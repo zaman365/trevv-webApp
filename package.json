@@ -1,0 +1,31 @@
+{
+  "name": "founderhq",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:web": "pnpm --filter @founderhq/web dev",
+    "dev:api": "pnpm --filter @founderhq/api dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @founderhq/db generate",
+    "db:migrate": "pnpm --filter @founderhq/db migrate",
+    "db:seed": "pnpm --filter @founderhq/db seed",
+    "contracts:generate": "pnpm --filter @founderhq/api-contract generate"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "prettier": "latest",
+    "turbo": "latest",
+    "typescript": "latest"
+  }
+}
+

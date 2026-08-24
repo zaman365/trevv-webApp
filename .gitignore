@@ -1,0 +1,16 @@
+node_modules
+.next
+.turbo
+dist
+coverage
+.expo
+.expo-shared
+apps/desktop/src-tauri/target
+*.log
+.env
+.env.local
+.DS_Store
+playwright-report
+test-results
+openapi.generated.json
+
