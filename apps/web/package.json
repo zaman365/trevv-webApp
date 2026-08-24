@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "build:cloudflare": "vinext build --config vite.config.ts",
     "build:sites": "vinext build --config sites.vite.config.ts",
-    "deploy:cloudflare": "wrangler deploy",
+    "deploy:cloudflare": "pnpm run build:cloudflare && wrangler deploy",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
