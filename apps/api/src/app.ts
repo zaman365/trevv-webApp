@@ -1,11 +1,34 @@
-import { createItemSchema, updateItemSchema } from "@founderhq/api-contract";
-import { openApiDocument } from "@founderhq/api-contract/openapi";
-import { createFounderAuth, type FounderAuth } from "@founderhq/auth-server";
 import {
+  attentionActionSchema,
+  createItemSchema,
+  updateItemSchema,
+} from "@founderhq/api-contract";
+import { openApiDocument } from "@founderhq/api-contract/openapi";
+import { createTrevvAuth, type TrevvAuth } from "@founderhq/auth-server";
+import {
+  calculateResourcePressure,
+  changesSinceCheckpoint,
+  demoBlueprintInstances,
+  demoBlueprintVersions,
+  demoChangeCheckpoint,
+  demoDecisionOutcomes,
+  demoDependencies,
+  demoHubSnapshots,
   demoHubs,
+  demoInsights,
   demoItems,
+  demoMeaningfulChanges,
+  demoPortfolios,
+  demoReviewRituals,
+  demoStakeholderExposure,
+  demoWaitingStates,
+  generateAttentionSignals,
   portfolioSignals,
+  previewBlueprintUpdate,
   rollupHub,
+  unrestrictedDevelopmentEntitlements,
+  type AttentionSignal,
+  type WaitingState,
   type WorkItem,
 } from "@founderhq/core";
 import { requireAccess, type AccessContext } from "@founderhq/permissions";
@@ -22,7 +45,20 @@ const itemStore = new Map(
   demoItems.map((item) => [item.id, { ...item, version: 0 }]),
 );
 const idempotencyStore = new Map<string, string>();
-let founderAuth: FounderAuth | null | undefined;
+let trevvAuth: TrevvAuth | null | undefined;
+const attentionStore = new Map<string, AttentionSignal>(
+  generateAttentionSignals(
+    "org-demo",
+    demoHubs,
+    demoItems,
+    demoWaitingStates,
+    now,
+    demoDependencies,
+  ).map((signal) => [signal.id, signal]),
+);
+const waitingStore = new Map<string, WaitingState>(
+  demoWaitingStates.map((waiting) => [waiting.id, waiting]),
+);
 
 app.use("*", secureHeaders());
 app.use(
@@ -82,7 +118,7 @@ app.use("/api/v1/*", async (context, next) => {
 app.get("/api/v1/health", (context) =>
   context.json({
     status: "ok",
-    service: "founderhq-api",
+    service: "trevv-api",
     version: "v1",
     time: new Date().toISOString(),
   }),
@@ -92,7 +128,7 @@ app.get("/api/v1/session", (context) =>
   context.json({
     user: {
       id: "user-owner",
-      email: "owner@founderhq.local",
+      email: "owner@trevv.local",
       name: "Mohammed Zaman",
       role: "owner",
       locale: "en",
@@ -101,6 +137,13 @@ app.get("/api/v1/session", (context) =>
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   }),
 );
+
+app.get("/api/v1/portfolios", (context) => {
+  requireAccess(context.get("access"), "read", "portfolio", {
+    organizationId: "org-demo",
+  });
+  return context.json(demoPortfolios);
+});
 
 app.get("/api/v1/portfolio", (context) => {
   requireAccess(context.get("access"), "read", "portfolio", {
@@ -113,6 +156,272 @@ app.get("/api/v1/portfolio", (context) => {
     hubs: demoHubs
       .map((hub) => ({ hub, rollup: rollupHub(hub, items, now) }))
       .sort((a, b) => b.rollup.score - a.rollup.score),
+  });
+});
+
+app.get("/api/v1/attention", (context) => {
+  requireAccess(context.get("access"), "read", "portfolio", {
+    organizationId: "org-demo",
+  });
+  const portfolioId = context.req.query("portfolioId");
+  const signals = [...attentionStore.values()]
+    .filter((signal) => !portfolioId || signal.portfolioId === portfolioId)
+    .filter((signal) => !signal.resolvedAt && !signal.dismissedAt)
+    .filter(
+      (signal) =>
+        !signal.snoozedUntil ||
+        new Date(signal.snoozedUntil).getTime() <= Date.now(),
+    )
+    .sort((left, right) => {
+      const weight = { info: 1, low: 2, medium: 3, high: 4, critical: 5 };
+      return weight[right.severity] - weight[left.severity];
+    });
+  return context.json(signals);
+});
+
+app.patch("/api/v1/attention/:id", async (context) => {
+  const signal = attentionStore.get(context.req.param("id"));
+  if (!signal)
+    return failure(
+      context,
+      404,
+      "resource_not_found",
+      "The requested attention signal is unavailable.",
+    );
+  requireAccess(context.get("access"), "update", "item", {
+    organizationId: signal.organizationId,
+    ...(signal.hubId ? { hubId: signal.hubId } : {}),
+  });
+  const raw: unknown = await context.req.json();
+  const parsed = attentionActionSchema.safeParse(raw);
+  if (!parsed.success)
+    return failure(
+      context,
+      422,
+      "validation_error",
+      "Review the signal action.",
+      { issues: parsed.error.flatten() },
+    );
+  const changedAt = new Date().toISOString();
+  const updated: AttentionSignal = {
+    ...signal,
+    ...(parsed.data.action === "resolve" ? { resolvedAt: changedAt } : {}),
+    ...(parsed.data.action === "dismiss" ? { dismissedAt: changedAt } : {}),
+    ...(parsed.data.action === "snooze" && parsed.data.snoozedUntil
+      ? { snoozedUntil: parsed.data.snoozedUntil }
+      : {}),
+    ...(parsed.data.reason ? { actionReason: parsed.data.reason } : {}),
+  };
+  attentionStore.set(updated.id, updated);
+  return context.json(updated);
+});
+
+app.get("/api/v1/waiting", (context) => {
+  const access = context.get("access");
+  return context.json(
+    [...waitingStore.values()].filter(
+      (waiting) =>
+        !waiting.resolvedAt && access.accessibleHubIds.has(waiting.hubId),
+    ),
+  );
+});
+
+app.patch("/api/v1/waiting/:id", async (context) => {
+  const waiting = waitingStore.get(context.req.param("id"));
+  if (!waiting)
+    return failure(
+      context,
+      404,
+      "resource_not_found",
+      "The requested waiting state is unavailable.",
+    );
+  requireAccess(context.get("access"), "update", "item", {
+    organizationId: waiting.organizationId,
+    hubId: waiting.hubId,
+  });
+  const raw: unknown = await context.req.json();
+  const parsed = z
+    .object({
+      action: z.enum(["resolve", "nudge", "reschedule"]),
+      note: z.string().trim().max(1_000).optional(),
+      nextFollowUp: z.iso.date().optional(),
+    })
+    .safeParse(raw);
+  if (!parsed.success)
+    return failure(
+      context,
+      422,
+      "validation_error",
+      "Review the follow-up action.",
+      {
+        issues: parsed.error.flatten(),
+      },
+    );
+  const updated: WaitingState = {
+    ...waiting,
+    ...(parsed.data.action === "resolve"
+      ? { resolvedAt: new Date().toISOString() }
+      : {}),
+    ...(parsed.data.nextFollowUp
+      ? { nextFollowUp: parsed.data.nextFollowUp }
+      : {}),
+    ...(parsed.data.note ? { waitingNote: parsed.data.note } : {}),
+  };
+  waitingStore.set(updated.id, updated);
+  return context.json(updated);
+});
+
+app.get("/api/v1/change-radar", (context) => {
+  requireAccess(context.get("access"), "read", "portfolio", {
+    organizationId: "org-demo",
+  });
+  return context.json({
+    checkpoint: demoChangeCheckpoint,
+    changes: changesSinceCheckpoint(
+      demoMeaningfulChanges,
+      demoChangeCheckpoint,
+    ),
+  });
+});
+
+app.get("/api/v1/management-memory", (context) => {
+  requireAccess(context.get("access"), "read", "portfolio", {
+    organizationId: "org-demo",
+  });
+  return context.json({
+    hubSnapshots: demoHubSnapshots,
+    reviewRituals: demoReviewRituals,
+    decisionOutcomes: demoDecisionOutcomes,
+  });
+});
+
+app.post("/api/v1/reviews/weekly", async (context) => {
+  const raw: unknown = await context.req.json();
+  const parsed = z
+    .object({
+      hubId: z.string().min(3),
+      health: z.enum(["on_track", "watch", "critical", "parked"]),
+      progress: z.string().trim().min(1),
+      blocker: z.string().trim().min(1),
+      nextMilestone: z.string().trim().min(1),
+      decisionNeeded: z.string().trim().optional(),
+      priorityNextWeek: z.string().trim().min(1),
+    })
+    .safeParse(raw);
+  if (!parsed.success)
+    return failure(
+      context,
+      422,
+      "validation_error",
+      "Review the weekly update.",
+      {
+        issues: parsed.error.flatten(),
+      },
+    );
+  requireAccess(context.get("access"), "update", "hub", {
+    organizationId: "org-demo",
+    hubId: parsed.data.hubId,
+  });
+  return context.json(
+    {
+      update: {
+        id: crypto.randomUUID(),
+        ...parsed.data,
+        publishedAt: new Date().toISOString(),
+      },
+      snapshot: {
+        id: crypto.randomUUID(),
+        organizationId: "org-demo",
+        portfolioId:
+          hubForId(parsed.data.hubId)?.portfolioId ?? "portfolio-demo",
+        hubId: parsed.data.hubId,
+        capturedAt: new Date().toISOString(),
+        health: parsed.data.health,
+        source: "weekly_review",
+      },
+      attentionRefreshed: true,
+    },
+    201,
+  );
+});
+
+app.get("/api/v1/insights", (context) => {
+  const access = context.get("access");
+  return context.json(
+    demoInsights.filter(
+      (insight) => !insight.hubId || access.accessibleHubIds.has(insight.hubId),
+    ),
+  );
+});
+
+app.get("/api/v1/blueprints", (context) => {
+  requireAccess(context.get("access"), "read", "portfolio", {
+    organizationId: "org-demo",
+  });
+  const instance = demoBlueprintInstances[0];
+  const current = demoBlueprintVersions[0];
+  const next = demoBlueprintVersions[1];
+  return context.json({
+    instances: demoBlueprintInstances,
+    versions: demoBlueprintVersions,
+    preview:
+      instance && current && next
+        ? previewBlueprintUpdate(instance, current, next)
+        : null,
+  });
+});
+
+app.get("/api/v1/team/pressure", (context) => {
+  requireAccess(context.get("access"), "read", "portfolio", {
+    organizationId: "org-demo",
+  });
+  return context.json(calculateResourcePressure(demoHubs, currentItems(), now));
+});
+
+app.get("/api/v1/entitlements", (context) => {
+  requireAccess(context.get("access"), "read", "settings", {
+    organizationId: "org-demo",
+  });
+  return context.json(unrestrictedDevelopmentEntitlements);
+});
+
+app.post("/api/v1/import/preview", async (context) => {
+  requireAccess(context.get("access"), "update", "settings", {
+    organizationId: "org-demo",
+  });
+  const raw: unknown = await context.req.json();
+  const parsed = z
+    .object({
+      preset: z.enum(["generic_csv", "monday", "clickup", "asana"]),
+      headers: z.array(z.string()).min(1).max(200),
+      rowCount: z.number().int().min(1).max(100_000),
+    })
+    .safeParse(raw);
+  if (!parsed.success)
+    return failure(
+      context,
+      422,
+      "validation_error",
+      "Review the import source.",
+      {
+        issues: parsed.error.flatten(),
+      },
+    );
+  const unsupportedFields = parsed.data.headers.filter((header) =>
+    /time track|formula|mirror/i.test(header),
+  );
+  return context.json({
+    preset: parsed.data.preset,
+    rowsDetected: parsed.data.rowCount,
+    rowsReady: parsed.data.rowCount,
+    warnings: unsupportedFields.length
+      ? ["Unsupported values will be preserved in the import report."]
+      : [],
+    unsupportedFields,
+    mapping: Object.fromEntries(
+      parsed.data.headers.map((header) => [header, header.toLocaleLowerCase()]),
+    ),
+    dryRun: true,
   });
 });
 
@@ -300,13 +609,37 @@ app.get("/api/v1/export/organization.json", (context) => {
   });
   context.header(
     "content-disposition",
-    "attachment; filename=founderhq-demo-export.json",
+    "attachment; filename=trevv-demo-export.json",
   );
   return context.json({
     exportedAt: new Date().toISOString(),
-    organization: { id: "org-demo", name: "FounderHQ Demo" },
+    organization: { id: "org-demo", name: "TREVV Demo" },
+    portfolios: demoPortfolios,
     hubs: demoHubs,
+    boards: [...new Set(currentItems().map((item) => item.boardId))].map(
+      (boardId) => ({
+        id: boardId,
+        hubId: currentItems().find((item) => item.boardId === boardId)?.hubId,
+      }),
+    ),
     items: currentItems(),
+    milestones: currentItems().filter((item) => item.type === "milestone"),
+    ideas: currentItems().filter((item) => item.type === "idea"),
+    decisions: currentItems().filter((item) => item.type === "decision"),
+    decisionOutcomes: demoDecisionOutcomes,
+    approvals: currentItems().filter((item) => item.type === "approval"),
+    updates: demoHubs.map((hub) => ({
+      hubId: hub.id,
+      text: hub.latestUpdate.text,
+      date: hub.latestUpdate.date,
+    })),
+    insights: demoInsights,
+    snapshots: demoHubSnapshots,
+    waiting: [...waitingStore.values()],
+    attention: [...attentionStore.values()],
+    dependencies: demoDependencies,
+    commentMetadata: [],
+    smartLinks: [],
   });
 });
 
@@ -380,12 +713,15 @@ app.onError((error, context) => {
     context,
     500,
     "internal_error",
-    "FounderHQ could not complete that request.",
+    "TREVV could not complete that request.",
   );
 });
 
 function currentItems(): WorkItem[] {
   return [...itemStore.values()].map(({ version: _version, ...item }) => item);
+}
+function hubForId(id: string) {
+  return demoHubs.find((hub) => hub.id === id);
 }
 function demoAccess(): AccessContext {
   return {
@@ -396,21 +732,21 @@ function demoAccess(): AccessContext {
     managedHubIds: new Set(demoHubs.map((hub) => hub.id)),
   };
 }
-function getAuth(): FounderAuth | null {
-  if (founderAuth !== undefined) return founderAuth;
+function getAuth(): TrevvAuth | null {
+  if (trevvAuth !== undefined) return trevvAuth;
   const databaseUrl = process.env.DATABASE_URL;
   const secret = process.env.BETTER_AUTH_SECRET;
   const baseUrl = process.env.BETTER_AUTH_URL;
-  founderAuth =
+  trevvAuth =
     databaseUrl && secret && baseUrl
-      ? createFounderAuth({
+      ? createTrevvAuth({
           databaseUrl,
           secret,
           baseUrl,
           trustedOrigins: [process.env.WEB_ORIGIN ?? "http://localhost:3000"],
         })
       : null;
-  return founderAuth;
+  return trevvAuth;
 }
 function quote(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;

@@ -13,8 +13,7 @@ export default function Icon() {
         alignItems: "center",
         justifyContent: "center",
         color: "white",
-        background:
-          "linear-gradient(145deg, #7770ef 0%, #5656d7 52%, #30306f 100%)",
+        background: "#5956c9",
         borderRadius: 112,
         fontFamily: "Arial, sans-serif",
         fontSize: 272,
@@ -23,7 +22,7 @@ export default function Icon() {
         boxShadow: "inset 0 0 0 18px rgba(255,255,255,.18)",
       }}
     >
-      F
+      T
     </div>,
     size,
   );

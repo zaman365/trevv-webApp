@@ -12,6 +12,7 @@ import {
   Command,
   FileQuestion,
   Grid2X2,
+  House,
   Inbox,
   Languages,
   LayoutTemplate,
@@ -31,12 +32,15 @@ import { createApiClient } from "@founderhq/api-client";
 import {
   demoHubs,
   demoItems,
+  demoPortfolios,
   portfolioSignals,
   rollupHub,
   type HubHealth,
 } from "@founderhq/core";
 import { getMessages, type Locale } from "@founderhq/i18n";
+import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { trevvBrand } from "@/lib/branding";
 
 const api = createApiClient({
   baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787/api/v1",
@@ -63,6 +67,7 @@ export function PortfolioExperience() {
   const [mobileNav, setMobileNav] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [health, setHealth] = useState<HubHealth | "all">("all");
+  const [portfolioId, setPortfolioId] = useState("portfolio-demo");
   const [remotePortfolio, setRemotePortfolio] = useState<Awaited<
     ReturnType<typeof api.portfolio>
   > | null>(null);
@@ -87,16 +92,19 @@ export function PortfolioExperience() {
       remotePortfolio?.signals ?? portfolioSignals(demoHubs, demoItems, now),
     [now, remotePortfolio],
   );
-  const availableHubs = remotePortfolio?.hubs.map(({ hub }) => hub) ?? demoHubs;
+  const availableHubs = (
+    remotePortfolio?.hubs.map(({ hub }) => hub) ?? demoHubs
+  ).filter((hub) => hub.portfolioId === portfolioId);
   const sortedHubs = useMemo(
     () =>
       (
         remotePortfolio?.hubs ??
         demoHubs.map((hub) => ({ hub, rollup: rollupHub(hub, demoItems, now) }))
       )
+        .filter(({ hub }) => hub.portfolioId === portfolioId)
         .filter(({ hub }) => health === "all" || hub.health === health)
         .sort((a, b) => b.rollup.score - a.rollup.score),
-    [health, now, remotePortfolio],
+    [health, now, portfolioId, remotePortfolio],
   );
   const totalSignals =
     signals.decisions +
@@ -117,11 +125,11 @@ export function PortfolioExperience() {
       <aside className={`sidebar ${mobileNav ? "sidebar-open" : ""}`}>
         <div className="brand-row">
           <span className="brand-mark" aria-hidden="true">
-            <span>F</span>
+            <span>T</span>
           </span>
           <div>
-            <strong>{process.env.NEXT_PUBLIC_APP_NAME ?? copy.app.name}</strong>
-            <span>{copy.app.organization}</span>
+            <strong>{trevvBrand.name}</strong>
+            <span>{trevvBrand.organization}</span>
           </div>
           <button
             className="icon-button mobile-only"
@@ -133,9 +141,18 @@ export function PortfolioExperience() {
         </div>
         <nav aria-label="Primary navigation">
           <p className="nav-label">Workspace</p>
+          <a className="nav-item" href="/app/home">
+            <House size={17} />
+            <span>Home</span>
+          </a>
           <a className="nav-item active" href="/app/portfolio">
             <Grid2X2 size={17} />
             <span>{copy.nav.portfolio}</span>
+            <span className="nav-badge">{totalSignals}</span>
+          </a>
+          <a className="nav-item" href="/app/attention">
+            <Sparkles size={17} />
+            <span>Attention</span>
             <span className="nav-badge">{totalSignals}</span>
           </a>
           <a className="nav-item" href="/app/my-work">
@@ -148,19 +165,9 @@ export function PortfolioExperience() {
             <span>{copy.nav.inbox}</span>
             <span className="nav-dot" />
           </a>
-          <a className="nav-item" href="/app/decisions">
-            <FileQuestion size={17} />
-            <span>{copy.nav.decisions}</span>
-            <span className="nav-badge subtle">{signals.decisions}</span>
-          </a>
-          <a className="nav-item" href="/app/approvals">
-            <ClipboardCheck size={17} />
-            <span>{copy.nav.approvals}</span>
-            <span className="nav-badge subtle">{signals.approvals}</span>
-          </a>
-          <p className="nav-label spaced">Hubs</p>
-          {availableHubs.slice(0, 6).map((hub) => (
-            <a
+          <p className="nav-label spaced">Hubs · Favorites</p>
+          {availableHubs.slice(0, 4).map((hub) => (
+            <Link
               className="nav-item hub-nav"
               href={`/app/hubs/${hub.slug}`}
               key={hub.id}
@@ -175,17 +182,35 @@ export function PortfolioExperience() {
               {hub.health === "critical" && (
                 <span className="health-pip critical" />
               )}
-            </a>
+            </Link>
           ))}
+          <Link className="nav-item" href="/app/hubs">
+            <Grid2X2 size={16} />
+            <span>All Hubs</span>
+          </Link>
+          <p className="nav-label spaced">Workflows</p>
+          <a className="nav-item" href="/app/decisions">
+            <FileQuestion size={17} />
+            <span>{copy.nav.decisions}</span>
+            <span className="nav-badge subtle">{signals.decisions}</span>
+          </a>
+          <a className="nav-item" href="/app/ideas">
+            <Lightbulb size={17} />
+            <span>Ideas</span>
+          </a>
+          <a className="nav-item" href="/app/team">
+            <Users size={17} />
+            <span>Team</span>
+          </a>
           <button className="nav-item nav-button">
             <Plus size={16} />
-            <span>{copy.common.newHub}</span>
+            <span>Create</span>
           </button>
         </nav>
         <div className="sidebar-foot">
-          <a className="nav-item" href="/app/templates">
+          <a className="nav-item" href="/app/blueprints">
             <LayoutTemplate size={17} />
-            <span>{copy.nav.templates}</span>
+            <span>Blueprints</span>
           </a>
           <a className="nav-item" href="/app/settings/profile">
             <Settings2 size={17} />
@@ -250,13 +275,14 @@ export function PortfolioExperience() {
             >
               {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            <button
+            <a
               className="icon-button notification-button"
               aria-label={copy.common.notifications}
+              href="/app/notifications"
             >
               <Bell size={18} />
               <span />
-            </button>
+            </a>
             <button
               className="avatar avatar-mz avatar-button"
               aria-label={copy.common.userMenu}
@@ -273,10 +299,25 @@ export function PortfolioExperience() {
               <h1>{copy.portfolio.title}</h1>
               <p>{copy.portfolio.subtitle}</p>
             </div>
-            <button className="primary-button">
-              <Plus size={17} />
-              {copy.common.newHub}
-            </button>
+            <div className="portfolio-heading-actions">
+              <label>
+                <span>Selected Portfolio</span>
+                <select
+                  value={portfolioId}
+                  onChange={(event) => setPortfolioId(event.target.value)}
+                >
+                  {demoPortfolios.map((portfolio) => (
+                    <option key={portfolio.id} value={portfolio.id}>
+                      {portfolio.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="primary-button">
+                <Plus size={17} />
+                {copy.common.newHub}
+              </button>
+            </div>
           </section>
 
           <section
@@ -300,7 +341,7 @@ export function PortfolioExperience() {
                 tone="violet"
                 icon={FileQuestion}
                 count={signals.decisions}
-                label={copy.portfolio.founderDecisions}
+                label="Decisions due"
                 note={copy.portfolio.needsDecision}
               />
               <SignalCard
@@ -344,9 +385,9 @@ export function PortfolioExperience() {
                 <span className="live-dot" />
                 {copy.portfolio.dataNote}
               </span>
-              <button>
+              <a href="/app/attention">
                 {copy.common.viewAll} <span aria-hidden="true">→</span>
-              </button>
+              </a>
             </div>
           </section>
 

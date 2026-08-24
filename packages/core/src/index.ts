@@ -1,3 +1,5 @@
+import type { ProgressMode } from "./commercial";
+
 export type HubHealth = "on_track" | "watch" | "critical" | "parked";
 export type LifecycleStage =
   | "idea"
@@ -9,10 +11,19 @@ export type LifecycleStage =
   | "paused"
   | "archived";
 export type HubType =
-  | "venture"
+  | "business"
   | "brand"
+  | "client"
   | "product"
+  | "department"
+  | "venture"
+  | "initiative"
+  | "investment"
+  | "campaign"
+  | "program"
+  | "project"
   | "shared_function"
+  /** @deprecated compatibility alias for pre-TREVV records */
   | "client_program"
   | "journey"
   | "other";
@@ -28,6 +39,7 @@ export interface HubMetric {
 
 export interface Hub {
   id: string;
+  portfolioId: string;
   slug: string;
   name: string;
   icon: string;
@@ -41,6 +53,7 @@ export interface Hub {
   nextMilestone: { title: string; date: string };
   latestUpdate: { text: string; date: string };
   metrics: HubMetric[];
+  progressMode?: ProgressMode;
 }
 
 export interface WorkItem {
@@ -157,12 +170,14 @@ export function portfolioSignals(
 
 export const demoHubs: Hub[] = [
   {
-    id: "hub-zehn",
-    slug: "zehn",
-    name: "ZEHN",
-    icon: "Z",
+    id: "hub-northstar",
+    portfolioId: "portfolio-demo",
+    slug: "northstar-apparel",
+    name: "Northstar Apparel",
+    icon: "N",
     accent: "#6456d8",
     type: "brand",
+    progressMode: "milestone_completion",
     stage: "grow",
     health: "critical",
     healthNote:
@@ -180,12 +195,14 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-leckereich",
-    slug: "leckereich",
-    name: "Leckereich",
-    icon: "L",
+    id: "hub-mealflow",
+    portfolioId: "portfolio-demo",
+    slug: "mealflow",
+    name: "MealFlow",
+    icon: "M",
     accent: "#e05f4f",
     type: "product",
+    progressMode: "weighted_work_items",
     stage: "build",
     health: "watch",
     healthNote:
@@ -203,12 +220,13 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-marktfix",
-    slug: "marktfix",
-    name: "MarktFix",
-    icon: "M",
+    id: "hub-localreach",
+    portfolioId: "portfolio-demo",
+    slug: "localreach",
+    name: "LocalReach",
+    icon: "L",
     accent: "#17846b",
-    type: "client_program",
+    type: "client",
     stage: "operate",
     health: "on_track",
     healthNote: "Delivery capacity and client response times are healthy.",
@@ -225,12 +243,13 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-lokalfix",
-    slug: "lokalfix",
-    name: "LokalFix",
-    icon: "L",
+    id: "hub-studioops",
+    portfolioId: "portfolio-demo",
+    slug: "studioops",
+    name: "StudioOps",
+    icon: "S",
     accent: "#2b77b9",
-    type: "venture",
+    type: "business",
     stage: "validate",
     health: "watch",
     healthNote: "The recurring-care package needs a sharper value proposition.",
@@ -247,12 +266,13 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-mikroit",
-    slug: "mikroit",
-    name: "MikroIT",
+    id: "hub-clientspark",
+    portfolioId: "portfolio-demo",
+    slug: "clientspark",
+    name: "ClientSpark",
     icon: "μ",
     accent: "#1f8c94",
-    type: "client_program",
+    type: "client",
     stage: "operate",
     health: "on_track",
     healthNote:
@@ -270,9 +290,10 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-gastrofix",
-    slug: "gastrofix",
-    name: "GastroFix",
+    id: "hub-greentable",
+    portfolioId: "portfolio-demo",
+    slug: "greentable",
+    name: "GreenTable",
     icon: "G",
     accent: "#c87b2b",
     type: "venture",
@@ -293,9 +314,10 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-intelligentlab",
-    slug: "intelligentlab",
-    name: "IntelligentLab",
+    id: "hub-centralops",
+    portfolioId: "portfolio-demo",
+    slug: "centralops",
+    name: "CentralOps",
     icon: "I",
     accent: "#505c73",
     type: "shared_function",
@@ -315,15 +337,17 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-bigboyz",
-    slug: "bigboyz",
-    name: "BigBoyz",
+    id: "hub-futuregoods",
+    portfolioId: "portfolio-demo",
+    slug: "futuregoods",
+    name: "FutureGoods",
     icon: "B",
     accent: "#ad477c",
     type: "brand",
     stage: "idea",
     health: "parked",
-    healthNote: "Intentionally parked until ZEHN launch work is complete.",
+    healthNote:
+      "Intentionally parked until Northstar Apparel launch work is complete.",
     priority: "Preserve sizing research",
     lead: { name: "Mohammed Zaman", initials: "MZ", color: "#352f75" },
     nextMilestone: { title: "Revisit concept", date: "2026-10-15" },
@@ -337,9 +361,10 @@ export const demoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-founder",
-    slug: "founder-journey",
-    name: "Founder Journey",
+    id: "hub-personal",
+    portfolioId: "portfolio-personal",
+    slug: "personal-projects",
+    name: "Personal Projects",
     icon: "F",
     accent: "#78623c",
     type: "journey",
@@ -350,7 +375,7 @@ export const demoHubs: Hub[] = [
     lead: { name: "Mohammed Zaman", initials: "MZ", color: "#352f75" },
     nextMilestone: { title: "Submit application", date: "2026-09-06" },
     latestUpdate: {
-      text: "Financial model is reviewed; the narrative now needs final proof points from ZEHN and MarktFix.",
+      text: "Financial model is reviewed; the narrative now needs final proof points from Northstar Apparel and LocalReach.",
       date: "2026-08-21",
     },
     metrics: [
@@ -363,8 +388,8 @@ export const demoHubs: Hub[] = [
 export const demoItems: WorkItem[] = [
   {
     id: "i-1",
-    hubId: "hub-zehn",
-    boardId: "b-zehn-launch",
+    hubId: "hub-northstar",
+    boardId: "b-northstar-launch",
     title: "Approve packaging compliance copy",
     type: "approval",
     priority: "urgent",
@@ -375,8 +400,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-2",
-    hubId: "hub-zehn",
-    boardId: "b-zehn-launch",
+    hubId: "hub-northstar",
+    boardId: "b-northstar-launch",
     title: "Choose storefront launch offer",
     type: "decision",
     priority: "urgent",
@@ -387,8 +412,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-3",
-    hubId: "hub-zehn",
-    boardId: "b-zehn-launch",
+    hubId: "hub-northstar",
+    boardId: "b-northstar-launch",
     title: "Confirm GPSR manufacturer evidence",
     type: "task",
     priority: "high",
@@ -398,8 +423,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-4",
-    hubId: "hub-zehn",
-    boardId: "b-zehn-launch",
+    hubId: "hub-northstar",
+    boardId: "b-northstar-launch",
     title: "SS26 storefront launch",
     type: "milestone",
     priority: "urgent",
@@ -409,8 +434,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-5",
-    hubId: "hub-zehn",
-    boardId: "b-zehn-launch",
+    hubId: "hub-northstar",
+    boardId: "b-northstar-launch",
     title: "Publish polo fit guide",
     type: "task",
     priority: "normal",
@@ -420,8 +445,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-6",
-    hubId: "hub-leckereich",
-    boardId: "b-leck-beta",
+    hubId: "hub-mealflow",
+    boardId: "b-mealflow-beta",
     title: "Select onboarding navigation",
     type: "decision",
     priority: "high",
@@ -432,8 +457,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-7",
-    hubId: "hub-leckereich",
-    boardId: "b-leck-beta",
+    hubId: "hub-mealflow",
+    boardId: "b-mealflow-beta",
     title: "Restaurant owner dashboard review",
     type: "approval",
     priority: "high",
@@ -444,8 +469,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-8",
-    hubId: "hub-leckereich",
-    boardId: "b-leck-beta",
+    hubId: "hub-mealflow",
+    boardId: "b-mealflow-beta",
     title: "Fix onboarding permissions",
     type: "task",
     priority: "urgent",
@@ -455,8 +480,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-9",
-    hubId: "hub-marktfix",
-    boardId: "b-market-delivery",
+    hubId: "hub-localreach",
+    boardId: "b-localreach-delivery",
     title: "Create proof pack checklist",
     type: "task",
     priority: "normal",
@@ -466,8 +491,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-10",
-    hubId: "hub-marktfix",
-    boardId: "b-market-delivery",
+    hubId: "hub-localreach",
+    boardId: "b-localreach-delivery",
     title: "Client storefront repair",
     type: "task",
     priority: "high",
@@ -477,8 +502,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-11",
-    hubId: "hub-lokalfix",
-    boardId: "b-lokal-pilot",
+    hubId: "hub-studioops",
+    boardId: "b-studioops-pilot",
     title: "Name recurring care tiers",
     type: "decision",
     priority: "high",
@@ -488,8 +513,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-12",
-    hubId: "hub-lokalfix",
-    boardId: "b-lokal-pilot",
+    hubId: "hub-studioops",
+    boardId: "b-studioops-pilot",
     title: "Pilot proposal follow-up",
     type: "task",
     priority: "high",
@@ -498,8 +523,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-13",
-    hubId: "hub-mikroit",
-    boardId: "b-it-requests",
+    hubId: "hub-clientspark",
+    boardId: "b-clientspark-requests",
     title: "Validate secure access checklist",
     type: "task",
     priority: "normal",
@@ -509,8 +534,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-14",
-    hubId: "hub-gastrofix",
-    boardId: "b-gastro-validation",
+    hubId: "hub-greentable",
+    boardId: "b-greentable-validation",
     title: "Choose single pilot outcome",
     type: "decision",
     priority: "urgent",
@@ -521,8 +546,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-15",
-    hubId: "hub-gastrofix",
-    boardId: "b-gastro-validation",
+    hubId: "hub-greentable",
+    boardId: "b-greentable-validation",
     title: "Pilot scope approved",
     type: "milestone",
     priority: "urgent",
@@ -532,8 +557,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-16",
-    hubId: "hub-intelligentlab",
-    boardId: "b-il-compliance",
+    hubId: "hub-centralops",
+    boardId: "b-centralops-compliance",
     title: "Approve supplier declaration pack",
     type: "approval",
     priority: "high",
@@ -544,8 +569,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-17",
-    hubId: "hub-intelligentlab",
-    boardId: "b-il-compliance",
+    hubId: "hub-centralops",
+    boardId: "b-centralops-compliance",
     title: "Collect marketplace evidence",
     type: "task",
     priority: "high",
@@ -555,8 +580,8 @@ export const demoItems: WorkItem[] = [
   },
   {
     id: "i-18",
-    hubId: "hub-founder",
-    boardId: "b-founder-funding",
+    hubId: "hub-personal",
+    boardId: "b-personal-funding",
     title: "Write traction evidence",
     type: "task",
     priority: "normal",
@@ -564,4 +589,19 @@ export const demoItems: WorkItem[] = [
     dueDate: "2026-08-30",
     assignee: "Mohammed Zaman",
   },
+  {
+    id: "i-19",
+    hubId: "hub-localreach",
+    boardId: "b-localreach-delivery",
+    title: "Choose pilot packaging model",
+    type: "decision",
+    priority: "normal",
+    status: "done",
+    dueDate: "2026-07-31",
+    assignee: "Mohammed Zaman",
+    decisionState: "decided",
+  },
 ];
+
+export * from "./commercial";
+export * from "./commercial-demo";

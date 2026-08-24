@@ -374,7 +374,7 @@ export function BoardExperience() {
   };
 
   return (
-    <WorkspaceFrame active="hub" hubSlug="zehn">
+    <WorkspaceFrame active="hub" hubSlug="northstar-apparel">
       <main className="board-main">
         <header className="board-header">
           <div className="board-title-wrap">
@@ -460,7 +460,7 @@ export function BoardExperience() {
         )}
         {view === "table" ? (
           <DndContext
-            id="founderhq-launch-board"
+            id="trevv-launch-board"
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={onDragEnd}

@@ -1,6 +1,6 @@
 # Accessibility evidence
 
-FounderHQ targets WCAG 2.2 AA. The UI uses semantic headings, native buttons/links/tables, screen-reader labels for icon controls, visible focus rings, keyboard-operable status controls, non-color status icons/text, and reduced-motion rules.
+TREVV targets WCAG 2.2 AA. The UI uses semantic headings, native buttons/links/tables, screen-reader labels for icon controls, visible focus rings, keyboard-operable status controls, non-color status icons/text, and reduced-motion rules.
 
 CI runs axe against sign-in, Portfolio, Hub Overview, Board, item panel, and Decision Center at desktop and mobile breakpoints. Serious and critical WCAG A/AA violations fail the build. Playwright also exercises the item panel and key navigation paths.
 

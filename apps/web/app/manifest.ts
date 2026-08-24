@@ -1,13 +1,14 @@
 import type { MetadataRoute } from "next";
+import { trevvBrand } from "@/lib/branding";
 
 export default function manifest(): MetadataRoute.Manifest {
-  const name = process.env.NEXT_PUBLIC_APP_NAME ?? "FounderHQ";
+  const name = trevvBrand.name;
   return {
     name,
     short_name: name,
     description:
-      "Portfolio-first operating system for founders and their teams.",
-    start_url: "/app/portfolio",
+      "Portfolio-first operating system for businesses, projects, teams, and everything else you are responsible for.",
+    start_url: "/app/home",
     display: "standalone",
     background_color: "#f5f6fa",
     theme_color: "#5b5bd6",

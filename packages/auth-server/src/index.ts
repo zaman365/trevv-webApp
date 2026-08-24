@@ -8,9 +8,9 @@ export interface AuthEnvironment {
   trustedOrigins: string[];
 }
 
-export function createFounderAuth(environment: AuthEnvironment) {
+export function createTrevvAuth(environment: AuthEnvironment) {
   return betterAuth({
-    appName: process.env.APP_NAME ?? "FounderHQ",
+    appName: process.env.APP_NAME ?? "TREVV",
     baseURL: environment.baseUrl,
     secret: environment.secret,
     database: new Pool({ connectionString: environment.databaseUrl, max: 10 }),
@@ -23,4 +23,8 @@ export function createFounderAuth(environment: AuthEnvironment) {
   });
 }
 
-export type FounderAuth = ReturnType<typeof createFounderAuth>;
+export type TrevvAuth = ReturnType<typeof createTrevvAuth>;
+/** @deprecated Compatibility alias for pre-TREVV integrations. */
+export const createFounderAuth = createTrevvAuth;
+/** @deprecated Use TrevvAuth. */
+export type FounderAuth = TrevvAuth;

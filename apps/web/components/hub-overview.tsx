@@ -28,6 +28,9 @@ export function HubOverview({ slug }: { slug: string }) {
     demoItems,
     new Date("2026-08-24T12:00:00+02:00"),
   );
+  const boardId =
+    demoItems.find((item) => item.hubId === hub.id)?.boardId ??
+    "b-northstar-launch";
   const copy = productCopy.en.hub;
   return (
     <WorkspaceFrame active="hub" hubSlug={hub.slug}>
@@ -47,11 +50,17 @@ export function HubOverview({ slug }: { slug: string }) {
             </div>
           </div>
           <div className="hub-page-actions">
-            <a href={`/app/hubs/${hub.slug}/boards/b-zehn-launch`}>
+            <a href={`/app/hubs/${hub.slug}/boards/${boardId}`}>
               <Plus size={15} />
               {copy.addItem}
             </a>
             <button>{copy.postUpdate}</button>
+            {hub.slug === "localreach" && (
+              <a href={`/app/hubs/${hub.slug}/stakeholder`}>
+                <ExternalLink size={14} />
+                Stakeholder view
+              </a>
+            )}
             <button aria-label="More actions">
               <MoreHorizontal size={17} />
             </button>
@@ -61,11 +70,14 @@ export function HubOverview({ slug }: { slug: string }) {
           <a className="active" href={`/app/hubs/${hub.slug}`}>
             {copy.overview}
           </a>
-          <a href={`/app/hubs/${hub.slug}/boards`}>{copy.boards}</a>
-          <a href={`/app/hubs/${hub.slug}/updates`}>{copy.updates}</a>
-          <a href={`/app/hubs/${hub.slug}/metrics`}>{copy.metrics}</a>
-          <a href={`/app/hubs/${hub.slug}/team`}>{copy.team}</a>
-          <a href={`/app/hubs/${hub.slug}/links`}>{copy.links}</a>
+          <a href="#work">Work</a>
+          <a href={`/app/hubs/${hub.slug}/boards/${boardId}`}>Board</a>
+          <a href="#milestones">Milestones</a>
+          <a href="#updates">Updates</a>
+          <a href="#decisions">Decisions</a>
+          <a href="#ideas">Ideas</a>
+          <a href="#files">Files</a>
+          <a href="#team">Team</a>
         </nav>
         <div className="hub-content-grid">
           <div className="hub-primary-column">
@@ -80,8 +92,8 @@ export function HubOverview({ slug }: { slug: string }) {
               <p>
                 {hub.healthNote} The team is focused on{" "}
                 <strong>{hub.priority.toLocaleLowerCase()}</strong>, with the
-                next review framed around one founder decision and the evidence
-                needed to move confidently.
+                next review framed around one important decision and the
+                evidence needed to move confidently.
               </p>
               <div className="executive-grid">
                 <div>
@@ -98,13 +110,13 @@ export function HubOverview({ slug }: { slug: string }) {
                 </div>
               </div>
             </section>
-            <section className="overview-section">
+            <section className="overview-section" id="work">
               <div className="overview-section-title">
                 <div>
                   <h2>{copy.liveSignals}</h2>
                   <p>Calculated directly from accessible work items.</p>
                 </div>
-                <a href={`/app/hubs/${hub.slug}/boards/b-zehn-launch`}>
+                <a href={`/app/hubs/${hub.slug}/boards/${boardId}`}>
                   {copy.viewBoard}
                   <ArrowRight size={13} />
                 </a>
@@ -136,7 +148,7 @@ export function HubOverview({ slug }: { slug: string }) {
                 />
               </div>
             </section>
-            <section className="overview-section">
+            <section className="overview-section" id="updates">
               <div className="overview-section-title">
                 <div>
                   <h2>{copy.latestUpdate}</h2>
@@ -178,7 +190,7 @@ export function HubOverview({ slug }: { slug: string }) {
                 </div>
               </article>
             </section>
-            <section className="overview-section">
+            <section className="overview-section" id="ideas">
               <div className="overview-section-title">
                 <div>
                   <h2>{copy.recentActivity}</h2>
@@ -208,17 +220,25 @@ export function HubOverview({ slug }: { slug: string }) {
             </section>
           </div>
           <aside className="hub-secondary-column">
-            <section className="side-overview-card">
+            <section className="side-overview-card" id="milestones">
               <header>
                 <CalendarDays size={15} />
                 <h2>{copy.milestone}</h2>
               </header>
               <strong>{hub.nextMilestone.title}</strong>
               <time>{hub.nextMilestone.date}</time>
-              <div className="milestone-track">
-                <i style={{ width: "68%" }} />
-              </div>
-              <span>68% of milestone work complete</span>
+              {hub.progressMode && hub.progressMode !== "none" ? (
+                <>
+                  <div className="milestone-track">
+                    <i style={{ width: "68%" }} />
+                  </div>
+                  <span>68% of milestone work complete</span>
+                </>
+              ) : (
+                <span>
+                  Ongoing Hub · completion percentage is intentionally off
+                </span>
+              )}
             </section>
             <section className="side-overview-card">
               <header>
@@ -235,7 +255,10 @@ export function HubOverview({ slug }: { slug: string }) {
                 ))}
               </div>
             </section>
-            <section className="side-overview-card attention-list">
+            <section
+              className="side-overview-card attention-list"
+              id="decisions"
+            >
               <header>
                 <FileQuestion size={15} />
                 <h2>{copy.decisions}</h2>
@@ -257,7 +280,7 @@ export function HubOverview({ slug }: { slug: string }) {
                 <ArrowRight size={13} />
               </a>
             </section>
-            <section className="side-overview-card resources-list">
+            <section className="side-overview-card resources-list" id="files">
               <header>
                 <Link2 size={15} />
                 <h2>{copy.connected}</h2>
@@ -289,7 +312,7 @@ export function HubOverview({ slug }: { slug: string }) {
                 <ExternalLink size={12} />
               </a>
             </section>
-            <section className="side-overview-card team-row">
+            <section className="side-overview-card team-row" id="team">
               <header>
                 <Users size={15} />
                 <h2>{copy.team}</h2>

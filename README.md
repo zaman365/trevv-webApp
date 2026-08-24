@@ -1,12 +1,18 @@
-# FounderHQ
+# TREVV
 
-FounderHQ is a portfolio-first operating system for founders running several ventures, brands, programs, and shared functions. The complete V1 experience lives in the Web/PWA; Expo and Tauri provide deliberately smaller mobile and desktop foundations against the same API.
+TREVV is a commercial, portfolio-first operating system for people responsible for several businesses, brands, clients, products, departments, ventures, or initiatives. It brings execution, decisions, waiting dependencies, evidence, and management memory together—and shows where attention matters.
 
 ## What ships
 
-- Portfolio intelligence with live, domain-owned roll-ups across nine seeded Hubs
+- Organization → Portfolio → Hub tenancy with automatic default-Portfolio migration
+- deterministic Attention Engine, Waiting Center, personalized Home, and Change Radar
+- review rituals, lightweight historical snapshots, and Decision consequence reviews
+- Insights and opportunity discovery with promotion provenance
+- managed Blueprints with safe diffs, selected application, local overrides, and detach
+- stakeholder-safe Hub views, import presets/dry runs, cross-Hub dependencies, and workload evidence
+- pricing-agnostic subscription and entitlement architecture with unrestricted development mode
 - polished Hub Overview, board table/Kanban, inline editing, and item side panel
-- My Work, Inbox, Decision Center, Approval Center, search, templates, integrations, onboarding, sign-in, and sign-up
+- My Work, actionable Inbox, informational Notifications, Decision Center, Approval Center, search, integrations, commercial onboarding, sign-in, and sign-up
 - English/German UI foundations, responsive mobile-browser layouts, dark mode, and installable PWA behavior
 - versioned Hono API, Better Auth, PostgreSQL/Drizzle schema, background worker, typed client, permission policy, events/outbox, CSV/JSON export, and safe integration mocks
 - Expo mobile companion shell and Tauri desktop shell consuming the same hosted API contract
@@ -31,7 +37,7 @@ pnpm contracts:generate
 pnpm dev
 ```
 
-Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. Demo mode is on unless `DEMO_MODE=false`; this keeps the seeded product tour usable before credentials are configured.
+Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. Demo mode is on unless `DEMO_MODE=false`; it uses fictional public data in the `TREVV Demo` organization and an unrestricted development entitlement set.
 
 For a focused process, use `pnpm dev:web` or `pnpm dev:api`. Expo runs with `pnpm --filter @founderhq/mobile dev`; the Tauri shell runs with `pnpm --filter @founderhq/desktop tauri dev`.
 

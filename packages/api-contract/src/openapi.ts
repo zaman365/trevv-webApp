@@ -1,15 +1,21 @@
 export const openApiDocument = {
   openapi: "3.1.0",
   info: {
-    title: "FounderHQ API",
-    version: "1.0.0",
+    title: "TREVV API",
+    version: "2.0.0",
     description:
-      "Versioned, permission-scoped contracts shared by the FounderHQ Web, Mobile, and Desktop clients.",
+      "Versioned, permission-scoped contracts shared by the TREVV Web, Mobile, and Desktop clients.",
   },
   servers: [{ url: "http://localhost:8787", description: "Local API" }],
   tags: [
     { name: "System" },
     { name: "Portfolio" },
+    { name: "Attention" },
+    { name: "Waiting" },
+    { name: "Management Memory" },
+    { name: "Insights" },
+    { name: "Blueprints" },
+    { name: "Commercial" },
     { name: "Hubs" },
     { name: "Items" },
     { name: "Search" },
@@ -41,6 +47,121 @@ export const openApiDocument = {
         responses: {
           "200": { description: "Accessible Portfolio roll-up" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
+        },
+      },
+    },
+    "/api/v1/portfolios": {
+      get: {
+        tags: ["Portfolio"],
+        operationId: "listPortfolios",
+        responses: { "200": { description: "Accessible Portfolios" } },
+      },
+    },
+    "/api/v1/attention": {
+      get: {
+        tags: ["Attention"],
+        operationId: "listAttentionSignals",
+        parameters: [
+          { name: "portfolioId", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": { description: "Active explainable Attention signals" },
+        },
+      },
+    },
+    "/api/v1/attention/{id}": {
+      patch: {
+        tags: ["Attention"],
+        operationId: "actOnAttentionSignal",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: {
+          "200": { description: "Resolved, dismissed, or snoozed signal" },
+          "422": { $ref: "#/components/responses/Validation" },
+        },
+      },
+    },
+    "/api/v1/waiting": {
+      get: {
+        tags: ["Waiting"],
+        operationId: "listWaitingStates",
+        responses: {
+          "200": { description: "Accessible active waiting states" },
+        },
+      },
+    },
+    "/api/v1/waiting/{id}": {
+      patch: {
+        tags: ["Waiting"],
+        operationId: "updateWaitingState",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: { "200": { description: "Updated waiting state" } },
+      },
+    },
+    "/api/v1/change-radar": {
+      get: {
+        tags: ["Management Memory"],
+        operationId: "getChangeRadar",
+        responses: {
+          "200": {
+            description: "Meaningful changes since the user checkpoint",
+          },
+        },
+      },
+    },
+    "/api/v1/management-memory": {
+      get: {
+        tags: ["Management Memory"],
+        operationId: "getManagementMemory",
+        responses: {
+          "200": {
+            description: "Snapshots, review rituals, and decision outcomes",
+          },
+        },
+      },
+    },
+    "/api/v1/insights": {
+      get: {
+        tags: ["Insights"],
+        operationId: "listInsights",
+        responses: {
+          "200": { description: "Permission-filtered operational evidence" },
+        },
+      },
+    },
+    "/api/v1/blueprints": {
+      get: {
+        tags: ["Blueprints"],
+        operationId: "listBlueprints",
+        responses: {
+          "200": {
+            description:
+              "Blueprint versions, instances, and safe update preview",
+          },
+        },
+      },
+    },
+    "/api/v1/team/pressure": {
+      get: {
+        tags: ["Attention"],
+        operationId: "getTeamPressure",
+        responses: { "200": { description: "Cross-Hub capacity evidence" } },
+      },
+    },
+    "/api/v1/entitlements": {
+      get: {
+        tags: ["Commercial"],
+        operationId: "getEntitlements",
+        responses: {
+          "200": { description: "Central capability entitlement set" },
+        },
+      },
+    },
+    "/api/v1/import/preview": {
+      post: {
+        tags: ["Commercial"],
+        operationId: "previewImport",
+        responses: {
+          "200": { description: "Dry-run mapping and unsupported-data report" },
         },
       },
     },
@@ -240,6 +361,43 @@ export const openApiDocument = {
           },
           dueDate: { type: "string", format: "date" },
           assignee: { type: "string" },
+        },
+      },
+      HubInput: {
+        type: "object",
+        required: ["portfolioId", "name", "type"],
+        properties: {
+          portfolioId: { type: "string" },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          type: {
+            type: "string",
+            enum: [
+              "business",
+              "brand",
+              "client",
+              "product",
+              "department",
+              "venture",
+              "initiative",
+              "investment",
+              "campaign",
+              "program",
+              "project",
+              "shared_function",
+              "journey",
+              "other",
+            ],
+          },
+          progressMode: {
+            type: "string",
+            enum: [
+              "none",
+              "manual",
+              "task_completion",
+              "weighted_work_items",
+              "milestone_completion",
+            ],
+          },
         },
       },
       Error: {

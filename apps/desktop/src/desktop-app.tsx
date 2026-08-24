@@ -40,8 +40,8 @@ function DesktopPortfolio() {
     <div className="desktop-shell">
       <aside>
         <div className="desktop-brand">
-          <span>F</span>
-          <strong>FounderHQ</strong>
+          <span>T</span>
+          <strong>TREVV</strong>
         </div>
         <button className="active">
           <Grid2X2 size={16} />
@@ -71,7 +71,7 @@ function DesktopPortfolio() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search FounderHQ…"
+              placeholder="Search TREVV…"
             />
           </label>
           <button>

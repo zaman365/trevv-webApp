@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { productCopy } from "@/lib/product-copy";
+import { trevvBrand } from "@/lib/branding";
 
 export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
   const copy = productCopy.en.auth;
@@ -24,27 +25,27 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
       <section className="auth-brand-panel">
         <div className="auth-brand">
           <span className="brand-mark">
-            <span>F</span>
+            <span>T</span>
           </span>
-          <strong>{process.env.NEXT_PUBLIC_APP_NAME ?? "FounderHQ"}</strong>
+          <strong>{trevvBrand.name}</strong>
         </div>
         <div className="auth-promise">
           <span>
             <Sparkles size={17} />
           </span>
           <h1>
-            Every venture.
+            Everything you run.
             <br />
-            One clear next move.
+            One clear view.
           </h1>
           <p>
-            See what needs attention, why it matters, and who owns the work —
-            without rebuilding a founder dashboard by hand.
+            See what needs attention, why it matters, and who owns the work
+            across every business, client, product, and initiative.
           </p>
           <ul>
             <li>
               <Check size={13} />
-              Live Portfolio signals from real work
+              Explainable signals from real operational work
             </li>
             <li>
               <Check size={13} />
@@ -58,25 +59,25 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
         </div>
         <div className="auth-mini-portfolio">
           <article>
-            <span>Z</span>
+            <span>N</span>
             <div>
-              <strong>ZEHN</strong>
+              <strong>Northstar Apparel</strong>
               <small>Launch readiness</small>
             </div>
             <b>68%</b>
           </article>
           <article>
-            <span>L</span>
+            <span>M</span>
             <div>
-              <strong>Leckereich</strong>
+              <strong>MealFlow</strong>
               <small>Pilot onboarding</small>
             </div>
             <b>Watch</b>
           </article>
           <article>
-            <span>M</span>
+            <span>L</span>
             <div>
-              <strong>MarktFix</strong>
+              <strong>LocalReach</strong>
               <small>Service delivery</small>
             </div>
             <b>On track</b>
@@ -93,7 +94,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
           <p>
             {mode === "sign-in" ? copy.signInSubtitle : copy.signUpSubtitle}
           </p>
-          <form action="/app/portfolio">
+          <form action="/app/home">
             {mode === "sign-up" && (
               <label>
                 {copy.name}
@@ -110,9 +111,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
                 <input
                   type="email"
                   required
-                  defaultValue={
-                    mode === "sign-in" ? "owner@founderhq.local" : ""
-                  }
+                  defaultValue={mode === "sign-in" ? "owner@trevv.local" : ""}
                   placeholder="you@company.com"
                 />
               </span>
@@ -124,7 +123,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
                 <input
                   type={show ? "text" : "password"}
                   required
-                  defaultValue={mode === "sign-in" ? "founderhq-demo" : ""}
+                  defaultValue={mode === "sign-in" ? "trevv-demo" : ""}
                   placeholder="At least 12 characters"
                 />
                 <button
@@ -144,7 +143,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
           <div className="auth-separator">
             <span>or</span>
           </div>
-          <a className="demo-auth-button" href="/app/portfolio">
+          <a className="demo-auth-button" href="/app/home">
             <Grid2X2 size={16} />
             {copy.demo}
           </a>
@@ -163,7 +162,15 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
 export function OnboardingExperience() {
   const copy = productCopy.en.auth;
   const [step, setStep] = useState(1);
-  const starterHubs = ["ZEHN", "Leckereich", "MarktFix", "Shared operations"];
+  const [managing, setManaging] = useState("businesses");
+  const modes = [
+    ["businesses", "Multiple businesses / brands", "Operating portfolio"],
+    ["clients", "Agency clients", "Client delivery"],
+    ["departments", "Company departments", "Department operations"],
+    ["products", "Products / initiatives", "Product portfolio"],
+    ["personal", "Personal projects", "Personal portfolio"],
+    ["blank", "Start blank", "No preset"],
+  ] as const;
   return (
     <main className="onboarding-page">
       <header>
@@ -173,76 +180,210 @@ export function OnboardingExperience() {
         </a>
         <div className="auth-brand">
           <span className="brand-mark">
-            <span>F</span>
+            <span>T</span>
           </span>
-          <strong>FounderHQ</strong>
+          <strong>{trevvBrand.name}</strong>
         </div>
-        <span>Step {step} of 4</span>
+        <span>Step {step} of 5</span>
       </header>
       <div className="onboarding-track">
-        <i style={{ width: `${step * 25}%` }} />
+        <i style={{ width: `${step * 20}%` }} />
       </div>
       <section>
         <span className="onboarding-icon">
           <Sparkles size={19} />
         </span>
-        <h1>{copy.onboardingTitle}</h1>
-        <p>{copy.onboardingSubtitle}</p>
+        <h1>
+          {step === 1
+            ? "What are you managing?"
+            : step === 2
+              ? "Create your first Hub"
+              : step === 3
+                ? "Choose a starter Blueprint"
+                : step === 4
+                  ? "Bring your team and context"
+                  : "Your Portfolio is ready"}
+        </h1>
+        <p>
+          {step === 1
+            ? "This only selects sensible defaults. You can mix every Hub type later."
+            : step === 2
+              ? "A Hub is anything you are responsible for — a business, client, product, department, or initiative."
+              : step === 3
+                ? "Start with a useful structure or keep the Hub completely blank."
+                : step === 4
+                  ? "Invite, connect, or import now — every option can be skipped."
+                  : "You can see health, priority, waiting work, and next attention in under five minutes."}
+        </p>
         {step === 1 && (
-          <div className="onboarding-form">
+          <div className="onboarding-form onboarding-mode-form">
             <label>
               {copy.organization}
-              <input defaultValue="FounderHQ Demo" />
+              <input defaultValue="TREVV Demo" />
             </label>
-            <div>
-              <label>
-                {copy.language}
-                <select defaultValue="en">
-                  <option value="en">English</option>
-                  <option value="de">Deutsch</option>
-                </select>
-              </label>
-              <label>
-                {copy.timezone}
-                <select defaultValue="Europe/Berlin">
-                  <option>Europe/Berlin</option>
-                  <option>UTC</option>
-                </select>
-              </label>
+            <div className="managing-grid">
+              {modes.map(([value, title, template]) => (
+                <label
+                  className={managing === value ? "selected" : ""}
+                  key={value}
+                >
+                  <input
+                    type="radio"
+                    name="managing"
+                    value={value}
+                    checked={managing === value}
+                    onChange={() => setManaging(value)}
+                  />
+                  <span>{title.at(0)}</span>
+                  <strong>{title}</strong>
+                  <small>{template}</small>
+                </label>
+              ))}
             </div>
           </div>
         )}
         {step === 2 && (
-          <div className="hub-choice-grid">
-            {starterHubs.map((hub, index) => (
-              <label key={hub}>
-                <input type="checkbox" defaultChecked={index < 3} />
-                <span>{hub.at(0)}</span>
-                <strong>{hub}</strong>
-                <small>{index === 3 ? "Shared function" : "Venture Hub"}</small>
+          <div className="onboarding-form first-hub-form">
+            <label>
+              Hub name
+              <input
+                defaultValue={
+                  managing === "clients" ? "First client" : "Northstar Apparel"
+                }
+              />
+            </label>
+            <div>
+              <label>
+                Type
+                <select
+                  defaultValue={managing === "clients" ? "client" : "business"}
+                >
+                  <option value="business">Business</option>
+                  <option value="brand">Brand</option>
+                  <option value="client">Client</option>
+                  <option value="product">Product</option>
+                  <option value="department">Department</option>
+                  <option value="venture">Venture</option>
+                  <option value="initiative">Initiative</option>
+                  <option value="project">Project</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>
+                Owner
+                <select>
+                  <option>Mohammed Zaman</option>
+                  <option>Assign later</option>
+                </select>
+              </label>
+            </div>
+            <div>
+              <label>
+                Icon / color
+                <div className="hub-identity-input">
+                  <span>N</span>
+                  <input
+                    type="color"
+                    defaultValue="#5956c9"
+                    aria-label="Hub color"
+                  />
+                </div>
+              </label>
+              <label>
+                Health <small>Optional</small>
+                <select defaultValue="on_track">
+                  <option value="on_track">On Track</option>
+                  <option value="watch">Attention</option>
+                  <option value="critical">Critical</option>
+                  <option value="parked">Paused</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Current priority <small>Optional</small>
+              <input
+                placeholder="What matters most right now?"
+                defaultValue="Prepare the first launch review"
+              />
+            </label>
+          </div>
+        )}
+        {step === 3 && (
+          <div className="blueprint-choice-grid">
+            {[
+              "Operating business",
+              "Client delivery",
+              "Product initiative",
+              "Launch campaign",
+              "Start blank",
+            ].map((name, index) => (
+              <label key={name}>
+                <input
+                  type="radio"
+                  name="blueprint"
+                  defaultChecked={index === 0}
+                />
+                <span>
+                  <Grid2X2 size={16} />
+                </span>
+                <strong>{name}</strong>
+                <small>
+                  {index === 4
+                    ? "No statuses or fields added"
+                    : "Board, views, update cadence, and optional review ritual"}
+                </small>
               </label>
             ))}
           </div>
         )}
-        {step === 3 && (
-          <div className="onboarding-form">
+        {step === 4 && (
+          <div className="setup-option-grid">
             <label>
-              {copy.invite} <small>{copy.optional}</small>
-              <textarea placeholder="teammate@company.com" />
+              <input type="checkbox" />
+              <span>
+                <UserRound size={17} />
+              </span>
+              <strong>Invite team</strong>
+              <small>Now or later</small>
             </label>
-            <p>Guests will only see the Hubs explicitly shared with them.</p>
+            <label>
+              <input type="checkbox" />
+              <span>G</span>
+              <strong>Connect Google Drive</strong>
+              <small>Permission-safe file picker</small>
+            </label>
+            <label>
+              <input type="checkbox" />
+              <span>
+                <Grid2X2 size={17} />
+              </span>
+              <strong>Import spreadsheet</strong>
+              <small>Preview and dry run first</small>
+            </label>
+            <label>
+              <input type="checkbox" defaultChecked />
+              <span>
+                <ShieldCheck size={17} />
+              </span>
+              <strong>Keep workspace private</strong>
+              <small>Recommended default</small>
+            </label>
           </div>
         )}
-        {step === 4 && (
+        {step === 5 && (
           <div className="ready-card">
             <span>
               <Check size={20} />
             </span>
             <h2>Your Portfolio is ready</h2>
             <p>
-              We added realistic starter work so you can understand the
-              operating rhythm before replacing it with your own.
+              TREVV created one Portfolio, your first Hub, a starter Blueprint,
+              and a calm Home view. Nothing is locked into a customer mode.
             </p>
+            <div>
+              <b>Venture Portfolio</b>
+              <span>1 Hub · 1 owner · private</span>
+            </div>
           </div>
         )}
         <footer>
@@ -252,7 +393,7 @@ export function OnboardingExperience() {
           >
             {copy.back}
           </button>
-          {step < 4 ? (
+          {step < 5 ? (
             <button
               className="primary-button"
               onClick={() => setStep((current) => current + 1)}
@@ -261,8 +402,8 @@ export function OnboardingExperience() {
               <ArrowRight size={14} />
             </button>
           ) : (
-            <a className="primary-button" href="/app/portfolio">
-              Open Portfolio
+            <a className="primary-button" href="/app/home">
+              Open TREVV
               <ArrowRight size={14} />
             </a>
           )}

@@ -2,10 +2,11 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "@founderhq/design-tokens/css";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
+import { trevvBrand } from "@/lib/branding";
 import "./globals.css";
 import "./workspace.css";
 
-const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "FounderHQ";
+const appName = trevvBrand.name;
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -13,27 +14,27 @@ export const metadata: Metadata = {
   ),
   title: { default: appName, template: `%s · ${appName}` },
   description:
-    "A clear operating system for every venture, decision, and next move.",
+    "A calm operating system for every business, project, decision, and next move.",
   applicationName: appName,
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: appName, statusBarStyle: "default" },
   openGraph: {
     type: "website",
     title: appName,
-    description: "Every venture. One clear next move.",
+    description: "Everything you're running. One clear view.",
     images: [
       {
         url: "/og.png",
-        width: 1729,
+        width: 1728,
         height: 910,
-        alt: "FounderHQ portfolio overview",
+        alt: "TREVV attention-first portfolio overview",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
     title: appName,
-    description: "Every venture. One clear next move.",
+    description: "Everything you're running. One clear view.",
     images: ["/og.png"],
   },
 };

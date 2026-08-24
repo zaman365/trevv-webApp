@@ -1,8 +1,8 @@
 [package]
 name = "founderhq-desktop"
 version = "0.1.0"
-description = "FounderHQ desktop foundation"
-authors = ["FounderHQ"]
+description = "TREVV desktop foundation"
+authors = ["TREVV"]
 edition = "2021"
 
 [lib]

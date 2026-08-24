@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "FounderHQ",
-    "slug": "founderhq",
+    "name": "TREVV",
+    "slug": "trevv",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "founderhq",
+    "scheme": "trevv",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "plugins": ["expo-router", "expo-secure-store", "expo-notifications"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.founderhq.mobile"
+      "bundleIdentifier": "de.trevv.mobile"
     },
-    "android": { "package": "com.founderhq.mobile" },
+    "android": { "package": "de.trevv.mobile" },
     "experiments": { "typedRoutes": true },
     "extra": { "router": { "origin": false } }
   }

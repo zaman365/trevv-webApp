@@ -1,4 +1,4 @@
-name: FounderHQ CI
+name: TREVV CI
 
 on:
   push:

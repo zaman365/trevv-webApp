@@ -46,10 +46,33 @@ const titleKeys = {
 export function FocusExperience({ kind }: { kind: FocusKind }) {
   const copy = productCopy.en.focus;
   const [query, setQuery] = useState("");
-  const [captured, setCaptured] = useState([
-    "Review ZEHN returns policy",
-    "Explore supplier evidence reminder",
+  const [inboxActions, setInboxActions] = useState([
+    {
+      id: "inbox-1",
+      category: "decision request",
+      title: "Select onboarding navigation",
+      source: "Nora Klein · MealFlow",
+    },
+    {
+      id: "inbox-2",
+      category: "mention",
+      title: "Can you confirm the compliance assumption?",
+      source: "Amira Demir · Northstar Apparel",
+    },
+    {
+      id: "inbox-3",
+      category: "approval request",
+      title: "Review client storefront repair",
+      source: "Jana Roth · LocalReach",
+    },
+    {
+      id: "inbox-4",
+      category: "follow-up",
+      title: "Supplier evidence follow-up is due",
+      source: "TREVV · Northstar Apparel",
+    },
   ]);
+  const [recentCaptures, setRecentCaptures] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [titleKey, subtitleKey] = titleKeys[kind];
   const searchResults = useMemo(() => {
@@ -69,7 +92,7 @@ export function FocusExperience({ kind }: { kind: FocusKind }) {
       <main className="focus-main">
         <header className="focus-header">
           <div>
-            <p>FounderHQ / {crumb}</p>
+            <p>TREVV / {crumb}</p>
             <h1>{copy[titleKey]}</h1>
             <span>{copy[subtitleKey]}</span>
           </div>
@@ -83,12 +106,18 @@ export function FocusExperience({ kind }: { kind: FocusKind }) {
         {kind === "myWork" && <MyWork />}
         {kind === "inbox" && (
           <InboxView
-            captured={captured}
+            actions={inboxActions}
+            recentCaptures={recentCaptures}
             draft={draft}
             setDraft={setDraft}
+            onDone={(id) =>
+              setInboxActions((current) =>
+                current.filter((action) => action.id !== id),
+              )
+            }
             onCapture={() => {
               if (draft.trim()) {
-                setCaptured((current) => [draft.trim(), ...current]);
+                setRecentCaptures((current) => [draft.trim(), ...current]);
                 setDraft("");
               }
             }}
@@ -177,32 +206,41 @@ function MyWork() {
 }
 
 function InboxView({
-  captured,
+  actions,
+  recentCaptures,
   draft,
   setDraft,
+  onDone,
   onCapture,
 }: {
-  captured: string[];
+  actions: Array<{
+    id: string;
+    category: string;
+    title: string;
+    source: string;
+  }>;
+  recentCaptures: string[];
   draft: string;
   setDraft: (value: string) => void;
+  onDone: (id: string) => void;
   onCapture: () => void;
 }) {
   return (
     <div className="inbox-layout">
-      <section className="capture-card">
+      <section className="capture-card quick-capture-separate">
         <div className="capture-card-icon">
           <Sparkles size={18} />
         </div>
         <div>
-          <h2>What is on your mind?</h2>
+          <h2>Quick Capture</h2>
           <p>
-            Capture a task, idea, decision, link or request. Triage it when the
-            context is clearer.
+            Personal capture stays separate from communication that needs a
+            response.
           </p>
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Type anything that needs a place…"
+            placeholder="Capture a task, idea, link or note…"
           />
           <footer>
             <div>
@@ -229,30 +267,44 @@ function InboxView({
       <section className="inbox-list">
         <header>
           <div>
-            <h2>Untriaged</h2>
-            <span>{captured.length} items waiting for a home</span>
+            <h2>Actionable Inbox</h2>
+            <span>{actions.length} requests need a response</span>
           </div>
           <button>
             <Filter size={14} />
             Filter
           </button>
         </header>
-        {captured.map((title, index) => (
-          <article key={`${title}-${index}`}>
+        {actions.map((action) => (
+          <article key={action.id}>
             <span className="inbox-item-icon">
               <Inbox size={15} />
             </span>
             <div>
-              <strong>{title}</strong>
-              <span>Captured today · Private inbox</span>
+              <p>{action.category}</p>
+              <strong>{action.title}</strong>
+              <span>{action.source}</span>
             </div>
-            <button>Move to Hub</button>
-            <button>Park</button>
+            <button onClick={() => onDone(action.id)}>Done</button>
+            <button>Snooze</button>
             <button aria-label="Open">
               <ArrowRight size={14} />
             </button>
           </article>
         ))}
+        {!actions.length && (
+          <p className="inbox-clear">
+            <CheckCircle2 size={16} />
+            Your actionable Inbox is clear.
+          </p>
+        )}
+        {recentCaptures.length > 0 && (
+          <footer className="capture-confirmation">
+            <CheckCircle2 size={14} />
+            {recentCaptures.length} personal capture
+            {recentCaptures.length === 1 ? "" : "s"} saved outside Inbox.
+          </footer>
+        )}
       </section>
     </div>
   );
@@ -491,7 +543,7 @@ function TemplatesView() {
             <LayoutTemplate size={18} />
           </span>
           <div>
-            <p>{index < 4 ? "Popular" : "FounderHQ template"}</p>
+            <p>{index < 4 ? "Popular" : "TREVV template"}</p>
             <h2>{template}</h2>
             <span>
               Ready-made groups, statuses, fields, views and update prompts for

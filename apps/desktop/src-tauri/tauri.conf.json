@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "FounderHQ",
+  "productName": "TREVV",
   "version": "0.1.0",
-  "identifier": "com.founderhq.desktop",
+  "identifier": "de.trevv.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "FounderHQ",
+        "title": "TREVV",
         "width": 1320,
         "height": 850,
         "minWidth": 920,

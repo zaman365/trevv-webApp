@@ -1,14 +1,16 @@
 import { createAuthClient } from "better-auth/client";
 
 export interface SecureSessionStore {
-  get(key: "founderhq.session"): Promise<string | null>;
-  set(key: "founderhq.session", value: string): Promise<void>;
-  remove(key: "founderhq.session"): Promise<void>;
+  get(key: "trevv.session" | "founderhq.session"): Promise<string | null>;
+  set(key: "trevv.session" | "founderhq.session", value: string): Promise<void>;
+  remove(key: "trevv.session" | "founderhq.session"): Promise<void>;
 }
 
-export function createFounderAuthClient(baseURL: string) {
+export function createTrevvAuthClient(baseURL: string) {
   return createAuthClient({ baseURL, basePath: "/api/auth" });
 }
+/** @deprecated Use createTrevvAuthClient. */
+export const createFounderAuthClient = createTrevvAuthClient;
 
 export function createMemorySessionStore(): SecureSessionStore {
   let value: string | null = null;

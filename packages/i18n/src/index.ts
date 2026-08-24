@@ -1,6 +1,6 @@
 export const messages = {
   en: {
-    app: { name: "FounderHQ", organization: "FounderHQ Demo" },
+    app: { name: "TREVV", organization: "TREVV Demo" },
     nav: {
       portfolio: "Portfolio",
       myWork: "My Work",
@@ -30,7 +30,7 @@ export const messages = {
       priority: "Current priority",
       latestUpdate: "Latest update",
       signals: "signals need attention",
-      attention: "Founder attention",
+      attention: "Attention",
       showLess: "Show less",
       dismiss: "Dismiss",
       searchPlaceholder: "Search work, Hubs and people…",
@@ -52,7 +52,7 @@ export const messages = {
       allTypes: "All types",
       allHealth: "All health",
       sortAttention: "Sort: attention",
-      founderDecisions: "Founder decisions",
+      decisionsDue: "Decisions",
       approvalsDue: "Approvals due",
       blockedItems: "Blocked items",
       overdueMilestones: "Overdue milestones",
@@ -84,7 +84,7 @@ export const messages = {
     },
   },
   de: {
-    app: { name: "FounderHQ", organization: "FounderHQ Demo" },
+    app: { name: "TREVV", organization: "TREVV Demo" },
     nav: {
       portfolio: "Portfolio",
       myWork: "Meine Arbeit",
@@ -138,7 +138,7 @@ export const messages = {
       allTypes: "Alle Typen",
       allHealth: "Alle Zustände",
       sortAttention: "Sortierung: Priorität",
-      founderDecisions: "Founder-Entscheidungen",
+      decisionsDue: "Entscheidungen",
       approvalsDue: "Fällige Freigaben",
       blockedItems: "Blockierte Aufgaben",
       overdueMilestones: "Überfällige Meilensteine",

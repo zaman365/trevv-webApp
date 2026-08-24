@@ -22,10 +22,19 @@ export const roleEnum = pgEnum("membership_role", [
   "viewer",
 ]);
 export const hubTypeEnum = pgEnum("hub_type", [
-  "venture",
+  "business",
   "brand",
+  "client",
   "product",
+  "department",
+  "venture",
+  "initiative",
+  "investment",
+  "campaign",
+  "program",
+  "project",
   "shared_function",
+  // Kept as a compatibility value for existing pre-TREVV records.
   "client_program",
   "journey",
   "other",
@@ -72,8 +81,18 @@ export const visibilityEnum = pgEnum("visibility", ["private", "organization"]);
 export const progressModeEnum = pgEnum("progress_mode", [
   "none",
   "task_completion",
+  "weighted_work_items",
+  "milestone_completion",
+  // Kept as a compatibility value for existing boards.
   "weighted_milestones",
   "manual",
+]);
+export const attentionSeverityEnum = pgEnum("attention_severity", [
+  "info",
+  "low",
+  "medium",
+  "high",
+  "critical",
 ]);
 
 const timestamps = {
@@ -112,6 +131,32 @@ export const users = pgTable(
   (table) => [uniqueIndex("app_users_email_unique").on(table.email)],
 );
 
+export const portfolios = pgTable(
+  "portfolios",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull().default(""),
+    isDefault: boolean("is_default").notNull().default(false),
+    ordering: real("ordering").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("portfolios_org_slug_unique").on(
+      table.organizationId,
+      table.slug,
+    ),
+    index("portfolios_org_default_idx").on(
+      table.organizationId,
+      table.isDefault,
+    ),
+  ],
+);
+
 export const memberships = pgTable(
   "memberships",
   {
@@ -127,6 +172,27 @@ export const memberships = pgTable(
   (table) => [
     primaryKey({ columns: [table.organizationId, table.userId] }),
     index("memberships_user_idx").on(table.userId),
+  ],
+);
+
+export const portfolioMembers = pgTable(
+  "portfolio_members",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: roleEnum("role").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.portfolioId, table.userId] }),
+    index("portfolio_members_user_idx").on(table.organizationId, table.userId),
   ],
 );
 
@@ -156,6 +222,9 @@ export const hubs = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description").notNull().default(""),
@@ -176,10 +245,13 @@ export const hubs = pgTable(
     nextReviewDate: date("next_review_date"),
     lastUpdateAt: timestamp("last_update_at", { withTimezone: true }),
     ordering: real("ordering").notNull().default(0),
+    progressMode: progressModeEnum("progress_mode").notNull().default("none"),
+    manualProgressValue: integer("manual_progress_value"),
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("hubs_org_slug_unique").on(table.organizationId, table.slug),
+    uniqueIndex("hubs_portfolio_slug_unique").on(table.portfolioId, table.slug),
+    index("hubs_org_portfolio_idx").on(table.organizationId, table.portfolioId),
     index("hubs_org_health_idx").on(table.organizationId, table.health),
     index("hubs_org_lead_idx").on(table.organizationId, table.leadUserId),
   ],
@@ -355,6 +427,7 @@ export const itemDependencies = pgTable(
     dependsOnItemId: text("depends_on_item_id")
       .notNull()
       .references(() => workItems.id, { onDelete: "cascade" }),
+    relation: text("relation").notNull().default("depends_on"),
   },
   (table) => [primaryKey({ columns: [table.itemId, table.dependsOnItemId] })],
 );
@@ -677,6 +750,587 @@ export const outboxEvents = pgTable(
   },
   (table) => [
     index("outbox_pending_idx").on(table.processedAt, table.availableAt),
+  ],
+);
+
+// Commercial services are kept pricing-agnostic. Product code evaluates
+// entitlement keys centrally and billing providers write through an adapter.
+export const plans = pgTable(
+  "plans",
+  {
+    id: text("id").primaryKey(),
+    key: text("key").notNull(),
+    name: text("name").notNull(),
+    active: boolean("active").notNull().default(true),
+    metadata: jsonb("metadata").notNull().default({}),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex("plans_key_unique").on(table.key)],
+);
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    planId: text("plan_id")
+      .notNull()
+      .references(() => plans.id),
+    status: text("status").notNull(),
+    provider: text("provider"),
+    providerCustomerId: text("provider_customer_id"),
+    providerSubscriptionId: text("provider_subscription_id"),
+    currentPeriodStart: timestamp("current_period_start", {
+      withTimezone: true,
+    }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    ...timestamps,
+  },
+  (table) => [
+    index("subscriptions_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+  ],
+);
+
+export const entitlements = pgTable(
+  "entitlements",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    subscriptionId: text("subscription_id").references(() => subscriptions.id, {
+      onDelete: "cascade",
+    }),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull(),
+    source: text("source").notNull().default("plan"),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    effectiveUntil: timestamp("effective_until", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("entitlements_org_key_source_unique").on(
+      table.organizationId,
+      table.key,
+      table.source,
+    ),
+    index("entitlements_org_effective_idx").on(
+      table.organizationId,
+      table.effectiveUntil,
+    ),
+  ],
+);
+
+export const usageCounters = pgTable(
+  "usage_counters",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: real("value").notNull().default(0),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("usage_counters_org_key_period_unique").on(
+      table.organizationId,
+      table.key,
+      table.periodStart,
+    ),
+  ],
+);
+
+export const billingEvents = pgTable(
+  "billing_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    provider: text("provider").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("billing_events_provider_event_unique").on(
+      table.provider,
+      table.providerEventId,
+    ),
+  ],
+);
+
+export const attentionSignals = pgTable(
+  "attention_signals",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    signalType: text("signal_type").notNull(),
+    severity: attentionSeverityEnum("severity").notNull(),
+    impact: integer("impact").notNull(),
+    urgency: integer("urgency").notNull(),
+    responsibility: real("responsibility").notNull().default(1),
+    reason: text("reason").notNull(),
+    recommendedAction: text("recommended_action"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
+    actionReason: text("action_reason"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("attention_org_portfolio_active_idx").on(
+      table.organizationId,
+      table.portfolioId,
+      table.resolvedAt,
+      table.dismissedAt,
+    ),
+    index("attention_entity_idx").on(
+      table.organizationId,
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+);
+
+export const waitingStates = pgTable(
+  "waiting_states",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    hubId: text("hub_id")
+      .notNull()
+      .references(() => hubs.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    waitingType: text("waiting_type").notNull(),
+    waitingReferenceId: text("waiting_reference_id"),
+    waitingLabel: text("waiting_label"),
+    waitingSince: timestamp("waiting_since", { withTimezone: true }).notNull(),
+    expectedBy: date("expected_by"),
+    followUpOwnerId: text("follow_up_owner_id")
+      .notNull()
+      .references(() => users.id),
+    nextFollowUp: date("next_follow_up"),
+    waitingNote: text("waiting_note"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("waiting_org_portfolio_follow_up_idx").on(
+      table.organizationId,
+      table.portfolioId,
+      table.nextFollowUp,
+      table.resolvedAt,
+    ),
+    uniqueIndex("waiting_active_entity_unique").on(
+      table.organizationId,
+      table.entityType,
+      table.entityId,
+      table.resolvedAt,
+    ),
+  ],
+);
+
+export const userSeenCheckpoints = pgTable(
+  "user_seen_checkpoints",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.portfolioId, table.userId] }),
+    index("seen_checkpoints_user_idx").on(table.organizationId, table.userId),
+  ],
+);
+
+export const hubSnapshots = pgTable(
+  "hub_snapshots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    hubId: text("hub_id")
+      .notNull()
+      .references(() => hubs.id, { onDelete: "cascade" }),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    health: hubHealthEnum("health").notNull(),
+    progress: real("progress"),
+    openCount: integer("open_count").notNull(),
+    overdueCount: integer("overdue_count").notNull(),
+    blockedCount: integer("blocked_count").notNull(),
+    decisionCount: integer("decision_count").notNull(),
+    attentionCount: integer("attention_count").notNull(),
+    nextMilestoneId: text("next_milestone_id").references(() => workItems.id),
+    nextMilestoneStatus: text("next_milestone_status"),
+    latestUpdateAt: timestamp("latest_update_at", { withTimezone: true }),
+    source: text("source").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("hub_snapshots_hub_captured_unique").on(
+      table.hubId,
+      table.capturedAt,
+    ),
+    index("hub_snapshots_portfolio_captured_idx").on(
+      table.organizationId,
+      table.portfolioId,
+      table.capturedAt,
+    ),
+  ],
+);
+
+export const reviewRituals = pgTable(
+  "review_rituals",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    cadence: text("cadence").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    nextDueAt: timestamp("next_due_at", { withTimezone: true }),
+    reminderEnabled: boolean("reminder_enabled").notNull().default(false),
+    ...timestamps,
+  },
+  (table) => [
+    index("review_rituals_due_idx").on(
+      table.organizationId,
+      table.enabled,
+      table.nextDueAt,
+    ),
+  ],
+);
+
+export const decisionOutcomes = pgTable(
+  "decision_outcomes",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    decisionItemId: text("decision_item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    outcome: text("outcome").notNull(),
+    learning: text("learning").notNull(),
+    wouldRepeat: boolean("would_repeat"),
+    recordedBy: text("recorded_by")
+      .notNull()
+      .references(() => users.id),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("decision_outcomes_decision_idx").on(
+      table.organizationId,
+      table.decisionItemId,
+      table.recordedAt,
+    ),
+  ],
+);
+
+export const insights = pgTable(
+  "insights",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceUrl: text("source_url"),
+    impact: text("impact"),
+    labels: text("labels").array().notNull().default([]),
+    capturedBy: text("captured_by")
+      .notNull()
+      .references(() => users.id),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ...timestamps,
+  },
+  (table) => [
+    index("insights_portfolio_captured_idx").on(
+      table.organizationId,
+      table.portfolioId,
+      table.capturedAt,
+    ),
+  ],
+);
+
+export const insightLinks = pgTable(
+  "insight_links",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    insightId: text("insight_id")
+      .notNull()
+      .references(() => insights.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("insight_links_target_unique").on(
+      table.insightId,
+      table.entityType,
+      table.entityId,
+    ),
+    index("insight_links_entity_idx").on(
+      table.organizationId,
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+);
+
+export const blueprints = pgTable(
+  "blueprints",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    currentVersionId: text("current_version_id"),
+    ...timestamps,
+  },
+  (table) => [index("blueprints_org_idx").on(table.organizationId)],
+);
+
+export const blueprintVersions = pgTable(
+  "blueprint_versions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    blueprintId: text("blueprint_id")
+      .notNull()
+      .references(() => blueprints.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    summary: text("summary").notNull(),
+    definition: jsonb("definition").notNull(),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("blueprint_versions_number_unique").on(
+      table.blueprintId,
+      table.version,
+    ),
+  ],
+);
+
+export const blueprintInstances = pgTable(
+  "blueprint_instances",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    blueprintId: text("blueprint_id")
+      .notNull()
+      .references(() => blueprints.id, { onDelete: "cascade" }),
+    blueprintVersionId: text("blueprint_version_id")
+      .notNull()
+      .references(() => blueprintVersions.id),
+    hubId: text("hub_id")
+      .notNull()
+      .references(() => hubs.id, { onDelete: "cascade" }),
+    boardId: text("board_id")
+      .notNull()
+      .references(() => boards.id, { onDelete: "cascade" }),
+    localOverrides: jsonb("local_overrides").notNull().default([]),
+    detachedAt: timestamp("detached_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("blueprint_instances_board_unique").on(table.boardId),
+    index("blueprint_instances_update_idx").on(
+      table.organizationId,
+      table.blueprintId,
+      table.detachedAt,
+    ),
+  ],
+);
+
+export const stakeholderExposures = pgTable(
+  "stakeholder_exposures",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hubId: text("hub_id")
+      .notNull()
+      .references(() => hubs.id, { onDelete: "cascade" }),
+    principalId: text("principal_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    showHealth: boolean("show_health").notNull().default(false),
+    showLatestUpdate: boolean("show_latest_update").notNull().default(false),
+    showMilestones: boolean("show_milestones").notNull().default(false),
+    selectedWorkItemIds: text("selected_work_item_ids")
+      .array()
+      .notNull()
+      .default([]),
+    selectedResourceIds: text("selected_resource_ids")
+      .array()
+      .notNull()
+      .default([]),
+    approvalItemIds: text("approval_item_ids").array().notNull().default([]),
+    decisionItemIds: text("decision_item_ids").array().notNull().default([]),
+    showInternalComments: boolean("show_internal_comments")
+      .notNull()
+      .default(false),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("stakeholder_exposures_principal_hub_unique").on(
+      table.hubId,
+      table.principalId,
+    ),
+  ],
+);
+
+export const importRuns = pgTable(
+  "import_runs",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    preset: text("preset").notNull(),
+    status: text("status").notNull(),
+    dryRun: boolean("dry_run").notNull().default(true),
+    fieldMapping: jsonb("field_mapping").notNull().default({}),
+    statusMapping: jsonb("status_mapping").notNull().default({}),
+    ownerMapping: jsonb("owner_mapping").notNull().default({}),
+    report: jsonb("report").notNull().default({}),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("import_runs_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const inboxItems = pgTable(
+  "inbox_items",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    resource: jsonb("resource").notNull().default({}),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("inbox_items_user_actionable_idx").on(
+      table.organizationId,
+      table.userId,
+      table.doneAt,
+      table.snoozedUntil,
+    ),
   ],
 );
 

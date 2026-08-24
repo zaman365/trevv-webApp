@@ -23,10 +23,16 @@ const seriousViolations = (
 
 const routes = [
   "/sign-in",
+  "/onboarding",
+  "/app/home",
   "/app/portfolio",
-  "/app/hubs/zehn",
-  "/app/hubs/zehn/boards/b-zehn-launch",
+  "/app/attention",
+  "/app/waiting",
+  "/app/hubs/northstar-apparel",
+  "/app/hubs/northstar-apparel/boards/b-northstar-launch",
+  "/app/hubs/localreach/stakeholder",
   "/app/decisions",
+  "/app/blueprints",
 ] as const;
 
 for (const route of routes) {
@@ -45,7 +51,7 @@ for (const route of routes) {
 test("item detail panel has no serious automated accessibility violations", async ({
   page,
 }) => {
-  await page.goto("/app/hubs/zehn/boards/b-zehn-launch");
+  await page.goto("/app/hubs/northstar-apparel/boards/b-northstar-launch");
   const panel = page.getByRole("complementary", {
     name: "Choose storefront launch offer",
   });

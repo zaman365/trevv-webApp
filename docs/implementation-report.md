@@ -1,10 +1,10 @@
-# FounderHQ implementation report
+# TREVV implementation report
 
 ## Delivered
 
-FounderHQ V1 is implemented as a pnpm/Turborepo TypeScript monorepo. The Next.js Web/PWA is the complete product surface, supported by a versioned Hono API, Better Auth, PostgreSQL/Drizzle persistence, a typed cross-platform client, a permission policy, an outbox worker, an Expo mobile companion, and a Tauri desktop shell.
+TREVV is implemented as a pnpm/Turborepo TypeScript monorepo. The Next.js Web/PWA is the complete product surface, supported by a versioned Hono API, Better Auth, PostgreSQL/Drizzle persistence, a typed cross-platform client, a permission policy, an outbox/attention/review worker, an Expo mobile companion, and a Tauri desktop shell.
 
-The deterministic demo includes nine Hubs and exercises portfolio roll-ups, Hub navigation, table and Kanban boards, drag-and-drop foundations, bulk selection, item detail editing, My Work, Inbox, decisions, approvals, search, templates, integrations, authentication, and onboarding. English/German foundations, light/dark themes, responsive layouts, offline-first demo fallback, PWA metadata, and a generated social preview are included.
+The deterministic fictional demo exercises multi-Portfolio roll-ups, explainable Attention actions, Waiting follow-ups, Change Radar filtering, review snapshots, Decision outcomes, Insights, opportunity provenance, Blueprint diffs, stakeholder exposure, import dry runs, cross-Hub pressure, Hub navigation, boards, My Work, Inbox, decisions, approvals, search, integrations, authentication, and commercial onboarding.
 
 ## Notable decisions
 
@@ -22,10 +22,10 @@ The deterministic demo includes nine Hubs and exercises portfolio roll-ups, Hub 
 - TypeScript type-check across 18 workspaces
 - unit and package tests across domain, permissions, database, integrations, API, Web, and worker packages
 - production build across all 18 workspaces
-- 8 Playwright critical-path checks across desktop and mobile viewports
-- 12 axe accessibility checks with no serious or critical findings across sign-in, Portfolio, Hub, Board, Decisions, and the item panel
-- live API smoke checks for health, portfolio, and the 11-path OpenAPI document
-- dependency audit with no unhandled high or critical advisory
+- 22 Playwright critical-path checks across desktop and mobile viewports
+- 24 axe accessibility checks with no serious or critical findings across onboarding, Home, Portfolio, Attention, Waiting, Hub, Board, stakeholder view, Decisions, Blueprints, and the item panel
+- API contract coverage for health, Portfolio, Attention, Waiting, commercial memory, and the 23-path OpenAPI document
+- dependency audit with no reported advisory
 
 ## Release constraints
 

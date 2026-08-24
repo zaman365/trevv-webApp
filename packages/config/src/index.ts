@@ -1,7 +1,9 @@
 export const appConfig = {
-  name: "FounderHQ",
+  name: "TREVV",
   defaultLocale: "en" as const,
   supportedLocales: ["en", "de"] as const,
-  deepLinkScheme: "founderhq",
+  deepLinkScheme: "trevv",
+  legacyDeepLinkSchemes: ["founderhq"] as const,
+  primaryDomain: "trevv.de",
   apiVersion: "v1",
 };

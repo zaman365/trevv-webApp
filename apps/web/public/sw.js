@@ -1,4 +1,4 @@
-const CACHE = "founderhq-v1";
+const CACHE = "trevv-v2";
 const SHELL = [
   "/",
   "/app/portfolio",

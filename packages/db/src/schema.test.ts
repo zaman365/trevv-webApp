@@ -5,6 +5,8 @@ describe("tenant schema", () => {
   it("includes the required operating and audit records", () => {
     for (const table of [
       "organizations",
+      "portfolios",
+      "portfolioMembers",
       "memberships",
       "hubs",
       "boards",
@@ -18,6 +20,25 @@ describe("tenant schema", () => {
       "integrationConnections",
       "webhookDeliveries",
       "outboxEvents",
+      "attentionSignals",
+      "waitingStates",
+      "hubSnapshots",
+      "decisionOutcomes",
+      "insights",
+      "insightLinks",
+      "blueprints",
+      "blueprintVersions",
+      "blueprintInstances",
+      "plans",
+      "subscriptions",
+      "entitlements",
+      "usageCounters",
+      "billingEvents",
+      "userSeenCheckpoints",
+      "reviewRituals",
+      "stakeholderExposures",
+      "importRuns",
+      "inboxItems",
     ])
       expect(schema).toHaveProperty(table);
   });

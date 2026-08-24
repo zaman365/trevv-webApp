@@ -6,7 +6,7 @@ serve({ fetch: app.fetch, port }, (info) => {
   console.log(
     JSON.stringify({
       level: "info",
-      message: "FounderHQ API ready",
+      message: "TREVV API ready",
       url: `http://localhost:${info.port}`,
     }),
   );

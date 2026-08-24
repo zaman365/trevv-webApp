@@ -2,7 +2,7 @@
 
 ## Topology
 
-FounderHQ is one platform with purpose-built clients:
+TREVV is one platform with purpose-built clients:
 
 ```text
 Web (Next.js) ─┐
@@ -10,7 +10,7 @@ Mobile (Expo) ─┼─ typed API client ─ Hono /api/v1 ─ domain services �
 Desktop (Tauri)┘                            └──── outbox ─ worker
 ```
 
-The Hono service owns transport, authentication boundaries, authorization calls, validation, rate limits, and webhook endpoints. `packages/core` owns domain rules and portfolio roll-ups. `packages/api-contract` is the single Zod contract source. `packages/db` owns Drizzle schema and repositories. No client imports server-only packages.
+The Hono service owns transport, authentication boundaries, authorization calls, validation, rate limits, and webhook endpoints. `packages/core` owns deterministic attention, entitlement, Blueprint diff, opportunity, pressure, and portfolio-rollup rules. `packages/api-contract` is the single Zod contract source. `packages/db` owns the additive Drizzle schema and repositories. No client imports server-only packages.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Better Auth is configured once in `packages/auth-server`. Web uses secure same-s
 
 ## Realtime and background work
 
-Mutations emit transactionally stored outbox events. The worker leases events idempotently and handles notifications, reminders, update staleness, import/export jobs, and provider synchronization. Server-Sent Events refresh activity and notification surfaces; event types remain transport-neutral.
+Mutations emit transactionally stored outbox events. The worker leases events idempotently and handles notifications, reminders, deterministic Attention refreshes, review cadence, update staleness, import/export jobs, and provider synchronization. Server-Sent Events refresh activity and notification surfaces; event types remain transport-neutral.
 
 ## Offline and concurrency
 
@@ -26,5 +26,4 @@ Clients cache safe reads, apply optimistic board mutations, and surface retry/fa
 
 ## Deployment
 
-Web, API, and worker are independently deployable. API and worker share PostgreSQL and private object storage. Mobile and desktop point to the hosted HTTPS API. Preferred production data regions are in the EU. Deep links use the `founderhq://` scheme plus verified HTTPS links.
-
+Web, API, and worker are independently deployable. API and worker share PostgreSQL and private object storage. Mobile and desktop point to the hosted HTTPS API. Preferred production data regions are in the EU. New deep links use `trevv://` plus verified `https://trevv.de` links; the legacy scheme remains a compatibility alias during migration.

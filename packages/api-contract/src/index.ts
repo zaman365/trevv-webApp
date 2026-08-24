@@ -27,9 +27,17 @@ export const lifecycleStageSchema = z.enum([
   "archived",
 ]);
 export const hubTypeSchema = z.enum([
-  "venture",
+  "business",
   "brand",
+  "client",
   "product",
+  "department",
+  "venture",
+  "initiative",
+  "investment",
+  "campaign",
+  "program",
+  "project",
   "shared_function",
   "client_program",
   "journey",
@@ -74,6 +82,7 @@ export const sessionSchema = z.object({
 
 export const hubSchema = z.object({
   id: idSchema,
+  portfolioId: idSchema,
   slug: z.string().min(1).max(120),
   name: z.string().min(1).max(160),
   icon: z.string().min(1).max(12),
@@ -139,6 +148,88 @@ export const portfolioResponseSchema = z.object({
   hubs: z.array(z.object({ hub: hubSchema, rollup: hubRollupSchema })),
 });
 
+export const portfolioSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  name: z.string().min(1).max(160),
+  slug: z.string().min(1).max(120),
+  description: z.string().max(1_000),
+  isDefault: z.boolean(),
+});
+
+export const attentionSignalSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  portfolioId: idSchema,
+  hubId: idSchema.optional(),
+  entityType: z.string().min(1).max(80),
+  entityId: idSchema,
+  signalType: z.string().min(1).max(120),
+  severity: z.enum(["info", "low", "medium", "high", "critical"]),
+  impact: z.number().min(1).max(5),
+  urgency: z.number().min(1).max(5),
+  responsibility: z.number().positive(),
+  reason: z.string().min(1).max(2_000),
+  recommendedAction: z.string().max(2_000).optional(),
+  createdAt: z.iso.datetime(),
+  resolvedAt: z.iso.datetime().optional(),
+  dismissedAt: z.iso.datetime().optional(),
+  snoozedUntil: z.iso.datetime().optional(),
+  actionReason: z.string().max(1_000).optional(),
+  metadata: z.record(z.string(), z.unknown()),
+});
+
+export const attentionActionSchema = z
+  .object({
+    action: z.enum(["resolve", "dismiss", "snooze"]),
+    reason: z.string().trim().min(3).max(1_000).optional(),
+    snoozedUntil: z.iso.datetime().optional(),
+  })
+  .superRefine((value, context) => {
+    if (["dismiss", "snooze"].includes(value.action) && !value.reason)
+      context.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "A reason is required when dismissing or snoozing a signal.",
+      });
+    if (value.action === "snooze" && !value.snoozedUntil)
+      context.addIssue({
+        code: "custom",
+        path: ["snoozedUntil"],
+        message: "A snooze-until date is required.",
+      });
+  });
+
+export const waitingStateSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  portfolioId: idSchema,
+  hubId: idSchema,
+  entityType: z.enum(["work_item", "decision", "approval"]),
+  entityId: idSchema,
+  title: z.string().min(1).max(500),
+  waitingType: z.enum([
+    "person",
+    "team",
+    "external_partner",
+    "client",
+    "vendor",
+    "decision",
+    "document",
+    "dependency",
+    "other",
+  ]),
+  waitingReferenceId: idSchema.optional(),
+  waitingLabel: z.string().max(200).optional(),
+  waitingSince: z.iso.date(),
+  expectedBy: z.iso.date().optional(),
+  followUpOwnerId: idSchema,
+  followUpOwnerName: z.string().min(1).max(160),
+  nextFollowUp: z.iso.date().optional(),
+  waitingNote: z.string().max(2_000).optional(),
+  resolvedAt: z.iso.datetime().optional(),
+});
+
 export const paginatedItemsSchema = z.object({
   data: z.array(workItemSchema),
   nextCursor: z.string().nullable(),
@@ -172,6 +263,9 @@ export type Session = z.infer<typeof sessionSchema>;
 export type HubDto = z.infer<typeof hubSchema>;
 export type WorkItemDto = z.infer<typeof workItemSchema>;
 export type PortfolioResponse = z.infer<typeof portfolioResponseSchema>;
+export type PortfolioDto = z.infer<typeof portfolioSchema>;
+export type AttentionSignalDto = z.infer<typeof attentionSignalSchema>;
+export type WaitingStateDto = z.infer<typeof waitingStateSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
 export const eventSchema = z.discriminatedUnion("type", [

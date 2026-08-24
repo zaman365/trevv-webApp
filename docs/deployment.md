@@ -42,4 +42,4 @@ Use `.env.example` as the catalog. Secrets belong in the provider secret manager
 
 ## Deep links
 
-Web uses HTTPS application routes. Mobile registers `founderhq://`; desktop registers the Tauri deep-link capability when packaging is enabled. Auth callbacks must include a one-time state/PKCE verifier and return to a specific safe route. Unknown deep links open the Portfolio, never arbitrary external URLs.
+Web uses HTTPS application routes on the configured host; `trevv.de` is the primary product domain. Mobile registers `trevv://`; desktop registers the Tauri deep-link capability when packaging is enabled. Auth callbacks must include a one-time state/PKCE verifier and return to a specific safe route. Unknown deep links open Home, never arbitrary external URLs. The legacy scheme may be accepted temporarily for compatibility.

@@ -33,7 +33,7 @@ export default function PortfolioScreen() {
   if (portfolio.isError || !portfolio.data)
     return (
       <SafeAreaView style={styles.center}>
-        <Text style={styles.errorTitle}>FounderHQ is offline</Text>
+        <Text style={styles.errorTitle}>TREVV is offline</Text>
         <Text style={styles.errorText}>
           Start the API or check EXPO_PUBLIC_API_URL, then retry.
         </Text>
@@ -57,7 +57,7 @@ export default function PortfolioScreen() {
           />
         }
       >
-        <Text style={styles.eyebrow}>FOUNDERHQ · MOBILE COMPANION</Text>
+        <Text style={styles.eyebrow}>TREVV · MOBILE COMPANION</Text>
         <Text style={styles.title}>Portfolio</Text>
         <Text style={styles.subtitle}>
           Review what needs you without carrying the desktop board in your

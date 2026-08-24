@@ -1,11 +1,17 @@
 export const productCopy = {
   en: {
     nav: {
+      home: "Home",
       portfolio: "Portfolio",
+      attention: "Attention",
       myWork: "My Work",
       inbox: "Inbox",
+      waiting: "Waiting",
       decisions: "Decisions",
       approvals: "Approvals",
+      ideas: "Ideas",
+      team: "Team",
+      reviews: "Reviews",
       templates: "Templates",
       settings: "Settings",
       hubs: "Hubs",
@@ -19,7 +25,7 @@ export const productCopy = {
       closeNavigation: "Close navigation",
     },
     board: {
-      breadcrumb: "ZEHN / Product launch",
+      breadcrumb: "Northstar Apparel / Product launch",
       title: "SS26 launch board",
       subtitle: "Products, compliance, content and storefront readiness",
       table: "Table",
@@ -97,7 +103,7 @@ export const productCopy = {
       liveSignals: "Live work signals",
       milestone: "Next milestone",
       latestUpdate: "Latest weekly update",
-      decisions: "Founder decisions & approvals",
+      decisions: "Decisions & approvals",
       recentActivity: "Recent activity",
       connected: "Connected resources",
       viewBoard: "Open launch board",
@@ -121,9 +127,9 @@ export const productCopy = {
         "Start proven operating workflows without adding hierarchy.",
       settingsTitle: "Integrations",
       settingsSubtitle:
-        "Connect optional tools while FounderHQ stays useful on its own.",
+        "Connect optional tools while TREVV stays useful on its own.",
       newCapture: "Capture item",
-      searchPlaceholder: "Search FounderHQ…",
+      searchPlaceholder: "Search TREVV…",
       noResults: "No matching work found.",
       today: "Today",
       upcoming: "Upcoming",
@@ -144,16 +150,16 @@ export const productCopy = {
     auth: {
       signInTitle: "Welcome back",
       signInSubtitle: "Open your portfolio and make the next move clear.",
-      signUpTitle: "Create your FounderHQ",
+      signUpTitle: "Create your TREVV workspace",
       signUpSubtitle:
-        "Bring every venture and responsibility into one calm operating system.",
+        "Bring every business, project, team, and responsibility into one calm operating system.",
       email: "Work email",
       password: "Password",
       name: "Your name",
       signIn: "Sign in",
       create: "Create account",
       demo: "Continue with demo workspace",
-      noAccount: "New to FounderHQ?",
+      noAccount: "New to TREVV?",
       hasAccount: "Already have an account?",
       onboardingTitle: "Shape your operating system",
       onboardingSubtitle:

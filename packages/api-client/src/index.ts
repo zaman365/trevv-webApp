@@ -1,16 +1,21 @@
 import {
   apiErrorSchema,
+  attentionActionSchema,
+  attentionSignalSchema,
   hubSchema,
   paginatedItemsSchema,
   portfolioResponseSchema,
+  portfolioSchema,
   sessionSchema,
   workItemSchema,
+  waitingStateSchema,
+  type AttentionSignalDto,
   type PortfolioResponse,
   type Session,
   type WorkItemDto,
 } from "@founderhq/api-contract";
 
-export class FounderHqApiError extends Error {
+export class TrevvApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
@@ -18,7 +23,7 @@ export class FounderHqApiError extends Error {
     readonly status: number,
   ) {
     super(message);
-    this.name = "FounderHqApiError";
+    this.name = "TrevvApiError";
   }
 }
 
@@ -51,13 +56,13 @@ export function createApiClient({
     if (!response.ok) {
       const parsed = apiErrorSchema.safeParse(body);
       if (parsed.success)
-        throw new FounderHqApiError(
+        throw new TrevvApiError(
           parsed.data.error.code,
           parsed.data.error.message,
           parsed.data.error.requestId,
           response.status,
         );
-      throw new FounderHqApiError(
+      throw new TrevvApiError(
         "unexpected_response",
         "The server returned an unexpected response.",
         response.headers.get("x-request-id") ?? "unknown",
@@ -72,6 +77,34 @@ export function createApiClient({
       sessionSchema.parse(await request("/session")),
     portfolio: async (): Promise<PortfolioResponse> =>
       portfolioResponseSchema.parse(await request("/portfolio")),
+    portfolios: async () =>
+      portfolioSchema.array().parse(await request("/portfolios")),
+    attention: async (portfolioId?: string) =>
+      attentionSignalSchema
+        .array()
+        .parse(
+          await request(
+            `/attention${portfolioId ? `?portfolioId=${encodeURIComponent(portfolioId)}` : ""}`,
+          ),
+        ),
+    actOnAttention: async (
+      id: string,
+      input: {
+        action: "resolve" | "dismiss" | "snooze";
+        reason?: string;
+        snoozedUntil?: string;
+      },
+    ): Promise<AttentionSignalDto> => {
+      const body = attentionActionSchema.parse(input);
+      return attentionSignalSchema.parse(
+        await request(`/attention/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        }),
+      );
+    },
+    waiting: async () =>
+      waitingStateSchema.array().parse(await request("/waiting")),
     hubs: async () => hubSchema.array().parse(await request("/hubs")),
     items: async (cursor?: string) =>
       paginatedItemsSchema.parse(
@@ -105,4 +138,8 @@ export function createApiClient({
   };
 }
 
-export type FounderHqApiClient = ReturnType<typeof createApiClient>;
+export type TrevvApiClient = ReturnType<typeof createApiClient>;
+/** @deprecated Use TrevvApiError. */
+export { TrevvApiError as FounderHqApiError };
+/** @deprecated Use TrevvApiClient. */
+export type FounderHqApiClient = TrevvApiClient;

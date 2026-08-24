@@ -12,7 +12,7 @@ describe("portfolio roll-ups", () => {
   });
   it("never mutates or silently derives manual health", () => {
     const hub = structuredClone(
-      demoHubs.find((candidate) => candidate.slug === "gastrofix")!,
+      demoHubs.find((candidate) => candidate.slug === "greentable")!,
     );
     const before = hub.health;
     const rollup = rollupHub(hub, demoItems, now);
