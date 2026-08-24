@@ -1,0 +1,79 @@
+name: FounderHQ CI
+
+on:
+  push:
+    branches: [main, "feat/**", "codex/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: founderhq
+          POSTGRES_PASSWORD: founderhq
+          POSTGRES_DB: founderhq_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U founderhq -d founderhq_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_test
+      BETTER_AUTH_SECRET: ci-only-secret-ci-only-secret-1234
+      BETTER_AUTH_URL: http://127.0.0.1:8787
+      WEB_ORIGIN: http://127.0.0.1:3100
+      DEMO_MODE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate and verify API contract
+        run: |
+          pnpm contracts:generate
+          git diff --exit-code -- openapi.json
+      - name: Migrate and seed clean database
+        run: |
+          pnpm db:migrate
+          pnpm db:seed
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Dependency security scan
+        run: pnpm security:audit
+
+  browser-quality:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - run: pnpm test:a11y
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 14
