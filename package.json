@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "pnpm exec turbo run build",
+    "build": "node scripts/build.mjs",
     "dev": "turbo run dev --parallel",
     "dev:web": "pnpm --filter @founderhq/web dev",
     "dev:api": "pnpm --filter @founderhq/api dev",

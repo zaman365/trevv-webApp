@@ -22,6 +22,8 @@ Web, Mobile, and Desktop point to one public HTTPS API. The API is the only serv
 
 Run `pnpm install --frozen-lockfile`, `pnpm contracts:generate`, and all quality gates before producing artifacts. Apply `pnpm db:migrate` as a one-off release job before API rollout, then run `pnpm db:seed` only for a new demo/pilot database.
 
+The root `pnpm build` validates every workspace through Turborepo. A hosting environment that deliberately launches the root script through npm compiles the deployable Web/PWA workspace directly, so its later build shell does not depend on retaining a pnpm binary.
+
 ## Release order
 
 1. Snapshot/verify PostgreSQL and validate backup restore recency.
