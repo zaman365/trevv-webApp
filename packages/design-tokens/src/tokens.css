@@ -1,0 +1,45 @@
+:root {
+  --fh-canvas: #f5f6fa;
+  --fh-canvas-deep: #ebeef5;
+  --fh-surface: #ffffff;
+  --fh-surface-subtle: #fafbfc;
+  --fh-ink: #172033;
+  --fh-ink-soft: #3e465a;
+  --fh-muted: #626b7e;
+  --fh-border: #e2e5ec;
+  --fh-border-strong: #d3d7e2;
+  --fh-primary: #5b5bd6;
+  --fh-primary-strong: #4747bd;
+  --fh-primary-soft: #eeeeff;
+  --fh-success: #146b50;
+  --fh-success-soft: #e7f5ef;
+  --fh-warning: #865006;
+  --fh-warning-soft: #fff3dc;
+  --fh-danger: #ad3148;
+  --fh-danger-soft: #ffebee;
+  --fh-parked: #60697b;
+  --fh-parked-soft: #eef0f4;
+  --fh-info: #2873b9;
+  --fh-info-soft: #e8f2fb;
+  --fh-shadow-sm: 0 1px 2px rgb(23 32 51 / 4%);
+  --fh-shadow-md: 0 12px 32px rgb(23 32 51 / 8%);
+  --fh-radius-control: 11px;
+  --fh-radius-card: 17px;
+  --fh-radius-panel: 20px;
+  --fh-focus: 0 0 0 3px rgb(91 91 214 / 22%);
+}
+
+[data-theme="dark"] {
+  --fh-canvas: #111522;
+  --fh-canvas-deep: #0b0e17;
+  --fh-surface: #191e2d;
+  --fh-surface-subtle: #151a28;
+  --fh-ink: #f4f6fb;
+  --fh-ink-soft: #d9deea;
+  --fh-muted: #9da5ba;
+  --fh-border: #2a3143;
+  --fh-border-strong: #384157;
+  --fh-primary: #8b88ff;
+  --fh-primary-strong: #a4a2ff;
+  --fh-primary-soft: #29294d;
+}

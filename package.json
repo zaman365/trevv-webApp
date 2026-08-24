@@ -14,6 +14,9 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "playwright test tests/e2e/critical-paths.spec.ts",
+    "test:a11y": "playwright test tests/e2e/accessibility.spec.ts",
+    "security:audit": "node scripts/audit.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @founderhq/db generate",
@@ -22,10 +25,11 @@
     "contracts:generate": "pnpm --filter @founderhq/api-contract generate"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
+    "@playwright/test": "1.55.1",
     "@types/node": "latest",
     "prettier": "latest",
     "turbo": "latest",
-    "typescript": "latest"
+    "typescript": "5.9.3"
   }
 }
-

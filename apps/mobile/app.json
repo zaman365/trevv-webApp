@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "FounderHQ",
+    "slug": "founderhq",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "founderhq",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router", "expo-secure-store", "expo-notifications"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.founderhq.mobile"
+    },
+    "android": { "package": "com.founderhq.mobile" },
+    "experiments": { "typedRoutes": true },
+    "extra": { "router": { "origin": false } }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@founderhq/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@founderhq/api-client": "workspace:*",
+    "@founderhq/auth-client": "workspace:*",
+    "@founderhq/design-tokens": "workspace:*",
+    "@founderhq/ui-native": "workspace:*",
+    "@tanstack/react-query": "latest",
+    "expo": "latest",
+    "expo-constants": "latest",
+    "expo-linking": "latest",
+    "expo-notifications": "latest",
+    "expo-router": "latest",
+    "expo-secure-store": "latest",
+    "expo-status-bar": "latest",
+    "react": "latest",
+    "react-native": "latest",
+    "react-native-safe-area-context": "latest",
+    "react-native-screens": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "typescript": "5.9.3",
+    "vitest": "latest"
+  }
+}

@@ -1,4 +1,5 @@
 node_modules
+.pnpm-store
 .next
 .turbo
 dist
@@ -7,10 +8,10 @@ coverage
 .expo-shared
 apps/desktop/src-tauri/target
 *.log
+*.tsbuildinfo
 .env
 .env.local
 .DS_Store
 playwright-report
 test-results
 openapi.generated.json
-
