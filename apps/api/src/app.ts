@@ -23,6 +23,7 @@ import {
   demoStakeholderExposure,
   demoWaitingStates,
   generateAttentionSignals,
+  hubsForPortfolio,
   portfolioSignals,
   previewBlueprintUpdate,
   rollupHub,
@@ -149,11 +150,25 @@ app.get("/api/v1/portfolio", (context) => {
   requireAccess(context.get("access"), "read", "portfolio", {
     organizationId: "org-demo",
   });
-  const items = currentItems();
+  const portfolioId = context.req.query("portfolioId") ?? "portfolio-demo";
+  const portfolio = demoPortfolios.find(
+    (candidate) => candidate.id === portfolioId,
+  );
+  if (!portfolio)
+    return failure(
+      context,
+      404,
+      "resource_not_found",
+      "The requested Portfolio is unavailable.",
+    );
+  const hubs = hubsForPortfolio(portfolio.id);
+  const hubIds = new Set(hubs.map((hub) => hub.id));
+  const items = currentItems().filter((item) => hubIds.has(item.hubId));
   return context.json({
     asOf: now.toISOString(),
-    signals: portfolioSignals(demoHubs, items, now),
-    hubs: demoHubs
+    portfolio,
+    signals: portfolioSignals(hubs, items, now),
+    hubs: hubs
       .map((hub) => ({ hub, rollup: rollupHub(hub, items, now) }))
       .sort((a, b) => b.rollup.score - a.rollup.score),
   });

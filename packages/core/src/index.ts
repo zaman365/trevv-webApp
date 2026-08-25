@@ -1,4 +1,5 @@
 import type { ProgressMode } from "./commercial";
+import { demoPortfolios } from "./commercial-demo";
 
 export type HubHealth = "on_track" | "watch" | "critical" | "parked";
 export type LifecycleStage =
@@ -68,6 +69,14 @@ export interface WorkItem {
   assignee?: string;
   approvalState?: "pending" | "changes_requested" | "approved" | "rejected";
   decisionState?: "needed" | "analyzing" | "delegated" | "deferred" | "decided";
+}
+
+export interface Board {
+  id: string;
+  hubId: string;
+  name: string;
+  category: string;
+  description: string;
 }
 
 export interface PortfolioSignal {
@@ -669,6 +678,209 @@ export const demoItems: WorkItem[] = [
   ...currentDemoItems,
   ...originalDemoItems,
 ];
+
+const currentBoardDefinitions: Board[] = [
+  {
+    id: "b-northstar-launch",
+    hubId: "hub-northstar",
+    name: "SS26 launch board",
+    category: "Product launch",
+    description: "Products, compliance, content and storefront readiness",
+  },
+  {
+    id: "b-mealflow-beta",
+    hubId: "hub-mealflow",
+    name: "Restaurant beta board",
+    category: "Product beta",
+    description: "Onboarding, owner controls and pilot validation",
+  },
+  {
+    id: "b-localreach-delivery",
+    hubId: "hub-localreach",
+    name: "Delivery operations board",
+    category: "Client delivery",
+    description: "Active fixes, evidence packs and client approvals",
+  },
+  {
+    id: "b-studioops-pilot",
+    hubId: "hub-studioops",
+    name: "Care pilot board",
+    category: "Business validation",
+    description: "Offers, pilot calls and recurring-care evidence",
+  },
+  {
+    id: "b-clientspark-requests",
+    hubId: "hub-clientspark",
+    name: "Service requests board",
+    category: "Client operations",
+    description: "Intake, triage and service-delivery follow-through",
+  },
+  {
+    id: "b-greentable-validation",
+    hubId: "hub-greentable",
+    name: "Pilot validation board",
+    category: "Venture validation",
+    description: "Scope decisions, interviews and measurable pilot outcomes",
+  },
+  {
+    id: "b-centralops-compliance",
+    hubId: "hub-centralops",
+    name: "Compliance operations board",
+    category: "Shared operations",
+    description: "Evidence, declarations and quarterly compliance review",
+  },
+  {
+    id: "b-futuregoods-research",
+    hubId: "hub-futuregoods",
+    name: "Concept research board",
+    category: "Brand research",
+    description: "Customer evidence, sizing research and concept decisions",
+  },
+  {
+    id: "b-personal-funding",
+    hubId: "hub-personal",
+    name: "Funding application board",
+    category: "Personal projects",
+    description: "Narrative, evidence and submission milestones",
+  },
+];
+
+const originalBoardDefinitions: Board[] = originalHubIdentity.map(
+  ([currentHubId, originalHubId]) => {
+    const source = currentBoardDefinitions.find(
+      (board) => board.hubId === currentHubId,
+    );
+    if (!source) throw new Error(`Missing source Board for ${currentHubId}`);
+    return {
+      ...source,
+      id: `original-${source.id}`,
+      hubId: originalHubId,
+    };
+  },
+);
+
+export const demoBoards: Board[] = [
+  ...currentBoardDefinitions,
+  ...originalBoardDefinitions,
+];
+
+export function portfolioById(portfolioId: string) {
+  return demoPortfolios.find((portfolio) => portfolio.id === portfolioId);
+}
+
+export function hubsForPortfolio(portfolioId: string): Hub[] {
+  return demoHubs.filter((hub) => hub.portfolioId === portfolioId);
+}
+
+export function hubBySlug(slug: string): Hub | undefined {
+  return demoHubs.find((hub) => hub.slug === slug);
+}
+
+export function boardsForHub(hubId: string): Board[] {
+  return demoBoards.filter((board) => board.hubId === hubId);
+}
+
+export function boardForHub(
+  hubId: string,
+  boardId?: string,
+): Board | undefined {
+  return demoBoards.find(
+    (board) => board.hubId === hubId && (!boardId || board.id === boardId),
+  );
+}
+
+export function itemsForBoard(boardId: string): WorkItem[] {
+  return demoItems.filter((item) => item.boardId === boardId);
+}
+
+export function itemsForHub(hubId: string): WorkItem[] {
+  return demoItems.filter((item) => item.hubId === hubId);
+}
+
+const statusCompletion: Record<WorkItem["status"], number> = {
+  not_started: 0,
+  blocked: 0.15,
+  working: 0.5,
+  review: 0.85,
+  done: 1,
+};
+
+const priorityWeight: Record<WorkItem["priority"], number> = {
+  urgent: 5,
+  high: 3,
+  normal: 2,
+  low: 1,
+  none: 1,
+};
+
+export function calculateWorkProgress(
+  items: readonly WorkItem[],
+  mode: ProgressMode = "task_completion",
+): number | null {
+  if (mode === "none" || mode === "manual") return null;
+  const scoped =
+    mode === "milestone_completion"
+      ? items.filter((item) => item.type === "milestone")
+      : items;
+  if (scoped.length === 0) return null;
+  const weighted = mode === "weighted_work_items";
+  const possible = scoped.reduce(
+    (total, item) => total + (weighted ? priorityWeight[item.priority] : 1),
+    0,
+  );
+  const completed = scoped.reduce(
+    (total, item) =>
+      total +
+      statusCompletion[item.status] *
+        (weighted ? priorityWeight[item.priority] : 1),
+    0,
+  );
+  return Math.round((completed / possible) * 100);
+}
+
+export function calculateHubProgress(hub: Hub): number | null {
+  return calculateWorkProgress(
+    itemsForHub(hub.id),
+    hub.progressMode ?? "task_completion",
+  );
+}
+
+export function validateDemoRelationships(): string[] {
+  const errors: string[] = [];
+  const portfolioIds = new Set(demoPortfolios.map((portfolio) => portfolio.id));
+  const hubIds = new Set(demoHubs.map((hub) => hub.id));
+  const boardIds = new Set(demoBoards.map((board) => board.id));
+  const itemIds = new Set(demoItems.map((item) => item.id));
+  if (portfolioIds.size !== demoPortfolios.length)
+    errors.push("Portfolio IDs must be unique");
+  if (hubIds.size !== demoHubs.length) errors.push("Hub IDs must be unique");
+  if (new Set(demoHubs.map((hub) => hub.slug)).size !== demoHubs.length)
+    errors.push("Hub slugs must be unique");
+  if (boardIds.size !== demoBoards.length) errors.push("Board IDs must be unique");
+  if (itemIds.size !== demoItems.length) errors.push("Item IDs must be unique");
+  for (const hub of demoHubs)
+    if (!portfolioIds.has(hub.portfolioId))
+      errors.push(
+        `Hub ${hub.id} references missing Portfolio ${hub.portfolioId}`,
+      );
+    else if (!demoBoards.some((board) => board.hubId === hub.id))
+      errors.push(`Hub ${hub.id} has no Board`);
+  for (const board of demoBoards)
+    if (!hubIds.has(board.hubId))
+      errors.push(`Board ${board.id} references missing Hub ${board.hubId}`);
+  for (const item of demoItems) {
+    const board = demoBoards.find((candidate) => candidate.id === item.boardId);
+    if (!hubIds.has(item.hubId))
+      errors.push(`Item ${item.id} references missing Hub ${item.hubId}`);
+    if (!boardIds.has(item.boardId))
+      errors.push(`Item ${item.id} references missing Board ${item.boardId}`);
+    else if (board?.hubId !== item.hubId)
+      errors.push(
+        `Item ${item.id} does not belong to Board Hub ${board?.hubId}`,
+      );
+  }
+  return errors;
+}
 
 export * from "./commercial";
 export * from "./commercial-demo";

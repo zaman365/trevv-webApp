@@ -22,10 +22,11 @@ import {
 } from "lucide-react";
 import {
   demoDependencies,
-  demoHubs,
   demoItems,
   demoWaitingStates,
   generateAttentionSignals,
+  hubBySlug,
+  hubsForPortfolio,
 } from "@founderhq/core";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
@@ -61,13 +62,26 @@ export function WorkspaceFrame({
 }) {
   const [open, setOpen] = useState(false);
   const copy = productCopy.en;
+  const activeHub = hubSlug ? hubBySlug(hubSlug) : undefined;
+  const workspaceHubs = hubsForPortfolio(
+    activeHub?.portfolioId ?? "portfolio-demo",
+  );
+  const workspaceHubIds = new Set(workspaceHubs.map((hub) => hub.id));
+  const workspaceItems = demoItems.filter((item) =>
+    workspaceHubIds.has(item.hubId),
+  );
+  const workspaceItemIds = new Set(workspaceItems.map((item) => item.id));
   const attentionCount = generateAttentionSignals(
     "org-demo",
-    demoHubs,
-    demoItems,
-    demoWaitingStates,
+    workspaceHubs,
+    workspaceItems,
+    demoWaitingStates.filter((state) => workspaceHubIds.has(state.hubId ?? "")),
     new Date("2026-08-24T12:00:00.000Z"),
-    demoDependencies,
+    demoDependencies.filter(
+      (dependency) =>
+        workspaceItemIds.has(dependency.itemId) &&
+        workspaceItemIds.has(dependency.dependsOnItemId),
+    ),
   ).length;
   const nav = [
     ["home", copy.nav.home, "/app/home", House],
@@ -112,7 +126,7 @@ export function WorkspaceFrame({
             </Link>
           ))}
           <p className="nav-label spaced">{copy.nav.hubs} · Favorites</p>
-          {demoHubs.slice(0, 4).map((hub) => (
+          {workspaceHubs.slice(0, 4).map((hub) => (
             <Link
               className={`nav-item hub-nav ${active === "hub" && hubSlug === hub.slug ? "active" : ""}`}
               href={`/app/hubs/${hub.slug}`}

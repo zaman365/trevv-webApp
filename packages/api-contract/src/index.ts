@@ -142,12 +142,6 @@ export const portfolioSignalSchema = z.object({
   unassignedUrgent: z.number().int().nonnegative(),
 });
 
-export const portfolioResponseSchema = z.object({
-  asOf: z.iso.datetime(),
-  signals: portfolioSignalSchema,
-  hubs: z.array(z.object({ hub: hubSchema, rollup: hubRollupSchema })),
-});
-
 export const portfolioSchema = z.object({
   id: idSchema,
   organizationId: idSchema,
@@ -155,6 +149,13 @@ export const portfolioSchema = z.object({
   slug: z.string().min(1).max(120),
   description: z.string().max(1_000),
   isDefault: z.boolean(),
+});
+
+export const portfolioResponseSchema = z.object({
+  asOf: z.iso.datetime(),
+  portfolio: portfolioSchema,
+  signals: portfolioSignalSchema,
+  hubs: z.array(z.object({ hub: hubSchema, rollup: hubRollupSchema })),
 });
 
 export const attentionSignalSchema = z.object({

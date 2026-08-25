@@ -78,26 +78,48 @@
   background: var(--fh-surface);
   border-bottom: 1px solid var(--fh-border);
 }
-.hub-tabs a {
+.hub-tabs a,
+.hub-tabs button {
   position: relative;
   display: grid;
   place-items: center;
   padding: 0 10px;
   color: var(--fh-muted);
+  background: transparent;
+  border: 0;
   font-size: 8.5px;
+  font-family: inherit;
   white-space: nowrap;
+  cursor: pointer;
 }
-.hub-tabs a.active {
+.hub-tabs a.active,
+.hub-tabs button.active {
   color: var(--hub-accent);
   font-weight: 700;
 }
-.hub-tabs a.active::after {
+.hub-tabs a.active::after,
+.hub-tabs button.active::after {
   position: absolute;
   inset: auto 8px 0;
   height: 2px;
   content: "";
   background: var(--hub-accent);
   border-radius: 2px 2px 0 0;
+}
+.board-not-found {
+  min-height: 70vh;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+}
+.board-not-found h1,
+.board-not-found p {
+  margin: 0;
+}
+.board-not-found a {
+  color: var(--fh-primary);
+  font-weight: 700;
 }
 .hub-content-grid {
   width: min(1200px, calc(100% - 52px));

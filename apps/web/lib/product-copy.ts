@@ -83,7 +83,7 @@ export const productCopy = {
       dependency: "Dependency",
       openResource: "Open resource",
       complete: "Mark complete",
-      checklist: "Launch checklist",
+      checklist: "Completion checklist",
       addSubitem: "Add subitem",
       changesSaved: "Changes saved",
       following: "Following",

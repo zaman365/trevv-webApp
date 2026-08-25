@@ -75,8 +75,12 @@ export function createApiClient({
   return {
     session: async (): Promise<Session> =>
       sessionSchema.parse(await request("/session")),
-    portfolio: async (): Promise<PortfolioResponse> =>
-      portfolioResponseSchema.parse(await request("/portfolio")),
+    portfolio: async (portfolioId?: string): Promise<PortfolioResponse> =>
+      portfolioResponseSchema.parse(
+        await request(
+          `/portfolio${portfolioId ? `?portfolioId=${encodeURIComponent(portfolioId)}` : ""}`,
+        ),
+      ),
     portfolios: async () =>
       portfolioSchema.array().parse(await request("/portfolios")),
     attention: async (portfolioId?: string) =>

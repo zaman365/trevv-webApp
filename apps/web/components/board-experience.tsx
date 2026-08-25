@@ -49,7 +49,17 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  boardForHub,
+  calculateWorkProgress,
+  hubBySlug,
+  itemsForBoard,
+  type Board,
+  type Hub,
+  type WorkItem,
+} from "@founderhq/core";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 
@@ -66,123 +76,63 @@ interface BoardItem {
   resources: number;
   updates: number;
   description: string;
-  group: "Launch work" | "Content & creative";
+  group: string;
 }
 
-const initialItems: BoardItem[] = [
-  {
-    id: "i-2",
-    title: "Choose storefront launch offer",
-    owner: "Mohammed",
-    initials: "MZ",
-    status: "working",
-    priority: "Urgent",
-    due: "Aug 25",
-    resources: 2,
-    updates: 4,
-    description:
-      "Select the launch offer that creates urgency without eroding the premium positioning. Compare early-access value, limited bundle, and free-exchange options.",
-    group: "Launch work",
-  },
-  {
-    id: "i-1",
-    title: "Approve packaging compliance copy",
-    owner: "Mohammed",
-    initials: "MZ",
-    status: "review",
-    priority: "Urgent",
-    due: "Aug 26",
-    resources: 3,
-    updates: 7,
-    description:
-      "Review the final packaging copy against GPSR requirements and the approved brand voice before print files are released.",
-    group: "Launch work",
-  },
-  {
-    id: "i-3",
-    title: "Confirm GPSR manufacturer evidence",
-    owner: "Amira",
-    initials: "AD",
-    status: "blocked",
-    priority: "High",
-    due: "Aug 22",
-    resources: 4,
-    updates: 3,
-    description:
-      "Collect and validate manufacturer evidence for every SS26 SKU. The supplier declaration for two polo colorways is still missing.",
-    group: "Launch work",
-  },
-  {
-    id: "i-4",
-    title: "SS26 storefront launch",
-    owner: "Nora",
-    initials: "NK",
-    status: "working",
-    priority: "Urgent",
-    due: "Aug 28",
-    resources: 5,
-    updates: 8,
-    description:
-      "Release the SS26 collection with final products, merchandising, policy content, tracking and launch checks complete.",
-    group: "Launch work",
-  },
-  {
-    id: "i-5",
-    title: "Publish polo fit guide",
-    owner: "Elias",
-    initials: "EH",
-    status: "working",
-    priority: "Normal",
-    due: "Aug 27",
-    resources: 2,
-    updates: 2,
-    description:
-      "Turn the approved fit notes and photography into a practical mobile-first guide for product pages.",
-    group: "Content & creative",
-  },
-  {
-    id: "i-19",
-    title: "Retouch campaign selects",
-    owner: "Sofia",
-    initials: "SM",
-    status: "review",
-    priority: "High",
-    due: "Aug 25",
-    resources: 6,
-    updates: 5,
-    description:
-      "Finish color, crop and material-detail checks for the twelve launch selects.",
-    group: "Content & creative",
-  },
-  {
-    id: "i-20",
-    title: "Write care instructions",
-    owner: "Jana",
-    initials: "JR",
-    status: "planned",
-    priority: "Normal",
-    due: "Aug 29",
-    resources: 1,
-    updates: 1,
-    description:
-      "Create accurate care instructions for all cotton polo variants and align them with label copy.",
-    group: "Content & creative",
-  },
-  {
-    id: "i-21",
-    title: "Configure launch analytics",
-    owner: "Tim",
-    initials: "TB",
-    status: "done",
-    priority: "High",
-    due: "Aug 23",
-    resources: 1,
-    updates: 3,
-    description:
-      "Verify consent-aware funnel events, campaign parameters and the launch dashboard.",
-    group: "Launch work",
-  },
-];
+const formatDueDate = (dueDate?: string) =>
+  dueDate
+    ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
+        new Date(`${dueDate}T12:00:00Z`),
+      )
+    : "No date";
+
+const initialsFor = (name?: string) =>
+  name
+    ? name
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "—";
+
+const descriptionFor = (item: WorkItem) => {
+  const purpose: Record<WorkItem["type"], string> = {
+    task: "Complete the defined work and attach the evidence needed for review.",
+    decision:
+      "Review the available evidence, record the chosen option, and unblock dependent work.",
+    approval:
+      "Review the submitted work, capture feedback, and record the approval outcome.",
+    milestone:
+      "Coordinate the required work and confirm that the milestone acceptance criteria are met.",
+    idea: "Clarify the opportunity, expected impact, evidence, and next validation step.",
+    request:
+      "Triage the request, confirm ownership, and communicate the next action.",
+  };
+  return `${item.title}. ${purpose[item.type]}`;
+};
+
+const toBoardItem = (item: WorkItem): BoardItem => ({
+  id: item.id,
+  title: item.title,
+  owner: item.assignee?.split(" ")[0] ?? "Unassigned",
+  initials: initialsFor(item.assignee),
+  status: item.status === "not_started" ? "planned" : item.status,
+  priority:
+    item.priority === "none"
+      ? "Low"
+      : (`${item.priority[0]?.toUpperCase()}${item.priority.slice(1)}` as Priority),
+  due: formatDueDate(item.dueDate),
+  resources: 0,
+  updates: 0,
+  description: descriptionFor(item),
+  group:
+    item.type === "decision" || item.type === "milestone"
+      ? "Milestones & decisions"
+      : item.type === "approval"
+        ? "Approvals"
+        : "Execution",
+});
 
 const statusLabel: Record<Status, string> = {
   planned: "Planned",
@@ -192,14 +142,83 @@ const statusLabel: Record<Status, string> = {
   done: "Done",
 };
 
-export function BoardExperience() {
+export function BoardExperience({
+  hubSlug,
+  boardId,
+}: {
+  hubSlug: string;
+  boardId: string;
+}) {
+  const hub = hubBySlug(hubSlug);
+  const board = hub ? boardForHub(hub.id, boardId) : undefined;
+  if (!hub || !board)
+    return (
+      <WorkspaceFrame active="hub" hubSlug={hubSlug}>
+        <main className="board-main board-not-found">
+          <h1>Board not found</h1>
+          <p>This board does not belong to the requested Hub.</p>
+          <Link href={hub ? `/app/hubs/${hub.slug}` : "/app/hubs"}>
+            Return to {hub?.name ?? "All Hubs"}
+          </Link>
+        </main>
+      </WorkspaceFrame>
+    );
+  return (
+    <BoardWorkspace
+      key={`${hub.id}:${board.id}`}
+      hub={hub}
+      board={board}
+      sourceItems={itemsForBoard(board.id)}
+    />
+  );
+}
+
+function BoardWorkspace({
+  hub,
+  board,
+  sourceItems,
+}: {
+  hub: Hub;
+  board: Board;
+  sourceItems: WorkItem[];
+}) {
   const copy = productCopy.en.board;
-  const [items, setItems] = useState(initialItems);
+  const seedItems = useMemo(() => sourceItems.map(toBoardItem), [sourceItems]);
+  const [items, setItems] = useState(seedItems);
   const [view, setView] = useState<"table" | "kanban">("table");
   const [selected, setSelected] = useState<BoardItem | null>(
-    initialItems[0] ?? null,
+    seedItems[0] ?? null,
   );
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [storageReady, setStorageReady] = useState(false);
+  const storageKey = `trevv:board:${board.id}`;
+  useEffect(() => {
+    let storedItems: BoardItem[] | null = null;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored) as BoardItem[];
+        const allowedIds = new Set(seedItems.map((item) => item.id));
+        const valid = parsed.filter((item) => allowedIds.has(item.id));
+        if (valid.length === seedItems.length) storedItems = valid;
+      }
+    } catch {
+      // Keep the server seed if client storage is unavailable or malformed.
+    }
+    const timer = window.setTimeout(() => {
+      if (storedItems) setItems(storedItems);
+      setStorageReady(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [seedItems, storageKey]);
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(items));
+    } catch {
+      // Board editing remains available even when persistence is unavailable.
+    }
+  }, [items, storageKey, storageReady]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 7 } }),
     useSensor(KeyboardSensor, {
@@ -372,21 +391,42 @@ export function BoardExperience() {
         return arrayMove(current, oldIndex, newIndex);
       });
   };
+  const progressItems = sourceItems.map((sourceItem) => {
+    const item = items.find((candidate) => candidate.id === sourceItem.id);
+    return {
+      ...sourceItem,
+      status:
+        item?.status === "planned"
+          ? ("not_started" as const)
+          : (item?.status ?? sourceItem.status),
+    };
+  });
+  const progress =
+    calculateWorkProgress(
+      progressItems,
+      hub.progressMode ?? "task_completion",
+    ) ?? 0;
+  const dependencyTitle =
+    items.find((item) =>
+      sourceItems.find(
+        (source) => source.id === item.id && source.type === "milestone",
+      ),
+    )?.title ?? "No dependency";
 
   return (
-    <WorkspaceFrame active="hub" hubSlug="northstar-apparel">
+    <WorkspaceFrame active="hub" hubSlug={hub.slug}>
       <main className="board-main">
         <header className="board-header">
           <div className="board-title-wrap">
-            <p>{copy.breadcrumb}</p>
+            <p>{`${hub.name} / ${board.category}`}</p>
             <div>
-              <span className="board-mark">Z</span>
-              <h1>{copy.title}</h1>
+              <span className="board-mark">{hub.icon}</span>
+              <h1>{board.name}</h1>
               <button aria-label="Board menu">
                 <MoreHorizontal size={18} />
               </button>
             </div>
-            <small>{copy.subtitle}</small>
+            <small>{board.description}</small>
           </div>
           <div className="board-header-actions">
             <button>
@@ -443,9 +483,11 @@ export function BoardExperience() {
           </span>
           <div className="board-progress">
             <span>
-              <i style={{ width: "68%" }} />
+              <i style={{ width: `${progress}%` }} />
             </span>
-            <b>{copy.progress}</b>
+            <b>
+              {progress}% ready · {items.length} items
+            </b>
           </div>
         </div>
         {checked.size > 0 && (
@@ -460,7 +502,7 @@ export function BoardExperience() {
         )}
         {view === "table" ? (
           <DndContext
-            id="trevv-launch-board"
+            id={`trevv-${board.id}`}
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={onDragEnd}
@@ -519,6 +561,9 @@ export function BoardExperience() {
           item={items.find((item) => item.id === selected.id) ?? selected}
           onClose={() => setSelected(null)}
           updateItem={updateItem}
+          hubName={hub.name}
+          boardName={board.name}
+          dependencyTitle={dependencyTitle}
         />
       )}
     </WorkspaceFrame>
@@ -651,16 +696,22 @@ function ItemPanel({
   item,
   onClose,
   updateItem,
+  hubName,
+  boardName,
+  dependencyTitle,
 }: {
   item: BoardItem;
   onClose: () => void;
   updateItem: (id: string, patch: Partial<BoardItem>) => void;
+  hubName: string;
+  boardName: string;
+  dependencyTitle: string;
 }) {
   const copy = productCopy.en.item;
   const [subitems, setSubitems] = useState([
-    { title: "Compliance wording signed off", done: true },
-    { title: "Print proof attached", done: false },
-    { title: "Supplier confirmation archived", done: false },
+    { title: `${item.title} acceptance criteria confirmed`, done: true },
+    { title: "Supporting evidence attached", done: false },
+    { title: "Outcome recorded in the project update", done: false },
   ]);
   const [comment, setComment] = useState("");
   return (
@@ -697,7 +748,10 @@ function ItemPanel({
               updateItem(item.id, { title: event.target.value })
             }
           />
-          <button className="complete-button">
+          <button
+            className="complete-button"
+            onClick={() => updateItem(item.id, { status: "done" })}
+          >
             <Circle size={15} />
             {copy.complete}
           </button>
@@ -759,7 +813,7 @@ function ItemPanel({
             {copy.dependency}
           </span>
           <button>
-            SS26 storefront launch
+            {dependencyTitle}
             <ExternalLink size={12} />
           </button>
         </section>
@@ -832,8 +886,8 @@ function ItemPanel({
           >
             <span className="resource-icon">F</span>
             <div>
-              <strong>Packaging copy — final review</strong>
-              <span>Figma · Version 7</span>
+              <strong>{item.title} — working file</strong>
+              <span>{hubName} · Design resource</span>
             </div>
             <ExternalLink size={14} />
           </a>
@@ -847,8 +901,8 @@ function ItemPanel({
               <FileText size={16} />
             </span>
             <div>
-              <strong>GPSR evidence checklist</strong>
-              <span>Google Docs · Updated today</span>
+              <strong>{boardName} evidence</strong>
+              <span>Google Docs · Project resource</span>
             </div>
             <ExternalLink size={14} />
           </a>
@@ -864,14 +918,14 @@ function ItemPanel({
           <div className="activity-item">
             <span className="avatar avatar-ad">AD</span>
             <p>
-              <strong>Amira</strong> requested final approval
+              <strong>{item.owner}</strong> updated this item
               <span>Today at 10:24</span>
             </p>
           </div>
           <div className="activity-item">
             <span className="activity-status-dot" />
             <p>
-              Status moved from Working to <strong>Review</strong>
+              Current status is <strong>{statusLabel[item.status]}</strong>
               <span>Yesterday at 16:40</span>
             </p>
           </div>

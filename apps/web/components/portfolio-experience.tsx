@@ -76,7 +76,7 @@ export function PortfolioExperience() {
   useEffect(() => {
     let active = true;
     void api
-      .portfolio()
+      .portfolio(portfolioId)
       .then((portfolio) => {
         if (active) setRemotePortfolio(portfolio);
       })
@@ -86,7 +86,7 @@ export function PortfolioExperience() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [portfolioId]);
   const localPortfolioHubs = demoHubs.filter(
     (hub) => hub.portfolioId === portfolioId,
   );

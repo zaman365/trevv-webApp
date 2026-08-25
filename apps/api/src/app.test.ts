@@ -9,9 +9,25 @@ describe("TREVV API v1", () => {
       hubs: unknown[];
       signals: { decisions: number; blocked: number };
     };
-    expect(body.hubs).toHaveLength(9);
+    expect(body.hubs).toHaveLength(8);
     expect(body.signals.decisions).toBeGreaterThan(0);
     expect(body.signals.blocked).toBeGreaterThan(0);
+  });
+  it("scopes Portfolio roll-ups without mixing original and current Hubs", async () => {
+    const response = await app.request(
+      "/api/v1/portfolio?portfolioId=portfolio-original",
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      portfolio: { id: string };
+      hubs: Array<{ hub: { name: string } }>;
+    };
+    expect(body.portfolio.id).toBe("portfolio-original");
+    expect(body.hubs).toHaveLength(8);
+    expect(body.hubs.map(({ hub }) => hub.name)).toContain("ZEHN");
+    expect(body.hubs.map(({ hub }) => hub.name)).not.toContain(
+      "Northstar Apparel",
+    );
   });
   it("uses a consistent error envelope", async () => {
     const response = await app.request("/api/v1/hubs/does-not-exist");

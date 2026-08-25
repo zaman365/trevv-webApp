@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AlertTriangle,
   ArrowRight,
@@ -15,22 +17,89 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { demoHubs, demoItems, rollupHub } from "@founderhq/core";
+import {
+  boardForHub,
+  calculateHubProgress,
+  hubBySlug,
+  itemsForHub,
+  rollupHub,
+} from "@founderhq/core";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 
+const hubTabIds = [
+  "overview",
+  "work",
+  "milestones",
+  "updates",
+  "decisions",
+  "ideas",
+  "files",
+  "team",
+] as const;
+type HubTabId = (typeof hubTabIds)[number];
+
 export function HubOverview({ slug }: { slug: string }) {
-  const hub =
-    demoHubs.find((candidate) => candidate.slug === slug) ?? demoHubs[0];
-  if (!hub) return null;
+  const hub = hubBySlug(slug);
+  if (!hub)
+    return (
+      <WorkspaceFrame active="hub" hubSlug={slug}>
+        <main className="hub-main board-not-found">
+          <h1>Hub not found</h1>
+          <Link href="/app/hubs">Return to All Hubs</Link>
+        </main>
+      </WorkspaceFrame>
+    );
+  return <HubWorkspace key={hub.id} hub={hub} />;
+}
+
+function HubWorkspace({
+  hub,
+}: {
+  hub: NonNullable<ReturnType<typeof hubBySlug>>;
+}) {
+  const [activeTab, setActiveTab] = useState<HubTabId>("overview");
+  useEffect(() => {
+    const syncHash = () => {
+      const hash = window.location.hash.slice(1) as HubTabId;
+      setActiveTab(hubTabIds.includes(hash) ? hash : "overview");
+    };
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+  const activateTab = (tab: HubTabId) => {
+    setActiveTab(tab);
+    const url = tab === "overview" ? window.location.pathname : `#${tab}`;
+    window.history.replaceState(null, "", url);
+    document
+      .getElementById(tab)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const hubItems = itemsForHub(hub.id);
   const rollup = rollupHub(
     hub,
-    demoItems,
+    hubItems,
     new Date("2026-08-24T12:00:00+02:00"),
   );
-  const boardId =
-    demoItems.find((item) => item.hubId === hub.id)?.boardId ??
-    "b-northstar-launch";
+  const board = boardForHub(hub.id);
+  const boardHref = board
+    ? `/app/hubs/${hub.slug}/boards/${board.id}`
+    : `/app/hubs/${hub.slug}`;
+  const progress = calculateHubProgress(hub);
+  const decisions = hubItems.filter(
+    (item) =>
+      item.status !== "done" &&
+      (item.type === "decision" || item.type === "approval"),
+  );
+  const recentItems = hubItems.slice(0, 3);
+  const team = Array.from(
+    new Set(
+      [hub.lead.name, ...hubItems.map((item) => item.assignee)].filter(Boolean),
+    ),
+  ) as string[];
   const copy = productCopy.en.hub;
   return (
     <WorkspaceFrame active="hub" hubSlug={hub.slug}>
@@ -43,14 +112,14 @@ export function HubOverview({ slug }: { slug: string }) {
             <span>{hub.icon}</span>
             <div>
               <p>
-                {hub.type.replace("_", " ")} · {hub.stage}
+                {hub.type.replaceAll("_", " ")} · {hub.stage}
               </p>
               <h1>{hub.name}</h1>
               <small>Lead by {hub.lead.name}</small>
             </div>
           </div>
           <div className="hub-page-actions">
-            <a href={`/app/hubs/${hub.slug}/boards/${boardId}`}>
+            <a href={boardHref}>
               <Plus size={15} />
               {copy.addItem}
             </a>
@@ -67,19 +136,31 @@ export function HubOverview({ slug }: { slug: string }) {
           </div>
         </header>
         <nav className="hub-tabs">
-          <a className="active" href={`/app/hubs/${hub.slug}`}>
+          <button
+            className={activeTab === "overview" ? "active" : ""}
+            onClick={() => activateTab("overview")}
+          >
             {copy.overview}
-          </a>
-          <a href="#work">Work</a>
-          <a href={`/app/hubs/${hub.slug}/boards/${boardId}`}>Board</a>
-          <a href="#milestones">Milestones</a>
-          <a href="#updates">Updates</a>
-          <a href="#decisions">Decisions</a>
-          <a href="#ideas">Ideas</a>
-          <a href="#files">Files</a>
-          <a href="#team">Team</a>
+          </button>
+          <button
+            className={activeTab === "work" ? "active" : ""}
+            onClick={() => activateTab("work")}
+          >
+            Work
+          </button>
+          <a href={boardHref}>Board</a>
+          {hubTabIds.slice(2).map((tab) => (
+            <button
+              className={activeTab === tab ? "active" : ""}
+              key={tab}
+              onClick={() => activateTab(tab)}
+            >
+              {tab[0]?.toUpperCase()}
+              {tab.slice(1)}
+            </button>
+          ))}
         </nav>
-        <div className="hub-content-grid">
+        <div className="hub-content-grid" id="overview">
           <div className="hub-primary-column">
             <section className="executive-card">
               <header>
@@ -116,7 +197,7 @@ export function HubOverview({ slug }: { slug: string }) {
                   <h2>{copy.liveSignals}</h2>
                   <p>Calculated directly from accessible work items.</p>
                 </div>
-                <a href={`/app/hubs/${hub.slug}/boards/${boardId}`}>
+                <a href={boardHref}>
                   {copy.viewBoard}
                   <ArrowRight size={13} />
                 </a>
@@ -198,24 +279,18 @@ export function HubOverview({ slug }: { slug: string }) {
                 </div>
               </div>
               <div className="hub-activity">
-                <Activity
-                  icon={CheckCircle2}
-                  tone="success"
-                  title="Polo photography moved to Review"
-                  meta="Nora · 32 minutes ago"
-                />
-                <Activity
-                  icon={MessageSquare}
-                  tone="primary"
-                  title="Amira posted compliance evidence notes"
-                  meta="Launch board · 2 hours ago"
-                />
-                <Activity
-                  icon={FileQuestion}
-                  tone="warning"
-                  title="Storefront offer decision requested"
-                  meta="Mohammed · Yesterday"
-                />
+                {recentItems.map((item) => (
+                  <Activity
+                    icon={item.status === "done" ? CheckCircle2 : MessageSquare}
+                    tone={item.status === "blocked" ? "warning" : "primary"}
+                    title={`${item.title} · ${item.status.replace("_", " ")}`}
+                    meta={`${item.assignee ?? "Unassigned"} · ${item.dueDate ?? "No due date"}`}
+                    key={item.id}
+                  />
+                ))}
+                {recentItems.length === 0 && (
+                  <p>No work activity has been recorded for this Hub yet.</p>
+                )}
               </div>
             </section>
           </div>
@@ -227,12 +302,12 @@ export function HubOverview({ slug }: { slug: string }) {
               </header>
               <strong>{hub.nextMilestone.title}</strong>
               <time>{hub.nextMilestone.date}</time>
-              {hub.progressMode && hub.progressMode !== "none" ? (
+              {progress !== null ? (
                 <>
                   <div className="milestone-track">
-                    <i style={{ width: "68%" }} />
+                    <i style={{ width: `${progress}%` }} />
                   </div>
-                  <span>68% of milestone work complete</span>
+                  <span>{progress}% of scoped work complete</span>
                 </>
               ) : (
                 <span>
@@ -263,22 +338,30 @@ export function HubOverview({ slug }: { slug: string }) {
                 <FileQuestion size={15} />
                 <h2>{copy.decisions}</h2>
               </header>
-              <a href="/app/decisions">
-                <span className="mini-tone violet">D</span>
-                <div>
-                  <strong>Choose storefront launch offer</strong>
-                  <small>Urgent · due tomorrow</small>
-                </div>
-                <ArrowRight size={13} />
-              </a>
-              <a href="/app/approvals">
-                <span className="mini-tone green">A</span>
-                <div>
-                  <strong>Packaging compliance copy</strong>
-                  <small>Approval · due Aug 26</small>
-                </div>
-                <ArrowRight size={13} />
-              </a>
+              {decisions.map((item) => (
+                <a
+                  href={
+                    item.type === "decision"
+                      ? "/app/decisions"
+                      : "/app/approvals"
+                  }
+                  key={item.id}
+                >
+                  <span
+                    className={`mini-tone ${item.type === "decision" ? "violet" : "green"}`}
+                  >
+                    {item.type === "decision" ? "D" : "A"}
+                  </span>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <small>
+                      {item.priority} · {item.dueDate ?? "No due date"}
+                    </small>
+                  </div>
+                  <ArrowRight size={13} />
+                </a>
+              ))}
+              {decisions.length === 0 && <p>No open decisions or approvals.</p>}
             </section>
             <section className="side-overview-card resources-list" id="files">
               <header>
@@ -288,7 +371,7 @@ export function HubOverview({ slug }: { slug: string }) {
               <a href="https://www.figma.com">
                 <span className="mini-tone dark">F</span>
                 <div>
-                  <strong>SS26 launch designs</strong>
+                  <strong>{hub.name} designs</strong>
                   <small>Figma</small>
                 </div>
                 <ExternalLink size={12} />
@@ -298,7 +381,7 @@ export function HubOverview({ slug }: { slug: string }) {
                   <GitBranch size={13} />
                 </span>
                 <div>
-                  <strong>Storefront repository</strong>
+                  <strong>{hub.name} repository</strong>
                   <small>GitHub</small>
                 </div>
                 <ExternalLink size={12} />
@@ -306,7 +389,7 @@ export function HubOverview({ slug }: { slug: string }) {
               <a href="https://docs.google.com">
                 <span className="mini-tone blue">D</span>
                 <div>
-                  <strong>Compliance evidence</strong>
+                  <strong>{hub.name} evidence</strong>
                   <small>Google Drive</small>
                 </div>
                 <ExternalLink size={12} />
@@ -318,11 +401,16 @@ export function HubOverview({ slug }: { slug: string }) {
                 <h2>{copy.team}</h2>
               </header>
               <div>
-                <span className="avatar avatar-mz">MZ</span>
-                <span className="avatar avatar-nk">NK</span>
-                <span className="avatar avatar-ad">AD</span>
-                <span className="avatar avatar-tb">TB</span>
-                <button>+5</button>
+                {team.slice(0, 5).map((name) => (
+                  <span className="avatar avatar-mz" title={name} key={name}>
+                    {name
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)}
+                  </span>
+                ))}
+                {team.length > 5 && <button>+{team.length - 5}</button>}
               </div>
             </section>
           </aside>
