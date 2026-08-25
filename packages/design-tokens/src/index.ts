@@ -13,6 +13,17 @@ export const tokens = {
   },
   radius: { control: 11, card: 17, panel: 20 },
   motion: { fast: 120, normal: 180 },
+  text: {
+    "2xs": 11,
+    xs: 12,
+    sm: 13,
+    base: 14,
+    md: 15,
+    lg: 17,
+    xl: 20,
+    "2xl": 26,
+  },
+  weight: { normal: 400, medium: 500, strong: 600, heavy: 700 },
 } as const;
 
 export type DesignTokens = typeof tokens;

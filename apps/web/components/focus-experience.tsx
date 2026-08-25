@@ -412,7 +412,7 @@ function ApprovalView() {
           <h2>Pending approvals</h2>
           <button>
             <Filter size={14} />
-            All Hubs
+            All projects
           </button>
         </header>
         {approvals.map((item, index) => (

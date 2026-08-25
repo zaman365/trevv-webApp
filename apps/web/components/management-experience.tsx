@@ -27,7 +27,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  attentionScore,
   calculateResourcePressure,
   changesSinceCheckpoint,
   demoBlueprintInstances,
@@ -35,7 +34,6 @@ import {
   demoBlueprintVersions,
   demoChangeCheckpoint,
   demoDecisionOutcomes,
-  demoDependencies,
   demoHubSnapshots,
   demoHubs,
   demoIdeaOpportunities,
@@ -45,182 +43,264 @@ import {
   demoPortfolios,
   demoReviewRituals,
   demoWaitingStates,
-  generateAttentionSignals,
   opportunityScore,
   previewBlueprintUpdate,
   type AttentionSignal,
   type ImportPreset,
   type WaitingState,
 } from "@founderhq/core";
+import Link from "next/link";
 import { useState } from "react";
+import { HealthBar, PageHero, Panel, ProgressRing, StatTile } from "./ui-kit";
+import { ProjectTile } from "./project-tile";
+import { allPortfolioSummaries } from "@/lib/portfolios";
+import { vocabularyFor } from "@/lib/terminology";
 import { WorkspaceFrame } from "./workspace-frame";
+import { useWorkspace } from "@/lib/workspace-context";
+import { type GroupedSignal } from "@/lib/attention";
 
 const now = new Date("2026-08-24T12:00:00.000Z");
-const initialSignals = generateAttentionSignals(
-  "org-demo",
-  demoHubs,
-  demoItems,
-  demoWaitingStates,
-  now,
-  demoDependencies,
-);
-
 const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
 
 export function HomeExperience() {
+  return (
+    <WorkspaceFrame active="home">
+      <HomeMain />
+    </WorkspaceFrame>
+  );
+}
+
+function HomeMain() {
+  const { scope, copy, portfolioId, setPortfolioId } = useWorkspace();
+  const vocab = vocabularyFor();
+  const portfolios = allPortfolioSummaries();
+  const active = portfolios.find((p) => p.portfolio.id === portfolioId);
   const changes = changesSinceCheckpoint(
     demoMeaningfulChanges,
     demoChangeCheckpoint,
   );
-  const needsYou = initialSignals.slice(0, 4);
+  const topNeedsYou = scope.attention.slice(0, 4);
   const decisions = demoItems.filter(
     (item) =>
       item.type === "decision" &&
       item.status !== "done" &&
       item.assignee === "Mohammed Zaman",
   );
-  const recentWins = demoMeaningfulChanges.filter(
-    (change) => change.type === "major_work_completed",
-  );
+  // The handful of projects actually asking for something right now.
+  const needsAttention = (active?.projects ?? [])
+    .filter(
+      (project) =>
+        project.hub.health !== "on_track" && project.hub.health !== "parked",
+    )
+    .slice(0, 3);
+  const totalProjects = portfolios.reduce((sum, p) => sum + p.count, 0);
+
   return (
-    <WorkspaceFrame active="home">
-      <main className="trevv-main">
-        <PageHeader
-          eyebrow="Monday, 24 August"
-          title="Good morning, Mohammed"
-          subtitle="Four things need you. Everything else can keep moving."
-          action={
-            <a className="primary-button" href="/app/inbox">
-              <Plus size={16} />
-              Quick capture
-            </a>
-          }
-        />
-        <section className="home-focus-strip" aria-label="Daily focus summary">
-          <MetricLink
-            href="/app/attention"
-            icon={Sparkles}
-            value={needsYou.length}
-            label="Needs you"
-            tone="violet"
-          />
-          <MetricLink
-            href="/app/decisions"
-            icon={FileQuestion}
-            value={decisions.length}
-            label="Decisions"
-            tone="blue"
-          />
-          <MetricLink
-            href="/app/waiting"
-            icon={Hourglass}
-            value={demoWaitingStates.length}
-            label="Waiting"
-            tone="amber"
-          />
-          <MetricLink
-            href="/app/reviews"
-            icon={CalendarClock}
-            value={2}
-            label="Reviews due"
-            tone="green"
-          />
-        </section>
-        <div className="home-columns">
-          <section className="trevv-panel" aria-labelledby="home-needs-title">
-            <PanelHeading
+    <main className="trevv-main home-main">
+      <PageHero
+        eyebrow="Monday, 24 August"
+        title="Good morning, Mohammed"
+        subtitle={`${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you across ${totalProjects} ${vocab.many.toLowerCase()}. Everything else can keep moving.`}
+        selector={
+          <label className="hero-select">
+            <span>{vocab.groupOne}</span>
+            <select
+              value={portfolioId}
+              onChange={(event) => setPortfolioId(event.target.value)}
+            >
+              {portfolios.map(({ portfolio }) => (
+                <option key={portfolio.id} value={portfolio.id}>
+                  {portfolio.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        }
+        actions={
+          <Link className="primary-button" href="/app/inbox">
+            <Plus size={16} />
+            <span>Quick capture</span>
+          </Link>
+        }
+        stats={
+          <>
+            <StatTile
               icon={Sparkles}
-              title="Needs You"
-              subtitle="Ranked by impact, urgency, and your responsibility."
+              value={scope.attentionCount}
+              label="Needs you"
+              note="Ranked by impact"
+              tone="danger"
               href="/app/attention"
             />
-            <div className="attention-list compact">
-              {needsYou.map((signal) => (
-                <AttentionRow key={signal.id} signal={signal} />
-              ))}
-            </div>
-          </section>
-          <section className="trevv-panel" aria-labelledby="today-title">
-            <PanelHeading
-              icon={Clock3}
-              title="Today"
-              subtitle="The commitments closest to now."
+            <StatTile
+              icon={FileQuestion}
+              value={decisions.length}
+              label="Decisions"
+              note="Waiting on your call"
+              tone="primary"
+              href="/app/decisions"
             />
-            <div className="today-list">
-              {demoItems
-                .filter((item) => item.status !== "done")
-                .slice(0, 5)
-                .map((item) => (
-                  <a
-                    key={item.id}
-                    href={`/app/hubs/${hubFor(item.hubId)?.slug}/boards/${item.boardId}`}
-                  >
-                    <span className={`priority-dot ${item.priority}`} />
-                    <div>
-                      <strong>{item.title}</strong>
-                      <small>
-                        {hubFor(item.hubId)?.name} · {item.dueDate ?? "No date"}
-                      </small>
-                    </div>
-                    <ArrowRight size={14} />
-                  </a>
-                ))}
-            </div>
-          </section>
-        </div>
-        <section
-          className="trevv-panel change-radar"
-          aria-labelledby="radar-title"
-        >
-          <PanelHeading
-            icon={RefreshCw}
-            title="Change Radar"
-            subtitle="Meaningful movement since your last visit — routine activity is filtered out."
-          />
-          <div className="change-groups">
-            {[...new Set(changes.map((change) => change.hubId))].map(
-              (hubId) => (
-                <article key={hubId}>
-                  <header>
-                    <HubMark hubId={hubId} />
-                    <div>
-                      <strong>{hubFor(hubId)?.name}</strong>
-                      <small>
-                        {
-                          changes.filter((change) => change.hubId === hubId)
-                            .length
-                        }{" "}
-                        meaningful changes
-                      </small>
-                    </div>
-                  </header>
-                  <ul>
-                    {changes
-                      .filter((change) => change.hubId === hubId)
-                      .map((change) => (
-                        <li key={change.id}>{change.summary}</li>
-                      ))}
-                  </ul>
-                </article>
-              ),
-            )}
-          </div>
-        </section>
-        <section className="trevv-panel wins-panel">
-          <PanelHeading
-            icon={CheckCircle2}
-            title="Recent wins"
-            subtitle="Progress worth noticing, without turning every event into a notification."
-          />
-          {recentWins.map((win) => (
-            <p key={win.id}>
-              <Check size={15} />
-              {win.summary} <span>{hubFor(win.hubId)?.name}</span>
-            </p>
+            <StatTile
+              icon={Hourglass}
+              value={demoWaitingStates.length}
+              label="Waiting"
+              note="On someone else"
+              tone="warning"
+              href="/app/waiting"
+            />
+            <StatTile
+              icon={CalendarClock}
+              value={2}
+              label="Reviews due"
+              note="Weekly and monthly"
+              href="/app/reviews"
+            />
+          </>
+        }
+      />
+
+      <Panel
+        icon={Grid2X2}
+        title={`Your ${vocab.groupMany.toLowerCase()}`}
+        subtitle={`Health across every ${vocab.one.toLowerCase()} you are responsible for.`}
+        href="/app/portfolio"
+        linkLabel="Open portfolio"
+      >
+        <div className="portfolio-cards">
+          {portfolios.map((summary) => (
+            <button
+              key={summary.portfolio.id}
+              className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
+              aria-pressed={summary.portfolio.id === portfolioId}
+              onClick={() => setPortfolioId(summary.portfolio.id)}
+            >
+              <header>
+                <div>
+                  <strong>{summary.portfolio.name}</strong>
+                  <span>
+                    {summary.count}{" "}
+                    {summary.count === 1
+                      ? vocab.one.toLowerCase()
+                      : vocab.many.toLowerCase()}
+                  </span>
+                </div>
+                {summary.progress !== null && (
+                  <ProgressRing
+                    value={summary.progress}
+                    size={44}
+                    label={`${summary.portfolio.name} progress`}
+                  />
+                )}
+              </header>
+              <HealthBar slices={summary.health} />
+              <footer>
+                <span className={summary.attentionCount ? "is-live" : ""}>
+                  <b>{summary.attentionCount}</b> need you
+                </span>
+                <span className={summary.overdue ? "is-live" : ""}>
+                  <b>{summary.overdue}</b> overdue
+                </span>
+                <span className={summary.blocked ? "is-live" : ""}>
+                  <b>{summary.blocked}</b> blocked
+                </span>
+              </footer>
+            </button>
           ))}
-        </section>
-      </main>
-    </WorkspaceFrame>
+        </div>
+      </Panel>
+
+      {needsAttention.length > 0 && (
+        <Panel
+          icon={AlertTriangle}
+          title={`${vocab.many} that need you`}
+          subtitle={`In ${active?.portfolio.name ?? "this portfolio"}, worst first.`}
+          href="/app/portfolio"
+        >
+          <div className="project-strip">
+            {needsAttention.map((project) => (
+              <ProjectTile
+                key={project.hub.id}
+                {...project}
+                copy={copy}
+                compact
+              />
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      <div className="home-columns">
+        <Panel
+          icon={Sparkles}
+          title="Needs You"
+          subtitle={`Top ${topNeedsYou.length} of ${scope.attentionCount}, ranked by impact, urgency, and your responsibility.`}
+          href="/app/attention"
+        >
+          <div className="attention-list compact">
+            {topNeedsYou.map((group) => (
+              <AttentionRow key={group.id} group={group} />
+            ))}
+          </div>
+        </Panel>
+        <Panel
+          icon={Clock3}
+          title="Today"
+          subtitle="The commitments closest to now."
+        >
+          <div className="today-list">
+            {demoItems
+              .filter((item) => item.status !== "done")
+              .slice(0, 5)
+              .map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/app/hubs/${hubFor(item.hubId)?.slug}/boards/${item.boardId}`}
+                >
+                  <span className={`priority-dot ${item.priority}`} />
+                  <div>
+                    <strong>{item.title}</strong>
+                    <small>
+                      {hubFor(item.hubId)?.name} · {item.dueDate ?? "No date"}
+                    </small>
+                  </div>
+                  <ArrowRight size={14} />
+                </Link>
+              ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel
+        icon={RefreshCw}
+        title="Change Radar"
+        subtitle="Meaningful movement since your last visit — routine activity is filtered out."
+        wide
+      >
+        <div className="change-groups">
+          {[...new Set(changes.map((change) => change.hubId))].map((hubId) => (
+            <article key={hubId}>
+              <header>
+                <HubMark hubId={hubId} />
+                <div>
+                  <strong>{hubFor(hubId)?.name}</strong>
+                  <small>
+                    {changes.filter((change) => change.hubId === hubId).length}{" "}
+                    meaningful changes
+                  </small>
+                </div>
+              </header>
+              <ul>
+                {changes
+                  .filter((change) => change.hubId === hubId)
+                  .map((change) => (
+                    <li key={change.id}>{change.summary}</li>
+                  ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </Panel>
+    </main>
   );
 }
 
@@ -255,17 +335,32 @@ function matchesAttentionTab(signal: AttentionSignal, tab: AttentionTab) {
   );
 }
 
+/** A grouped item belongs to a tab if any of its reasons do. */
+function groupMatchesTab(group: GroupedSignal, tab: AttentionTab) {
+  return group.signals.some((signal) => matchesAttentionTab(signal, tab));
+}
+
 export function AttentionExperience() {
-  const [signals, setSignals] = useState(initialSignals);
+  return (
+    <WorkspaceFrame active="attention">
+      <AttentionMain />
+    </WorkspaceFrame>
+  );
+}
+
+function AttentionMain() {
+  const { scope } = useWorkspace();
+  // One card per work item, not one per rule that fired. See lib/attention.ts.
+  const [groups, setGroups] = useState<GroupedSignal[]>(scope.attention);
   const [tab, setTab] = useState<AttentionTab>("Needs You");
   const [acting, setActing] = useState<{
     id: string;
     action: "dismiss" | "snooze";
   } | null>(null);
   const [reason, setReason] = useState("");
-  const visible = signals.filter((signal) => matchesAttentionTab(signal, tab));
+  const visible = groups.filter((group) => groupMatchesTab(group, tab));
   const remove = (id: string) =>
-    setSignals((current) => current.filter((signal) => signal.id !== id));
+    setGroups((current) => current.filter((group) => group.id !== id));
   const completeAction = () => {
     if (!acting || !reason.trim()) return;
     remove(acting.id);
@@ -273,134 +368,134 @@ export function AttentionExperience() {
     setReason("");
   };
   return (
-    <WorkspaceFrame active="attention">
-      <main className="trevv-main attention-center">
-        <PageHeader
-          eyebrow="Portfolio · Venture Portfolio"
-          title="Attention Center"
-          subtitle="Real operational signals, ranked so the important few stay visible."
-        />
-        <div
-          className="attention-tabs"
-          role="tablist"
-          aria-label="Attention filters"
-        >
-          {attentionTabs.map((name) => {
-            const count = signals.filter((signal) =>
-              matchesAttentionTab(signal, name),
-            ).length;
-            return (
-              <button
-                key={name}
-                role="tab"
-                aria-selected={tab === name}
-                className={tab === name ? "active" : ""}
-                onClick={() => setTab(name)}
-              >
-                {name}
-                <b>{count}</b>
-              </button>
-            );
-          })}
+    <main className="trevv-main attention-center">
+      <PageHeader
+        eyebrow="Portfolio · Venture Portfolio"
+        title="Attention Center"
+        subtitle="Real operational signals, ranked so the important few stay visible."
+      />
+      <div
+        className="attention-tabs"
+        role="tablist"
+        aria-label="Attention filters"
+      >
+        {attentionTabs.map((name) => {
+          const count = groups.filter((group) =>
+            groupMatchesTab(group, name),
+          ).length;
+          return (
+            <button
+              key={name}
+              role="tab"
+              aria-selected={tab === name}
+              className={tab === name ? "active" : ""}
+              onClick={() => setTab(name)}
+            >
+              {name}
+              <b>{count}</b>
+            </button>
+          );
+        })}
+      </div>
+      <section className="attention-explainer">
+        <ShieldCheck size={17} />
+        <div>
+          <strong>Why these signals?</strong>
+          <span>
+            Each item points to the evidence that triggered it. Snoozed and
+            dismissed signals stay out of the active queue.
+          </span>
         </div>
-        <section className="attention-explainer">
-          <ShieldCheck size={17} />
-          <div>
-            <strong>Why these signals?</strong>
-            <span>
-              Each item points to the evidence that triggered it. Snoozed and
-              dismissed signals stay out of the active queue.
-            </span>
-          </div>
-        </section>
-        <div className="attention-list">
-          {visible.map((signal) => (
-            <article className="attention-detail-card" key={signal.id}>
-              <div className={`attention-severity ${signal.severity}`}>
-                <AlertTriangle size={17} />
-              </div>
-              <div className="attention-detail-copy">
-                <header>
-                  <span>{hubFor(signal.hubId)?.name ?? "Portfolio"}</span>
-                  <b>{signal.severity}</b>
-                  <small>Score {attentionScore(signal, now)}</small>
-                </header>
-                <h2>
-                  {String(
-                    signal.metadata.title ??
-                      signal.signalType.replaceAll("_", " "),
-                  )}
-                </h2>
-                <p>{signal.reason}</p>
-                {signal.recommendedAction && (
-                  <div className="recommended-action">
-                    <Sparkles size={14} />
-                    <span>
-                      <b>Recommended action</b>
-                      {signal.recommendedAction}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="attention-actions">
-                <button className="resolve" onClick={() => remove(signal.id)}>
-                  <Check size={14} />
-                  Resolve
-                </button>
-                <button
-                  onClick={() => setActing({ id: signal.id, action: "snooze" })}
-                >
-                  <Pause size={14} />
-                  Snooze
-                </button>
-                <button
-                  onClick={() =>
-                    setActing({ id: signal.id, action: "dismiss" })
-                  }
-                >
-                  <X size={14} />
-                  Dismiss
-                </button>
-              </div>
-              {acting?.id === signal.id && (
-                <div className="attention-action-note">
-                  <label>
-                    {acting.action === "snooze"
-                      ? "Why and until when?"
-                      : "Why is this not useful?"}
-                    <input
-                      autoFocus
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                      placeholder={
-                        acting.action === "snooze"
-                          ? "Waiting until Friday for client response"
-                          : "Already covered in another review"
-                      }
-                    />
-                  </label>
-                  <button onClick={() => setActing(null)}>Cancel</button>
-                  <button
-                    className="primary-button"
-                    disabled={!reason.trim()}
-                    onClick={completeAction}
-                  >
-                    Save {acting.action}
-                  </button>
+      </section>
+      <div className="attention-list">
+        {visible.map((group) => (
+          <article className="attention-detail-card" key={group.id}>
+            <div className={`attention-severity ${group.severity}`}>
+              <AlertTriangle size={17} />
+            </div>
+            <div className="attention-detail-copy">
+              <header>
+                <span>{hubFor(group.hubId)?.name ?? "Portfolio"}</span>
+                <b>{group.severity}</b>
+              </header>
+              <h2>{group.title}</h2>
+              {/* Every reason this item needs you, in one place — rather
+                  than the same item repeated once per reason. */}
+              {group.reasons.length === 1 ? (
+                <p>{group.reasons[0]}</p>
+              ) : (
+                <ul className="attention-reasons">
+                  {group.reasons.map((why) => (
+                    <li key={why}>{why}</li>
+                  ))}
+                </ul>
+              )}
+              {group.primary.recommendedAction && (
+                <div className="recommended-action">
+                  <Sparkles size={14} />
+                  <span>
+                    <b>Recommended action</b>
+                    {group.primary.recommendedAction}
+                  </span>
                 </div>
               )}
-            </article>
-          ))}
-          {!visible.length && (
-            <EmptyState
-              icon={CheckCircle2}
-              title="This queue is clear"
-              note="Resolved, snoozed, and dismissed signals no longer compete for attention."
-            />
-          )}
-        </div>
-      </main>
-    </WorkspaceFrame>
+            </div>
+            <div className="attention-actions">
+              <button className="resolve" onClick={() => remove(group.id)}>
+                <Check size={14} />
+                Resolve
+              </button>
+              <button
+                onClick={() => setActing({ id: group.id, action: "snooze" })}
+              >
+                <Pause size={14} />
+                Snooze
+              </button>
+              <button
+                onClick={() => setActing({ id: group.id, action: "dismiss" })}
+              >
+                <X size={14} />
+                Dismiss
+              </button>
+            </div>
+            {acting?.id === group.id && (
+              <div className="attention-action-note">
+                <label>
+                  {acting.action === "snooze"
+                    ? "Why and until when?"
+                    : "Why is this not useful?"}
+                  <input
+                    autoFocus
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder={
+                      acting.action === "snooze"
+                        ? "Waiting until Friday for client response"
+                        : "Already covered in another review"
+                    }
+                  />
+                </label>
+                <button onClick={() => setActing(null)}>Cancel</button>
+                <button
+                  className="primary-button"
+                  disabled={!reason.trim()}
+                  onClick={completeAction}
+                >
+                  Save {acting.action}
+                </button>
+              </div>
+            )}
+          </article>
+        ))}
+        {!visible.length && (
+          <EmptyState
+            icon={CheckCircle2}
+            title="This queue is clear"
+            note="Resolved, snoozed, and dismissed signals no longer compete for attention."
+          />
+        )}
+      </div>
+    </main>
   );
 }
 
@@ -858,9 +953,9 @@ export function TeamExperience() {
           <div>
             <strong>Cross-Hub signal</strong>
             <span>
-              {pressure[0]?.criticalHubResponsibilities ?? 0} critical Hubs and{" "}
-              {pressure[0]?.urgentHighActive ?? 0} urgent/high items currently
-              depend on {pressure[0]?.userName ?? "one owner"}.
+              {pressure[0]?.criticalHubResponsibilities ?? 0} critical projects
+              and {pressure[0]?.urgentHighActive ?? 0} urgent/high items
+              currently depend on {pressure[0]?.userName ?? "one owner"}.
             </span>
           </div>
           <a href="/app/attention">
@@ -915,7 +1010,7 @@ export function HubsExperience() {
       <main className="trevv-main hubs-page">
         <PageHeader
           eyebrow="Responsibility containers"
-          title="All Hubs"
+          title="All projects"
           subtitle="Businesses, brands, clients, products, departments, ventures, initiatives, and projects — without forcing one vocabulary."
           action={
             <button className="primary-button">
@@ -1318,31 +1413,6 @@ function PanelHeading({
   );
 }
 
-function MetricLink({
-  href,
-  icon: Icon,
-  value,
-  label,
-  tone,
-}: {
-  href: string;
-  icon: typeof Sparkles;
-  value: number;
-  label: string;
-  tone: string;
-}) {
-  return (
-    <a className={`metric-link ${tone}`} href={href}>
-      <span>
-        <Icon size={17} />
-      </span>
-      <strong>{value}</strong>
-      <small>{label}</small>
-      <ArrowRight size={13} />
-    </a>
-  );
-}
-
 function HubMark({ hubId }: { hubId: string }) {
   const hub = hubFor(hubId);
   return (
@@ -1355,23 +1425,27 @@ function HubMark({ hubId }: { hubId: string }) {
   );
 }
 
-function AttentionRow({ signal }: { signal: AttentionSignal }) {
+function AttentionRow({ group }: { group: GroupedSignal }) {
   return (
-    <a className="attention-row" href="/app/attention">
-      <span className={`signal-pip ${signal.severity}`} />
+    <Link className="attention-row" href="/app/attention">
+      <span className={`signal-pip ${group.severity}`} />
       <div>
         <p>
-          {hubFor(signal.hubId)?.name ?? "Portfolio"} · {signal.severity}
+          {hubFor(group.hubId)?.name ?? "Portfolio"} · {group.severity}
         </p>
-        <strong>
-          {String(
-            signal.metadata.title ?? signal.signalType.replaceAll("_", " "),
+        <strong>{group.title}</strong>
+        <small>
+          {group.reasons[0]}{" "}
+          {group.reasons.length > 1 && (
+            <b className="reason-more">
+              +{group.reasons.length - 1} more{" "}
+              {group.reasons.length === 2 ? "reason" : "reasons"}
+            </b>
           )}
-        </strong>
-        <small>{signal.reason}</small>
+        </small>
       </div>
       <ArrowRight size={14} />
-    </a>
+    </Link>
   );
 }
 

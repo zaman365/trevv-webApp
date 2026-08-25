@@ -5,6 +5,7 @@ import { ServiceWorkerRegistration } from "@/components/service-worker-registrat
 import { trevvBrand } from "@/lib/branding";
 import "./globals.css";
 import "./workspace.css";
+import "./design-system.css";
 
 const appName = trevvBrand.name;
 

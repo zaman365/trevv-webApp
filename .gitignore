@@ -16,3 +16,10 @@ apps/desktop/src-tauri/target
 playwright-report
 test-results
 openapi.generated.json
+
+# Local build/spec briefs (kept out of version control)
+FounderHQ — Codex Development Instruction.md
+FounderHQ_Codex_Build_Instruction.md
+FounderHQ_Codex_Build_Instruction_UPDATED.md
+TREVV_Codex_INCREMENTAL_Delta_Only.md
+TREVV_Codex_Master_Build_Instruction.md

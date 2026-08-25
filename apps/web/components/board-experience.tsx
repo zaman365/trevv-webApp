@@ -17,6 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { DistributionBar } from "./charts";
 import { flexRender } from "@tanstack/react-table";
 import {
   getCoreRowModel,
@@ -52,6 +53,8 @@ import {
 import {
   boardForHub,
   calculateWorkProgress,
+  demoWorkItemGroups,
+  groupsForBoard,
   hubBySlug,
   itemsForBoard,
   type Board,
@@ -59,7 +62,7 @@ import {
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 
@@ -73,10 +76,13 @@ interface BoardItem {
   status: Status;
   priority: Priority;
   due: string;
+  /** ISO date, kept so ranges can sort. `due` is display-only. */
+  dueDate?: string;
   resources: number;
   updates: number;
   description: string;
   group: string;
+  groupId: string;
 }
 
 const formatDueDate = (dueDate?: string) =>
@@ -123,16 +129,19 @@ const toBoardItem = (item: WorkItem): BoardItem => ({
       ? "Low"
       : (`${item.priority[0]?.toUpperCase()}${item.priority.slice(1)}` as Priority),
   due: formatDueDate(item.dueDate),
+  ...(item.dueDate ? { dueDate: item.dueDate } : {}),
   resources: 0,
   updates: 0,
   description: descriptionFor(item),
-  group:
-    item.type === "decision" || item.type === "milestone"
-      ? "Milestones & decisions"
-      : item.type === "approval"
-        ? "Approvals"
-        : "Execution",
+  groupId: item.groupId ?? UNGROUPED_ID,
+  group: groupNameFor(item.groupId),
 });
+
+/** Items without a Group still need a band, so they get a real one. */
+const UNGROUPED_ID = "ungrouped";
+
+const groupNameFor = (groupId?: string) =>
+  demoWorkItemGroups.find((group) => group.id === groupId)?.name ?? "Ungrouped";
 
 const statusLabel: Record<Status, string> = {
   planned: "Planned",
@@ -158,7 +167,7 @@ export function BoardExperience({
           <h1>Board not found</h1>
           <p>This board does not belong to the requested Hub.</p>
           <Link href={hub ? `/app/hubs/${hub.slug}` : "/app/hubs"}>
-            Return to {hub?.name ?? "All Hubs"}
+            Return to {hub?.name ?? "all projects"}
           </Link>
         </main>
       </WorkspaceFrame>
@@ -183,13 +192,41 @@ function BoardWorkspace({
   sourceItems: WorkItem[];
 }) {
   const copy = productCopy.en.board;
-  const seedItems = useMemo(() => sourceItems.map(toBoardItem), [sourceItems]);
+  const boardGroups = useMemo(() => groupsForBoard(board.id), [board.id]);
+  const groupRank = useMemo(() => {
+    const order = new Map(boardGroups.map((group, index) => [group.id, index]));
+    // Ungrouped items sort last rather than interleaving.
+    return (groupId: string) => order.get(groupId) ?? boardGroups.length;
+  }, [boardGroups]);
+  // Rows must be contiguous per group for the bands to read correctly.
+  const seedItems = useMemo(
+    () =>
+      sourceItems
+        .map(toBoardItem)
+        .sort(
+          (left, right) => groupRank(left.groupId) - groupRank(right.groupId),
+        ),
+    [groupRank, sourceItems],
+  );
   const [items, setItems] = useState(seedItems);
   const [view, setView] = useState<"table" | "kanban">("table");
   const [selected, setSelected] = useState<BoardItem | null>(
     seedItems[0] ?? null,
   );
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set(),
+  );
+  const groupColor = (groupId: string) =>
+    boardGroups.find((group) => group.id === groupId)?.color ??
+    "var(--fh-border-strong)";
+  const toggleGroup = (groupId: string) =>
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
   const [storageReady, setStorageReady] = useState(false);
   const storageKey = `trevv:board:${board.id}`;
   useEffect(() => {
@@ -530,9 +567,64 @@ function BoardWorkspace({
                   strategy={verticalListSortingStrategy}
                 >
                   <tbody>
-                    {table.getRowModel().rows.map((row) => (
-                      <SortableTableRow row={row} key={row.id} />
-                    ))}
+                    {/* Group bands: the device that keeps a long board
+                        readable. A header row opens each band, and its rows
+                        stay draggable inside the same sortable context. */}
+                    {table.getRowModel().rows.map((row, index, rows) => {
+                      const groupId = row.original.groupId;
+                      const isFirstOfGroup =
+                        index === 0 ||
+                        rows[index - 1]?.original.groupId !== groupId;
+                      const isLastOfGroup =
+                        index === rows.length - 1 ||
+                        rows[index + 1]?.original.groupId !== groupId;
+                      const size = rows.filter(
+                        (candidate) => candidate.original.groupId === groupId,
+                      ).length;
+                      const collapsed = collapsedGroups.has(groupId);
+                      return (
+                        <Fragment key={row.id}>
+                          {isFirstOfGroup && (
+                            <tr className="group-row">
+                              <td colSpan={8}>
+                                <button
+                                  className="group-header"
+                                  aria-expanded={!collapsed}
+                                  style={
+                                    {
+                                      "--group-color": groupColor(groupId),
+                                    } as React.CSSProperties
+                                  }
+                                  onClick={() => toggleGroup(groupId)}
+                                >
+                                  <ChevronDown
+                                    size={15}
+                                    className={collapsed ? "rotated" : ""}
+                                  />
+                                  <span className="group-name">
+                                    {row.original.group}
+                                  </span>
+                                  <span className="group-count">
+                                    {size} {size === 1 ? "item" : "items"}
+                                  </span>
+                                </button>
+                              </td>
+                            </tr>
+                          )}
+                          {!collapsed && <SortableTableRow row={row} />}
+                          {isLastOfGroup && (
+                            <GroupSummaryRow
+                              items={rows
+                                .filter(
+                                  (candidate) =>
+                                    candidate.original.groupId === groupId,
+                                )
+                                .map((candidate) => candidate.original)}
+                            />
+                          )}
+                        </Fragment>
+                      );
+                    })}
                     <tr className="add-row">
                       <td />
                       <td colSpan={7}>
@@ -567,6 +659,100 @@ function BoardWorkspace({
         />
       )}
     </WorkspaceFrame>
+  );
+}
+
+const STATUS_COLORS: Record<Status, string> = {
+  planned: "var(--fh-parked)",
+  working: "var(--fh-warning)",
+  blocked: "var(--fh-danger)",
+  review: "var(--fh-info)",
+  done: "var(--fh-success)",
+};
+
+const PRIORITY_COLORS: Record<Priority, string> = {
+  Urgent: "var(--fh-danger)",
+  High: "var(--fh-warning)",
+  Normal: "var(--fh-info)",
+  Low: "var(--fh-parked)",
+};
+
+/**
+ * The aggregation row under each group. Status and priority arrive as
+ * distribution bars because the mix is the interesting part; dates arrive as
+ * a range; counts sum. Every bar carries its numbers in the tooltip and the
+ * accessible name, so none of it depends on colour.
+ */
+function GroupSummaryRow({ items }: { items: BoardItem[] }) {
+  const statusSlices = (Object.keys(STATUS_COLORS) as Status[])
+    .map((key) => ({
+      key,
+      label: statusLabel[key],
+      color: STATUS_COLORS[key],
+      value: items.filter((item) => item.status === key).length,
+    }))
+    .filter((slice) => slice.value > 0);
+
+  const prioritySlices = (Object.keys(PRIORITY_COLORS) as Priority[])
+    .map((key) => ({
+      key,
+      label: key,
+      color: PRIORITY_COLORS[key],
+      value: items.filter((item) => item.priority === key).length,
+    }))
+    .filter((slice) => slice.value > 0);
+
+  const dated = items
+    .filter((item) => item.dueDate)
+    .sort((left, right) => left.dueDate!.localeCompare(right.dueDate!));
+  const dueRange =
+    dated.length === 0
+      ? "—"
+      : dated.length === 1 || dated[0]!.due === dated[dated.length - 1]!.due
+        ? dated[0]!.due
+        : `${dated[0]!.due} – ${dated[dated.length - 1]!.due}`;
+
+  const owners = new Set(
+    items
+      .filter((item) => item.owner !== "Unassigned")
+      .map((item) => item.owner),
+  ).size;
+  const resources = items.reduce((sum, item) => sum + item.resources, 0);
+  const updates = items.reduce((sum, item) => sum + item.updates, 0);
+
+  return (
+    <tr className="summary-row">
+      <td />
+      <td>
+        <span className="summary-count">
+          {items.length} {items.length === 1 ? "item" : "items"}
+        </span>
+      </td>
+      <td>
+        <span className="summary-cell">
+          {owners} {owners === 1 ? "owner" : "owners"}
+        </span>
+      </td>
+      <td>
+        <DistributionBar slices={statusSlices} title="Status mix" />
+      </td>
+      <td>
+        <DistributionBar slices={prioritySlices} title="Priority mix" />
+      </td>
+      <td>
+        <span className="summary-pill">{dueRange}</span>
+      </td>
+      <td>
+        <span className="summary-cell">
+          {resources} {resources === 1 ? "file" : "files"}
+        </span>
+      </td>
+      <td>
+        <span className="summary-cell">
+          {updates} {updates === 1 ? "update" : "updates"}
+        </span>
+      </td>
+    </tr>
   );
 }
 

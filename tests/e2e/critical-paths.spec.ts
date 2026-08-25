@@ -14,7 +14,11 @@ test("operator starts in Home and opens a Hub from Portfolio", async ({
 
   await page.goto("/app/portfolio");
   await expect(page.getByRole("heading", { name: "Portfolio" })).toBeVisible();
-  const hubLink = page.locator('.hub-card[href="/app/hubs/northstar-apparel"]');
+  // The card is a div with a stretched link, so the whole card stays
+  // clickable without nesting its overflow button inside an anchor.
+  const hubLink = page.locator(
+    '.project-tile .tile-link[href="/app/hubs/northstar-apparel"]',
+  );
   await expect(hubLink).toBeVisible();
   await hubLink.click();
   await expect(

@@ -69,6 +69,20 @@ export interface WorkItem {
   assignee?: string;
   approvalState?: "pending" | "changes_requested" | "approved" | "rejected";
   decisionState?: "needed" | "analyzing" | "delegated" | "deferred" | "decided";
+  /** Visual grouping inside a Board (§4). Ungrouped items fall to the end. */
+  groupId?: string;
+}
+
+/**
+ * A Group is the visual band inside a Board — the device that keeps a
+ * forty-row board readable. Colour is per-group and carries no status
+ * meaning; status stays on the item.
+ */
+export interface WorkItemGroup {
+  id: string;
+  boardId: string;
+  name: string;
+  color: string;
 }
 
 export interface Board {
@@ -455,6 +469,7 @@ const currentDemoItems: WorkItem[] = [
     dueDate: "2026-08-26",
     assignee: "Mohammed Zaman",
     approvalState: "pending",
+    groupId: "g-northstar-compliance",
   },
   {
     id: "i-2",
@@ -467,6 +482,7 @@ const currentDemoItems: WorkItem[] = [
     dueDate: "2026-08-25",
     assignee: "Mohammed Zaman",
     decisionState: "needed",
+    groupId: "g-northstar-launch",
   },
   {
     id: "i-3",
@@ -478,6 +494,7 @@ const currentDemoItems: WorkItem[] = [
     status: "blocked",
     dueDate: "2026-08-22",
     assignee: "Amira Demir",
+    groupId: "g-northstar-compliance",
   },
   {
     id: "i-4",
@@ -489,6 +506,7 @@ const currentDemoItems: WorkItem[] = [
     status: "working",
     dueDate: "2026-08-28",
     assignee: "Nora Klein",
+    groupId: "g-northstar-launch",
   },
   {
     id: "i-5",
@@ -500,6 +518,7 @@ const currentDemoItems: WorkItem[] = [
     status: "working",
     dueDate: "2026-08-27",
     assignee: "Elias Hart",
+    groupId: "g-northstar-launch",
   },
   {
     id: "i-6",
@@ -512,6 +531,7 @@ const currentDemoItems: WorkItem[] = [
     dueDate: "2026-08-26",
     assignee: "Mohammed Zaman",
     decisionState: "needed",
+    groupId: "g-mealflow-onboarding",
   },
   {
     id: "i-7",
@@ -524,6 +544,7 @@ const currentDemoItems: WorkItem[] = [
     dueDate: "2026-08-27",
     assignee: "Nora Klein",
     approvalState: "pending",
+    groupId: "g-mealflow-onboarding",
   },
   {
     id: "i-8",
@@ -535,6 +556,7 @@ const currentDemoItems: WorkItem[] = [
     status: "blocked",
     dueDate: "2026-08-23",
     assignee: "Tim Bauer",
+    groupId: "g-mealflow-onboarding",
   },
   {
     id: "i-9",
@@ -546,6 +568,7 @@ const currentDemoItems: WorkItem[] = [
     status: "working",
     dueDate: "2026-08-29",
     assignee: "Elias Hart",
+    groupId: "g-localreach-delivery",
   },
   {
     id: "i-10",
@@ -557,6 +580,7 @@ const currentDemoItems: WorkItem[] = [
     status: "review",
     dueDate: "2026-08-25",
     assignee: "Jana Roth",
+    groupId: "g-localreach-delivery",
   },
   {
     id: "i-11",
@@ -568,6 +592,7 @@ const currentDemoItems: WorkItem[] = [
     status: "working",
     dueDate: "2026-08-28",
     decisionState: "needed",
+    groupId: "g-studioops-pilot",
   },
   {
     id: "i-12",
@@ -578,6 +603,7 @@ const currentDemoItems: WorkItem[] = [
     priority: "high",
     status: "working",
     dueDate: "2026-08-26",
+    groupId: "g-studioops-pilot",
   },
   {
     id: "i-13",
@@ -601,6 +627,7 @@ const currentDemoItems: WorkItem[] = [
     dueDate: "2026-08-20",
     assignee: "Mohammed Zaman",
     decisionState: "needed",
+    groupId: "g-greentable-validation",
   },
   {
     id: "i-15",
@@ -612,6 +639,7 @@ const currentDemoItems: WorkItem[] = [
     status: "working",
     dueDate: "2026-08-21",
     assignee: "Sofia Marin",
+    groupId: "g-greentable-validation",
   },
   {
     id: "i-16",
@@ -624,6 +652,7 @@ const currentDemoItems: WorkItem[] = [
     dueDate: "2026-08-25",
     assignee: "Mohammed Zaman",
     approvalState: "pending",
+    groupId: "g-centralops-compliance",
   },
   {
     id: "i-17",
@@ -635,6 +664,7 @@ const currentDemoItems: WorkItem[] = [
     status: "blocked",
     dueDate: "2026-08-22",
     assignee: "Amira Demir",
+    groupId: "g-centralops-compliance",
   },
   {
     id: "i-18",
@@ -658,6 +688,7 @@ const currentDemoItems: WorkItem[] = [
     dueDate: "2026-07-31",
     assignee: "Mohammed Zaman",
     decisionState: "decided",
+    groupId: "g-localreach-delivery",
   },
 ];
 
@@ -789,6 +820,71 @@ export function boardForHub(
   );
 }
 
+/**
+ * Seeded Groups. Every board gets a small set of bands so the table has
+ * structure before a customer defines their own.
+ */
+export const demoWorkItemGroups: WorkItemGroup[] = [
+  {
+    id: "g-northstar-launch",
+    boardId: "b-northstar-launch",
+    name: "Launch critical",
+    color: "#ad3148",
+  },
+  {
+    id: "g-northstar-compliance",
+    boardId: "b-northstar-launch",
+    name: "Compliance",
+    color: "#865006",
+  },
+  {
+    id: "g-mealflow-onboarding",
+    boardId: "b-mealflow-beta",
+    name: "Onboarding",
+    color: "#5b5bd6",
+  },
+  {
+    id: "g-mealflow-feedback",
+    boardId: "b-mealflow-beta",
+    name: "Beta feedback",
+    color: "#2873b9",
+  },
+  {
+    id: "g-localreach-delivery",
+    boardId: "b-localreach-delivery",
+    name: "In delivery",
+    color: "#146b50",
+  },
+  {
+    id: "g-localreach-intake",
+    boardId: "b-localreach-delivery",
+    name: "Client intake",
+    color: "#2873b9",
+  },
+  {
+    id: "g-greentable-validation",
+    boardId: "b-greentable-validation",
+    name: "Pilot decisions",
+    color: "#ad3148",
+  },
+  {
+    id: "g-studioops-pilot",
+    boardId: "b-studioops-pilot",
+    name: "Pilot scope",
+    color: "#5b5bd6",
+  },
+  {
+    id: "g-centralops-compliance",
+    boardId: "b-centralops-compliance",
+    name: "Controls",
+    color: "#865006",
+  },
+];
+
+export function groupsForBoard(boardId: string): WorkItemGroup[] {
+  return demoWorkItemGroups.filter((group) => group.boardId === boardId);
+}
+
 export function itemsForBoard(boardId: string): WorkItem[] {
   return demoItems.filter((item) => item.boardId === boardId);
 }
@@ -856,7 +952,8 @@ export function validateDemoRelationships(): string[] {
   if (hubIds.size !== demoHubs.length) errors.push("Hub IDs must be unique");
   if (new Set(demoHubs.map((hub) => hub.slug)).size !== demoHubs.length)
     errors.push("Hub slugs must be unique");
-  if (boardIds.size !== demoBoards.length) errors.push("Board IDs must be unique");
+  if (boardIds.size !== demoBoards.length)
+    errors.push("Board IDs must be unique");
   if (itemIds.size !== demoItems.length) errors.push("Item IDs must be unique");
   for (const hub of demoHubs)
     if (!portfolioIds.has(hub.portfolioId))

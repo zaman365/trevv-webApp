@@ -26,7 +26,29 @@
   --fh-radius-control: 11px;
   --fh-radius-card: 17px;
   --fh-radius-panel: 20px;
-  --fh-focus: 0 0 0 3px rgb(91 91 214 / 22%);
+
+  /* Focus ring. Must clear 3:1 against the surface behind it to satisfy
+     WCAG 2.2 SC 2.4.11. The solid primary reaches 5.37:1; the inner white
+     ring separates it from dark and coloured surfaces. */
+  --fh-focus: 0 0 0 1px var(--fh-surface), 0 0 0 3px var(--fh-primary);
+
+  /* Type scale. One step per role — an entity's name must sit at least two
+     steps above its own metadata, in size and in weight. 11.5px is retired;
+     --fh-text-2xs exists only for uppercase column headers, where the
+     letterforms are large relative to the size. */
+  --fh-text-2xs: 11px;
+  --fh-text-xs: 12px;
+  --fh-text-sm: 13px;
+  --fh-text-base: 14px;
+  --fh-text-md: 15px;
+  --fh-text-lg: 17px;
+  --fh-text-xl: 20px;
+  --fh-text-2xl: 26px;
+
+  --fh-weight-normal: 400;
+  --fh-weight-medium: 500;
+  --fh-weight-strong: 600;
+  --fh-weight-heavy: 700;
 }
 
 [data-theme="dark"] {
@@ -42,4 +64,19 @@
   --fh-primary: #8b88ff;
   --fh-primary-strong: #a4a2ff;
   --fh-primary-soft: #29294d;
+
+  /* The semantic colours need their own dark values. The light ones are
+     tuned for a white ground and land at 2.5–3.3:1 on a dark surface —
+     below AA. These are lightened with the hue preserved, and clear AA
+     both on the surface and inside their own soft chip. */
+  --fh-success: #6cc5a3;
+  --fh-success-soft: #16302a;
+  --fh-warning: #e0b070;
+  --fh-warning-soft: #33280f;
+  --fh-danger: #f2909f;
+  --fh-danger-soft: #3a1f27;
+  --fh-parked: #a3acbe;
+  --fh-parked-soft: #252b36;
+  --fh-info: #84bdf0;
+  --fh-info-soft: #152736;
 }

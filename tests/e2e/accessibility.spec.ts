@@ -26,6 +26,7 @@ const routes = [
   "/onboarding",
   "/app/home",
   "/app/portfolio",
+  "/app/dashboard",
   "/app/attention",
   "/app/waiting",
   "/app/hubs/northstar-apparel",

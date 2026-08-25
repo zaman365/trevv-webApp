@@ -17,7 +17,7 @@ export const productCopy = {
       hubs: "Hubs",
     },
     shell: {
-      search: "Search work, Hubs and people…",
+      search: "Search work, projects and people…",
       capture: "Quick capture",
       notifications: "Notifications",
       userMenu: "Open user menu",

@@ -27,7 +27,16 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
+import { PageHero, StatTile } from "./ui-kit";
 import { productCopy } from "@/lib/product-copy";
+import { labelForType } from "@/lib/terminology";
+
+const hubHealthCopy: Record<string, string> = {
+  on_track: "On track",
+  watch: "Watch",
+  critical: "Critical",
+  parked: "Parked",
+};
 
 const hubTabIds = [
   "overview",
@@ -47,8 +56,8 @@ export function HubOverview({ slug }: { slug: string }) {
     return (
       <WorkspaceFrame active="hub" hubSlug={slug}>
         <main className="hub-main board-not-found">
-          <h1>Hub not found</h1>
-          <Link href="/app/hubs">Return to All Hubs</Link>
+          <h1>Project not found</h1>
+          <Link href="/app/hubs">Return to all projects</Link>
         </main>
       </WorkspaceFrame>
     );
@@ -95,7 +104,9 @@ function HubWorkspace({
       (item.type === "decision" || item.type === "approval"),
   );
   const ideas = hubItems.filter((item) => item.type === "idea");
-  const completedItems = hubItems.filter((item) => item.status === "done").length;
+  const completedItems = hubItems.filter(
+    (item) => item.status === "done",
+  ).length;
   const datedItems = hubItems.filter((item) => item.dueDate).length;
   const onTimeItems = Math.max(0, datedItems - rollup.overdue);
   const calculatedMetrics = [
@@ -122,34 +133,82 @@ function HubWorkspace({
         className="hub-main"
         style={{ "--hub-accent": hub.accent } as React.CSSProperties}
       >
-        <header className="hub-page-header">
-          <div className="hub-page-identity">
-            <span>{hub.icon}</span>
-            <div>
-              <p>
-                {hub.type.replaceAll("_", " ")} · {hub.stage}
-              </p>
-              <h1>{hub.name}</h1>
-              <small>Lead by {hub.lead.name}</small>
-            </div>
-          </div>
-          <div className="hub-page-actions">
-            <a href={boardHref}>
-              <Plus size={15} />
-              {copy.addItem}
-            </a>
-            <button>{copy.postUpdate}</button>
-            {hub.slug === "localreach" && (
-              <a href={`/app/hubs/${hub.slug}/stakeholder`}>
-                <ExternalLink size={14} />
-                Stakeholder view
-              </a>
-            )}
-            <button aria-label="More actions">
-              <MoreHorizontal size={17} />
-            </button>
-          </div>
-        </header>
+        <PageHero
+          eyebrow={
+            <>
+              {labelForType(hub.type)} · {hub.stage} · Led by {hub.lead.name}
+            </>
+          }
+          title={hub.name}
+          badge={
+            <span className={`health-badge ${hub.health}`}>
+              {hubHealthCopy[hub.health]}
+            </span>
+          }
+          subtitle={hub.healthNote}
+          accent={hub.accent}
+          monogram={hub.icon}
+          actions={
+            <>
+              <Link className="primary-button" href={boardHref}>
+                <Plus size={16} />
+                <span>{copy.addItem}</span>
+              </Link>
+              <button className="quiet-button">{copy.postUpdate}</button>
+              {hub.slug === "localreach" && (
+                <Link
+                  className="quiet-button"
+                  href={`/app/hubs/${hub.slug}/stakeholder`}
+                >
+                  <ExternalLink size={14} />
+                  Stakeholder view
+                </Link>
+              )}
+              <button className="icon-button" aria-label="More actions">
+                <MoreHorizontal size={17} />
+              </button>
+            </>
+          }
+          stats={
+            <>
+              <StatTile
+                icon={TrendingUp}
+                value={progress === null ? "Manual" : `${progress}%`}
+                label="Scoped progress"
+                note={
+                  progress === null
+                    ? "Set manually"
+                    : `${completedItems} of ${hubItems.length} complete · weighted by status`
+                }
+                tone="primary"
+                {...(progress !== null ? { meter: progress } : {})}
+              />
+              <StatTile
+                icon={FolderKanban}
+                value={rollup.open}
+                label="Open work"
+                note={`${datedItems} with a date`}
+              />
+              <StatTile
+                icon={AlertTriangle}
+                value={rollup.overdue + rollup.blocked}
+                label="Overdue or blocked"
+                note={`${rollup.overdue} overdue · ${rollup.blocked} blocked`}
+                tone={rollup.overdue + rollup.blocked ? "danger" : "neutral"}
+              />
+              <StatTile
+                icon={FileQuestion}
+                value={rollup.decisions + rollup.approvals}
+                label="Needs a call"
+                note="Decisions and approvals"
+                tone={
+                  rollup.decisions + rollup.approvals ? "warning" : "neutral"
+                }
+                href="/app/decisions"
+              />
+            </>
+          }
+        />
         <nav className="hub-tabs">
           <button
             className={activeTab === "overview" ? "active" : ""}
@@ -294,7 +353,7 @@ function HubWorkspace({
               <div className="overview-section-title">
                 <div>
                   <h2>Ideas</h2>
-                  <p>Opportunities captured for this Hub.</p>
+                  <p>Opportunities captured for this project.</p>
                 </div>
               </div>
               <div className="hub-activity">
@@ -308,7 +367,7 @@ function HubWorkspace({
                   />
                 ))}
                 {ideas.length === 0 && (
-                  <p>No ideas have been captured for this Hub yet.</p>
+                  <p>No ideas have been captured for this project yet.</p>
                 )}
               </div>
             </section>

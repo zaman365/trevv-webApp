@@ -2,6 +2,8 @@
 
 import {
   Bell,
+  ChartColumn,
+  ChevronDown,
   ClipboardCheck,
   Command,
   FileQuestion,
@@ -9,29 +11,26 @@ import {
   House,
   Hourglass,
   Inbox,
+  Languages,
   LayoutTemplate,
   Lightbulb,
   Menu,
+  Moon,
   MoreHorizontal,
   Plus,
   Search,
   Settings2,
   Sparkles,
+  Sun,
   Users,
   X,
 } from "lucide-react";
-import {
-  demoDependencies,
-  demoItems,
-  demoWaitingStates,
-  generateAttentionSignals,
-  hubBySlug,
-  hubsForPortfolio,
-} from "@founderhq/core";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
+import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
+import { vocabularyFor } from "@/lib/terminology";
 
 type ActivePage =
   | "home"
@@ -51,6 +50,11 @@ type ActivePage =
   | "settings"
   | "hub";
 
+/**
+ * The one workspace shell. Every screen renders inside it, so the navigation,
+ * the theme and language controls, Quick capture and — critically — the
+ * attention badge are defined once and cannot drift between screens.
+ */
 export function WorkspaceFrame({
   children,
   active,
@@ -58,38 +62,57 @@ export function WorkspaceFrame({
 }: {
   children: ReactNode;
   active: ActivePage;
-  hubSlug?: string;
+  hubSlug?: string | undefined;
+}) {
+  return (
+    <WorkspaceProvider>
+      <WorkspaceChrome active={active} hubSlug={hubSlug}>
+        {children}
+      </WorkspaceChrome>
+    </WorkspaceProvider>
+  );
+}
+
+function WorkspaceChrome({
+  children,
+  active,
+  hubSlug,
+}: {
+  children: ReactNode;
+  active: ActivePage;
+  hubSlug?: string | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  const {
+    copy: messages,
+    scope,
+    theme,
+    toggleTheme,
+    locale,
+    toggleLocale,
+    captureOpen,
+    setCaptureOpen,
+  } = useWorkspace();
   const copy = productCopy.en;
-  const activeHub = hubSlug ? hubBySlug(hubSlug) : undefined;
-  const workspaceHubs = hubsForPortfolio(
-    activeHub?.portfolioId ?? "portfolio-demo",
-  );
-  const workspaceHubIds = new Set(workspaceHubs.map((hub) => hub.id));
-  const workspaceItems = demoItems.filter((item) =>
-    workspaceHubIds.has(item.hubId),
-  );
-  const workspaceItemIds = new Set(workspaceItems.map((item) => item.id));
-  const attentionCount = generateAttentionSignals(
-    "org-demo",
-    workspaceHubs,
-    workspaceItems,
-    demoWaitingStates.filter((state) => workspaceHubIds.has(state.hubId ?? "")),
-    new Date("2026-08-24T12:00:00.000Z"),
-    demoDependencies.filter(
-      (dependency) =>
-        workspaceItemIds.has(dependency.itemId) &&
-        workspaceItemIds.has(dependency.dependsOnItemId),
-    ),
-  ).length;
+  const vocab = vocabularyFor();
+
+  // One number, from one place. See lib/attention.ts.
+  const attentionCount = scope.attentionCount;
+
   const nav = [
-    ["home", copy.nav.home, "/app/home", House],
-    ["portfolio", copy.nav.portfolio, "/app/portfolio", Grid2X2],
-    ["attention", copy.nav.attention, "/app/attention", Sparkles],
-    ["myWork", copy.nav.myWork, "/app/my-work", ClipboardCheck],
-    ["inbox", copy.nav.inbox, "/app/inbox", Inbox],
+    ["home", copy.nav.home, "/app/home", House, undefined],
+    ["portfolio", copy.nav.portfolio, "/app/portfolio", Grid2X2, undefined],
+    [
+      "attention",
+      copy.nav.attention,
+      "/app/attention",
+      Sparkles,
+      attentionCount,
+    ],
+    ["myWork", copy.nav.myWork, "/app/my-work", ClipboardCheck, undefined],
+    ["inbox", copy.nav.inbox, "/app/inbox", Inbox, undefined],
   ] as const;
+
   return (
     <div className="product-shell workspace-product">
       <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
@@ -111,26 +134,29 @@ export function WorkspaceFrame({
         </div>
         <nav aria-label="Primary navigation">
           <p className="nav-label">Workspace</p>
-          {nav.map(([key, label, href, Icon]) => (
+          {nav.map(([key, label, href, Icon, badge]) => (
             <Link
               key={key}
               className={`nav-item ${active === key ? "active" : ""}`}
               href={href}
+              aria-current={active === key ? "page" : undefined}
+              onClick={() => setOpen(false)}
             >
               <Icon size={17} />
               <span>{label}</span>
               {key === "inbox" && <span className="nav-dot" />}
-              {key === "attention" && (
-                <span className="nav-badge">{attentionCount}</span>
+              {badge !== undefined && badge > 0 && (
+                <span className="nav-badge">{badge}</span>
               )}
             </Link>
           ))}
-          <p className="nav-label spaced">{copy.nav.hubs} · Favorites</p>
-          {workspaceHubs.slice(0, 4).map((hub) => (
+          <p className="nav-label spaced">{vocab.many} · Favorites</p>
+          {scope.hubs.slice(0, 4).map((hub) => (
             <Link
               className={`nav-item hub-nav ${active === "hub" && hubSlug === hub.slug ? "active" : ""}`}
               href={`/app/hubs/${hub.slug}`}
               key={hub.id}
+              onClick={() => setOpen(false)}
             >
               <span
                 className="hub-nav-icon"
@@ -140,63 +166,75 @@ export function WorkspaceFrame({
               </span>
               <span>{hub.name}</span>
               {hub.health === "critical" && (
-                <span className="health-pip critical" />
+                <span className="health-pip critical">
+                  <span className="sr-only">Critical</span>
+                </span>
               )}
             </Link>
           ))}
           <Link className="nav-item" href="/app/hubs">
             <Grid2X2 size={16} />
-            <span>All Hubs</span>
+            <span>All {vocab.many.toLowerCase()}</span>
           </Link>
           <p className="nav-label spaced">Workflows</p>
-          <a
+          <Link
             className={`nav-item ${active === "decisions" ? "active" : ""}`}
             href="/app/decisions"
           >
             <FileQuestion size={17} />
             <span>{copy.nav.decisions}</span>
-          </a>
-          <a
+          </Link>
+          <Link
             className={`nav-item ${active === "ideas" ? "active" : ""}`}
             href="/app/ideas"
           >
             <Lightbulb size={17} />
             <span>{copy.nav.ideas}</span>
-          </a>
-          <a
+          </Link>
+          <Link
             className={`nav-item ${active === "team" ? "active" : ""}`}
             href="/app/team"
           >
             <Users size={17} />
             <span>{copy.nav.team}</span>
-          </a>
-          <button className="nav-item nav-button">
+          </Link>
+          <button
+            className="nav-item nav-button"
+            onClick={() => setCaptureOpen(true)}
+          >
             <Plus size={16} />
             <span>Create</span>
           </button>
         </nav>
         <div className="sidebar-foot">
-          <a
+          <Link
+            className={`nav-item ${active === "reviews" ? "active" : ""}`}
+            href="/app/dashboard"
+          >
+            <ChartColumn size={17} />
+            <span>Dashboard</span>
+          </Link>
+          <Link
             className={`nav-item ${active === "templates" ? "active" : ""}`}
             href="/app/blueprints"
           >
             <LayoutTemplate size={17} />
             <span>Blueprints</span>
-          </a>
-          <a
+          </Link>
+          <Link
             className={`nav-item ${active === "waiting" ? "active" : ""}`}
             href="/app/waiting"
           >
             <Hourglass size={17} />
             <span>{copy.nav.waiting}</span>
-          </a>
-          <a
+          </Link>
+          <Link
             className={`nav-item ${active === "settings" ? "active" : ""}`}
             href="/app/settings/integrations"
           >
             <Settings2 size={17} />
             <span>{copy.nav.settings}</span>
-          </a>
+          </Link>
           <div className="user-card">
             <span className="avatar avatar-mz">MZ</span>
             <div>
@@ -223,27 +261,45 @@ export function WorkspaceFrame({
           >
             <Menu size={20} />
           </button>
-          <a href="/app/search" className="search-trigger">
+          <Link href="/app/search" className="search-trigger">
             <Search size={17} />
             <span>{copy.shell.search}</span>
             <kbd>
               <Command size={11} />K
             </kbd>
-          </a>
+          </Link>
           <div className="topbar-actions">
-            <a className="quiet-button capture-button" href="/app/inbox">
+            <button
+              className="quiet-button capture-button"
+              onClick={() => setCaptureOpen(true)}
+            >
               <Plus size={16} />
               {copy.shell.capture}
               <kbd>Q</kbd>
-            </a>
-            <a
+            </button>
+            <button
+              className="icon-button"
+              onClick={toggleLocale}
+              aria-label={messages.common.switchLanguage}
+            >
+              <Languages size={18} />
+              <span className="language-code">{locale.toUpperCase()}</span>
+            </button>
+            <button
+              className="icon-button"
+              onClick={toggleTheme}
+              aria-label={messages.common.theme}
+            >
+              {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+            <Link
               className="icon-button notification-button"
               aria-label={copy.shell.notifications}
               href="/app/notifications"
             >
               <Bell size={18} />
               <span />
-            </a>
+            </Link>
             <button
               className="avatar avatar-mz avatar-button"
               aria-label={copy.shell.userMenu}
@@ -254,6 +310,89 @@ export function WorkspaceFrame({
         </header>
         {children}
       </div>
+
+      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+        <Link
+          className={active === "portfolio" ? "active" : ""}
+          href="/app/portfolio"
+        >
+          <Grid2X2 size={19} />
+          <span>{messages.nav.portfolio}</span>
+        </Link>
+        <Link
+          className={active === "myWork" ? "active" : ""}
+          href="/app/my-work"
+        >
+          <ClipboardCheck size={19} />
+          <span>{messages.nav.myWork}</span>
+        </Link>
+        <button onClick={() => setCaptureOpen(true)}>
+          <span className="mobile-capture">
+            <Plus size={22} />
+          </span>
+          <span>{messages.common.quickCapture}</span>
+        </button>
+        <Link className={active === "inbox" ? "active" : ""} href="/app/inbox">
+          <Inbox size={19} />
+          <span>{messages.nav.inbox}</span>
+        </Link>
+        <button onClick={() => setOpen(true)}>
+          <MoreHorizontal size={19} />
+          <span>{messages.common.more}</span>
+        </button>
+      </nav>
+
+      {captureOpen && <QuickCapture onClose={() => setCaptureOpen(false)} />}
+    </div>
+  );
+}
+
+function QuickCapture({ onClose }: { onClose: () => void }) {
+  const { copy } = useWorkspace();
+  return (
+    <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
+      <section
+        className="capture-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={copy.common.quickCapture}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div>
+          <span className="attention-icon">
+            <Lightbulb size={18} />
+          </span>
+          <div>
+            <h2>{copy.common.quickCapture}</h2>
+            <p>Capture now. Organize when you are ready.</p>
+          </div>
+          <button
+            className="icon-button"
+            onClick={onClose}
+            aria-label={copy.common.dismiss}
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <input autoFocus placeholder="What needs to move?" />
+        <div className="capture-options">
+          <button>
+            Task <ChevronDown size={14} />
+          </button>
+          <button>
+            Inbox <ChevronDown size={14} />
+          </button>
+          <button>
+            Owner <ChevronDown size={14} />
+          </button>
+        </div>
+        <footer>
+          <span>Press ⌘ + Enter to save</span>
+          <button className="primary-button" onClick={onClose}>
+            Capture item
+          </button>
+        </footer>
+      </section>
     </div>
   );
 }

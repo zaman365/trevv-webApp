@@ -74,12 +74,12 @@ a {
   line-height: 1.15;
 }
 .brand-row strong {
-  font-size: 14px;
+  font-size: var(--fh-text-base);
   letter-spacing: -0.01em;
 }
 .brand-row span {
   color: var(--fh-muted);
-  font-size: 14px;
+  font-size: var(--fh-text-base);
   margin-top: 4px;
 }
 .brand-mark {
@@ -95,7 +95,7 @@ a {
 .brand-mark span {
   margin: 0;
   color: white;
-  font-size: 14px;
+  font-size: var(--fh-text-base);
   font-weight: 750;
 }
 .sidebar nav {
@@ -106,7 +106,7 @@ a {
 .nav-label {
   margin: 0 9px 7px;
   color: var(--fh-muted);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   line-height: 1;
   font-weight: 760;
   letter-spacing: 0.1em;
@@ -127,7 +127,7 @@ a {
   border-radius: 10px;
   color: var(--fh-ink-soft);
   background: transparent;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
   font-weight: 560;
   cursor: pointer;
   text-align: left;
@@ -162,7 +162,7 @@ a {
   border-radius: 7px;
   color: white;
   background: var(--fh-primary);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-weight: 750;
 }
 .nav-badge.subtle {
@@ -183,7 +183,7 @@ a {
 .nav-item kbd {
   margin-left: auto;
   color: var(--fh-muted);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-family: inherit;
 }
 .hub-nav {
@@ -196,7 +196,7 @@ a {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 7px;
-  font-size: 14px;
+  font-size: var(--fh-text-base);
   font-weight: 780;
 }
 .nav-button {
@@ -220,12 +220,12 @@ a {
   flex-direction: column;
 }
 .user-card strong {
-  font-size: 15px;
+  font-size: var(--fh-text-md);
 }
 .user-card span {
   margin-top: 2px;
   color: var(--fh-muted);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
 }
 .avatar {
   width: 27px;
@@ -235,7 +235,7 @@ a {
   flex: 0 0 auto;
   border-radius: 9px;
   color: white !important;
-  font-size: 13px !important;
+  font-size: var(--fh-text-sm) !important;
   font-weight: 760;
 }
 .avatar-mz {
@@ -271,7 +271,7 @@ a {
   background: var(--fh-canvas);
   border: 1px solid var(--fh-border);
   border-radius: 10px;
-  font-size: 15px;
+  font-size: var(--fh-text-md);
   cursor: pointer;
 }
 .search-trigger span {
@@ -291,7 +291,7 @@ a {
   border: 1px solid var(--fh-border);
   border-radius: 6px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
 }
 .topbar-actions {
   display: flex;
@@ -324,17 +324,17 @@ a {
   padding: 0 11px;
   border: 1px solid var(--fh-border);
   background: var(--fh-surface);
-  font-size: 15px;
+  font-size: var(--fh-text-md);
   font-weight: 650;
 }
 .quiet-button kbd {
   margin-left: 5px;
   color: var(--fh-muted);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-family: inherit;
 }
 .language-code {
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-weight: 760;
 }
 .notification-button {
@@ -354,7 +354,8 @@ a {
   border: 0;
   cursor: pointer;
 }
-.mobile-menu {
+.mobile-menu,
+.mobile-only {
   display: none;
 }
 
@@ -373,21 +374,21 @@ a {
 .eyebrow {
   margin: 0 0 7px !important;
   color: var(--fh-primary-strong) !important;
-  font-size: 13px !important;
+  font-size: var(--fh-text-sm) !important;
   font-weight: 760;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 .page-heading h1 {
   margin: 0;
-  font-size: clamp(27px, 3vw, 36px);
-  line-height: 1.08;
+  font-size: var(--fh-text-2xl);
+  line-height: 1.15;
   letter-spacing: -0.035em;
 }
 .page-heading p {
   margin: 9px 0 0;
   color: var(--fh-muted);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .primary-button {
   height: 38px;
@@ -401,7 +402,7 @@ a {
   color: white;
   background: var(--fh-primary);
   box-shadow: 0 6px 14px rgb(91 91 214 / 20%);
-  font-size: 15px;
+  font-size: var(--fh-text-md);
   font-weight: 680;
   cursor: pointer;
   transition:
@@ -432,14 +433,15 @@ a {
 .attention-heading h2,
 .section-heading h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fh-text-lg);
+  font-weight: var(--fh-weight-strong);
   letter-spacing: -0.015em;
 }
 .attention-heading p,
 .section-heading p {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   color: var(--fh-muted);
-  font-size: 14px;
+  font-size: var(--fh-text-sm);
 }
 .attention-icon {
   width: 34px;
@@ -457,27 +459,27 @@ a {
   color: var(--fh-danger);
   background: var(--fh-danger-soft);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-weight: 730;
 }
 .signal-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  padding: 15px;
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 16px;
+  gap: 12px;
 }
 .signal-card {
   position: relative;
   min-width: 0;
-  min-height: 94px;
+  min-height: 116px;
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 12px;
+  gap: 12px;
+  padding: 16px 18px;
   color: var(--fh-ink);
   background: var(--fh-surface-subtle);
   border: 1px solid var(--fh-border);
-  border-radius: 13px;
+  border-radius: 14px;
   text-align: left;
   cursor: pointer;
   transition:
@@ -486,7 +488,6 @@ a {
     border-color 0.15s ease;
 }
 .signal-card:hover {
-  transform: translateY(-2px);
   border-color: var(--fh-border-strong);
   box-shadow: 0 7px 18px rgb(23 32 51 / 7%);
 }
@@ -496,63 +497,74 @@ a {
   flex-direction: column;
 }
 .signal-card strong {
-  font-size: 18px;
+  font-size: var(--fh-text-2xl);
+  font-weight: var(--fh-weight-strong);
   line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 .signal-card b {
-  overflow: hidden;
-  margin-top: 6px;
-  font-size: 13px;
-  line-height: 1.2;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  margin-top: 8px;
+  font-size: var(--fh-text-md);
+  font-weight: var(--fh-weight-strong);
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
 }
 .signal-card small {
-  overflow: hidden;
-  margin-top: 4px;
+  margin-top: 5px;
   color: var(--fh-muted);
-  font-size: 12.5px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  font-size: var(--fh-text-sm);
+  line-height: 1.4;
 }
 .signal-icon {
-  width: 27px;
-  height: 27px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  border-radius: 8px;
+  border-radius: 10px;
 }
-.signal-violet .signal-icon {
-  color: var(--fh-primary);
-  background: var(--fh-primary-soft);
-}
-.signal-blue .signal-icon {
-  color: var(--fh-info);
-  background: var(--fh-info-soft);
-}
-.signal-red .signal-icon {
+/* Severity, not category. The icon and label already say which kind of
+   signal this is; colour is reserved for how much it matters. */
+.signal-critical .signal-icon {
   color: var(--fh-danger);
   background: var(--fh-danger-soft);
 }
-.signal-amber .signal-icon {
+.signal-high .signal-icon {
   color: var(--fh-warning);
   background: var(--fh-warning-soft);
 }
-.signal-gray .signal-icon {
-  color: var(--fh-parked);
+.signal-normal .signal-icon {
+  color: var(--fh-muted);
   background: var(--fh-parked-soft);
 }
-.signal-pink .signal-icon {
-  color: #ad477c;
-  background: #f9eaf2;
+.signal-critical {
+  border-color: color-mix(in srgb, var(--fh-danger) 26%, var(--fh-border));
+}
+.signal-critical strong {
+  color: var(--fh-danger);
+}
+/* A signal with nothing in it should recede, not compete with a live one. */
+.signal-card.is-clear {
+  background: transparent;
+}
+.signal-card.is-clear strong,
+.signal-card.is-clear b {
+  color: var(--fh-muted);
+  font-weight: var(--fh-weight-medium);
+}
+.signal-card.is-clear .signal-icon {
+  color: var(--fh-muted);
+  background: var(--fh-parked-soft);
+  opacity: 0.7;
 }
 .signal-arrow {
   position: absolute;
   top: 12px;
   right: 10px;
   color: var(--fh-muted);
-  font-size: 12px;
+  font-size: var(--fh-text-xs);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -568,7 +580,7 @@ a {
   color: var(--fh-muted);
   background: var(--fh-surface-subtle);
   border-top: 1px solid var(--fh-border);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
 }
 .attention-foot > span {
   display: flex;
@@ -579,7 +591,7 @@ a {
   color: var(--fh-primary-strong);
   background: none;
   border: 0;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-weight: 700;
   cursor: pointer;
 }
@@ -614,83 +626,13 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 9px;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   cursor: pointer;
 }
 .filters select {
   appearance: auto;
 }
-.hub-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 13px;
-}
-.hub-card {
-  --hub-accent: var(--fh-primary);
-  position: relative;
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  padding: 15px 16px 13px;
-  background: var(--fh-surface);
-  border: 1px solid var(--fh-border);
-  border-radius: var(--fh-radius-card);
-  box-shadow: var(--fh-shadow-sm);
-  transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease,
-    border-color 0.16s ease;
-}
-.hub-card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--hub-accent) 35%, var(--fh-border));
-  box-shadow: var(--fh-shadow-md);
-}
-.hub-card-accent {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--hub-accent);
-}
-.hub-card-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.hub-icon {
-  width: 31px;
-  height: 31px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  color: var(--hub-accent);
-  background: color-mix(in srgb, var(--hub-accent) 11%, var(--fh-surface));
-  border-radius: 9px;
-  font-size: 12px;
-  font-weight: 780;
-}
-.hub-title {
-  min-width: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-.hub-title h3 {
-  overflow: hidden;
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.hub-title span {
-  margin-top: 3px;
-  color: var(--fh-muted);
-  font-size: 12.5px;
-  text-transform: capitalize;
-}
+/* Health badge — shared by the project tile and the Hub header. */
 .health-badge {
   height: 22px;
   display: inline-flex;
@@ -698,8 +640,8 @@ a {
   gap: 4px;
   padding: 0 7px;
   border-radius: 7px;
-  font-size: 12.5px;
-  font-weight: 720;
+  font-size: var(--fh-text-xs);
+  font-weight: var(--fh-weight-strong);
   white-space: nowrap;
 }
 .health-badge.critical {
@@ -718,169 +660,22 @@ a {
   color: var(--fh-parked);
   background: var(--fh-parked-soft);
 }
-.card-more {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  color: var(--fh-muted);
-  background: none;
-  border: 0;
-  border-radius: 7px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-.hub-card:hover .card-more,
-.hub-card:focus-visible .card-more {
-  opacity: 1;
-}
-.health-note {
-  min-height: 30px;
-  margin: 11px 0 9px;
-  color: var(--fh-muted);
-  font-size: 13px;
-  line-height: 1.48;
-}
-.priority-block {
-  padding: 9px 10px;
-  background: var(--fh-surface-subtle);
-  border: 1px solid var(--fh-border);
-  border-radius: 10px;
-}
-.priority-block span,
-.milestone-row span,
-.update-row > div > span,
-.metric-row span {
-  display: block;
-  color: var(--fh-muted);
-  font-size: 11.5px;
-  font-weight: 650;
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
-}
-.priority-block strong {
-  display: block;
-  overflow: hidden;
-  margin-top: 4px;
-  font-size: 13px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.milestone-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 1px;
-  border-bottom: 1px solid var(--fh-border);
-}
-.milestone-row div {
-  min-width: 0;
-  flex: 1;
-}
-.milestone-row strong {
-  display: block;
-  overflow: hidden;
-  margin-top: 4px;
-  font-size: 13px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.milestone-row time {
-  padding: 5px 7px;
-  color: var(--fh-ink-soft);
-  background: var(--fh-canvas);
-  border-radius: 7px;
-  font-size: 12.5px;
-  font-weight: 700;
-}
-.hub-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--fh-border);
-}
-.hub-stats span {
-  display: flex;
-  flex-direction: column;
-  color: var(--fh-muted);
-  font-size: 11.5px;
-  text-align: center;
-}
-.hub-stats b {
-  margin-bottom: 2px;
-  color: var(--fh-ink);
-  font-size: 15px;
-}
-.hub-stats .stat-danger b {
-  color: var(--fh-danger);
-}
-.metric-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px;
-  margin: 10px 0;
-}
-.metric-row > div {
-  position: relative;
-  padding: 8px 9px;
-  background: var(--fh-surface-subtle);
-  border-radius: 9px;
-}
-.metric-row strong {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 15px;
-}
-.metric-row small {
-  margin-left: 5px;
-  color: var(--fh-success);
-  font-size: 11.5px;
-  font-weight: 700;
-}
-.update-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding-top: 9px;
-  border-top: 1px solid var(--fh-border);
-}
-.update-row > div {
-  min-width: 0;
-}
-.update-row p {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 4px 0 0;
-  color: var(--fh-ink-soft);
-  font-size: 12.5px;
-  line-height: 1.42;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-.open-hub {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  align-self: flex-end;
-  margin-top: 10px;
+.filter-toggle.on {
   color: var(--fh-primary-strong);
-  font-size: 12.5px;
-  font-weight: 750;
-  opacity: 0;
-  transform: translateX(-4px);
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
+  background: var(--fh-primary-soft);
+  border-color: color-mix(in srgb, var(--fh-primary) 30%, var(--fh-border));
 }
-.hub-card:hover .open-hub,
-.hub-card:focus-visible .open-hub {
-  opacity: 1;
-  transform: none;
+.sr-only {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-
-.mobile-only,
 .mobile-bottom-nav {
   display: none;
 }
@@ -914,12 +709,12 @@ a {
 }
 .capture-dialog h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fh-text-base);
 }
 .capture-dialog p {
   margin: 3px 0 0;
   color: var(--fh-muted);
-  font-size: 14px;
+  font-size: var(--fh-text-base);
 }
 .capture-dialog > input {
   width: calc(100% - 36px);
@@ -930,7 +725,7 @@ a {
   background: var(--fh-surface-subtle);
   border: 1px solid var(--fh-border);
   border-radius: 11px;
-  font-size: 15px;
+  font-size: var(--fh-text-md);
 }
 .capture-options {
   display: flex;
@@ -947,7 +742,7 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 9px;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
 }
 .capture-dialog footer {
   display: flex;
@@ -959,12 +754,12 @@ a {
 }
 .capture-dialog footer span {
   color: var(--fh-muted);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1320px) {
   .signal-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .hub-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1038,16 +833,21 @@ a {
     margin-bottom: 20px;
   }
   .page-heading h1 {
-    font-size: 28px;
+    font-size: var(--fh-text-xl);
   }
   .page-heading p {
     max-width: 270px;
     line-height: 1.45;
   }
+  /* Keep the label. An unlabelled purple square next to the bottom bar's
+     Quick-capture "+" gave one screen two identical-looking primary
+     affordances with different jobs. */
   .page-heading .primary-button {
-    width: 38px;
-    padding: 0;
-    font-size: 0;
+    padding: 0 14px;
+    font-size: var(--fh-text-sm);
+  }
+  .page-heading .primary-button span {
+    display: inline;
   }
   .attention-heading {
     align-items: flex-start;
@@ -1057,12 +857,13 @@ a {
     margin-left: 46px;
   }
   .signal-grid {
-    grid-template-columns: repeat(2, 1fr);
-    padding: 10px;
-    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 12px;
+    gap: 10px;
   }
   .signal-card {
-    min-height: 88px;
+    min-height: 104px;
+    padding: 14px;
   }
   .section-heading {
     align-items: flex-start;
@@ -1077,18 +878,8 @@ a {
   .filters select {
     flex: 0 0 auto;
   }
-  .hub-grid {
-    grid-template-columns: 1fr;
-  }
-  .hub-card {
-    padding: 15px;
-  }
-  .card-more {
+  .tile-more {
     opacity: 1;
-  }
-  .open-hub {
-    opacity: 1;
-    transform: none;
   }
   .mobile-bottom-nav {
     position: fixed;
@@ -1113,7 +904,7 @@ a {
     color: var(--fh-muted);
     background: none;
     border: 0;
-    font-size: 11.5px;
+    font-size: var(--fh-text-xs);
   }
   .mobile-bottom-nav .active {
     color: var(--fh-primary);
@@ -1130,6 +921,17 @@ a {
     border: 4px solid var(--fh-surface);
     border-radius: 13px;
     box-shadow: 0 6px 16px rgb(91 91 214 / 30%);
+  }
+}
+
+/* Below this a two-up signal card is ~160px, which is not enough for
+   "Unassigned urgent". Full width reads better than a clipped label. */
+@media (max-width: 430px) {
+  .signal-grid {
+    grid-template-columns: 1fr;
+  }
+  .signal-card {
+    min-height: 0;
   }
 }
 
@@ -1165,7 +967,7 @@ a {
 .board-title-wrap > p {
   margin: 0 0 8px;
   color: var(--fh-muted);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
 }
 .board-title-wrap > div {
   display: flex;
@@ -1174,7 +976,7 @@ a {
 }
 .board-title-wrap h1 {
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fh-text-xl);
   line-height: 1.2;
   letter-spacing: -0.025em;
 }
@@ -1192,7 +994,7 @@ a {
   display: block;
   margin: 7px 0 0 39px;
   color: var(--fh-muted);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
 }
 .board-mark {
   width: 30px;
@@ -1202,7 +1004,7 @@ a {
   color: #6456d8;
   background: #eeeafe;
   border-radius: 9px;
-  font-size: 15px;
+  font-size: var(--fh-text-md);
   font-weight: 800;
 }
 .board-header-actions {
@@ -1220,7 +1022,7 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 10px;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-weight: 650;
 }
 .board-header-actions > .primary-button {
@@ -1242,7 +1044,7 @@ a {
   background: #514a9a;
   border: 2px solid var(--fh-surface);
   border-radius: 50%;
-  font-size: 11px;
+  font-size: var(--fh-text-2xs);
   font-style: normal;
   font-weight: 700;
 }
@@ -1273,7 +1075,7 @@ a {
   background: transparent;
   border: 0;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   cursor: pointer;
 }
 .view-toolbar > button:hover,
@@ -1315,7 +1117,7 @@ a {
   gap: 5px;
   margin-left: 5px;
   color: var(--fh-success);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .board-progress {
   display: flex;
@@ -1338,7 +1140,7 @@ a {
 }
 .board-progress b {
   color: var(--fh-muted);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .bulk-bar {
   position: absolute;
@@ -1357,7 +1159,7 @@ a {
 }
 .bulk-bar strong {
   padding: 0 8px;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .bulk-bar button {
   height: 26px;
@@ -1366,7 +1168,7 @@ a {
   background: rgb(255 255 255 / 10%);
   border: 0;
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .board-table-wrap {
   min-width: 0;
@@ -1391,7 +1193,7 @@ a {
   background: var(--fh-surface-subtle);
   border-bottom: 1px solid var(--fh-border);
   border-right: 1px solid var(--fh-border);
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
   font-weight: 730;
   letter-spacing: 0.035em;
   text-align: left;
@@ -1406,7 +1208,7 @@ a {
   border-bottom: 1px solid var(--fh-border);
   border-right: 1px solid var(--fh-border);
   background: var(--fh-surface);
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   transition: background 0.12s ease;
 }
 .board-table tr:last-child td {
@@ -1502,7 +1304,7 @@ a {
   width: 23px;
   height: 23px;
   border-radius: 8px;
-  font-size: 11.5px !important;
+  font-size: var(--fh-text-xs) !important;
 }
 .avatar-ad {
   background: #505c73;
@@ -1530,7 +1332,7 @@ a {
   color: var(--fh-ink-soft);
   border: 0;
   border-radius: 7px;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
   font-weight: 650;
   cursor: pointer;
 }
@@ -1572,7 +1374,7 @@ a {
 .date-cell,
 .count-cell {
   color: var(--fh-muted);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .date-cell.overdue {
   color: var(--fh-danger);
@@ -1581,6 +1383,48 @@ a {
 .count-cell {
   justify-content: center;
 }
+/* Group bands — the structure that keeps a long board readable (§4). */
+.group-row td {
+  padding: 0;
+  background: var(--fh-surface);
+  border-bottom: 1px solid var(--fh-border);
+}
+.group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px 9px 14px;
+  color: var(--fh-ink);
+  background: none;
+  border: 0;
+  border-left: 3px solid var(--group-color, var(--fh-border-strong));
+  cursor: pointer;
+  text-align: left;
+}
+.group-header:hover {
+  background: var(--fh-surface-subtle);
+}
+.group-header svg {
+  flex: 0 0 auto;
+  color: var(--group-color, var(--fh-muted));
+  transition: transform 0.15s ease;
+}
+.group-header svg.rotated {
+  transform: rotate(-90deg);
+}
+.group-name {
+  color: var(--group-color, var(--fh-ink));
+  font-size: var(--fh-text-base);
+  font-weight: var(--fh-weight-strong);
+  letter-spacing: -0.005em;
+}
+.group-count {
+  color: var(--fh-muted);
+  font-size: var(--fh-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 .add-row td {
   height: 37px;
 }
@@ -1591,12 +1435,12 @@ a {
   color: var(--fh-muted);
   background: none;
   border: 0;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .drag-hint {
   margin: 10px 28px 0;
   color: var(--fh-muted);
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
 }
 
 .kanban-board {
@@ -1621,7 +1465,7 @@ a {
   border-bottom: 1px solid var(--fh-border);
 }
 .kanban-column > header strong {
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
 }
 .kanban-column > header b {
   min-width: 18px;
@@ -1632,7 +1476,7 @@ a {
   color: var(--fh-muted);
   background: var(--fh-surface);
   border-radius: 6px;
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
 }
 .kanban-column > header button {
   width: 22px;
@@ -1660,7 +1504,7 @@ a {
   color: var(--fh-ink);
   background: none;
   border: 0;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   font-weight: 650;
   line-height: 1.45;
   text-align: left;
@@ -1672,7 +1516,7 @@ a {
   margin-top: 9px;
 }
 .priority-flag {
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
   font-weight: 700;
 }
 .kanban-card .avatar {
@@ -1688,7 +1532,7 @@ a {
   padding-top: 9px;
   color: var(--fh-muted);
   border-top: 1px solid var(--fh-border);
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
 }
 .kanban-card footer span {
   display: flex;
@@ -1712,7 +1556,7 @@ a {
   background: transparent;
   border: 1px dashed var(--fh-border-strong);
   border-radius: 9px;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 
 .item-panel {
@@ -1766,7 +1610,7 @@ a {
   border-radius: 7px;
   color: var(--fh-primary-strong);
   background: var(--fh-primary-soft);
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
   font-weight: 680;
 }
 .save-state {
@@ -1792,8 +1636,8 @@ a {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
-  font-size: 20px;
-  font-weight: 720;
+  font-size: var(--fh-text-xl);
+  font-weight: var(--fh-weight-heavy);
   line-height: 1.3;
   letter-spacing: -0.025em;
 }
@@ -1810,7 +1654,7 @@ a {
   background: var(--fh-success-soft);
   border: 0;
   border-radius: 9px;
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
   font-weight: 670;
   white-space: nowrap;
 }
@@ -1830,7 +1674,7 @@ a {
   align-items: center;
   gap: 7px;
   color: var(--fh-muted);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .property-grid > button {
   min-width: 0;
@@ -1843,7 +1687,7 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
   text-align: left;
 }
 .property-grid > button svg:last-child {
@@ -1854,14 +1698,14 @@ a {
   width: 19px;
   height: 19px;
   border-radius: 6px;
-  font-size: 11px !important;
+  font-size: var(--fh-text-2xs) !important;
 }
 .panel-section {
   margin-top: 22px;
 }
 .panel-section h3 {
   margin: 0 0 10px;
-  font-size: 14px;
+  font-size: var(--fh-text-base);
 }
 .description-editor {
   min-height: 76px;
@@ -1870,7 +1714,7 @@ a {
   background: var(--fh-surface-subtle);
   border: 1px solid var(--fh-border);
   border-radius: 10px;
-  font-size: 13px;
+  font-size: var(--fh-text-sm);
   line-height: 1.65;
 }
 .panel-section-title {
@@ -1880,7 +1724,7 @@ a {
 }
 .panel-section-title > span {
   color: var(--fh-muted);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .panel-section-title > button {
   display: flex;
@@ -1889,7 +1733,7 @@ a {
   color: var(--fh-muted);
   background: none;
   border: 0;
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
 }
 .subitem-progress {
   height: 4px;
@@ -1916,7 +1760,7 @@ a {
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid var(--fh-border);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .subitem-list button {
   display: grid;
@@ -1943,7 +1787,7 @@ a {
   color: var(--fh-primary);
   background: none;
   border: 0;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .resource-card {
   display: flex;
@@ -1962,7 +1806,7 @@ a {
   color: white;
   background: #1d1d1f;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: var(--fh-text-md);
   font-weight: 700;
 }
 .resource-icon.docs {
@@ -1976,7 +1820,7 @@ a {
 .resource-card strong {
   display: block;
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -1984,7 +1828,7 @@ a {
   display: block;
   margin-top: 4px;
   color: var(--fh-muted);
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
 }
 .resource-card > svg {
   color: var(--fh-muted);
@@ -2007,13 +1851,13 @@ a {
   flex-direction: column;
   margin: 0;
   color: var(--fh-ink-soft);
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
   line-height: 1.4;
 }
 .activity-item p span {
   margin-top: 3px;
   color: var(--fh-muted);
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
 }
 .activity-status-dot {
   width: 8px;
@@ -2044,7 +1888,7 @@ a {
   color: var(--fh-ink);
   background: var(--fh-surface-subtle);
   border: 0;
-  font-size: 12.5px;
+  font-size: var(--fh-text-sm);
 }
 .comment-composer > div > span {
   display: flex;
@@ -2065,7 +1909,7 @@ a {
   background: none;
   border: 0;
   border-radius: 6px;
-  font-size: 11.5px;
+  font-size: var(--fh-text-xs);
 }
 .comment-composer .send-button {
   margin-left: auto;
