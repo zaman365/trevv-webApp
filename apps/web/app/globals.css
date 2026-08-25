@@ -79,7 +79,7 @@ a {
 }
 .brand-row span {
   color: var(--fh-muted);
-  font-size: 10.5px;
+  font-size: 14px;
   margin-top: 4px;
 }
 .brand-mark {
@@ -106,7 +106,7 @@ a {
 .nav-label {
   margin: 0 9px 7px;
   color: var(--fh-muted);
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1;
   font-weight: 760;
   letter-spacing: 0.1em;
@@ -162,7 +162,7 @@ a {
   border-radius: 7px;
   color: white;
   background: var(--fh-primary);
-  font-size: 9.5px;
+  font-size: 13px;
   font-weight: 750;
 }
 .nav-badge.subtle {
@@ -183,7 +183,7 @@ a {
 .nav-item kbd {
   margin-left: auto;
   color: var(--fh-muted);
-  font-size: 9px;
+  font-size: 13px;
   font-family: inherit;
 }
 .hub-nav {
@@ -196,7 +196,7 @@ a {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 780;
 }
 .nav-button {
@@ -220,12 +220,12 @@ a {
   flex-direction: column;
 }
 .user-card strong {
-  font-size: 11.5px;
+  font-size: 15px;
 }
 .user-card span {
   margin-top: 2px;
   color: var(--fh-muted);
-  font-size: 9.5px;
+  font-size: 13px;
 }
 .avatar {
   width: 27px;
@@ -235,7 +235,7 @@ a {
   flex: 0 0 auto;
   border-radius: 9px;
   color: white !important;
-  font-size: 9px !important;
+  font-size: 13px !important;
   font-weight: 760;
 }
 .avatar-mz {
@@ -271,7 +271,7 @@ a {
   background: var(--fh-canvas);
   border: 1px solid var(--fh-border);
   border-radius: 10px;
-  font-size: 11.5px;
+  font-size: 15px;
   cursor: pointer;
 }
 .search-trigger span {
@@ -291,7 +291,7 @@ a {
   border: 1px solid var(--fh-border);
   border-radius: 6px;
   font-family: inherit;
-  font-size: 9px;
+  font-size: 13px;
 }
 .topbar-actions {
   display: flex;
@@ -324,17 +324,17 @@ a {
   padding: 0 11px;
   border: 1px solid var(--fh-border);
   background: var(--fh-surface);
-  font-size: 11.5px;
+  font-size: 15px;
   font-weight: 650;
 }
 .quiet-button kbd {
   margin-left: 5px;
   color: var(--fh-muted);
-  font-size: 9px;
+  font-size: 13px;
   font-family: inherit;
 }
 .language-code {
-  font-size: 9px;
+  font-size: 13px;
   font-weight: 760;
 }
 .notification-button {
@@ -373,7 +373,7 @@ a {
 .eyebrow {
   margin: 0 0 7px !important;
   color: var(--fh-primary-strong) !important;
-  font-size: 9.5px !important;
+  font-size: 13px !important;
   font-weight: 760;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -401,7 +401,7 @@ a {
   color: white;
   background: var(--fh-primary);
   box-shadow: 0 6px 14px rgb(91 91 214 / 20%);
-  font-size: 11.5px;
+  font-size: 15px;
   font-weight: 680;
   cursor: pointer;
   transition:
@@ -439,7 +439,7 @@ a {
 .section-heading p {
   margin: 4px 0 0;
   color: var(--fh-muted);
-  font-size: 10.5px;
+  font-size: 14px;
 }
 .attention-icon {
   width: 34px;
@@ -457,7 +457,7 @@ a {
   color: var(--fh-danger);
   background: var(--fh-danger-soft);
   border-radius: 8px;
-  font-size: 9.5px;
+  font-size: 13px;
   font-weight: 730;
 }
 .signal-grid {
@@ -502,7 +502,7 @@ a {
 .signal-card b {
   overflow: hidden;
   margin-top: 6px;
-  font-size: 9.5px;
+  font-size: 13px;
   line-height: 1.2;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -511,7 +511,7 @@ a {
   overflow: hidden;
   margin-top: 4px;
   color: var(--fh-muted);
-  font-size: 8.5px;
+  font-size: 12.5px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -568,7 +568,7 @@ a {
   color: var(--fh-muted);
   background: var(--fh-surface-subtle);
   border-top: 1px solid var(--fh-border);
-  font-size: 9px;
+  font-size: 13px;
 }
 .attention-foot > span {
   display: flex;
@@ -579,7 +579,7 @@ a {
   color: var(--fh-primary-strong);
   background: none;
   border: 0;
-  font-size: 9px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -614,7 +614,7 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 9px;
-  font-size: 9.5px;
+  font-size: 13px;
   cursor: pointer;
 }
 .filters select {
@@ -688,7 +688,7 @@ a {
 .hub-title span {
   margin-top: 3px;
   color: var(--fh-muted);
-  font-size: 8.5px;
+  font-size: 12.5px;
   text-transform: capitalize;
 }
 .health-badge {
@@ -698,7 +698,7 @@ a {
   gap: 4px;
   padding: 0 7px;
   border-radius: 7px;
-  font-size: 8px;
+  font-size: 12.5px;
   font-weight: 720;
   white-space: nowrap;
 }
@@ -739,7 +739,7 @@ a {
   min-height: 30px;
   margin: 11px 0 9px;
   color: var(--fh-muted);
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1.48;
 }
 .priority-block {
@@ -754,7 +754,7 @@ a {
 .metric-row span {
   display: block;
   color: var(--fh-muted);
-  font-size: 7.5px;
+  font-size: 11.5px;
   font-weight: 650;
   letter-spacing: 0.035em;
   text-transform: uppercase;
@@ -763,7 +763,7 @@ a {
   display: block;
   overflow: hidden;
   margin-top: 4px;
-  font-size: 9.5px;
+  font-size: 13px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -782,7 +782,7 @@ a {
   display: block;
   overflow: hidden;
   margin-top: 4px;
-  font-size: 9px;
+  font-size: 13px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -791,7 +791,7 @@ a {
   color: var(--fh-ink-soft);
   background: var(--fh-canvas);
   border-radius: 7px;
-  font-size: 8px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 .hub-stats {
@@ -805,13 +805,13 @@ a {
   display: flex;
   flex-direction: column;
   color: var(--fh-muted);
-  font-size: 7px;
+  font-size: 11.5px;
   text-align: center;
 }
 .hub-stats b {
   margin-bottom: 2px;
   color: var(--fh-ink);
-  font-size: 11px;
+  font-size: 15px;
 }
 .hub-stats .stat-danger b {
   color: var(--fh-danger);
@@ -831,12 +831,12 @@ a {
 .metric-row strong {
   display: inline-block;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 15px;
 }
 .metric-row small {
   margin-left: 5px;
   color: var(--fh-success);
-  font-size: 7.5px;
+  font-size: 11.5px;
   font-weight: 700;
 }
 .update-row {
@@ -854,7 +854,7 @@ a {
   overflow: hidden;
   margin: 4px 0 0;
   color: var(--fh-ink-soft);
-  font-size: 8.5px;
+  font-size: 12.5px;
   line-height: 1.42;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -866,7 +866,7 @@ a {
   align-self: flex-end;
   margin-top: 10px;
   color: var(--fh-primary-strong);
-  font-size: 8.5px;
+  font-size: 12.5px;
   font-weight: 750;
   opacity: 0;
   transform: translateX(-4px);
@@ -919,7 +919,7 @@ a {
 .capture-dialog p {
   margin: 3px 0 0;
   color: var(--fh-muted);
-  font-size: 10px;
+  font-size: 14px;
 }
 .capture-dialog > input {
   width: calc(100% - 36px);
@@ -947,7 +947,7 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 9px;
-  font-size: 9px;
+  font-size: 13px;
 }
 .capture-dialog footer {
   display: flex;
@@ -959,7 +959,7 @@ a {
 }
 .capture-dialog footer span {
   color: var(--fh-muted);
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 
 @media (max-width: 1180px) {
@@ -1113,7 +1113,7 @@ a {
     color: var(--fh-muted);
     background: none;
     border: 0;
-    font-size: 7.5px;
+    font-size: 11.5px;
   }
   .mobile-bottom-nav .active {
     color: var(--fh-primary);
@@ -1165,7 +1165,7 @@ a {
 .board-title-wrap > p {
   margin: 0 0 8px;
   color: var(--fh-muted);
-  font-size: 9px;
+  font-size: 13px;
 }
 .board-title-wrap > div {
   display: flex;
@@ -1192,7 +1192,7 @@ a {
   display: block;
   margin: 7px 0 0 39px;
   color: var(--fh-muted);
-  font-size: 9.5px;
+  font-size: 13px;
 }
 .board-mark {
   width: 30px;
@@ -1202,7 +1202,7 @@ a {
   color: #6456d8;
   background: #eeeafe;
   border-radius: 9px;
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 800;
 }
 .board-header-actions {
@@ -1220,7 +1220,7 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 10px;
-  font-size: 9.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 .board-header-actions > .primary-button {
@@ -1242,7 +1242,7 @@ a {
   background: #514a9a;
   border: 2px solid var(--fh-surface);
   border-radius: 50%;
-  font-size: 6.5px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 700;
 }
@@ -1273,7 +1273,7 @@ a {
   background: transparent;
   border: 0;
   border-radius: 8px;
-  font-size: 9px;
+  font-size: 13px;
   cursor: pointer;
 }
 .view-toolbar > button:hover,
@@ -1315,7 +1315,7 @@ a {
   gap: 5px;
   margin-left: 5px;
   color: var(--fh-success);
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 .board-progress {
   display: flex;
@@ -1338,7 +1338,7 @@ a {
 }
 .board-progress b {
   color: var(--fh-muted);
-  font-size: 8px;
+  font-size: 12.5px;
 }
 .bulk-bar {
   position: absolute;
@@ -1357,7 +1357,7 @@ a {
 }
 .bulk-bar strong {
   padding: 0 8px;
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 .bulk-bar button {
   height: 26px;
@@ -1366,7 +1366,7 @@ a {
   background: rgb(255 255 255 / 10%);
   border: 0;
   border-radius: 7px;
-  font-size: 8px;
+  font-size: 12.5px;
 }
 .board-table-wrap {
   min-width: 0;
@@ -1391,7 +1391,7 @@ a {
   background: var(--fh-surface-subtle);
   border-bottom: 1px solid var(--fh-border);
   border-right: 1px solid var(--fh-border);
-  font-size: 7.5px;
+  font-size: 11.5px;
   font-weight: 730;
   letter-spacing: 0.035em;
   text-align: left;
@@ -1406,7 +1406,7 @@ a {
   border-bottom: 1px solid var(--fh-border);
   border-right: 1px solid var(--fh-border);
   background: var(--fh-surface);
-  font-size: 9.5px;
+  font-size: 13px;
   transition: background 0.12s ease;
 }
 .board-table tr:last-child td {
@@ -1502,7 +1502,7 @@ a {
   width: 23px;
   height: 23px;
   border-radius: 8px;
-  font-size: 7px !important;
+  font-size: 11.5px !important;
 }
 .avatar-ad {
   background: #505c73;
@@ -1530,7 +1530,7 @@ a {
   color: var(--fh-ink-soft);
   border: 0;
   border-radius: 7px;
-  font-size: 8.5px;
+  font-size: 12.5px;
   font-weight: 650;
   cursor: pointer;
 }
@@ -1572,7 +1572,7 @@ a {
 .date-cell,
 .count-cell {
   color: var(--fh-muted);
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 .date-cell.overdue {
   color: var(--fh-danger);
@@ -1591,12 +1591,12 @@ a {
   color: var(--fh-muted);
   background: none;
   border: 0;
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 .drag-hint {
   margin: 10px 28px 0;
   color: var(--fh-muted);
-  font-size: 7.5px;
+  font-size: 11.5px;
 }
 
 .kanban-board {
@@ -1621,7 +1621,7 @@ a {
   border-bottom: 1px solid var(--fh-border);
 }
 .kanban-column > header strong {
-  font-size: 9.5px;
+  font-size: 13px;
 }
 .kanban-column > header b {
   min-width: 18px;
@@ -1632,7 +1632,7 @@ a {
   color: var(--fh-muted);
   background: var(--fh-surface);
   border-radius: 6px;
-  font-size: 7.5px;
+  font-size: 11.5px;
 }
 .kanban-column > header button {
   width: 22px;
@@ -1660,7 +1660,7 @@ a {
   color: var(--fh-ink);
   background: none;
   border: 0;
-  font-size: 9.5px;
+  font-size: 13px;
   font-weight: 650;
   line-height: 1.45;
   text-align: left;
@@ -1672,7 +1672,7 @@ a {
   margin-top: 9px;
 }
 .priority-flag {
-  font-size: 7.5px;
+  font-size: 11.5px;
   font-weight: 700;
 }
 .kanban-card .avatar {
@@ -1688,7 +1688,7 @@ a {
   padding-top: 9px;
   color: var(--fh-muted);
   border-top: 1px solid var(--fh-border);
-  font-size: 7.5px;
+  font-size: 11.5px;
 }
 .kanban-card footer span {
   display: flex;
@@ -1712,7 +1712,7 @@ a {
   background: transparent;
   border: 1px dashed var(--fh-border-strong);
   border-radius: 9px;
-  font-size: 8px;
+  font-size: 12.5px;
 }
 
 .item-panel {
@@ -1766,7 +1766,7 @@ a {
   border-radius: 7px;
   color: var(--fh-primary-strong);
   background: var(--fh-primary-soft);
-  font-size: 7.5px;
+  font-size: 11.5px;
   font-weight: 680;
 }
 .save-state {
@@ -1810,7 +1810,7 @@ a {
   background: var(--fh-success-soft);
   border: 0;
   border-radius: 9px;
-  font-size: 7.5px;
+  font-size: 11.5px;
   font-weight: 670;
   white-space: nowrap;
 }
@@ -1830,7 +1830,7 @@ a {
   align-items: center;
   gap: 7px;
   color: var(--fh-muted);
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 .property-grid > button {
   min-width: 0;
@@ -1843,7 +1843,7 @@ a {
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 8px;
-  font-size: 8px;
+  font-size: 12.5px;
   text-align: left;
 }
 .property-grid > button svg:last-child {
@@ -1854,14 +1854,14 @@ a {
   width: 19px;
   height: 19px;
   border-radius: 6px;
-  font-size: 6px !important;
+  font-size: 11px !important;
 }
 .panel-section {
   margin-top: 22px;
 }
 .panel-section h3 {
   margin: 0 0 10px;
-  font-size: 10.5px;
+  font-size: 14px;
 }
 .description-editor {
   min-height: 76px;
@@ -1870,7 +1870,7 @@ a {
   background: var(--fh-surface-subtle);
   border: 1px solid var(--fh-border);
   border-radius: 10px;
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1.65;
 }
 .panel-section-title {
@@ -1880,7 +1880,7 @@ a {
 }
 .panel-section-title > span {
   color: var(--fh-muted);
-  font-size: 8px;
+  font-size: 12.5px;
 }
 .panel-section-title > button {
   display: flex;
@@ -1889,7 +1889,7 @@ a {
   color: var(--fh-muted);
   background: none;
   border: 0;
-  font-size: 7.5px;
+  font-size: 11.5px;
 }
 .subitem-progress {
   height: 4px;
@@ -1916,7 +1916,7 @@ a {
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid var(--fh-border);
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 .subitem-list button {
   display: grid;
@@ -1943,7 +1943,7 @@ a {
   color: var(--fh-primary);
   background: none;
   border: 0;
-  font-size: 8px;
+  font-size: 12.5px;
 }
 .resource-card {
   display: flex;
@@ -1962,7 +1962,7 @@ a {
   color: white;
   background: #1d1d1f;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 700;
 }
 .resource-icon.docs {
@@ -1976,7 +1976,7 @@ a {
 .resource-card strong {
   display: block;
   overflow: hidden;
-  font-size: 8.5px;
+  font-size: 12.5px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -1984,7 +1984,7 @@ a {
   display: block;
   margin-top: 4px;
   color: var(--fh-muted);
-  font-size: 7.5px;
+  font-size: 11.5px;
 }
 .resource-card > svg {
   color: var(--fh-muted);
@@ -2007,13 +2007,13 @@ a {
   flex-direction: column;
   margin: 0;
   color: var(--fh-ink-soft);
-  font-size: 8px;
+  font-size: 12.5px;
   line-height: 1.4;
 }
 .activity-item p span {
   margin-top: 3px;
   color: var(--fh-muted);
-  font-size: 7px;
+  font-size: 11.5px;
 }
 .activity-status-dot {
   width: 8px;
@@ -2044,7 +2044,7 @@ a {
   color: var(--fh-ink);
   background: var(--fh-surface-subtle);
   border: 0;
-  font-size: 8.5px;
+  font-size: 12.5px;
 }
 .comment-composer > div > span {
   display: flex;
@@ -2065,7 +2065,7 @@ a {
   background: none;
   border: 0;
   border-radius: 6px;
-  font-size: 7px;
+  font-size: 11.5px;
 }
 .comment-composer .send-button {
   margin-left: auto;
