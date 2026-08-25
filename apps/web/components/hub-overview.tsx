@@ -10,8 +10,8 @@ import {
   FileQuestion,
   FolderKanban,
   GitBranch,
+  Lightbulb,
   Link2,
-  MessageSquare,
   MoreHorizontal,
   Plus,
   TrendingUp,
@@ -94,7 +94,22 @@ function HubWorkspace({
       item.status !== "done" &&
       (item.type === "decision" || item.type === "approval"),
   );
-  const recentItems = hubItems.slice(0, 3);
+  const ideas = hubItems.filter((item) => item.type === "idea");
+  const completedItems = hubItems.filter((item) => item.status === "done").length;
+  const datedItems = hubItems.filter((item) => item.dueDate).length;
+  const onTimeItems = Math.max(0, datedItems - rollup.overdue);
+  const calculatedMetrics = [
+    {
+      label: "Scoped progress",
+      value: progress === null ? "Manual" : `${progress}%`,
+      trend: `${completedItems}/${hubItems.length} done`,
+    },
+    {
+      label: "On-time work",
+      value: datedItems === 0 ? "—" : `${onTimeItems}/${datedItems}`,
+      trend: rollup.overdue === 0 ? "On track" : `${rollup.overdue} overdue`,
+    },
+  ];
   const team = Array.from(
     new Set(
       [hub.lead.name, ...hubItems.map((item) => item.assignee)].filter(Boolean),
@@ -173,8 +188,7 @@ function HubWorkspace({
               <p>
                 {hub.healthNote} The team is focused on{" "}
                 <strong>{hub.priority.toLocaleLowerCase()}</strong>, with the
-                next review framed around one important decision and the
-                evidence needed to move confidently.
+                next review aligned to {hub.nextMilestone.title}.
               </p>
               <div className="executive-grid">
                 <div>
@@ -185,7 +199,9 @@ function HubWorkspace({
                   <span>Primary blocker</span>
                   <strong>
                     {rollup.blocked
-                      ? "External evidence and final approval"
+                      ? rollup.blocked === 1
+                        ? "1 blocked item needs resolution"
+                        : `${rollup.blocked} blocked items need resolution`
                       : "No material blocker"}
                   </strong>
                 </div>
@@ -258,8 +274,11 @@ function HubWorkspace({
                   <div>
                     <span>Help needed</span>
                     <p>
-                      Approve the recommended option so the launch path stays
-                      intact.
+                      {rollup.blocked > 0
+                        ? `Resolve ${rollup.blocked} blocked item${rollup.blocked === 1 ? "" : "s"} and record the evidence.`
+                        : rollup.decisions + rollup.approvals > 0
+                          ? `Resolve ${rollup.decisions + rollup.approvals} open decision${rollup.decisions + rollup.approvals === 1 ? "" : "s"} or approval${rollup.decisions + rollup.approvals === 1 ? "" : "s"}.`
+                          : "No immediate escalation is required."}
                     </p>
                   </div>
                   <div>
@@ -274,22 +293,22 @@ function HubWorkspace({
             <section className="overview-section" id="ideas">
               <div className="overview-section-title">
                 <div>
-                  <h2>{copy.recentActivity}</h2>
-                  <p>The last meaningful changes across this Hub.</p>
+                  <h2>Ideas</h2>
+                  <p>Opportunities captured for this Hub.</p>
                 </div>
               </div>
               <div className="hub-activity">
-                {recentItems.map((item) => (
+                {ideas.map((item) => (
                   <Activity
-                    icon={item.status === "done" ? CheckCircle2 : MessageSquare}
-                    tone={item.status === "blocked" ? "warning" : "primary"}
+                    icon={Lightbulb}
+                    tone="primary"
                     title={`${item.title} · ${item.status.replace("_", " ")}`}
                     meta={`${item.assignee ?? "Unassigned"} · ${item.dueDate ?? "No due date"}`}
                     key={item.id}
                   />
                 ))}
-                {recentItems.length === 0 && (
-                  <p>No work activity has been recorded for this Hub yet.</p>
+                {ideas.length === 0 && (
+                  <p>No ideas have been captured for this Hub yet.</p>
                 )}
               </div>
             </section>
@@ -321,7 +340,7 @@ function HubWorkspace({
                 <h2>{copy.metrics}</h2>
               </header>
               <div className="side-metrics">
-                {hub.metrics.map((metric) => (
+                {calculatedMetrics.map((metric) => (
                   <div key={metric.label}>
                     <span>{metric.label}</span>
                     <strong>{metric.value}</strong>

@@ -106,7 +106,7 @@ export const productCopy = {
       decisions: "Decisions & approvals",
       recentActivity: "Recent activity",
       connected: "Connected resources",
-      viewBoard: "Open launch board",
+      viewBoard: "Open board",
     },
     focus: {
       myWorkTitle: "My Work",
