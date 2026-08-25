@@ -168,7 +168,7 @@ export function portfolioSignals(
   };
 }
 
-export const demoHubs: Hub[] = [
+const currentDemoHubs: Hub[] = [
   {
     id: "hub-northstar",
     portfolioId: "portfolio-demo",
@@ -385,7 +385,56 @@ export const demoHubs: Hub[] = [
   },
 ];
 
-export const demoItems: WorkItem[] = [
+const originalHubIdentity = [
+  ["hub-northstar", "hub-zehn", "zehn", "ZEHN", "Z"],
+  ["hub-mealflow", "hub-leckereich", "leckereich", "Leckereich", "L"],
+  ["hub-localreach", "hub-marktfix", "marktfix", "MarktFix", "M"],
+  ["hub-studioops", "hub-lokalfix", "lokalfix", "LokalFix", "L"],
+  ["hub-clientspark", "hub-mikroit", "mikroit", "MikroIT", "μ"],
+  ["hub-greentable", "hub-gastrofix", "gastrofix", "GastroFix", "G"],
+  [
+    "hub-centralops",
+    "hub-intelligentlab",
+    "intelligentlab",
+    "IntelligentLab",
+    "I",
+  ],
+  ["hub-futuregoods", "hub-bigboyz", "bigboyz", "BigBoyz", "B"],
+] as const;
+
+const originalHubIdByCurrentId = new Map<string, string>(
+  originalHubIdentity.map(([currentId, originalId]) => [currentId, originalId]),
+);
+
+const originalDemoHubs: Hub[] = originalHubIdentity.map(
+  ([currentId, id, slug, name, icon]) => {
+    const source = currentDemoHubs.find((hub) => hub.id === currentId);
+    if (!source) throw new Error(`Missing source Hub ${currentId}`);
+    return {
+      ...source,
+      id,
+      portfolioId: "portfolio-original",
+      slug,
+      name,
+      icon,
+      healthNote: source.healthNote
+        .replace("Northstar Apparel", "ZEHN")
+        .replace("MealFlow", "Leckereich")
+        .replace("LocalReach", "MarktFix"),
+      latestUpdate: {
+        ...source.latestUpdate,
+        text: source.latestUpdate.text
+          .replace("Northstar Apparel", "ZEHN")
+          .replace("MealFlow", "Leckereich")
+          .replace("LocalReach", "MarktFix"),
+      },
+    };
+  },
+);
+
+export const demoHubs: Hub[] = [...currentDemoHubs, ...originalDemoHubs];
+
+const currentDemoItems: WorkItem[] = [
   {
     id: "i-1",
     hubId: "hub-northstar",
@@ -601,6 +650,24 @@ export const demoItems: WorkItem[] = [
     assignee: "Mohammed Zaman",
     decisionState: "decided",
   },
+];
+
+const originalDemoItems: WorkItem[] = currentDemoItems.flatMap((item) => {
+  const originalHubId = originalHubIdByCurrentId.get(item.hubId);
+  if (!originalHubId) return [];
+  return [
+    {
+      ...item,
+      id: `original-${item.id}`,
+      hubId: originalHubId,
+      boardId: `original-${item.boardId}`,
+    },
+  ];
+});
+
+export const demoItems: WorkItem[] = [
+  ...currentDemoItems,
+  ...originalDemoItems,
 ];
 
 export * from "./commercial";

@@ -33,6 +33,15 @@ export const demoPortfolios: Portfolio[] = [
     description: "Private initiatives kept outside the operating portfolio.",
     isDefault: false,
   },
+  {
+    id: "portfolio-original",
+    organizationId: "org-demo",
+    name: "Original Portfolio",
+    slug: "original-portfolio",
+    description:
+      "Mohammed's original project portfolio, restored with its established ventures and operating context.",
+    isDefault: false,
+  },
 ];
 
 export const demoWaitingStates: WaitingState[] = [

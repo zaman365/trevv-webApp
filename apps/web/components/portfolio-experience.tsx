@@ -87,24 +87,36 @@ export function PortfolioExperience() {
       active = false;
     };
   }, []);
-  const signals = useMemo(
-    () =>
-      remotePortfolio?.signals ?? portfolioSignals(demoHubs, demoItems, now),
-    [now, remotePortfolio],
+  const localPortfolioHubs = demoHubs.filter(
+    (hub) => hub.portfolioId === portfolioId,
   );
-  const availableHubs = (
-    remotePortfolio?.hubs.map(({ hub }) => hub) ?? demoHubs
-  ).filter((hub) => hub.portfolioId === portfolioId);
+  const remotePortfolioHubs =
+    remotePortfolio?.hubs
+      .map(({ hub }) => hub)
+      .filter((hub) => hub.portfolioId === portfolioId) ?? [];
+  const availableHubs =
+    portfolioId === "portfolio-original" || remotePortfolioHubs.length === 0
+      ? localPortfolioHubs
+      : remotePortfolioHubs;
+  const availableHubIds = useMemo(
+    () => new Set(availableHubs.map((hub) => hub.id)),
+    [availableHubs],
+  );
+  const portfolioItems = useMemo(
+    () => demoItems.filter((item) => availableHubIds.has(item.hubId)),
+    [availableHubIds],
+  );
+  const signals = useMemo(
+    () => portfolioSignals(availableHubs, portfolioItems, now),
+    [availableHubs, now, portfolioItems],
+  );
   const sortedHubs = useMemo(
     () =>
-      (
-        remotePortfolio?.hubs ??
-        demoHubs.map((hub) => ({ hub, rollup: rollupHub(hub, demoItems, now) }))
-      )
-        .filter(({ hub }) => hub.portfolioId === portfolioId)
+      availableHubs
+        .map((hub) => ({ hub, rollup: rollupHub(hub, portfolioItems, now) }))
         .filter(({ hub }) => health === "all" || hub.health === health)
         .sort((a, b) => b.rollup.score - a.rollup.score),
-    [health, now, portfolioId, remotePortfolio],
+    [availableHubs, health, now, portfolioItems],
   );
   const totalSignals =
     signals.decisions +
