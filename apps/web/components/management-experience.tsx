@@ -15,8 +15,6 @@ import {
   Grid2X2,
   History,
   Hourglass,
-  Lightbulb,
-  Link2,
   MessageSquareText,
   Pause,
   Plus,
@@ -27,25 +25,19 @@ import {
   X,
 } from "lucide-react";
 import {
-  calculateResourcePressure,
   changesSinceCheckpoint,
   demoBlueprintInstances,
   demoBlueprints,
   demoBlueprintVersions,
   demoChangeCheckpoint,
-  demoDecisionOutcomes,
   demoHubSnapshots,
   demoHubs,
-  demoIdeaOpportunities,
-  demoInsights,
   demoItems,
   demoMeaningfulChanges,
   demoPortfolios,
   demoReviewRituals,
   demoWaitingStates,
-  opportunityScore,
   previewBlueprintUpdate,
-  type AttentionSignal,
   type ImportPreset,
   type WaitingState,
 } from "@founderhq/core";
@@ -58,8 +50,11 @@ import { vocabularyFor } from "@/lib/terminology";
 import { WorkspaceFrame } from "./workspace-frame";
 import { useWorkspace } from "@/lib/workspace-context";
 import { type GroupedSignal } from "@/lib/attention";
+import { Hint } from "./learning-center";
+import { IdeasWorkflow } from "./ideas-workflow";
+import { TeamWorkflow } from "./team-workflow";
+import { AttentionCenter } from "./attention-center";
 
-const now = new Date("2026-08-24T12:00:00.000Z");
 const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
 
 export function HomeExperience() {
@@ -101,10 +96,19 @@ function HomeMain() {
         eyebrow="Monday, 24 August"
         title="Good morning, Mohammed"
         subtitle={`${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you across ${totalProjects} ${vocab.many.toLowerCase()}. Everything else can keep moving.`}
+        hintId="welcome-to-trevv"
         selector={
-          <label className="hero-select">
-            <span>{vocab.groupOne}</span>
+          <label className="home-portfolio-switcher">
+            <span className="home-switcher-icon">
+              <Grid2X2 size={15} />
+            </span>
+            <span className="home-switcher-copy">
+              <small>{vocab.groupOne}</small>
+              <strong>{active?.portfolio.name ?? "Choose portfolio"}</strong>
+            </span>
+            <ChevronDown size={15} />
             <select
+              aria-label={`Switch ${vocab.groupOne.toLowerCase()}`}
               value={portfolioId}
               onChange={(event) => setPortfolioId(event.target.value)}
             >
@@ -117,9 +121,12 @@ function HomeMain() {
           </label>
         }
         actions={
-          <Link className="primary-button" href="/app/inbox">
-            <Plus size={16} />
-            <span>Quick capture</span>
+          <Link className="home-capture-action" href="/app/inbox">
+            <span>
+              <Plus size={15} />
+            </span>
+            <strong>Quick capture</strong>
+            <kbd>Q</kbd>
           </Link>
         }
         stats={
@@ -304,198 +311,11 @@ function HomeMain() {
   );
 }
 
-const attentionTabs = [
-  "Needs You",
-  "At Risk",
-  "Blocked",
-  "Overdue",
-  "Stale",
-  "Waiting",
-] as const;
-type AttentionTab = (typeof attentionTabs)[number];
-
-function matchesAttentionTab(signal: AttentionSignal, tab: AttentionTab) {
-  if (tab === "Needs You") return signal.responsibility >= 1;
-  if (tab === "At Risk") return ["high", "critical"].includes(signal.severity);
-  if (tab === "Blocked")
-    return [
-      "blocked_work",
-      "dependency_threat",
-      "decision_blocking_execution",
-    ].includes(signal.signalType);
-  if (tab === "Overdue") return signal.signalType.includes("overdue");
-  if (tab === "Stale")
-    return (
-      signal.signalType.includes("stale") ||
-      signal.signalType === "missing_update"
-    );
-  return (
-    signal.signalType === "waiting_too_long" ||
-    signal.signalType === "follow_up_overdue"
-  );
-}
-
-/** A grouped item belongs to a tab if any of its reasons do. */
-function groupMatchesTab(group: GroupedSignal, tab: AttentionTab) {
-  return group.signals.some((signal) => matchesAttentionTab(signal, tab));
-}
-
 export function AttentionExperience() {
   return (
     <WorkspaceFrame active="attention">
-      <AttentionMain />
+      <AttentionCenter />
     </WorkspaceFrame>
-  );
-}
-
-function AttentionMain() {
-  const { scope } = useWorkspace();
-  // One card per work item, not one per rule that fired. See lib/attention.ts.
-  const [groups, setGroups] = useState<GroupedSignal[]>(scope.attention);
-  const [tab, setTab] = useState<AttentionTab>("Needs You");
-  const [acting, setActing] = useState<{
-    id: string;
-    action: "dismiss" | "snooze";
-  } | null>(null);
-  const [reason, setReason] = useState("");
-  const visible = groups.filter((group) => groupMatchesTab(group, tab));
-  const remove = (id: string) =>
-    setGroups((current) => current.filter((group) => group.id !== id));
-  const completeAction = () => {
-    if (!acting || !reason.trim()) return;
-    remove(acting.id);
-    setActing(null);
-    setReason("");
-  };
-  return (
-    <main className="trevv-main attention-center">
-      <PageHeader
-        eyebrow="Portfolio · Venture Portfolio"
-        title="Attention Center"
-        subtitle="Real operational signals, ranked so the important few stay visible."
-      />
-      <div
-        className="attention-tabs"
-        role="tablist"
-        aria-label="Attention filters"
-      >
-        {attentionTabs.map((name) => {
-          const count = groups.filter((group) =>
-            groupMatchesTab(group, name),
-          ).length;
-          return (
-            <button
-              key={name}
-              role="tab"
-              aria-selected={tab === name}
-              className={tab === name ? "active" : ""}
-              onClick={() => setTab(name)}
-            >
-              {name}
-              <b>{count}</b>
-            </button>
-          );
-        })}
-      </div>
-      <section className="attention-explainer">
-        <ShieldCheck size={17} />
-        <div>
-          <strong>Why these signals?</strong>
-          <span>
-            Each item points to the evidence that triggered it. Snoozed and
-            dismissed signals stay out of the active queue.
-          </span>
-        </div>
-      </section>
-      <div className="attention-list">
-        {visible.map((group) => (
-          <article className="attention-detail-card" key={group.id}>
-            <div className={`attention-severity ${group.severity}`}>
-              <AlertTriangle size={17} />
-            </div>
-            <div className="attention-detail-copy">
-              <header>
-                <span>{hubFor(group.hubId)?.name ?? "Portfolio"}</span>
-                <b>{group.severity}</b>
-              </header>
-              <h2>{group.title}</h2>
-              {/* Every reason this item needs you, in one place — rather
-                  than the same item repeated once per reason. */}
-              {group.reasons.length === 1 ? (
-                <p>{group.reasons[0]}</p>
-              ) : (
-                <ul className="attention-reasons">
-                  {group.reasons.map((why) => (
-                    <li key={why}>{why}</li>
-                  ))}
-                </ul>
-              )}
-              {group.primary.recommendedAction && (
-                <div className="recommended-action">
-                  <Sparkles size={14} />
-                  <span>
-                    <b>Recommended action</b>
-                    {group.primary.recommendedAction}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="attention-actions">
-              <button className="resolve" onClick={() => remove(group.id)}>
-                <Check size={14} />
-                Resolve
-              </button>
-              <button
-                onClick={() => setActing({ id: group.id, action: "snooze" })}
-              >
-                <Pause size={14} />
-                Snooze
-              </button>
-              <button
-                onClick={() => setActing({ id: group.id, action: "dismiss" })}
-              >
-                <X size={14} />
-                Dismiss
-              </button>
-            </div>
-            {acting?.id === group.id && (
-              <div className="attention-action-note">
-                <label>
-                  {acting.action === "snooze"
-                    ? "Why and until when?"
-                    : "Why is this not useful?"}
-                  <input
-                    autoFocus
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                    placeholder={
-                      acting.action === "snooze"
-                        ? "Waiting until Friday for client response"
-                        : "Already covered in another review"
-                    }
-                  />
-                </label>
-                <button onClick={() => setActing(null)}>Cancel</button>
-                <button
-                  className="primary-button"
-                  disabled={!reason.trim()}
-                  onClick={completeAction}
-                >
-                  Save {acting.action}
-                </button>
-              </div>
-            )}
-          </article>
-        ))}
-        {!visible.length && (
-          <EmptyState
-            icon={CheckCircle2}
-            title="This queue is clear"
-            note="Resolved, snoozed, and dismissed signals no longer compete for attention."
-          />
-        )}
-      </div>
-    </main>
   );
 }
 
@@ -525,6 +345,9 @@ export function WaitingExperience() {
   const [waiting, setWaiting] = useState(demoWaitingStates);
   const [section, setSection] = useState<WaitingSection>("Waiting on Me");
   const [notice, setNotice] = useState<string | null>(null);
+  const [nudgeItem, setNudgeItem] = useState<WaitingState | null>(null);
+  const [resolveItem, setResolveItem] = useState<WaitingState | null>(null);
+  const [lastResolved, setLastResolved] = useState<WaitingState | null>(null);
   const visible = waiting.filter((item) => inWaitingSection(item, section));
   return (
     <WorkspaceFrame active="waiting">
@@ -533,11 +356,24 @@ export function WaitingExperience() {
           eyebrow="Follow-ups"
           title="Waiting Center"
           subtitle="Track dependencies that are waiting on a person, team, decision, document, or external partner."
+          hintId="waiting"
         />
         {notice && (
           <div className="success-toast" role="status">
             <CheckCircle2 size={15} />
             {notice}
+            {lastResolved && (
+              <button
+                className="toast-undo"
+                onClick={() => {
+                  setWaiting((current) => [lastResolved, ...current]);
+                  setNotice("Waiting state restored.");
+                  setLastResolved(null);
+                }}
+              >
+                Undo
+              </button>
+            )}
             <button aria-label="Dismiss notice" onClick={() => setNotice(null)}>
               <X size={14} />
             </button>
@@ -601,23 +437,13 @@ export function WaitingExperience() {
                 </div>
               </dl>
               <footer>
-                <button
-                  onClick={() =>
-                    setNotice(
-                      `Nudge prepared for ${item.waitingLabel ?? "the owner"}.`,
-                    )
-                  }
-                >
+                <button onClick={() => setNudgeItem(item)}>
                   <Send size={14} />
                   Nudge
                 </button>
                 <button
                   className="resolve"
-                  onClick={() =>
-                    setWaiting((current) =>
-                      current.filter((candidate) => candidate.id !== item.id),
-                    )
-                  }
+                  onClick={() => setResolveItem(item)}
                 >
                   <Check size={14} />
                   Resolve
@@ -633,8 +459,209 @@ export function WaitingExperience() {
             />
           )}
         </div>
+        {nudgeItem && (
+          <WaitingNudgeDialog
+            item={nudgeItem}
+            onClose={() => setNudgeItem(null)}
+            onRecord={(message, nextFollowUp) => {
+              setWaiting((current) =>
+                current.map((item) =>
+                  item.id === nudgeItem.id
+                    ? { ...item, waitingNote: message, nextFollowUp }
+                    : item,
+                ),
+              );
+              setLastResolved(null);
+              setNotice(
+                `Follow-up prepared for ${nudgeItem.waitingLabel ?? "the owner"}.`,
+              );
+              setNudgeItem(null);
+            }}
+          />
+        )}
+        {resolveItem && (
+          <WaitingResolveDialog
+            item={resolveItem}
+            onClose={() => setResolveItem(null)}
+            onConfirm={() => {
+              setWaiting((current) =>
+                current.filter((candidate) => candidate.id !== resolveItem.id),
+              );
+              setLastResolved(resolveItem);
+              setNotice(`Resolved “${resolveItem.title}”.`);
+              setResolveItem(null);
+            }}
+          />
+        )}
       </main>
     </WorkspaceFrame>
+  );
+}
+
+function WaitingNudgeDialog({
+  item,
+  onClose,
+  onRecord,
+}: {
+  item: WaitingState;
+  onClose: () => void;
+  onRecord: (message: string, nextFollowUp: string) => void;
+}) {
+  const [channel, setChannel] = useState("Email note");
+  const [message, setMessage] = useState(
+    `Hi ${item.waitingLabel ?? "there"}, checking in on “${item.title}”. We expected this by ${item.expectedBy ?? "the agreed date"}. Could you share the current status and next step?`,
+  );
+  const [nextFollowUp, setNextFollowUp] = useState(
+    item.nextFollowUp ?? "2026-08-28",
+  );
+  return (
+    <div
+      className="workflow-dialog-layer"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <form
+        className="workflow-dialog waiting-nudge-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="waiting-nudge-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onRecord(message.trim(), nextFollowUp);
+        }}
+      >
+        <header>
+          <span>
+            <Send size={17} />
+          </span>
+          <div>
+            <p>Follow-up helper</p>
+            <h2 id="waiting-nudge-title">Prepare a focused nudge</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close nudge dialog"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <div className="workflow-dialog-body">
+          <div className="workflow-context-card">
+            <Hourglass size={16} />
+            <p>
+              <strong>{item.title}</strong>
+              <span>
+                Waiting on{" "}
+                {item.waitingLabel ?? item.waitingType.replaceAll("_", " ")}
+              </span>
+            </p>
+          </div>
+          <label>
+            <span>Channel</span>
+            <select
+              value={channel}
+              onChange={(event) => setChannel(event.target.value)}
+            >
+              <option>Email note</option>
+              <option>Slack message</option>
+              <option>Internal follow-up</option>
+            </select>
+          </label>
+          <label>
+            <span>Message</span>
+            <textarea
+              required
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Next follow-up</span>
+            <input
+              required
+              type="date"
+              value={nextFollowUp}
+              onChange={(event) => setNextFollowUp(event.target.value)}
+            />
+          </label>
+          <p className="workflow-safety-note">
+            <ShieldCheck size={14} /> TREVV records this follow-up in the demo;
+            it does not contact an external person.
+          </p>
+        </div>
+        <footer>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={!message.trim() || !nextFollowUp}
+          >
+            Record {channel.toLocaleLowerCase()} <ArrowRight size={13} />
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function WaitingResolveDialog({
+  item,
+  onClose,
+  onConfirm,
+}: {
+  item: WaitingState;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="workflow-dialog-layer"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <section
+        className="workflow-dialog compact-workflow-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="waiting-resolve-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <span className="success-dialog-icon">
+            <Check size={17} />
+          </span>
+          <div>
+            <p>Waiting state</p>
+            <h2 id="waiting-resolve-title">Mark this dependency resolved?</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close resolve dialog"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <div className="workflow-dialog-body">
+          <p className="resolve-dialog-copy">
+            “{item.title}” will leave the Waiting Center. The underlying work
+            item and its history stay available.
+          </p>
+        </div>
+        <footer>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="primary-button" type="button" onClick={onConfirm}>
+            <Check size={14} /> Mark resolved
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -662,6 +689,7 @@ export function ReviewsExperience() {
           eyebrow="Management memory"
           title="Review Rituals"
           subtitle="Optional operating rhythms that turn updates into snapshots and refreshed attention."
+          hintId="reviews"
         />
         <div className="review-grid">
           <section className="trevv-panel daily-focus">
@@ -805,198 +833,20 @@ export function ReviewsExperience() {
 }
 
 export function IdeasExperience() {
-  const opportunity = demoIdeaOpportunities[0]!;
-  const linkedInsights = demoInsights.filter(
-    (insight) => insight.hubId === "hub-mealflow",
-  );
   return (
     <WorkspaceFrame active="ideas">
       <main className="trevv-main ideas-page">
-        <PageHeader
-          eyebrow="Discovery"
-          title="Ideas & evidence"
-          subtitle="Develop opportunities lightly, attach the why, and preserve provenance when work is promoted."
-          action={
-            <button className="primary-button">
-              <Plus size={16} />
-              Capture idea
-            </button>
-          }
-        />
-        <div className="ideas-layout">
-          <section className="opportunity-card">
-            <header>
-              <span>
-                <Lightbulb size={18} />
-              </span>
-              <div>
-                <p>MealFlow · Opportunity</p>
-                <h2>Service-first pilot home</h2>
-              </div>
-              <b>Review Sep 02</b>
-            </header>
-            <dl>
-              <div>
-                <dt>Problem / opportunity</dt>
-                <dd>{opportunity.problemOrOpportunity}</dd>
-              </div>
-              <div>
-                <dt>Hypothesis</dt>
-                <dd>{opportunity.hypothesis}</dd>
-              </div>
-            </dl>
-            <div className="optional-score">
-              <span>
-                <small>Impact</small>
-                <b>{opportunity.expectedImpact}/5</b>
-              </span>
-              <span>
-                <small>Confidence</small>
-                <b>{opportunity.confidence}/5</b>
-              </span>
-              <span>
-                <small>Strategic fit</small>
-                <b>{opportunity.strategicFit}/5</b>
-              </span>
-              <span>
-                <small>Effort</small>
-                <b>{opportunity.effort}/5</b>
-              </span>
-              <strong>Optional score {opportunityScore(opportunity)}</strong>
-            </div>
-            <footer>
-              <span>
-                <GitBranch size={14} />
-                Promoted to Decision: “Select onboarding navigation”
-              </span>
-              <a href="/app/decisions">
-                Open decision <ArrowRight size={13} />
-              </a>
-            </footer>
-          </section>
-          <section className="trevv-panel evidence-panel">
-            <PanelHeading
-              icon={Link2}
-              title="Linked evidence"
-              subtitle="Evidence stays connected to the idea and its promoted work."
-            />
-            {linkedInsights.map((insight) => (
-              <article key={insight.id}>
-                <span>
-                  <FileText size={16} />
-                </span>
-                <div>
-                  <p>
-                    {insight.sourceType.replaceAll("_", " ")} · {insight.impact}{" "}
-                    impact
-                  </p>
-                  <h3>{insight.title}</h3>
-                  <small>{insight.description}</small>
-                  <div>
-                    {insight.labels.map((label) => (
-                      <b key={label}>{label}</b>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))}
-            <button>
-              <Plus size={14} />
-              Attach insight
-            </button>
-          </section>
-        </div>
-        <section className="trevv-panel consequence-panel">
-          <PanelHeading
-            icon={History}
-            title="Decision consequence review"
-            subtitle="Selected decisions return later so the organization can learn, not merely remember."
-          />
-          {demoDecisionOutcomes.map((outcome) => (
-            <article key={outcome.id}>
-              <span className="outcome-badge">Better than expected</span>
-              <div>
-                <h3>Choose pilot packaging model</h3>
-                <p>{outcome.learning}</p>
-                <small>
-                  Would make the same decision again:{" "}
-                  <b>{outcome.wouldRepeat ? "Yes" : "No"}</b>
-                </small>
-              </div>
-              <time>{outcome.recordedAt.slice(0, 10)}</time>
-            </article>
-          ))}
-        </section>
+        <IdeasWorkflow />
       </main>
     </WorkspaceFrame>
   );
 }
 
 export function TeamExperience() {
-  const pressure = calculateResourcePressure(demoHubs, demoItems, now);
   return (
     <WorkspaceFrame active="team">
       <main className="trevv-main team-page">
-        <PageHeader
-          eyebrow="Across Hubs"
-          title="Team pressure"
-          subtitle="Lightweight workload evidence for bottlenecks — no timesheets or hourly estimates."
-          action={
-            <button className="primary-button">
-              <Plus size={16} />
-              Invite member
-            </button>
-          }
-        />
-        <section className="pressure-note">
-          <AlertTriangle size={18} />
-          <div>
-            <strong>Cross-Hub signal</strong>
-            <span>
-              {pressure[0]?.criticalHubResponsibilities ?? 0} critical projects
-              and {pressure[0]?.urgentHighActive ?? 0} urgent/high items
-              currently depend on {pressure[0]?.userName ?? "one owner"}.
-            </span>
-          </div>
-          <a href="/app/attention">
-            Review signal <ArrowRight size={13} />
-          </a>
-        </section>
-        <section className="trevv-panel pressure-table">
-          <header>
-            <span>Person</span>
-            <span>Urgent / high</span>
-            <span>Due this week</span>
-            <span>Blocked</span>
-            <span>Critical Hubs</span>
-            <span>Milestones</span>
-            <span>Pressure</span>
-          </header>
-          {pressure.map((person) => (
-            <article key={person.userId}>
-              <span>
-                <span className="avatar">
-                  {person.userName
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")}
-                </span>
-                <div>
-                  <strong>{person.userName}</strong>
-                  <small>{person.hubIds.length} Hubs</small>
-                </div>
-              </span>
-              <b>{person.urgentHighActive}</b>
-              <b>{person.dueThisWeek}</b>
-              <b>{person.blockedResponsibilities}</b>
-              <b>{person.criticalHubResponsibilities}</b>
-              <b>{person.milestonesOwned}</b>
-              <span className={`pressure-badge ${person.pressure}`}>
-                {person.pressure}
-              </span>
-            </article>
-          ))}
-        </section>
+        <TeamWorkflow />
       </main>
     </WorkspaceFrame>
   );
@@ -1012,6 +862,7 @@ export function HubsExperience() {
           eyebrow="Responsibility containers"
           title="All projects"
           subtitle="Businesses, brands, clients, products, departments, ventures, initiatives, and projects — without forcing one vocabulary."
+          hintId="hubs"
           action={
             <button className="primary-button">
               <Plus size={16} />
@@ -1063,12 +914,26 @@ export function BlueprintsExperience() {
   const next = demoBlueprintVersions[1]!;
   const instance = demoBlueprintInstances[0]!;
   const diff = previewBlueprintUpdate(instance, current, next);
+  const [view, setView] = useState<
+    "updates" | "catalog" | "instances" | "history"
+  >("updates");
   const [selected, setSelected] = useState(
     new Set([...diff.additions, ...diff.changes]),
   );
   const [state, setState] = useState<"preview" | "applied" | "detached">(
     "preview",
   );
+  const [confirmDetach, setConfirmDetach] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [installed, setInstalled] = useState(new Set(["Client delivery"]));
+  const [history, setHistory] = useState([
+    {
+      id: "history-created",
+      action: "Instance created from Client delivery v1",
+      detail: "LocalReach / Delivery board",
+      date: "18 Aug 2026, 09:24",
+    },
+  ]);
   const toggle = (entry: string) =>
     setSelected((currentSet) => {
       const nextSet = new Set(currentSet);
@@ -1083,97 +948,455 @@ export function BlueprintsExperience() {
           eyebrow="Managed standards"
           title="Blueprints"
           subtitle="Reusable operating systems that can improve over time without overwriting local work."
-        />
-        <section className="blueprint-summary">
-          <span>
-            <Grid2X2 size={20} />
-          </span>
-          <div>
-            <p>Blueprint · version 2 available</p>
-            <h2>{demoBlueprints[0]?.name}</h2>
-            <small>{demoBlueprints[0]?.description}</small>
-          </div>
-          <b>LocalReach / Delivery board</b>
-        </section>
-        {state === "preview" ? (
-          <section className="trevv-panel blueprint-diff">
-            <PanelHeading
-              icon={GitBranch}
-              title="Preview changes"
-              subtitle="Choose what to apply. Nothing destructive is applied automatically."
-            />
-            <div className="diff-groups">
-              <article>
-                <h3>Additions</h3>
-                {diff.additions.map((entry) => (
-                  <label key={entry}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(entry)}
-                      onChange={() => toggle(entry)}
-                    />
-                    <Plus size={13} />
-                    {entry}
-                  </label>
-                ))}
-              </article>
-              <article>
-                <h3>Configuration changes</h3>
-                {diff.changes.map((entry) => (
-                  <label key={entry}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(entry)}
-                      onChange={() => toggle(entry)}
-                    />
-                    <RefreshCw size={13} />
-                    {entry}
-                  </label>
-                ))}
-              </article>
-              <article className="override-group">
-                <h3>Local overrides preserved</h3>
-                {diff.preservedOverrides.map((entry) => (
-                  <p key={entry}>
-                    <ShieldCheck size={14} />
-                    {entry}
-                  </p>
-                ))}
-              </article>
-            </div>
-            <footer>
-              <button onClick={() => setState("detached")}>
-                Detach from Blueprint
-              </button>
-              <button
-                className="primary-button"
-                disabled={!selected.size}
-                onClick={() => setState("applied")}
-              >
-                Apply {selected.size} selected changes
-              </button>
-            </footer>
-          </section>
-        ) : (
-          <section className="trevv-panel blueprint-result">
-            <CheckCircle2 size={28} />
-            <h2>
-              {state === "applied"
-                ? "Selected improvements applied"
-                : "Instance detached"}
-            </h2>
-            <p>
-              {state === "applied"
-                ? "Local overrides were preserved. The instance now follows version 2."
-                : "This board keeps its current configuration and will not receive Blueprint updates."}
-            </p>
-            <button onClick={() => setState("preview")}>
-              Return to preview
+          hintId="blueprints"
+          action={
+            <button
+              className="primary-button"
+              onClick={() => setView("catalog")}
+            >
+              <Plus size={15} /> Browse Blueprints
             </button>
+          }
+        />
+        {notice && (
+          <div className="success-toast" role="status">
+            <CheckCircle2 size={15} /> {notice}
+            <button aria-label="Dismiss notice" onClick={() => setNotice(null)}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
+        <div
+          className="blueprint-tabs"
+          role="tablist"
+          aria-label="Blueprint sections"
+        >
+          {[
+            ["updates", "Updates", state === "preview" ? 1 : 0],
+            ["catalog", "Catalog", blueprintCatalog.length],
+            ["instances", "Instances", installed.size],
+            ["history", "History", history.length],
+          ].map(([key, label, count]) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              className={view === key ? "active" : ""}
+              onClick={() => setView(key as typeof view)}
+              key={String(key)}
+            >
+              {String(label)} <b>{Number(count)}</b>
+            </button>
+          ))}
+        </div>
+
+        {view === "updates" && (
+          <>
+            <section className="blueprint-summary">
+              <span>
+                <Grid2X2 size={20} />
+              </span>
+              <div>
+                <p>
+                  Blueprint ·{" "}
+                  {state === "preview"
+                    ? "version 2 available"
+                    : state === "applied"
+                      ? "version 2 current"
+                      : "detached"}
+                </p>
+                <h2>{demoBlueprints[0]?.name}</h2>
+                <small>{demoBlueprints[0]?.description}</small>
+              </div>
+              <b>LocalReach / Delivery board</b>
+            </section>
+            {state === "preview" ? (
+              <section className="trevv-panel blueprint-diff">
+                <PanelHeading
+                  icon={GitBranch}
+                  title="Preview changes"
+                  subtitle="Choose what to apply. Nothing destructive is applied automatically."
+                  hintId="blueprints"
+                />
+                <div className="blueprint-selection-tools">
+                  <span>
+                    {selected.size} of{" "}
+                    {diff.additions.length + diff.changes.length} optional
+                    changes selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelected(new Set([...diff.additions, ...diff.changes]))
+                    }
+                  >
+                    Select all
+                  </button>
+                  <button type="button" onClick={() => setSelected(new Set())}>
+                    Clear
+                  </button>
+                </div>
+                <div className="diff-groups">
+                  <article>
+                    <h3>Additions</h3>
+                    {diff.additions.map((entry) => (
+                      <label key={entry}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(entry)}
+                          onChange={() => toggle(entry)}
+                        />
+                        <Plus size={13} /> {entry}
+                      </label>
+                    ))}
+                  </article>
+                  <article>
+                    <h3>Configuration changes</h3>
+                    {diff.changes.map((entry) => (
+                      <label key={entry}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(entry)}
+                          onChange={() => toggle(entry)}
+                        />
+                        <RefreshCw size={13} /> {entry}
+                      </label>
+                    ))}
+                  </article>
+                  <article className="override-group">
+                    <h3>Local overrides preserved</h3>
+                    {diff.preservedOverrides.map((entry) => (
+                      <p key={entry}>
+                        <ShieldCheck size={14} /> {entry}
+                      </p>
+                    ))}
+                  </article>
+                </div>
+                <footer>
+                  <button onClick={() => setConfirmDetach(true)}>
+                    Detach from Blueprint
+                  </button>
+                  <button
+                    className="primary-button"
+                    disabled={!selected.size}
+                    onClick={() => {
+                      setState("applied");
+                      setHistory((entries) => [
+                        {
+                          id: `history-${Date.now()}`,
+                          action: `Applied Client delivery v2 (${selected.size} changes)`,
+                          detail: "Local overrides preserved",
+                          date: "27 Aug 2026, just now",
+                        },
+                        ...entries,
+                      ]);
+                      setNotice(
+                        `${selected.size} Blueprint improvements applied safely.`,
+                      );
+                    }}
+                  >
+                    Apply {selected.size} selected changes
+                  </button>
+                </footer>
+              </section>
+            ) : (
+              <section className="trevv-panel blueprint-result">
+                {state === "applied" ? (
+                  <CheckCircle2 size={28} />
+                ) : (
+                  <Pause size={28} />
+                )}
+                <h2>
+                  {state === "applied"
+                    ? "Selected improvements applied"
+                    : "Instance detached"}
+                </h2>
+                <p>
+                  {state === "applied"
+                    ? "Local overrides were preserved. The instance now follows version 2."
+                    : "This board keeps its current configuration and will not receive Blueprint updates."}
+                </p>
+                <div>
+                  <button onClick={() => setView("history")}>
+                    View history
+                  </button>
+                  {state === "detached" && (
+                    <button
+                      onClick={() => {
+                        setState("preview");
+                        setNotice(
+                          "Blueprint connection restored. Review the update before applying it.",
+                        );
+                      }}
+                    >
+                      Reconnect Blueprint
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {view === "catalog" && (
+          <section className="blueprint-catalog">
+            {blueprintCatalog.map((blueprint) => {
+              const isInstalled = installed.has(blueprint.name);
+              return (
+                <article className="trevv-panel" key={blueprint.name}>
+                  <span>{blueprint.icon}</span>
+                  <p>{blueprint.category}</p>
+                  <h2>{blueprint.name}</h2>
+                  <small>{blueprint.description}</small>
+                  <ul>
+                    {blueprint.includes.map((entry) => (
+                      <li key={entry}>
+                        <Check size={12} /> {entry}
+                      </li>
+                    ))}
+                  </ul>
+                  <footer>
+                    <b>{blueprint.version}</b>
+                    <button
+                      type="button"
+                      className={isInstalled ? "installed" : ""}
+                      disabled={isInstalled}
+                      onClick={() => {
+                        setInstalled((currentSet) =>
+                          new Set(currentSet).add(blueprint.name),
+                        );
+                        setHistory((entries) => [
+                          {
+                            id: `history-${Date.now()}`,
+                            action: `Added ${blueprint.name} to the Blueprint library`,
+                            detail: "Ready to create an instance",
+                            date: "27 Aug 2026, just now",
+                          },
+                          ...entries,
+                        ]);
+                        setNotice(
+                          `${blueprint.name} added to your Blueprint library.`,
+                        );
+                      }}
+                    >
+                      {isInstalled ? (
+                        <>
+                          <Check size={13} /> In library
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={13} /> Add to library
+                        </>
+                      )}
+                    </button>
+                  </footer>
+                </article>
+              );
+            })}
           </section>
+        )}
+
+        {view === "instances" && (
+          <section className="trevv-panel blueprint-instances">
+            <PanelHeading
+              icon={Grid2X2}
+              title="Managed instances"
+              subtitle="Boards connected to a reusable Blueprint standard."
+              hintId="blueprints"
+            />
+            {[...installed].map((name, index) => (
+              <article key={name}>
+                <span>
+                  <Grid2X2 size={16} />
+                </span>
+                <div>
+                  <strong>
+                    {index === 0
+                      ? "LocalReach / Delivery board"
+                      : `${name} / Ready to configure`}
+                  </strong>
+                  <small>
+                    {name} ·{" "}
+                    {index === 0
+                      ? state === "detached"
+                        ? "Detached"
+                        : state === "applied"
+                          ? "Version 2"
+                          : "Version 1"
+                      : "No board connected yet"}
+                  </small>
+                </div>
+                <b
+                  className={index === 0 && state === "preview" ? "update" : ""}
+                >
+                  {index === 0 && state === "preview"
+                    ? "Update available"
+                    : index === 0 && state === "detached"
+                      ? "Detached"
+                      : "Current"}
+                </b>
+                <button
+                  type="button"
+                  onClick={() => setView(index === 0 ? "updates" : "catalog")}
+                >
+                  {index === 0 ? "Manage" : "Configure"}{" "}
+                  <ArrowRight size={12} />
+                </button>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {view === "history" && (
+          <section className="trevv-panel blueprint-history">
+            <PanelHeading
+              icon={History}
+              title="Blueprint history"
+              subtitle="An audit-friendly record of versions, connections, and library changes."
+              hintId="blueprints"
+            />
+            {history.map((entry) => (
+              <article key={entry.id}>
+                <span>
+                  <History size={15} />
+                </span>
+                <div>
+                  <strong>{entry.action}</strong>
+                  <small>{entry.detail}</small>
+                </div>
+                <time>{entry.date}</time>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {confirmDetach && (
+          <BlueprintDetachDialog
+            onClose={() => setConfirmDetach(false)}
+            onConfirm={() => {
+              setState("detached");
+              setConfirmDetach(false);
+              setHistory((entries) => [
+                {
+                  id: `history-${Date.now()}`,
+                  action: "Detached LocalReach / Delivery board",
+                  detail: "The board kept its current configuration",
+                  date: "27 Aug 2026, just now",
+                },
+                ...entries,
+              ]);
+              setNotice(
+                "Blueprint detached. The board configuration was preserved.",
+              );
+            }}
+          />
         )}
       </main>
     </WorkspaceFrame>
+  );
+}
+
+const blueprintCatalog = [
+  {
+    icon: "CD",
+    category: "Service delivery",
+    name: "Client delivery",
+    description:
+      "A repeatable delivery rhythm with review gates and stakeholder updates.",
+    version: "Version 2",
+    includes: ["Delivery groups", "Approval gates", "Weekly update ritual"],
+  },
+  {
+    icon: "PL",
+    category: "Product operations",
+    name: "Product launch",
+    description:
+      "Milestones, decisions, dependencies, and launch-readiness checks in one standard.",
+    version: "Version 1",
+    includes: ["Launch milestones", "Risk review", "Decision register"],
+  },
+  {
+    icon: "RC",
+    category: "Recurring operations",
+    name: "Recurring care",
+    description:
+      "A dependable intake, delivery, review, and renewal rhythm for recurring work.",
+    version: "Version 1",
+    includes: ["Request intake", "Service cadence", "Renewal checkpoint"],
+  },
+  {
+    icon: "VV",
+    category: "Venture building",
+    name: "Venture validation",
+    description:
+      "Evidence, hypotheses, experiments, and investment decisions for a new venture.",
+    version: "Version 3",
+    includes: ["Hypothesis board", "Evidence score", "Investment gates"],
+  },
+];
+
+function BlueprintDetachDialog({
+  onClose,
+  onConfirm,
+}: {
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="workflow-dialog-layer"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <section
+        className="workflow-dialog compact-workflow-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="blueprint-detach-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <span className="warning-dialog-icon">
+            <GitBranch size={17} />
+          </span>
+          <div>
+            <p>Managed instance</p>
+            <h2 id="blueprint-detach-title">
+              Detach this board from its Blueprint?
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close detach dialog"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <div className="workflow-dialog-body">
+          <p className="resolve-dialog-copy">
+            LocalReach keeps its current board configuration and local
+            overrides, but it will stop receiving future Blueprint updates.
+          </p>
+          <p className="workflow-safety-note">
+            <ShieldCheck size={14} /> No board, group, field, or work item will
+            be deleted.
+          </p>
+        </div>
+        <footer>
+          <button type="button" onClick={onClose}>
+            Keep connected
+          </button>
+          <button
+            className="danger-workflow-button"
+            type="button"
+            onClick={onConfirm}
+          >
+            Detach Blueprint
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -1193,6 +1416,7 @@ export function ImportExperience() {
           eyebrow="Migration"
           title="Import work"
           subtitle="Map fields, statuses, and owners before anything is written. Unsupported data is always reported."
+          hintId="import-export"
         />
         <div className="import-steps">
           <b className="active">1 Source</b>
@@ -1316,6 +1540,7 @@ export function NotificationsExperience() {
           eyebrow="Informational"
           title="Notifications"
           subtitle="Events worth knowing. Anything requiring action lives in Inbox instead."
+          hintId="notifications"
           action={
             <a className="primary-button" href="/app/inbox">
               Open actionable Inbox
@@ -1366,17 +1591,22 @@ function PageHeader({
   title,
   subtitle,
   action,
+  hintId,
 }: {
   eyebrow: string;
   title: string;
   subtitle: string;
   action?: React.ReactNode;
+  hintId?: string;
 }) {
   return (
     <header className="trevv-page-header">
       <div>
         <p>{eyebrow}</p>
-        <h1>{title}</h1>
+        <h1 className="page-title-with-hint">
+          {title}
+          {hintId && <Hint resourceId={hintId} />}
+        </h1>
         <span>{subtitle}</span>
       </div>
       {action}
@@ -1389,11 +1619,13 @@ function PanelHeading({
   title,
   subtitle,
   href,
+  hintId,
 }: {
   icon: typeof Sparkles;
   title: string;
   subtitle: string;
   href?: string;
+  hintId?: string;
 }) {
   return (
     <header className="panel-heading">
@@ -1401,7 +1633,10 @@ function PanelHeading({
         <Icon size={16} />
       </span>
       <div>
-        <h2>{title}</h2>
+        <h2 className="panel-title-with-hint">
+          {title}
+          {hintId && <Hint resourceId={hintId} />}
+        </h2>
         <p>{subtitle}</p>
       </div>
       {href && (
@@ -1427,7 +1662,7 @@ function HubMark({ hubId }: { hubId: string }) {
 
 function AttentionRow({ group }: { group: GroupedSignal }) {
   return (
-    <Link className="attention-row" href="/app/attention">
+    <Link className="attention-row" href={`/app/attention#${group.id}`}>
       <span className={`signal-pip ${group.severity}`} />
       <div>
         <p>

@@ -1,0 +1,1984 @@
+"use client";
+
+import {
+  ArrowRight,
+  BellRing,
+  Building2,
+  Check,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Download,
+  FileJson,
+  FileSpreadsheet,
+  KeyRound,
+  Laptop,
+  Link2,
+  Mail,
+  RefreshCw,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Smartphone,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import Link from "next/link";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { WorkspaceFrame } from "./workspace-frame";
+import { Hint } from "./learning-center";
+
+type SettingsSection =
+  "integrations" | "security" | "organization" | "members" | "audit" | "export";
+
+type ProviderKey =
+  "google-drive" | "figma" | "github" | "canva" | "google-calendar";
+
+type ProviderStatus = "connected" | "enabled" | "off";
+type AuditCategory =
+  "Integration" | "Security" | "Organization" | "Member" | "Export";
+type MemberRole = "Owner" | "Admin" | "Hub lead" | "Member" | "Stakeholder";
+
+interface ProviderDefinition {
+  key: ProviderKey;
+  name: string;
+  category: string;
+  description: string;
+  icon: string;
+  tone: string;
+  mode: "deep" | "smart-link" | "future";
+  permissions: string[];
+}
+
+interface ProviderConnection {
+  status: ProviderStatus;
+  label?: string;
+  connectedAt?: string;
+}
+
+interface OrganizationSettings {
+  name: string;
+  slug: string;
+  timezone: string;
+  language: "English" | "Deutsch";
+  weekStartsOn: "Monday" | "Sunday";
+}
+
+interface Member {
+  id: string;
+  name: string;
+  email: string;
+  initials: string;
+  role: MemberRole;
+  status: "active" | "invited";
+  lastActive: string;
+  current?: boolean;
+}
+
+interface Session {
+  id: string;
+  device: string;
+  detail: string;
+  activeAt: string;
+  kind: "desktop" | "mobile";
+  current?: boolean;
+}
+
+interface AuditEvent {
+  id: string;
+  actor: string;
+  action: string;
+  target: string;
+  category: AuditCategory;
+  createdAt: string;
+}
+
+interface StoredSettings {
+  providers: Record<ProviderKey, ProviderConnection>;
+  organization: OrganizationSettings;
+  members: Member[];
+  sessions: Session[];
+  audit: AuditEvent[];
+  twoFactorEnabled: boolean;
+  loginAlertsEnabled: boolean;
+  sessionTimeout: "7 days" | "30 days" | "90 days";
+  calendarWaitlisted: boolean;
+}
+
+const SETTINGS_STORAGE_KEY = "trevv.settings.v1";
+const SETTINGS_CHANGE_EVENT = "trevv-settings-change";
+const SETTINGS_SECTION_EVENT = "trevv-settings-section-change";
+
+const providers: ProviderDefinition[] = [
+  {
+    key: "google-drive",
+    name: "Google Drive",
+    category: "Deep integration",
+    description: "Connect files and folders with a permission-safe picker.",
+    icon: "G",
+    tone: "drive",
+    mode: "deep",
+    permissions: [
+      "Choose files through the Google picker",
+      "Read metadata for files you explicitly select",
+      "Remove TREVV access at any time",
+    ],
+  },
+  {
+    key: "figma",
+    name: "Figma",
+    category: "Smart links",
+    description: "Rich cards and safe embeds for design reviews.",
+    icon: "F",
+    tone: "figma",
+    mode: "smart-link",
+    permissions: [
+      "Recognize links pasted into TREVV",
+      "Show public metadata and an outbound link",
+      "Never edit the original Figma file",
+    ],
+  },
+  {
+    key: "github",
+    name: "GitHub",
+    category: "Smart links",
+    description: "Attach repositories, issues and pull requests.",
+    icon: "G",
+    tone: "github",
+    mode: "smart-link",
+    permissions: [
+      "Recognize repository, issue, and pull-request links",
+      "Show link metadata available to the viewer",
+      "Never write to repositories",
+    ],
+  },
+  {
+    key: "canva",
+    name: "Canva",
+    category: "Smart links",
+    description: "Reference designs and exported review assets.",
+    icon: "C",
+    tone: "canva",
+    mode: "smart-link",
+    permissions: [
+      "Recognize Canva design links",
+      "Display a safe preview when the link allows it",
+      "Never edit or publish a Canva design",
+    ],
+  },
+  {
+    key: "google-calendar",
+    name: "Google Calendar",
+    category: "Release 1.1",
+    description: "Milestones and review dates — not enabled in V1.",
+    icon: "31",
+    tone: "calendar",
+    mode: "future",
+    permissions: [],
+  },
+];
+
+const initialAudit: AuditEvent[] = [
+  {
+    id: "audit-1",
+    actor: "Mohammed Zaman",
+    action: "Updated organization settings",
+    target: "TREVV Demo",
+    category: "Organization",
+    createdAt: "2026-08-27T07:42:00.000Z",
+  },
+  {
+    id: "audit-2",
+    actor: "Mohammed Zaman",
+    action: "Enabled Google Drive demo picker",
+    target: "Google Drive",
+    category: "Integration",
+    createdAt: "2026-08-26T13:18:00.000Z",
+  },
+  {
+    id: "audit-3",
+    actor: "System",
+    action: "Completed organization export",
+    target: "Portable JSON export",
+    category: "Export",
+    createdAt: "2026-08-25T09:06:00.000Z",
+  },
+  {
+    id: "audit-4",
+    actor: "Mohammed Zaman",
+    action: "Invited a workspace member",
+    target: "lena@example.com",
+    category: "Member",
+    createdAt: "2026-08-22T14:30:00.000Z",
+  },
+  {
+    id: "audit-5",
+    actor: "System",
+    action: "Created a new browser session",
+    target: "Chrome on macOS",
+    category: "Security",
+    createdAt: "2026-08-20T06:55:00.000Z",
+  },
+];
+
+const initialSettings: StoredSettings = {
+  providers: {
+    "google-drive": {
+      status: "connected",
+      label: "Demo picker",
+      connectedAt: "2026-08-26T13:18:00.000Z",
+    },
+    figma: { status: "off" },
+    github: { status: "off" },
+    canva: { status: "off" },
+    "google-calendar": { status: "off" },
+  },
+  organization: {
+    name: "TREVV Demo",
+    slug: "trevv-demo",
+    timezone: "Europe/Berlin",
+    language: "English",
+    weekStartsOn: "Monday",
+  },
+  members: [
+    {
+      id: "member-mz",
+      name: "Mohammed Zaman",
+      email: "mohammed@trevv.de",
+      initials: "MZ",
+      role: "Owner",
+      status: "active",
+      lastActive: "Now",
+      current: true,
+    },
+    {
+      id: "member-nk",
+      name: "Nora Klein",
+      email: "nora@example.com",
+      initials: "NK",
+      role: "Admin",
+      status: "active",
+      lastActive: "18 minutes ago",
+    },
+    {
+      id: "member-ad",
+      name: "Amira Demir",
+      email: "amira@example.com",
+      initials: "AD",
+      role: "Hub lead",
+      status: "active",
+      lastActive: "Yesterday",
+    },
+    {
+      id: "member-lr",
+      name: "Lena Roth",
+      email: "lena@example.com",
+      initials: "LR",
+      role: "Member",
+      status: "invited",
+      lastActive: "Invite sent Aug 22",
+    },
+  ],
+  sessions: [
+    {
+      id: "session-current",
+      device: "Chrome on macOS",
+      detail: "Berlin, Germany · This browser",
+      activeAt: "Active now",
+      kind: "desktop",
+      current: true,
+    },
+    {
+      id: "session-mobile",
+      device: "Safari on iPhone",
+      detail: "Berlin, Germany",
+      activeAt: "Active 2 hours ago",
+      kind: "mobile",
+    },
+    {
+      id: "session-laptop",
+      device: "TREVV Desktop on MacBook",
+      detail: "Hamburg, Germany",
+      activeAt: "Active 4 days ago",
+      kind: "desktop",
+    },
+  ],
+  audit: initialAudit,
+  twoFactorEnabled: false,
+  loginAlertsEnabled: true,
+  sessionTimeout: "30 days",
+  calendarWaitlisted: false,
+};
+
+const sectionCopy: Record<
+  SettingsSection,
+  { label: string; title: string; subtitle: string; icon: LucideIcon }
+> = {
+  integrations: {
+    label: "Integrations",
+    title: "Integrations",
+    subtitle: "Connect optional tools while TREVV stays useful on its own.",
+    icon: Settings2,
+  },
+  security: {
+    label: "Security",
+    title: "Security",
+    subtitle:
+      "Protect your account and review the places where you are signed in.",
+    icon: ShieldCheck,
+  },
+  organization: {
+    label: "Organization",
+    title: "Organization",
+    subtitle:
+      "Set the defaults people see when they work in this organization.",
+    icon: Building2,
+  },
+  members: {
+    label: "Members",
+    title: "Members",
+    subtitle:
+      "Invite people and give each person the access their work requires.",
+    icon: Users,
+  },
+  audit: {
+    label: "Audit log",
+    title: "Audit log",
+    subtitle: "Review important security and administration activity.",
+    icon: Clock3,
+  },
+  export: {
+    label: "Export",
+    title: "Export & portability",
+    subtitle:
+      "Download portable copies of your work and workspace administration data.",
+    icon: Download,
+  },
+};
+
+const settingsHintIds: Record<SettingsSection, string> = {
+  integrations: "integrations",
+  security: "security",
+  organization: "organization-settings",
+  members: "members-permissions",
+  audit: "audit-log",
+  export: "import-export",
+};
+
+export function sanitizeWorkspaceSlug(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+function loadStoredSettings(raw: string | null): StoredSettings {
+  if (!raw) return initialSettings;
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredSettings>;
+    return {
+      ...initialSettings,
+      ...parsed,
+      providers: { ...initialSettings.providers, ...parsed.providers },
+      organization: { ...initialSettings.organization, ...parsed.organization },
+      members: Array.isArray(parsed.members)
+        ? parsed.members
+        : initialSettings.members,
+      sessions: Array.isArray(parsed.sessions)
+        ? parsed.sessions
+        : initialSettings.sessions,
+      audit: Array.isArray(parsed.audit) ? parsed.audit : initialSettings.audit,
+    };
+  } catch {
+    return initialSettings;
+  }
+}
+
+function subscribeToStoredSettings(onStoreChange: () => void): () => void {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(SETTINGS_CHANGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(SETTINGS_CHANGE_EVENT, onStoreChange);
+  };
+}
+
+function getStoredSettingsSnapshot(): string | null {
+  return window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+}
+
+function subscribeToSettingsSection(onStoreChange: () => void): () => void {
+  window.addEventListener("hashchange", onStoreChange);
+  window.addEventListener("popstate", onStoreChange);
+  window.addEventListener(SETTINGS_SECTION_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("hashchange", onStoreChange);
+    window.removeEventListener("popstate", onStoreChange);
+    window.removeEventListener(SETTINGS_SECTION_EVENT, onStoreChange);
+  };
+}
+
+function getSettingsSectionSnapshot(): string {
+  return window.location.hash;
+}
+
+function sectionFromHash(hash: string): SettingsSection {
+  const candidate = hash.replace(/^#/, "") as SettingsSection;
+  return candidate in sectionCopy ? candidate : "integrations";
+}
+
+function createAuditEvent(
+  action: string,
+  target: string,
+  category: AuditCategory,
+): AuditEvent {
+  return {
+    id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    actor: "Mohammed Zaman",
+    action,
+    target,
+    category,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function withAudit(
+  current: StoredSettings,
+  action: string,
+  target: string,
+  category: AuditCategory,
+): StoredSettings {
+  return {
+    ...current,
+    audit: [createAuditEvent(action, target, category), ...current.audit].slice(
+      0,
+      100,
+    ),
+  };
+}
+
+function downloadFile(name: string, body: string, type: string) {
+  const url = URL.createObjectURL(new Blob([body], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function csvCell(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function formatAuditTime(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Berlin",
+  }).format(new Date(value));
+}
+
+export function SettingsExperience() {
+  const sectionHash = useSyncExternalStore(
+    subscribeToSettingsSection,
+    getSettingsSectionSnapshot,
+    () => "",
+  );
+  const activeSection = sectionFromHash(sectionHash);
+  const storedSettings = useSyncExternalStore(
+    subscribeToStoredSettings,
+    getStoredSettingsSnapshot,
+    () => null,
+  );
+  const settings = useMemo(
+    () => loadStoredSettings(storedSettings),
+    [storedSettings],
+  );
+  const [organizationDraftOverride, setOrganizationDraft] =
+    useState<OrganizationSettings | null>(null);
+  const organizationDraft = organizationDraftOverride ?? settings.organization;
+  const [flash, setFlash] = useState("");
+  const [providerDialog, setProviderDialog] = useState<ProviderKey | null>(
+    null,
+  );
+  const [providerLabel, setProviderLabel] = useState("");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<Member | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<MemberRole>("Member");
+  const [memberQuery, setMemberQuery] = useState("");
+  const [auditQuery, setAuditQuery] = useState("");
+  const [auditCategory, setAuditCategory] = useState<AuditCategory | "All">(
+    "All",
+  );
+
+  const setSettings = (update: (current: StoredSettings) => StoredSettings) => {
+    const current = loadStoredSettings(
+      window.localStorage.getItem(SETTINGS_STORAGE_KEY),
+    );
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(update(current)),
+    );
+    window.dispatchEvent(new Event(SETTINGS_CHANGE_EVENT));
+  };
+
+  useEffect(() => {
+    if (!flash) return;
+    const timeout = window.setTimeout(() => setFlash(""), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [flash]);
+
+  const selectSection = (section: SettingsSection) => {
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}#${section}`,
+    );
+    window.dispatchEvent(new Event(SETTINGS_SECTION_EVENT));
+  };
+
+  const notify = (message: string) => setFlash(message);
+
+  const openProvider = (provider: ProviderDefinition) => {
+    setProviderLabel(
+      settings.providers[provider.key].label ?? `${provider.name} workspace`,
+    );
+    setProviderDialog(provider.key);
+  };
+
+  const saveProvider = (provider: ProviderDefinition) => {
+    const status: ProviderStatus =
+      provider.mode === "deep" ? "connected" : "enabled";
+    setSettings((current) =>
+      withAudit(
+        {
+          ...current,
+          providers: {
+            ...current.providers,
+            [provider.key]: {
+              status,
+              label: providerLabel.trim() || `${provider.name} workspace`,
+              connectedAt: new Date().toISOString(),
+            },
+          },
+        },
+        provider.mode === "deep"
+          ? "Configured demo connection"
+          : "Enabled smart-link previews",
+        provider.name,
+        "Integration",
+      ),
+    );
+    setProviderDialog(null);
+    notify(
+      `${provider.name} ${provider.mode === "deep" ? "configuration" : "smart links"} saved.`,
+    );
+  };
+
+  const disconnectProvider = (provider: ProviderDefinition) => {
+    setSettings((current) =>
+      withAudit(
+        {
+          ...current,
+          providers: {
+            ...current.providers,
+            [provider.key]: { status: "off" },
+          },
+        },
+        provider.mode === "deep"
+          ? "Disconnected demo connection"
+          : "Disabled smart-link previews",
+        provider.name,
+        "Integration",
+      ),
+    );
+    setProviderDialog(null);
+    notify(`${provider.name} has been turned off.`);
+  };
+
+  const toggleCalendarWaitlist = () => {
+    setSettings((current) =>
+      withAudit(
+        { ...current, calendarWaitlisted: !current.calendarWaitlisted },
+        current.calendarWaitlisted
+          ? "Left release notification list"
+          : "Joined release notification list",
+        "Google Calendar",
+        "Integration",
+      ),
+    );
+    notify(
+      settings.calendarWaitlisted
+        ? "Release reminder removed."
+        : "We’ll show a notice when Calendar is available.",
+    );
+  };
+
+  const toggleSecurity = (field: "twoFactorEnabled" | "loginAlertsEnabled") => {
+    const label =
+      field === "twoFactorEnabled" ? "Two-step verification" : "Login alerts";
+    setSettings((current) =>
+      withAudit(
+        { ...current, [field]: !current[field] },
+        `${current[field] ? "Disabled" : "Enabled"} ${label.toLocaleLowerCase()}`,
+        label,
+        "Security",
+      ),
+    );
+    notify(`${label} ${settings[field] ? "disabled" : "enabled"}.`);
+  };
+
+  const revokeSession = (session: Session) => {
+    setSettings((current) =>
+      withAudit(
+        {
+          ...current,
+          sessions: current.sessions.filter((item) => item.id !== session.id),
+        },
+        "Revoked a session",
+        session.device,
+        "Security",
+      ),
+    );
+    notify(`${session.device} was signed out.`);
+  };
+
+  const saveOrganization = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalized = {
+      ...organizationDraft,
+      name: organizationDraft.name.trim(),
+      slug: sanitizeWorkspaceSlug(organizationDraft.slug),
+    };
+    if (!normalized.name || !normalized.slug) return;
+    setOrganizationDraft(normalized);
+    setSettings((current) =>
+      withAudit(
+        { ...current, organization: normalized },
+        "Updated organization settings",
+        normalized.name,
+        "Organization",
+      ),
+    );
+    notify("Organization settings saved.");
+  };
+
+  const changeMemberRole = (member: Member, role: MemberRole) => {
+    setSettings((current) =>
+      withAudit(
+        {
+          ...current,
+          members: current.members.map((item) =>
+            item.id === member.id ? { ...item, role } : item,
+          ),
+        },
+        `Changed member role to ${role}`,
+        member.email,
+        "Member",
+      ),
+    );
+    notify(`${member.name} is now ${role}.`);
+  };
+
+  const removeMember = (member: Member) => {
+    setSettings((current) =>
+      withAudit(
+        {
+          ...current,
+          members: current.members.filter((item) => item.id !== member.id),
+        },
+        member.status === "invited"
+          ? "Revoked invitation"
+          : "Removed workspace member",
+        member.email,
+        "Member",
+      ),
+    );
+    notify(
+      member.status === "invited"
+        ? `Invitation for ${member.email} revoked.`
+        : `${member.name} removed from the organization.`,
+    );
+  };
+
+  const inviteMember = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const email = inviteEmail.trim().toLocaleLowerCase();
+    if (
+      !email ||
+      settings.members.some(
+        (member) => member.email.toLocaleLowerCase() === email,
+      )
+    ) {
+      notify(
+        email
+          ? "That person is already a member or has a pending invite."
+          : "Enter an email address.",
+      );
+      return;
+    }
+    const name = email
+      .split("@")[0]!
+      .split(/[._-]/)
+      .filter(Boolean)
+      .map((part) => `${part[0]?.toUpperCase()}${part.slice(1)}`)
+      .join(" ");
+    const initials = name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+    const member: Member = {
+      id: `member-${Date.now()}`,
+      name: name || email,
+      email,
+      initials: initials || "?",
+      role: inviteRole,
+      status: "invited",
+      lastActive: "Invite sent just now",
+    };
+    setSettings((current) =>
+      withAudit(
+        { ...current, members: [...current.members, member] },
+        `Invited a workspace ${inviteRole.toLocaleLowerCase()}`,
+        email,
+        "Member",
+      ),
+    );
+    setInviteEmail("");
+    setInviteRole("Member");
+    setInviteOpen(false);
+    notify(`Invitation created for ${email}.`);
+  };
+
+  const resendInvite = (member: Member) => {
+    setSettings((current) =>
+      withAudit(current, "Resent workspace invitation", member.email, "Member"),
+    );
+    notify(`Invitation resent to ${member.email}.`);
+  };
+
+  const exportOrganization = () => {
+    const portable = {
+      exportedAt: new Date().toISOString(),
+      formatVersion: 1,
+      organization: settings.organization,
+      administration: {
+        members: settings.members.map(({ id, name, email, role, status }) => ({
+          id,
+          name,
+          email,
+          role,
+          status,
+        })),
+        enabledIntegrations: Object.entries(settings.providers)
+          .filter(([, connection]) => connection.status !== "off")
+          .map(([provider, connection]) => ({
+            provider,
+            status: connection.status,
+          })),
+      },
+      data: {
+        portfolios: 2,
+        hubs: 6,
+        note: "Demo workspace content is provided by the deterministic TREVV seed.",
+      },
+    };
+    downloadFile(
+      "trevv-organization-export.json",
+      JSON.stringify(portable, null, 2),
+      "application/json",
+    );
+    setSettings((current) =>
+      withAudit(
+        current,
+        "Downloaded organization export",
+        "Portable JSON export",
+        "Export",
+      ),
+    );
+    notify("Organization export downloaded.");
+  };
+
+  const exportMembers = () => {
+    const header = ["name", "email", "role", "status"];
+    const rows = settings.members.map((member) =>
+      [member.name, member.email, member.role, member.status]
+        .map(csvCell)
+        .join(","),
+    );
+    downloadFile(
+      "trevv-members.csv",
+      [header.join(","), ...rows].join("\n"),
+      "text/csv;charset=utf-8",
+    );
+    setSettings((current) =>
+      withAudit(current, "Downloaded member list", "Members CSV", "Export"),
+    );
+    notify("Member list downloaded.");
+  };
+
+  const exportAudit = () => {
+    const rows = settings.audit.map((event) =>
+      [event.createdAt, event.actor, event.category, event.action, event.target]
+        .map(csvCell)
+        .join(","),
+    );
+    downloadFile(
+      "trevv-audit-log.csv",
+      ["timestamp,actor,category,action,target", ...rows].join("\n"),
+      "text/csv;charset=utf-8",
+    );
+    setSettings((current) =>
+      withAudit(current, "Downloaded audit log", "Audit CSV", "Export"),
+    );
+    notify("Audit log downloaded.");
+  };
+
+  const visibleMembers = useMemo(() => {
+    const query = memberQuery.trim().toLocaleLowerCase();
+    if (!query) return settings.members;
+    return settings.members.filter((member) =>
+      `${member.name} ${member.email} ${member.role}`
+        .toLocaleLowerCase()
+        .includes(query),
+    );
+  }, [memberQuery, settings.members]);
+
+  const visibleAudit = useMemo(() => {
+    const query = auditQuery.trim().toLocaleLowerCase();
+    return settings.audit.filter(
+      (event) =>
+        (auditCategory === "All" || event.category === auditCategory) &&
+        (!query ||
+          `${event.actor} ${event.action} ${event.target}`
+            .toLocaleLowerCase()
+            .includes(query)),
+    );
+  }, [auditCategory, auditQuery, settings.audit]);
+
+  const currentCopy = sectionCopy[activeSection];
+  const selectedProvider =
+    providers.find((provider) => provider.key === providerDialog) ?? null;
+
+  return (
+    <WorkspaceFrame active="settings">
+      <main className="focus-main settings-page">
+        <header className="focus-header settings-page-header">
+          <div>
+            <p>TREVV / Settings</p>
+            <h1 className="page-title-with-hint">
+              {currentCopy.title}
+              <Hint resourceId={settingsHintIds[activeSection]} />
+            </h1>
+            <span>{currentCopy.subtitle}</span>
+          </div>
+          {activeSection === "members" && (
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => setInviteOpen(true)}
+            >
+              <UserPlus size={15} /> Invite member
+            </button>
+          )}
+        </header>
+
+        {flash && (
+          <div className="settings-flash" role="status" aria-live="polite">
+            <CheckCircle2 size={16} />
+            <span>{flash}</span>
+            <button
+              type="button"
+              onClick={() => setFlash("")}
+              aria-label="Dismiss message"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        <div className="settings-shell">
+          <aside className="settings-navigation" aria-label="Settings sections">
+            {(
+              Object.entries(sectionCopy) as Array<
+                [SettingsSection, (typeof sectionCopy)[SettingsSection]]
+              >
+            ).map(([key, item]) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  type="button"
+                  className={activeSection === key ? "active" : ""}
+                  aria-current={activeSection === key ? "page" : undefined}
+                  onClick={() => selectSection(key)}
+                  key={key}
+                >
+                  <Icon size={15} />
+                  <span>{item.label}</span>
+                  <ArrowRight size={13} />
+                </button>
+              );
+            })}
+          </aside>
+
+          <section className="settings-content" aria-label={currentCopy.title}>
+            {activeSection === "integrations" && (
+              <IntegrationsPanel
+                settings={settings}
+                onOpen={openProvider}
+                onToggleCalendar={toggleCalendarWaitlist}
+              />
+            )}
+            {activeSection === "security" && (
+              <SecurityPanel
+                settings={settings}
+                onToggle={toggleSecurity}
+                onTimeout={(sessionTimeout) => {
+                  setSettings((current) =>
+                    withAudit(
+                      { ...current, sessionTimeout },
+                      "Updated session timeout",
+                      sessionTimeout,
+                      "Security",
+                    ),
+                  );
+                  notify("Session timeout updated.");
+                }}
+                onRevoke={revokeSession}
+              />
+            )}
+            {activeSection === "organization" && (
+              <OrganizationPanel
+                draft={organizationDraft}
+                saved={settings.organization}
+                onChange={setOrganizationDraft}
+                onSave={saveOrganization}
+                onReset={() => setOrganizationDraft(settings.organization)}
+              />
+            )}
+            {activeSection === "members" && (
+              <MembersPanel
+                members={visibleMembers}
+                query={memberQuery}
+                onQuery={setMemberQuery}
+                onRole={changeMemberRole}
+                onRemove={setMemberToRemove}
+                onResend={resendInvite}
+                onInvite={() => setInviteOpen(true)}
+              />
+            )}
+            {activeSection === "audit" && (
+              <AuditPanel
+                events={visibleAudit}
+                query={auditQuery}
+                category={auditCategory}
+                onQuery={setAuditQuery}
+                onCategory={setAuditCategory}
+                onExport={exportAudit}
+              />
+            )}
+            {activeSection === "export" && (
+              <ExportPanel
+                members={settings.members.length}
+                auditEvents={settings.audit.length}
+                onOrganization={exportOrganization}
+                onMembers={exportMembers}
+                onAudit={exportAudit}
+              />
+            )}
+          </section>
+        </div>
+
+        {selectedProvider && (
+          <ProviderDialog
+            provider={selectedProvider}
+            connection={settings.providers[selectedProvider.key]}
+            label={providerLabel}
+            onLabel={setProviderLabel}
+            onSave={() => saveProvider(selectedProvider)}
+            onDisconnect={() => disconnectProvider(selectedProvider)}
+            onClose={() => setProviderDialog(null)}
+          />
+        )}
+        {inviteOpen && (
+          <InviteDialog
+            email={inviteEmail}
+            role={inviteRole}
+            onEmail={setInviteEmail}
+            onRole={setInviteRole}
+            onSubmit={inviteMember}
+            onClose={() => setInviteOpen(false)}
+          />
+        )}
+        {memberToRemove && (
+          <RemoveMemberDialog
+            member={memberToRemove}
+            onConfirm={() => {
+              removeMember(memberToRemove);
+              setMemberToRemove(null);
+            }}
+            onClose={() => setMemberToRemove(null)}
+          />
+        )}
+      </main>
+    </WorkspaceFrame>
+  );
+}
+
+function IntegrationsPanel({
+  settings,
+  onOpen,
+  onToggleCalendar,
+}: {
+  settings: StoredSettings;
+  onOpen: (provider: ProviderDefinition) => void;
+  onToggleCalendar: () => void;
+}) {
+  return (
+    <div className="settings-stack">
+      <div className="settings-note">
+        <ShieldCheck size={18} />
+        <div>
+          <strong>Optional by design</strong>
+          <span>
+            Your Hubs, boards and decisions keep working if every provider is
+            disconnected.
+          </span>
+        </div>
+      </div>
+      <section className="settings-card provider-list complete-provider-list">
+        {providers.map((provider) => {
+          const connection = settings.providers[provider.key];
+          const active = connection.status !== "off";
+          return (
+            <article key={provider.key}>
+              <span
+                className={`provider-icon provider-tone-${provider.tone}`}
+                aria-hidden="true"
+              >
+                {provider.icon}
+              </span>
+              <div className="provider-copy">
+                <p>{provider.category}</p>
+                <h2>{provider.name}</h2>
+                <span>{provider.description}</span>
+              </div>
+              {provider.mode === "future" ? (
+                <button
+                  type="button"
+                  className={settings.calendarWaitlisted ? "configured" : ""}
+                  onClick={onToggleCalendar}
+                >
+                  {settings.calendarWaitlisted ? (
+                    <Check size={13} />
+                  ) : (
+                    <BellRing size={13} />
+                  )}
+                  {settings.calendarWaitlisted ? "Reminder set" : "Notify me"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={active ? "configured" : ""}
+                  onClick={() => onOpen(provider)}
+                >
+                  {active && <CheckCircle2 size={13} />}
+                  {active
+                    ? "Manage"
+                    : provider.mode === "smart-link"
+                      ? "Enable"
+                      : "Set up"}
+                  <ArrowRight size={12} />
+                </button>
+              )}
+            </article>
+          );
+        })}
+      </section>
+      <p className="settings-footnote">
+        Smart-link previews only enrich URLs a member deliberately adds. Deep
+        provider access is never required.
+      </p>
+    </div>
+  );
+}
+
+function SecurityPanel({
+  settings,
+  onToggle,
+  onTimeout,
+  onRevoke,
+}: {
+  settings: StoredSettings;
+  onToggle: (field: "twoFactorEnabled" | "loginAlertsEnabled") => void;
+  onTimeout: (value: StoredSettings["sessionTimeout"]) => void;
+  onRevoke: (session: Session) => void;
+}) {
+  return (
+    <div className="settings-stack">
+      <section className="settings-card settings-section-card">
+        <SettingsHeading
+          icon={KeyRound}
+          title="Account protection"
+          subtitle="Security preferences apply to your own TREVV account."
+        />
+        <SettingRow
+          title="Two-step verification"
+          description="Require a second verification step when a new device signs in."
+        >
+          <Switch
+            label="Two-step verification"
+            checked={settings.twoFactorEnabled}
+            onChange={() => onToggle("twoFactorEnabled")}
+          />
+        </SettingRow>
+        <SettingRow
+          title="Login alerts"
+          description="Notify you when TREVV sees a sign-in from a new browser or device."
+        >
+          <Switch
+            label="Login alerts"
+            checked={settings.loginAlertsEnabled}
+            onChange={() => onToggle("loginAlertsEnabled")}
+          />
+        </SettingRow>
+        <SettingRow
+          title="Session timeout"
+          description="Ask inactive browser sessions to sign in again."
+        >
+          <select
+            aria-label="Session timeout"
+            value={settings.sessionTimeout}
+            onChange={(event) =>
+              onTimeout(event.target.value as StoredSettings["sessionTimeout"])
+            }
+          >
+            <option>7 days</option>
+            <option>30 days</option>
+            <option>90 days</option>
+          </select>
+        </SettingRow>
+      </section>
+
+      <section className="settings-card settings-section-card">
+        <SettingsHeading
+          icon={Laptop}
+          title="Active sessions"
+          subtitle="Sign out devices you no longer use or recognize."
+        />
+        <div className="session-list">
+          {settings.sessions.map((session) => {
+            const DeviceIcon = session.kind === "mobile" ? Smartphone : Laptop;
+            return (
+              <article key={session.id}>
+                <span className="settings-list-icon">
+                  <DeviceIcon size={17} />
+                </span>
+                <div>
+                  <strong>{session.device}</strong>
+                  <span>{session.detail}</span>
+                  <small>{session.activeAt}</small>
+                </div>
+                {session.current ? (
+                  <b className="current-session">
+                    <CheckCircle2 size={12} /> Current
+                  </b>
+                ) : (
+                  <button type="button" onClick={() => onRevoke(session)}>
+                    Sign out
+                  </button>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function OrganizationPanel({
+  draft,
+  saved,
+  onChange,
+  onSave,
+  onReset,
+}: {
+  draft: OrganizationSettings;
+  saved: OrganizationSettings;
+  onChange: (value: OrganizationSettings) => void;
+  onSave: (event: FormEvent<HTMLFormElement>) => void;
+  onReset: () => void;
+}) {
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  return (
+    <form className="settings-card organization-form" onSubmit={onSave}>
+      <SettingsHeading
+        icon={Building2}
+        title="Workspace details"
+        subtitle="These defaults are shared by every member of this organization."
+      />
+      <div className="settings-form-grid">
+        <label className="full-width">
+          <span>Organization name</span>
+          <input
+            required
+            maxLength={80}
+            value={draft.name}
+            onChange={(event) =>
+              onChange({ ...draft, name: event.target.value })
+            }
+          />
+        </label>
+        <label className="full-width">
+          <span>Workspace URL</span>
+          <div className="slug-input">
+            <span>trevv.app/</span>
+            <input
+              required
+              pattern="[a-z0-9-]+"
+              maxLength={48}
+              aria-label="Workspace URL slug"
+              value={draft.slug}
+              onChange={(event) =>
+                onChange({
+                  ...draft,
+                  slug: sanitizeWorkspaceSlug(event.target.value),
+                })
+              }
+            />
+          </div>
+          <small>Lowercase letters, numbers, and hyphens only.</small>
+        </label>
+        <label>
+          <span>Default timezone</span>
+          <select
+            value={draft.timezone}
+            onChange={(event) =>
+              onChange({ ...draft, timezone: event.target.value })
+            }
+          >
+            <option value="Europe/Berlin">Europe/Berlin (CET)</option>
+            <option value="Europe/London">Europe/London (GMT)</option>
+            <option value="America/New_York">America/New York (ET)</option>
+            <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+          </select>
+        </label>
+        <label>
+          <span>Default language</span>
+          <select
+            value={draft.language}
+            onChange={(event) =>
+              onChange({
+                ...draft,
+                language: event.target
+                  .value as OrganizationSettings["language"],
+              })
+            }
+          >
+            <option>English</option>
+            <option>Deutsch</option>
+          </select>
+        </label>
+        <label>
+          <span>Week starts on</span>
+          <select
+            value={draft.weekStartsOn}
+            onChange={(event) =>
+              onChange({
+                ...draft,
+                weekStartsOn: event.target
+                  .value as OrganizationSettings["weekStartsOn"],
+              })
+            }
+          >
+            <option>Monday</option>
+            <option>Sunday</option>
+          </select>
+        </label>
+      </div>
+      <footer className="settings-form-actions">
+        <span>
+          {dirty ? "You have unsaved changes." : "All changes are saved."}
+        </span>
+        <button type="button" onClick={onReset} disabled={!dirty}>
+          Discard
+        </button>
+        <button
+          className="primary-button"
+          type="submit"
+          disabled={!dirty || !draft.name.trim() || !draft.slug}
+        >
+          Save changes
+        </button>
+      </footer>
+    </form>
+  );
+}
+
+function MembersPanel({
+  members,
+  query,
+  onQuery,
+  onRole,
+  onRemove,
+  onResend,
+  onInvite,
+}: {
+  members: Member[];
+  query: string;
+  onQuery: (value: string) => void;
+  onRole: (member: Member, role: MemberRole) => void;
+  onRemove: (member: Member) => void;
+  onResend: (member: Member) => void;
+  onInvite: () => void;
+}) {
+  return (
+    <section className="settings-card members-card">
+      <div className="settings-toolbar">
+        <label className="settings-search">
+          <Search size={15} />
+          <input
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+            placeholder="Search members…"
+          />
+        </label>
+        <span>{members.length} shown</span>
+      </div>
+      <div className="member-list">
+        {members.map((member) => (
+          <article key={member.id}>
+            <span className="member-avatar">{member.initials}</span>
+            <div className="member-identity">
+              <strong>
+                {member.name}
+                {member.current && <small>You</small>}
+              </strong>
+              <span>{member.email}</span>
+            </div>
+            <div className="member-activity">
+              <span className={`member-status ${member.status}`}>
+                <i /> {member.status === "active" ? "Active" : "Invited"}
+              </span>
+              <small>{member.lastActive}</small>
+            </div>
+            <select
+              aria-label={`Role for ${member.name}`}
+              value={member.role}
+              disabled={member.current}
+              onChange={(event) =>
+                onRole(member, event.target.value as MemberRole)
+              }
+            >
+              <option>Owner</option>
+              <option>Admin</option>
+              <option>Hub lead</option>
+              <option>Member</option>
+              <option>Stakeholder</option>
+            </select>
+            {member.current ? (
+              <span className="member-owner-lock">
+                <ShieldCheck size={14} /> Protected
+              </span>
+            ) : member.status === "invited" ? (
+              <div className="member-actions">
+                <button type="button" onClick={() => onResend(member)}>
+                  <RefreshCw size={13} /> Resend
+                </button>
+                <button
+                  type="button"
+                  className="icon-danger"
+                  onClick={() => onRemove(member)}
+                  aria-label={`Revoke invitation for ${member.email}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="remove-member"
+                onClick={() => onRemove(member)}
+              >
+                Remove
+              </button>
+            )}
+          </article>
+        ))}
+      </div>
+      {!members.length && (
+        <div className="settings-empty">
+          <Users size={24} />
+          <h2>No members found</h2>
+          <p>Try a different search or invite someone new.</p>
+          <button className="primary-button" type="button" onClick={onInvite}>
+            Invite member
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AuditPanel({
+  events,
+  query,
+  category,
+  onQuery,
+  onCategory,
+  onExport,
+}: {
+  events: AuditEvent[];
+  query: string;
+  category: AuditCategory | "All";
+  onQuery: (value: string) => void;
+  onCategory: (value: AuditCategory | "All") => void;
+  onExport: () => void;
+}) {
+  return (
+    <section className="settings-card audit-card">
+      <div className="settings-toolbar audit-toolbar">
+        <label className="settings-search">
+          <Search size={15} />
+          <input
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+            placeholder="Search activity…"
+          />
+        </label>
+        <select
+          aria-label="Audit category"
+          value={category}
+          onChange={(event) =>
+            onCategory(event.target.value as AuditCategory | "All")
+          }
+        >
+          <option>All</option>
+          <option>Integration</option>
+          <option>Security</option>
+          <option>Organization</option>
+          <option>Member</option>
+          <option>Export</option>
+        </select>
+        <button type="button" onClick={onExport}>
+          <Download size={14} /> Export CSV
+        </button>
+      </div>
+      <div className="audit-list">
+        {events.map((event) => (
+          <article key={event.id}>
+            <span
+              className={`audit-icon audit-${event.category.toLocaleLowerCase()}`}
+              aria-hidden="true"
+            >
+              {event.category.slice(0, 1)}
+            </span>
+            <div>
+              <strong>{event.action}</strong>
+              <span>
+                {event.actor} · {event.target}
+              </span>
+            </div>
+            <b>{event.category}</b>
+            <time dateTime={event.createdAt}>
+              {formatAuditTime(event.createdAt)}
+            </time>
+          </article>
+        ))}
+      </div>
+      {!events.length && (
+        <div className="settings-empty compact">
+          <Search size={22} />
+          <h2>No matching activity</h2>
+          <p>Change the search or category filter to see more events.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ExportPanel({
+  members,
+  auditEvents,
+  onOrganization,
+  onMembers,
+  onAudit,
+}: {
+  members: number;
+  auditEvents: number;
+  onOrganization: () => void;
+  onMembers: () => void;
+  onAudit: () => void;
+}) {
+  return (
+    <div className="settings-stack">
+      <div className="export-grid">
+        <ExportCard
+          icon={FileJson}
+          title="Organization data"
+          description="A portable JSON summary of organization settings, members, providers, and demo-workspace counts."
+          meta="JSON · generated on demand"
+          action="Download JSON"
+          onClick={onOrganization}
+        />
+        <ExportCard
+          icon={FileSpreadsheet}
+          title="Member directory"
+          description="Names, email addresses, roles, and invitation status for workspace administration."
+          meta={`${members} people · CSV`}
+          action="Download CSV"
+          onClick={onMembers}
+        />
+        <ExportCard
+          icon={Clock3}
+          title="Audit activity"
+          description="Important workspace administration and security activity currently retained in this demo."
+          meta={`${auditEvents} events · CSV`}
+          action="Download CSV"
+          onClick={onAudit}
+        />
+      </div>
+      <section className="settings-card portability-card">
+        <span className="settings-list-icon">
+          <Database size={18} />
+        </span>
+        <div>
+          <h2>Bring work into TREVV</h2>
+          <p>
+            Preview field mappings and validation warnings before importing any
+            CSV rows.
+          </p>
+        </div>
+        <Link href="/app/settings/import">
+          Open importer <ArrowRight size={13} />
+        </Link>
+      </section>
+      <div className="settings-note neutral-note">
+        <ShieldCheck size={18} />
+        <div>
+          <strong>Your data remains portable</strong>
+          <span>
+            Downloads are created in your browser for this demo. Production
+            exports are permission checked and auditable.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExportCard({
+  icon: Icon,
+  title,
+  description,
+  meta,
+  action,
+  onClick,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  meta: string;
+  action: string;
+  onClick: () => void;
+}) {
+  return (
+    <article className="settings-card export-card">
+      <span className="export-card-icon">
+        <Icon size={20} />
+      </span>
+      <h2>{title}</h2>
+      <p>{description}</p>
+      <small>{meta}</small>
+      <button type="button" onClick={onClick}>
+        <Download size={14} /> {action}
+      </button>
+    </article>
+  );
+}
+
+function SettingsHeading({
+  icon: Icon,
+  title,
+  subtitle,
+}: {
+  icon: LucideIcon;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <header className="settings-section-heading">
+      <span>
+        <Icon size={17} />
+      </span>
+      <div>
+        <h2>{title}</h2>
+        <p>{subtitle}</p>
+      </div>
+    </header>
+  );
+}
+
+function SettingRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="setting-row">
+      <div>
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Switch({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-label={label}
+      aria-checked={checked}
+      className={`settings-switch ${checked ? "on" : ""}`}
+      onClick={onChange}
+    >
+      <span />
+    </button>
+  );
+}
+
+function ProviderDialog({
+  provider,
+  connection,
+  label,
+  onLabel,
+  onSave,
+  onDisconnect,
+  onClose,
+}: {
+  provider: ProviderDefinition;
+  connection: ProviderConnection;
+  label: string;
+  onLabel: (value: string) => void;
+  onSave: () => void;
+  onDisconnect: () => void;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const active = connection.status !== "off";
+  return (
+    <SettingsDialog titleId={titleId} onClose={onClose}>
+      <header className="settings-dialog-header">
+        <span className={`provider-icon provider-tone-${provider.tone}`}>
+          {provider.icon}
+        </span>
+        <div>
+          <p>{provider.category}</p>
+          <h2 id={titleId}>
+            {active ? `Manage ${provider.name}` : `Enable ${provider.name}`}
+          </h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close dialog">
+          <X size={18} />
+        </button>
+      </header>
+      <div className="settings-dialog-body">
+        <div className="integration-mode-note">
+          {provider.mode === "deep" ? (
+            <ShieldCheck size={17} />
+          ) : (
+            <Link2 size={17} />
+          )}
+          <div>
+            <strong>
+              {provider.mode === "deep"
+                ? "Safe demo connection"
+                : "Metadata preview only"}
+            </strong>
+            <span>
+              {provider.mode === "deep"
+                ? "This V1 demo configures the permission-safe picker seam. It does not store a production OAuth token."
+                : "TREVV enriches links members deliberately paste. No account sign-in or write access is requested."}
+            </span>
+          </div>
+        </div>
+        <label className="dialog-field">
+          <span>Connection label</span>
+          <input
+            autoFocus
+            required
+            maxLength={60}
+            value={label}
+            onChange={(event) => onLabel(event.target.value)}
+          />
+        </label>
+        <div className="permission-list">
+          <strong>What this enables</strong>
+          {provider.permissions.map((permission) => (
+            <span key={permission}>
+              <CheckCircle2 size={14} /> {permission}
+            </span>
+          ))}
+        </div>
+        {active && connection.connectedAt && (
+          <p className="connection-meta">
+            <Clock3 size={13} /> Enabled{" "}
+            {formatAuditTime(connection.connectedAt)}
+          </p>
+        )}
+      </div>
+      <footer className="settings-dialog-actions split-actions">
+        {active ? (
+          <button
+            type="button"
+            className="danger-button"
+            onClick={onDisconnect}
+          >
+            Disconnect
+          </button>
+        ) : (
+          <span />
+        )}
+        <div>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={!label.trim()}
+            onClick={onSave}
+          >
+            {active
+              ? "Save changes"
+              : provider.mode === "deep"
+                ? "Configure demo"
+                : "Enable smart links"}
+          </button>
+        </div>
+      </footer>
+    </SettingsDialog>
+  );
+}
+
+function InviteDialog({
+  email,
+  role,
+  onEmail,
+  onRole,
+  onSubmit,
+  onClose,
+}: {
+  email: string;
+  role: MemberRole;
+  onEmail: (value: string) => void;
+  onRole: (value: MemberRole) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  return (
+    <SettingsDialog titleId={titleId} onClose={onClose}>
+      <form onSubmit={onSubmit}>
+        <header className="settings-dialog-header">
+          <span className="dialog-title-icon">
+            <UserPlus size={18} />
+          </span>
+          <div>
+            <p>Organization access</p>
+            <h2 id={titleId}>Invite a member</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close dialog">
+            <X size={18} />
+          </button>
+        </header>
+        <div className="settings-dialog-body invite-fields">
+          <label className="dialog-field">
+            <span>Email address</span>
+            <div className="input-with-icon">
+              <Mail size={15} />
+              <input
+                autoFocus
+                required
+                type="email"
+                placeholder="name@company.com"
+                value={email}
+                onChange={(event) => onEmail(event.target.value)}
+              />
+            </div>
+          </label>
+          <label className="dialog-field">
+            <span>Role</span>
+            <select
+              value={role}
+              onChange={(event) => onRole(event.target.value as MemberRole)}
+            >
+              <option>Admin</option>
+              <option>Hub lead</option>
+              <option>Member</option>
+              <option>Stakeholder</option>
+            </select>
+          </label>
+          <div className="role-explainer">
+            <ShieldCheck size={16} />
+            <p>
+              <strong>{role}</strong>
+              <span>{roleDescription(role)}</span>
+            </p>
+          </div>
+        </div>
+        <footer className="settings-dialog-actions">
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={!email.trim()}
+          >
+            Create invitation
+          </button>
+        </footer>
+      </form>
+    </SettingsDialog>
+  );
+}
+
+function RemoveMemberDialog({
+  member,
+  onConfirm,
+  onClose,
+}: {
+  member: Member;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const invitation = member.status === "invited";
+  return (
+    <SettingsDialog titleId={titleId} onClose={onClose}>
+      <header className="settings-dialog-header">
+        <span className="dialog-danger-icon">
+          <Trash2 size={18} />
+        </span>
+        <div>
+          <p>{invitation ? "Pending invitation" : "Organization access"}</p>
+          <h2 id={titleId}>
+            {invitation ? "Revoke this invitation?" : "Remove this member?"}
+          </h2>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close dialog">
+          <X size={18} />
+        </button>
+      </header>
+      <div className="settings-dialog-body remove-member-copy">
+        <p>
+          {invitation
+            ? `${member.email} will no longer be able to accept this invitation.`
+            : `${member.name} will lose access to this organization. Their existing work and activity history will remain.`}
+        </p>
+        <div>
+          <span className="member-avatar">{member.initials}</span>
+          <p>
+            <strong>{member.name}</strong>
+            <span>{member.email}</span>
+          </p>
+          <b>{member.role}</b>
+        </div>
+      </div>
+      <footer className="settings-dialog-actions">
+        <button type="button" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="confirm-danger-button"
+          onClick={onConfirm}
+        >
+          {invitation ? "Revoke invitation" : "Remove member"}
+        </button>
+      </footer>
+    </SettingsDialog>
+  );
+}
+
+function SettingsDialog({
+  titleId,
+  onClose,
+  children,
+}: {
+  titleId: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="settings-dialog-layer"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <section
+        className="settings-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function roleDescription(role: MemberRole): string {
+  const descriptions: Record<MemberRole, string> = {
+    Owner:
+      "Full organization access, including ownership and deletion controls.",
+    Admin:
+      "Can manage organization settings, members, templates, and integrations.",
+    "Hub lead": "Can manage assigned Hubs and the people working in them.",
+    Member: "Can create and update work in Hubs they can access.",
+    Stakeholder: "Read-only access to explicitly shared stakeholder views.",
+  };
+  return descriptions[role];
+}

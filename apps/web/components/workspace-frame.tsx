@@ -2,8 +2,9 @@
 
 import {
   Bell,
+  BookOpenText,
   ChartColumn,
-  ChevronDown,
+  CheckCircle2,
   ClipboardCheck,
   Command,
   FileQuestion,
@@ -26,11 +27,17 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
 import { vocabularyFor } from "@/lib/terminology";
+import { LearningCenterProvider, useLearningCenter } from "./learning-center";
+import type { CapturedWorkItem } from "@/lib/captured-work";
+import {
+  routeForCapturedType,
+  UniversalCreateDialog,
+} from "./universal-create";
 
 type ActivePage =
   | "home"
@@ -66,9 +73,11 @@ export function WorkspaceFrame({
 }) {
   return (
     <WorkspaceProvider>
-      <WorkspaceChrome active={active} hubSlug={hubSlug}>
-        {children}
-      </WorkspaceChrome>
+      <LearningCenterProvider>
+        <WorkspaceChrome active={active} hubSlug={hubSlug}>
+          {children}
+        </WorkspaceChrome>
+      </LearningCenterProvider>
     </WorkspaceProvider>
   );
 }
@@ -83,6 +92,9 @@ function WorkspaceChrome({
   hubSlug?: string | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  const [latestCapture, setLatestCapture] = useState<CapturedWorkItem | null>(
+    null,
+  );
   const {
     copy: messages,
     scope,
@@ -95,6 +107,33 @@ function WorkspaceChrome({
   } = useWorkspace();
   const copy = productCopy.en;
   const vocab = vocabularyFor();
+  const { openLearningCenter } = useLearningCenter();
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      if (event.key === "Escape" && captureOpen) {
+        setCaptureOpen(false);
+      }
+      if (
+        event.key.toLocaleLowerCase() === "q" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !isTyping
+      ) {
+        event.preventDefault();
+        setCaptureOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [captureOpen, setCaptureOpen]);
 
   // One number, from one place. See lib/attention.ts.
   const attentionCount = scope.attentionCount;
@@ -228,6 +267,19 @@ function WorkspaceChrome({
             <Hourglass size={17} />
             <span>{copy.nav.waiting}</span>
           </Link>
+          <button
+            className="nav-item nav-button learning-center-nav"
+            onClick={() => {
+              setOpen(false);
+              openLearningCenter();
+            }}
+          >
+            <BookOpenText size={17} />
+            <span>Learning Center</span>
+            <span className="learning-nav-mark">
+              <Lightbulb size={11} />
+            </span>
+          </button>
           <Link
             className={`nav-item ${active === "settings" ? "active" : ""}`}
             href="/app/settings/integrations"
@@ -276,6 +328,14 @@ function WorkspaceChrome({
               <Plus size={16} />
               {copy.shell.capture}
               <kbd>Q</kbd>
+            </button>
+            <button
+              className="icon-button"
+              onClick={() => openLearningCenter()}
+              aria-label="Open Learning Center"
+              title="Learning Center"
+            >
+              <Lightbulb size={17} />
             </button>
             <button
               className="icon-button"
@@ -342,57 +402,34 @@ function WorkspaceChrome({
         </button>
       </nav>
 
-      {captureOpen && <QuickCapture onClose={() => setCaptureOpen(false)} />}
-    </div>
-  );
-}
-
-function QuickCapture({ onClose }: { onClose: () => void }) {
-  const { copy } = useWorkspace();
-  return (
-    <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
-      <section
-        className="capture-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={copy.common.quickCapture}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div>
-          <span className="attention-icon">
-            <Lightbulb size={18} />
-          </span>
+      {latestCapture && (
+        <div className="global-capture-toast" role="status">
+          <CheckCircle2 size={16} />
           <div>
-            <h2>{copy.common.quickCapture}</h2>
-            <p>Capture now. Organize when you are ready.</p>
+            <strong>{latestCapture.title}</strong>
+            <span>
+              {latestCapture.type} created
+              {latestCapture.sendToInbox ? " and added to Inbox" : ""}.
+            </span>
           </div>
+          <Link href={routeForCapturedType(latestCapture.type)}>Open</Link>
           <button
-            className="icon-button"
-            onClick={onClose}
-            aria-label={copy.common.dismiss}
+            aria-label="Dismiss capture confirmation"
+            onClick={() => setLatestCapture(null)}
           >
-            <X size={18} />
+            <X size={14} />
           </button>
         </div>
-        <input autoFocus placeholder="What needs to move?" />
-        <div className="capture-options">
-          <button>
-            Task <ChevronDown size={14} />
-          </button>
-          <button>
-            Inbox <ChevronDown size={14} />
-          </button>
-          <button>
-            Owner <ChevronDown size={14} />
-          </button>
-        </div>
-        <footer>
-          <span>Press ⌘ + Enter to save</span>
-          <button className="primary-button" onClick={onClose}>
-            Capture item
-          </button>
-        </footer>
-      </section>
+      )}
+      {captureOpen && (
+        <UniversalCreateDialog
+          onClose={() => setCaptureOpen(false)}
+          onCreated={(item) => {
+            setLatestCapture(item);
+            setCaptureOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

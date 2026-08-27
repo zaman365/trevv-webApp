@@ -65,6 +65,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
+import { Hint } from "./learning-center";
 
 type Status = "planned" | "working" | "blocked" | "review" | "done";
 type Priority = "Urgent" | "High" | "Normal" | "Low";
@@ -459,6 +460,7 @@ function BoardWorkspace({
             <div>
               <span className="board-mark">{hub.icon}</span>
               <h1>{board.name}</h1>
+              <Hint resourceId="boards" />
               <button aria-label="Board menu">
                 <MoreHorizontal size={18} />
               </button>

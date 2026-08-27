@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Hint } from "./learning-center";
 
 /**
  * The shared vocabulary for Home, Portfolio and Hub.
@@ -26,6 +27,7 @@ export function PageHero({
   actions,
   stats,
   badge,
+  hintId,
   children,
 }: {
   eyebrow?: ReactNode;
@@ -33,6 +35,8 @@ export function PageHero({
   subtitle?: string;
   /** Status chip shown next to the title. */
   badge?: ReactNode;
+  /** Opens the matching managed Learning Center resource. */
+  hintId?: string;
   /** Brand colour, when the page is about one specific thing. */
   accent?: string;
   monogram?: string;
@@ -58,6 +62,7 @@ export function PageHero({
           {eyebrow && <p className="hero-eyebrow">{eyebrow}</p>}
           <div className="hero-title-row">
             <h1>{title}</h1>
+            {hintId && <Hint resourceId={hintId} />}
             {badge}
           </div>
           {subtitle && <p className="hero-sub">{subtitle}</p>}
@@ -87,6 +92,7 @@ export function StatTile({
   tone = "neutral",
   href,
   meter,
+  hintId,
 }: {
   icon?: LucideIcon;
   value: ReactNode;
@@ -96,6 +102,7 @@ export function StatTile({
   href?: string;
   /** 0–100. Draws a thin fill under the tile. */
   meter?: number | null;
+  hintId?: string;
 }) {
   const inner = (
     <>
@@ -106,7 +113,10 @@ export function StatTile({
       )}
       <span className="stat-body">
         <strong>{value}</strong>
-        <b>{label}</b>
+        <b className="stat-label-with-hint">
+          {label}
+          {hintId && <Hint resourceId={hintId} />}
+        </b>
         {note && <small>{note}</small>}
       </span>
       {href && (
@@ -142,6 +152,7 @@ export function Panel({
   aside,
   children,
   wide,
+  hintId,
 }: {
   icon?: LucideIcon;
   title: string;
@@ -151,6 +162,7 @@ export function Panel({
   aside?: ReactNode;
   children: ReactNode;
   wide?: boolean;
+  hintId?: string;
 }) {
   const id = `panel-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
@@ -165,7 +177,10 @@ export function Panel({
           </span>
         )}
         <div>
-          <h2 id={id}>{title}</h2>
+          <h2 id={id} className="panel-title-with-hint">
+            {title}
+            {hintId && <Hint resourceId={hintId} />}
+          </h2>
           {subtitle && <p>{subtitle}</p>}
         </div>
         {aside}

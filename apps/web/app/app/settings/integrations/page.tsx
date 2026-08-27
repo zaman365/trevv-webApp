@@ -1,4 +1,5 @@
-import { FocusExperience } from "@/components/focus-experience";
+import { SettingsExperience } from "@/components/settings-experience";
+
 export default function IntegrationsPage() {
-  return <FocusExperience kind="settings" />;
+  return <SettingsExperience />;
 }

@@ -4,26 +4,27 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  ChevronDown,
-  Circle,
   Clock3,
   ExternalLink,
-  FileQuestion,
   FileText,
   Filter,
-  Inbox,
   LayoutTemplate,
   Link2,
   Plus,
   Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
+  X,
 } from "lucide-react";
 import { demoHubs, demoItems } from "@founderhq/core";
 import { useMemo, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
+import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
+import { Hint } from "./learning-center";
+import { DecisionCenter } from "./decision-center";
+import { InboxWorkflow } from "./inbox-workflow";
+import { MyWorkWorkflow } from "./my-work-workflow";
 
 export type FocusKind =
   | "myWork"
@@ -43,37 +44,20 @@ const titleKeys = {
   settings: ["settingsTitle", "settingsSubtitle"],
 } as const;
 
+const focusHintIds: Record<FocusKind, string> = {
+  myWork: "my-work",
+  inbox: "inbox",
+  decisions: "decisions",
+  approvals: "approvals",
+  search: "search",
+  templates: "blueprints",
+  settings: "integrations",
+};
+
 export function FocusExperience({ kind }: { kind: FocusKind }) {
+  const capturedWork = useCapturedWork();
   const copy = productCopy.en.focus;
   const [query, setQuery] = useState("");
-  const [inboxActions, setInboxActions] = useState([
-    {
-      id: "inbox-1",
-      category: "decision request",
-      title: "Select onboarding navigation",
-      source: "Nora Klein · MealFlow",
-    },
-    {
-      id: "inbox-2",
-      category: "mention",
-      title: "Can you confirm the compliance assumption?",
-      source: "Amira Demir · Northstar Apparel",
-    },
-    {
-      id: "inbox-3",
-      category: "approval request",
-      title: "Review client storefront repair",
-      source: "Jana Roth · LocalReach",
-    },
-    {
-      id: "inbox-4",
-      category: "follow-up",
-      title: "Supplier evidence follow-up is due",
-      source: "TREVV · Northstar Apparel",
-    },
-  ]);
-  const [recentCaptures, setRecentCaptures] = useState<string[]>([]);
-  const [draft, setDraft] = useState("");
   const [titleKey, subtitleKey] = titleKeys[kind];
   const searchResults = useMemo(() => {
     const normalized = query.toLocaleLowerCase();
@@ -93,38 +77,28 @@ export function FocusExperience({ kind }: { kind: FocusKind }) {
         <header className="focus-header">
           <div>
             <p>TREVV / {crumb}</p>
-            <h1>{copy[titleKey]}</h1>
+            <h1 className="page-title-with-hint">
+              {copy[titleKey]}
+              <Hint resourceId={focusHintIds[kind]} />
+            </h1>
             <span>{copy[subtitleKey]}</span>
           </div>
           {kind === "inbox" && (
-            <button className="primary-button">
+            <button
+              className="primary-button"
+              onClick={() =>
+                document.getElementById("inbox-quick-capture")?.focus()
+              }
+            >
               <Plus size={16} />
               {copy.newCapture}
             </button>
           )}
         </header>
-        {kind === "myWork" && <MyWork />}
-        {kind === "inbox" && (
-          <InboxView
-            actions={inboxActions}
-            recentCaptures={recentCaptures}
-            draft={draft}
-            setDraft={setDraft}
-            onDone={(id) =>
-              setInboxActions((current) =>
-                current.filter((action) => action.id !== id),
-              )
-            }
-            onCapture={() => {
-              if (draft.trim()) {
-                setRecentCaptures((current) => [draft.trim(), ...current]);
-                setDraft("");
-              }
-            }}
-          />
-        )}
-        {kind === "decisions" && <DecisionView />}
-        {kind === "approvals" && <ApprovalView />}
+        {kind === "myWork" && <MyWorkWorkflow />}
+        {kind === "inbox" && <InboxWorkflow />}
+        {kind === "decisions" && <DecisionCenter />}
+        {kind === "approvals" && <ApprovalView capturedWork={capturedWork} />}
         {kind === "search" && (
           <SearchView
             query={query}
@@ -139,245 +113,45 @@ export function FocusExperience({ kind }: { kind: FocusKind }) {
   );
 }
 
-function MyWork() {
-  const copy = productCopy.en.focus;
-  const mine = demoItems.filter((item) => item.assignee === "Mohammed Zaman");
-  return (
-    <div className="focus-layout">
-      <aside className="focus-filter">
-        <button className="active">
-          Assigned to me <b>{mine.length}</b>
-        </button>
-        <button>
-          Following <b>8</b>
-        </button>
-        <button>
-          Created by me <b>12</b>
-        </button>
-        <hr />
-        <button>
-          <Filter size={14} />
-          Add filter
-        </button>
-      </aside>
-      <div className="work-groups">
-        {[
-          [
-            copy.overdue,
-            mine.filter((item) => item.dueDate && item.dueDate < "2026-08-24"),
-          ],
-          [copy.today, mine.filter((item) => item.dueDate === "2026-08-25")],
-          [
-            copy.upcoming,
-            mine.filter((item) => !item.dueDate || item.dueDate > "2026-08-25"),
-          ],
-        ].map(([label, items]) => (
-          <section className="work-group" key={String(label)}>
-            <header>
-              <ChevronDown size={14} />
-              <h2>{String(label)}</h2>
-              <b>{(items as typeof mine).length}</b>
-            </header>
-            {(items as typeof mine).map((item) => (
-              <a
-                href={`/app/hubs/${demoHubs.find((hub) => hub.id === item.hubId)?.slug}/boards/${item.boardId}`}
-                key={item.id}
-              >
-                <Circle size={16} />
-                <div>
-                  <strong>{item.title}</strong>
-                  <span>
-                    {demoHubs.find((hub) => hub.id === item.hubId)?.name} /
-                    Launch board
-                  </span>
-                </div>
-                <span className={`focus-status ${item.status}`}>
-                  {item.status.replace("_", " ")}
-                </span>
-                <time>{item.dueDate ?? "No date"}</time>
-                <ArrowRight size={13} />
-              </a>
-            ))}
-          </section>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function InboxView({
-  actions,
-  recentCaptures,
-  draft,
-  setDraft,
-  onDone,
-  onCapture,
-}: {
-  actions: Array<{
-    id: string;
-    category: string;
-    title: string;
-    source: string;
-  }>;
-  recentCaptures: string[];
-  draft: string;
-  setDraft: (value: string) => void;
-  onDone: (id: string) => void;
-  onCapture: () => void;
-}) {
-  return (
-    <div className="inbox-layout">
-      <section className="capture-card quick-capture-separate">
-        <div className="capture-card-icon">
-          <Sparkles size={18} />
-        </div>
-        <div>
-          <h2>Quick Capture</h2>
-          <p>
-            Personal capture stays separate from communication that needs a
-            response.
-          </p>
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Capture a task, idea, link or note…"
-          />
-          <footer>
-            <div>
-              <button>
-                Task <ChevronDown size={13} />
-              </button>
-              <button>
-                No Hub <ChevronDown size={13} />
-              </button>
-              <button>
-                No date <ChevronDown size={13} />
-              </button>
-            </div>
-            <button
-              className="primary-button"
-              onClick={onCapture}
-              disabled={!draft.trim()}
-            >
-              Capture
-            </button>
-          </footer>
-        </div>
-      </section>
-      <section className="inbox-list">
-        <header>
-          <div>
-            <h2>Actionable Inbox</h2>
-            <span>{actions.length} requests need a response</span>
-          </div>
-          <button>
-            <Filter size={14} />
-            Filter
-          </button>
-        </header>
-        {actions.map((action) => (
-          <article key={action.id}>
-            <span className="inbox-item-icon">
-              <Inbox size={15} />
-            </span>
-            <div>
-              <p>{action.category}</p>
-              <strong>{action.title}</strong>
-              <span>{action.source}</span>
-            </div>
-            <button onClick={() => onDone(action.id)}>Done</button>
-            <button>Snooze</button>
-            <button aria-label="Open">
-              <ArrowRight size={14} />
-            </button>
-          </article>
-        ))}
-        {!actions.length && (
-          <p className="inbox-clear">
-            <CheckCircle2 size={16} />
-            Your actionable Inbox is clear.
-          </p>
-        )}
-        {recentCaptures.length > 0 && (
-          <footer className="capture-confirmation">
-            <CheckCircle2 size={14} />
-            {recentCaptures.length} personal capture
-            {recentCaptures.length === 1 ? "" : "s"} saved outside Inbox.
-          </footer>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function DecisionView() {
-  const decisions = demoItems.filter((item) => item.type === "decision");
-  return (
-    <div className="center-layout">
-      <div className="center-tabs">
-        <button className="active">
-          Needs decision <b>{decisions.length}</b>
-        </button>
-        <button>
-          Analyzing <b>2</b>
-        </button>
-        <button>
-          Delegated <b>1</b>
-        </button>
-        <button>Deferred</button>
-        <button>Decided history</button>
-      </div>
-      <div className="center-grid">
-        {decisions.map((item, index) => (
-          <article className="decision-card" key={item.id}>
-            <header>
-              <span className="decision-icon">
-                <FileQuestion size={16} />
-              </span>
-              <span
-                className={`impact impact-${index % 2 ? "high" : "urgent"}`}
-              >
-                {index % 2 ? "High impact" : "Urgent"}
-              </span>
-            </header>
-            <p>
-              {demoHubs.find((hub) => hub.id === item.hubId)?.name} /{" "}
-              {item.boardId.replace(/-/g, " ")}
-            </p>
-            <h2>{item.title}</h2>
-            <span>
-              This choice unblocks the next milestone and clarifies the
-              operating path for the team.
-            </span>
-            <div className="recommendation">
-              <b>Recommendation</b>
-              <p>
-                {index % 2
-                  ? "Choose the simplest flow that can be validated with the pilot."
-                  : "Use the premium early-access offer with free exchange."}
-              </p>
-            </div>
-            <footer>
-              <span>
-                <Clock3 size={13} />
-                Due {item.dueDate}
-              </span>
-              <span className="avatar avatar-mz">MZ</span>
-              <button>
-                Review decision <ArrowRight size={13} />
-              </button>
-            </footer>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ApprovalView() {
-  const approvals = demoItems.filter((item) => item.type === "approval");
+function ApprovalView({ capturedWork }: { capturedWork: CapturedWorkItem[] }) {
+  const [resolved, setResolved] = useState<string[]>([]);
+  const [notice, setNotice] = useState("");
+  const approvals = [
+    ...demoItems
+      .filter((item) => item.type === "approval")
+      .map((item) => ({
+        id: item.id,
+        hubId: item.hubId,
+        title: item.title,
+        dueDate: item.dueDate,
+        requestedBy: "Amira Demir",
+        evidenceUrl: "https://www.figma.com",
+      })),
+    ...capturedWork
+      .filter((item) => item.type === "approval")
+      .map((item) => ({
+        id: item.id,
+        hubId: item.hubId,
+        title: item.title,
+        dueDate: item.dueDate,
+        requestedBy: item.owner,
+        evidenceUrl: item.evidenceUrl,
+      })),
+  ].filter((item) => !resolved.includes(item.id));
   return (
     <div className="approval-layout">
+      {notice && (
+        <div className="workflow-toast" role="status">
+          <CheckCircle2 size={15} />
+          <span>{notice}</span>
+          <button
+            aria-label="Dismiss notification"
+            onClick={() => setNotice("")}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
       <div className="approval-summary">
         <article>
           <span className="summary-icon violet">
@@ -428,10 +202,10 @@ function ApprovalView() {
               <h3>{item.title}</h3>
               <span>
                 {index % 2 ? "Product / UX" : "Legal / Packaging"} · Requested
-                by {index % 2 ? "Nora Klein" : "Amira Demir"}
+                by {item.requestedBy}
               </span>
               <div>
-                <a href="https://www.figma.com">
+                <a href={item.evidenceUrl ?? "#"}>
                   <Link2 size={12} />
                   Linked review resource <ExternalLink size={11} />
                 </a>
@@ -442,8 +216,21 @@ function ApprovalView() {
               </div>
             </div>
             <div className="approval-actions">
-              <button>Request changes</button>
-              <button className="approve-button">
+              <button
+                onClick={() => {
+                  setResolved((current) => [...current, item.id]);
+                  setNotice(`Changes requested for “${item.title}”.`);
+                }}
+              >
+                Request changes
+              </button>
+              <button
+                className="approve-button"
+                onClick={() => {
+                  setResolved((current) => [...current, item.id]);
+                  setNotice(`Approved “${item.title}”.`);
+                }}
+              >
                 <CheckCircle2 size={14} />
                 Approve
               </button>

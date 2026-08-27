@@ -114,6 +114,7 @@ function PortfolioMain() {
         }
         title={portfolio?.name ?? vocab.groupOne}
         subtitle={portfolio?.description ?? copy.portfolio.subtitle}
+        hintId="portfolios"
         selector={
           <label className="hero-select">
             <span>{vocab.groupOne}</span>

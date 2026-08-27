@@ -140,6 +140,7 @@ function HubWorkspace({
             </>
           }
           title={hub.name}
+          hintId="hubs"
           badge={
             <span className={`health-badge ${hub.health}`}>
               {hubHealthCopy[hub.health]}

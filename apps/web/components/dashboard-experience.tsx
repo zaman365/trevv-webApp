@@ -6,7 +6,6 @@ import {
   CalendarClock,
   CheckCircle2,
   Download,
-  Filter,
   LayoutGrid,
   ListChecks,
   MoreHorizontal,
@@ -14,7 +13,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { demoPortfolios, type WorkItem } from "@founderhq/core";
+import { demoHubs, demoPortfolios, type WorkItem } from "@founderhq/core";
 import { useMemo, useState, type ReactNode } from "react";
 import { summarizePortfolio } from "@/lib/portfolios";
 import { vocabularyFor } from "@/lib/terminology";
@@ -22,6 +21,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceFrame } from "./workspace-frame";
 import { BarChart, DonutChart, type Bar, type Slice } from "./charts";
 import { HealthBar, PageHero, StatTile } from "./ui-kit";
+import { Hint } from "./learning-center";
 
 export function DashboardExperience() {
   return (
@@ -51,6 +51,19 @@ const PRIORITY_META: Record<string, { label: string; color: string }> = {
 };
 
 const NOW = new Date("2026-08-24T12:00:00.000Z");
+
+function downloadDashboardFile(name: string, body: string, type: string) {
+  const url = URL.createObjectURL(new Blob([body], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function csvValue(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
 
 function DashboardMain() {
   const { scope, portfolioId, setPortfolioId } = useWorkspace();
@@ -188,6 +201,7 @@ function DashboardMain() {
         eyebrow={<>Reporting · {portfolio?.name}</>}
         title="Dashboard"
         subtitle={`Live reporting across every ${vocab.one.toLowerCase()} in this ${vocab.groupOne.toLowerCase()}. Nothing here is entered by hand.`}
+        hintId="dashboard"
         selector={
           <label className="hero-select">
             <span>{vocab.groupOne}</span>
@@ -221,9 +235,35 @@ function DashboardMain() {
                 All time
               </button>
             </div>
-            <button className="quiet-button">
+            <button
+              className="quiet-button"
+              onClick={() => {
+                const rows = items.map((item) =>
+                  [
+                    item.id,
+                    item.title,
+                    item.type,
+                    STATUS_META[item.status].label,
+                    PRIORITY_META[item.priority]?.label ?? item.priority,
+                    item.assignee ?? "Unassigned",
+                    item.dueDate ?? "",
+                    hubForDashboard(item.hubId),
+                  ]
+                    .map(csvValue)
+                    .join(","),
+                );
+                downloadDashboardFile(
+                  `trevv-dashboard-${portfolio?.name.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "portfolio"}.csv`,
+                  [
+                    "id,title,type,status,priority,owner,due_date,hub",
+                    ...rows,
+                  ].join("\n"),
+                  "text/csv;charset=utf-8",
+                );
+              }}
+            >
               <Download size={15} />
-              Export
+              Export {scopeFilter === "open" ? "open work" : "all work"}
             </button>
           </>
         }
@@ -234,6 +274,7 @@ function DashboardMain() {
               value={counts.all}
               label="All work items"
               note={`${counts.done} complete`}
+              hintId="dashboard"
             />
             <StatTile
               icon={TrendingUp}
@@ -266,6 +307,10 @@ function DashboardMain() {
           title="Work by status"
           note={scopeFilter === "open" ? "Open work only" : "All time"}
           span={4}
+          hintId="dashboard-status"
+          exportData={statusSlices}
+          scopeFilter={scopeFilter}
+          onScopeFilter={setScopeFilter}
         >
           <DonutChart slices={statusSlices} totalLabel="items" />
         </Widget>
@@ -275,6 +320,14 @@ function DashboardMain() {
           title="Work by owner"
           note="Top owners by open items"
           span={8}
+          hintId="dashboard-ownership"
+          exportData={ownerBars.map(({ key, label, value }) => ({
+            key,
+            label,
+            value,
+          }))}
+          scopeFilter={scopeFilter}
+          onScopeFilter={setScopeFilter}
         >
           <BarChart bars={ownerBars} emptyNote="No owners assigned yet." />
         </Widget>
@@ -284,6 +337,14 @@ function DashboardMain() {
           title={`Open work by ${vocab.one.toLowerCase()}`}
           note="Where the load actually sits"
           span={8}
+          hintId="dashboard-ownership"
+          exportData={projectBars.map(({ key, label, value }) => ({
+            key,
+            label,
+            value,
+          }))}
+          scopeFilter={scopeFilter}
+          onScopeFilter={setScopeFilter}
         >
           <BarChart
             bars={projectBars}
@@ -296,6 +357,10 @@ function DashboardMain() {
           title="Work by priority"
           note="How the queue is weighted"
           span={4}
+          hintId="dashboard-status"
+          exportData={prioritySlices}
+          scopeFilter={scopeFilter}
+          onScopeFilter={setScopeFilter}
         >
           <DonutChart slices={prioritySlices} totalLabel="items" />
         </Widget>
@@ -305,6 +370,14 @@ function DashboardMain() {
           title={`Overdue by ${vocab.one.toLowerCase()}`}
           note="Only projects with something late"
           span={6}
+          hintId="dashboard"
+          exportData={overdueBars.map(({ key, label, value }) => ({
+            key,
+            label,
+            value,
+          }))}
+          scopeFilter={scopeFilter}
+          onScopeFilter={setScopeFilter}
         >
           <BarChart
             bars={overdueBars}
@@ -318,6 +391,13 @@ function DashboardMain() {
           title={`${vocab.one} health`}
           note={`${summary?.count ?? 0} ${vocab.many.toLowerCase()}`}
           span={6}
+          hintId="portfolios"
+          exportData={{
+            health: summary?.health ?? [],
+            focus: summary?.focus ?? null,
+          }}
+          scopeFilter={scopeFilter}
+          onScopeFilter={setScopeFilter}
         >
           <div className="widget-health">
             <HealthBar slices={summary?.health ?? []} />
@@ -340,6 +420,10 @@ function Widget({
   title,
   note,
   span,
+  hintId,
+  exportData,
+  scopeFilter,
+  onScopeFilter,
   children,
 }: {
   icon: typeof PieChart;
@@ -347,32 +431,92 @@ function Widget({
   note?: string;
   /** Columns out of 12. */
   span: number;
+  hintId: string;
+  exportData: unknown;
+  scopeFilter: "all" | "open";
+  onScopeFilter: (scope: "all" | "open") => void;
   children: ReactNode;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
     <section
       className="widget"
       style={{ "--span": span } as React.CSSProperties}
-      aria-labelledby={`w-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+      aria-labelledby={`w-${slug}`}
     >
       <header>
         <span className="widget-icon">
           <Icon size={15} />
         </span>
         <div>
-          <h2 id={`w-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
-            {title}
-          </h2>
+          <h2 id={`w-${slug}`}>{title}</h2>
           {note && <p>{note}</p>}
         </div>
-        <button className="widget-action" aria-label={`Filter ${title}`}>
-          <Filter size={14} />
-        </button>
-        <button className="widget-action" aria-label={`Options for ${title}`}>
-          <MoreHorizontal size={16} />
-        </button>
+        <Hint resourceId={hintId} />
+        <div
+          className="widget-menu-wrap"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              setMenuOpen(false);
+            }
+          }}
+        >
+          <button
+            className="widget-action"
+            aria-label={`Options for ${title}`}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          {menuOpen && (
+            <div className="widget-menu" role="menu">
+              <strong>{title}</strong>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onScopeFilter(scopeFilter === "open" ? "all" : "open");
+                  setMenuOpen(false);
+                }}
+              >
+                {scopeFilter === "open"
+                  ? "Include completed work"
+                  : "Show open work only"}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  downloadDashboardFile(
+                    `trevv-${slug}.json`,
+                    JSON.stringify(
+                      {
+                        widget: title,
+                        scope: scopeFilter,
+                        exportedAt: new Date().toISOString(),
+                        data: exportData,
+                      },
+                      null,
+                      2,
+                    ),
+                    "application/json",
+                  );
+                  setMenuOpen(false);
+                }}
+              >
+                <Download size={13} /> Download widget data
+              </button>
+            </div>
+          )}
+        </div>
       </header>
       <div className="widget-body">{children}</div>
     </section>
   );
+}
+
+function hubForDashboard(hubId: string): string {
+  return demoHubs.find((hub) => hub.id === hubId)?.name ?? "Unknown Hub";
 }
