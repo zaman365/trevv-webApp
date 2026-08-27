@@ -293,6 +293,18 @@ test("Messages keeps requests, threads, and Hub context connected", async ({
 }) => {
   await page.goto("/app/messages");
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New message" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create room" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", { name: /Northstar · Launch room/ })
+      .locator("strong"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", { name: /Leadership decisions/ })
+      .locator("strong"),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Needs response \d+/ }),
   ).toBeVisible();
