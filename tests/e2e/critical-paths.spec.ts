@@ -14,6 +14,13 @@ test("operator starts in Home and opens a Hub from Portfolio", async ({
 
   await page.goto("/app/portfolio");
   await expect(page.getByRole("heading", { name: "Portfolio" })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 0) <= 520) {
+    const firstStat = page.locator(".hero-stats .stat-tile").first();
+    const labelBox = await firstStat.locator(".stat-body b").boundingBox();
+    const valueBox = await firstStat.locator(".stat-body strong").boundingBox();
+    await expect(firstStat.locator(".stat-body small")).toBeVisible();
+    expect(valueBox?.x ?? 0).toBeGreaterThan(labelBox?.x ?? 0);
+  }
   // The card is a div with a stretched link, so the whole card stays
   // clickable without nesting its overflow button inside an anchor.
   const hubLink = page.locator(

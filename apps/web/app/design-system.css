@@ -987,6 +987,61 @@
   }
   .hero-stats {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .stat-tile {
+    min-height: 72px;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
+    padding: 12px 14px 13px;
+  }
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+    grid-column: 1;
+    grid-row: 1;
+    border-radius: 12px;
+  }
+  .stat-body {
+    width: 100%;
+    display: grid;
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-areas:
+      "label value"
+      "note note";
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 3px;
+  }
+  .stat-body strong {
+    grid-area: value;
+    justify-self: end;
+    font-size: var(--fh-text-xl);
+    white-space: nowrap;
+  }
+  .stat-body b {
+    min-width: 0;
+    grid-area: label;
+    margin-top: 0;
+    overflow-wrap: anywhere;
+  }
+  .stat-body small {
+    grid-area: note;
+    margin-top: 0;
+  }
+  .stat-arrow {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+    margin-left: 0;
+    opacity: 1;
+  }
+  .stat-tile:not(:has(.stat-icon)) .stat-body {
+    grid-column: 1 / 3;
   }
 }
 
