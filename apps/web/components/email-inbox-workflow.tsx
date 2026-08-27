@@ -45,7 +45,14 @@ import {
 import { InboxWorkflow, type EmailInboxAction } from "./inbox-workflow";
 
 type InboxArea = "email" | "actionable";
-type MailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive";
+type MailFolder =
+  | "inbox"
+  | "starred"
+  | "sent"
+  | "drafts"
+  | "archive"
+  | "trash";
+type ComposeMode = "new" | "reply" | "forward";
 
 interface EmailAccount {
   id: string;
@@ -252,6 +259,7 @@ const folderLabels: Array<{
   { key: "sent", label: "Sent", icon: Send },
   { key: "drafts", label: "Drafts", icon: FileText },
   { key: "archive", label: "Archive", icon: Archive },
+  { key: "trash", label: "Trash", icon: Trash2 },
 ];
 
 function loadEmailAccounts(raw: string | null) {
@@ -357,8 +365,12 @@ function EmailInboxWorkflow({
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>("mail-1");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composeMode, setComposeMode] = useState<ComposeMode>("new");
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<EmailMessage | null>(null);
+  const [mailboxMenuOpen, setMailboxMenuOpen] = useState(false);
+  const [messageMenuOpen, setMessageMenuOpen] = useState(false);
+  const [senderDetailsOpen, setSenderDetailsOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
   const saveAccounts = (next: EmailAccount[]) => {
@@ -398,6 +410,8 @@ function EmailInboxWorkflow({
 
   const openMessage = (message: EmailMessage) => {
     setSelectedId(message.id);
+    setMessageMenuOpen(false);
+    setSenderDetailsOpen(false);
     if (message.unread) {
       updateMessage(message.id, (current) => ({ ...current, unread: false }));
     }
@@ -417,6 +431,9 @@ function EmailInboxWorkflow({
   const selectFolder = (nextFolder: MailFolder) => {
     setFolder(nextFolder);
     setSelectedId(null);
+    setMailboxMenuOpen(false);
+    setMessageMenuOpen(false);
+    setSenderDetailsOpen(false);
   };
 
   return (
@@ -433,7 +450,14 @@ function EmailInboxWorkflow({
 
       <div className="email-command-bar">
         <div>
-          <button className="primary-button" onClick={() => setComposeOpen(true)}>
+          <button
+            className="primary-button"
+            onClick={() => {
+              setReplyTo(null);
+              setComposeMode("new");
+              setComposeOpen(true);
+            }}
+          >
             <PenLine size={15} /> Compose
           </button>
           <label className="email-search">
@@ -550,9 +574,60 @@ function EmailInboxWorkflow({
               <h2>{folderLabels.find((item) => item.key === folder)?.label}</h2>
               <span>{visible.length} messages</span>
             </div>
-            <button aria-label="More mailbox actions">
-              <MoreHorizontal size={16} />
-            </button>
+            <div className="email-menu-wrap">
+              <button
+                type="button"
+                aria-label="More mailbox actions"
+                aria-expanded={mailboxMenuOpen}
+                onClick={() => setMailboxMenuOpen((current) => !current)}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {mailboxMenuOpen && (
+                <div className="email-action-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      const visibleIds = new Set(
+                        visible.map((message) => message.id),
+                      );
+                      setMessages((current) =>
+                        current.map((message) =>
+                          visibleIds.has(message.id)
+                            ? { ...message, unread: false }
+                            : message,
+                        ),
+                      );
+                      setMailboxMenuOpen(false);
+                      setNotice("Visible messages marked as read.");
+                    }}
+                  >
+                    <MailOpen size={14} /> Mark visible as read
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setQuery("");
+                      setMailboxMenuOpen(false);
+                    }}
+                  >
+                    <Search size={14} /> Clear search
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMailboxMenuOpen(false);
+                      setAccountsOpen(true);
+                    }}
+                  >
+                    <Settings2 size={14} /> Manage accounts
+                  </button>
+                </div>
+              )}
+            </div>
           </header>
           <div className="email-list-scroll">
             {visible.map((message) => {
@@ -635,20 +710,86 @@ function EmailInboxWorkflow({
                   </button>
                   <button
                     aria-label="Delete message"
-                    onClick={() => {
-                      setMessages((current) =>
-                        current.filter((message) => message.id !== selected.id),
-                      );
-                      setSelectedId(null);
-                      setNotice("Message moved to trash.");
-                    }}
+                    onClick={() =>
+                      moveSelected("trash", "Message moved to Trash.")
+                    }
                   >
                     <Trash2 size={15} />
                   </button>
                 </div>
-                <button aria-label="More message actions">
-                  <MoreHorizontal size={16} />
-                </button>
+                <div className="email-menu-wrap email-message-menu-wrap">
+                  <button
+                    type="button"
+                    aria-label="More message actions"
+                    aria-expanded={messageMenuOpen}
+                    onClick={() => setMessageMenuOpen((current) => !current)}
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                  {messageMenuOpen && (
+                    <div className="email-action-menu" role="menu">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          updateMessage(selected.id, (current) => ({
+                            ...current,
+                            unread: !current.unread,
+                          }));
+                          setMessageMenuOpen(false);
+                          setNotice(
+                            selected.unread
+                              ? "Message marked as read."
+                              : "Message marked as unread.",
+                          );
+                        }}
+                      >
+                        {selected.unread ? (
+                          <MailOpen size={14} />
+                        ) : (
+                          <Mail size={14} />
+                        )}
+                        Mark as {selected.unread ? "read" : "unread"}
+                      </button>
+                      {selected.folder !== "inbox" && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMessageMenuOpen(false);
+                            moveSelected("inbox", "Message moved to Inbox.");
+                          }}
+                        >
+                          <Inbox size={14} /> Move to Inbox
+                        </button>
+                      )}
+                      {selected.folder !== "archive" && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMessageMenuOpen(false);
+                            moveSelected("archive", "Message archived.");
+                          }}
+                        >
+                          <Archive size={14} /> Archive
+                        </button>
+                      )}
+                      {selected.folder !== "trash" && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMessageMenuOpen(false);
+                            moveSelected("trash", "Message moved to Trash.");
+                          }}
+                        >
+                          <Trash2 size={14} /> Move to Trash
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </header>
               <div className="email-reading-scroll">
                 <div className="email-reading-title">
@@ -664,7 +805,15 @@ function EmailInboxWorkflow({
                   <span className="email-sender-avatar">{initials(selected.from)}</span>
                   <div>
                     <strong>{selected.from}</strong>
-                    <button title={selected.fromEmail}>
+                    <button
+                      type="button"
+                      aria-expanded={senderDetailsOpen}
+                      aria-label="Show sender and recipient details"
+                      title={selected.fromEmail}
+                      onClick={() =>
+                        setSenderDetailsOpen((current) => !current)
+                      }
+                    >
                       to me <ChevronDown size={11} />
                     </button>
                   </div>
@@ -682,6 +831,28 @@ function EmailInboxWorkflow({
                     <Star size={15} fill={selected.starred ? "currentColor" : "none"} />
                   </button>
                 </div>
+                {senderDetailsOpen && (
+                  <dl className="email-sender-details">
+                    <div>
+                      <dt>From</dt>
+                      <dd>
+                        {selected.from} &lt;{selected.fromEmail}&gt;
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>To</dt>
+                      <dd>{selected.to || "No recipient recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt>Account</dt>
+                      <dd>
+                        {accounts.find(
+                          (account) => account.id === selected.accountId,
+                        )?.email ?? "Disconnected account"}
+                      </dd>
+                    </div>
+                  </dl>
+                )}
                 <div className="email-body">
                   {selected.body.map((paragraph, index) => (
                     <p key={`${selected.id}-${index}`}>{paragraph}</p>
@@ -695,10 +866,14 @@ function EmailInboxWorkflow({
                     </strong>
                     <div>
                       {selected.attachments.map((attachment) => (
-                        <button key={attachment}>
+                        <span
+                          aria-label={`Attachment: ${attachment}`}
+                          key={attachment}
+                          title="Attachment metadata from the synced message"
+                        >
                           <FileText size={17} />
                           <span>{attachment}</span>
-                        </button>
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -707,12 +882,19 @@ function EmailInboxWorkflow({
                   <button
                     onClick={() => {
                       setReplyTo(selected);
+                      setComposeMode("reply");
                       setComposeOpen(true);
                     }}
                   >
                     <Reply size={14} /> Reply
                   </button>
-                  <button>
+                  <button
+                    onClick={() => {
+                      setReplyTo(selected);
+                      setComposeMode("forward");
+                      setComposeOpen(true);
+                    }}
+                  >
                     <Forward size={14} /> Forward
                   </button>
                   <button
@@ -737,14 +919,17 @@ function EmailInboxWorkflow({
       {composeOpen && (
         <ComposeDialog
           accounts={accounts}
+          mode={composeMode}
           replyTo={replyTo}
           onClose={() => {
             setComposeOpen(false);
+            setComposeMode("new");
             setReplyTo(null);
           }}
           onSend={(message) => {
             setMessages((current) => [message, ...current]);
             setComposeOpen(false);
+            setComposeMode("new");
             setReplyTo(null);
             setNotice("Email sent.");
           }}
@@ -764,11 +949,13 @@ function EmailInboxWorkflow({
 
 function ComposeDialog({
   accounts,
+  mode,
   replyTo,
   onClose,
   onSend,
 }: {
   accounts: EmailAccount[];
+  mode: ComposeMode;
   replyTo: EmailMessage | null;
   onClose: () => void;
   onSend: (message: EmailMessage) => void;
@@ -776,11 +963,23 @@ function ComposeDialog({
   const [fromAccountId, setFromAccountId] = useState(
     replyTo?.accountId ?? accounts[0]?.id ?? "",
   );
-  const [to, setTo] = useState(replyTo?.fromEmail ?? "");
-  const [subject, setSubject] = useState(
-    replyTo ? `Re: ${replyTo.subject.replace(/^Re:\s*/i, "")}` : "",
+  const [to, setTo] = useState(
+    mode === "reply" ? (replyTo?.fromEmail ?? "") : "",
   );
-  const [body, setBody] = useState("");
+  const [subject, setSubject] = useState(
+    replyTo
+      ? mode === "forward"
+        ? `Fwd: ${replyTo.subject.replace(/^Fwd:\s*/i, "")}`
+        : `Re: ${replyTo.subject.replace(/^Re:\s*/i, "")}`
+      : "",
+  );
+  const [body, setBody] = useState(
+    mode === "forward" && replyTo
+      ? `\n\n---------- Forwarded message ----------\nFrom: ${replyTo.from} <${replyTo.fromEmail}>\nTo: ${replyTo.to}\nSubject: ${replyTo.subject}\n\n${replyTo.body.join("\n\n")}`
+      : "",
+  );
+  const modeLabel =
+    mode === "reply" ? "Reply" : mode === "forward" ? "Forward" : "New message";
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -810,7 +1009,7 @@ function ComposeDialog({
             <PenLine size={17} />
           </span>
           <div>
-            <p>{replyTo ? "Reply" : "New message"}</p>
+            <p>{modeLabel}</p>
             <h2>{replyTo ? replyTo.subject : "Compose email"}</h2>
           </div>
           <button type="button" aria-label="Close composer" onClick={onClose}>

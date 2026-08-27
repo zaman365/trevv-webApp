@@ -231,6 +231,110 @@ export const waitingStateSchema = z.object({
   resolvedAt: z.iso.datetime().optional(),
 });
 
+export const conversationKindSchema = z.enum([
+  "hub",
+  "team",
+  "direct",
+  "external",
+]);
+export const conversationVisibilitySchema = z.enum([
+  "organization",
+  "private",
+  "guest_scoped",
+]);
+export const messageIntentSchema = z.enum([
+  "message",
+  "request",
+  "decision",
+  "update",
+]);
+export const messageResponseStateSchema = z.enum(["open", "resolved"]);
+
+export const conversationSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  portfolioId: idSchema.optional(),
+  hubId: idSchema.optional(),
+  title: z.string().trim().min(1).max(160),
+  purpose: z.string().trim().max(1_000),
+  kind: conversationKindSchema,
+  visibility: conversationVisibilitySchema,
+  participantIds: z.array(idSchema).min(1).max(250),
+  lastMessageAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
+
+export const conversationMessageSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  conversationId: idSchema,
+  senderId: idSchema,
+  parentMessageId: idSchema.optional(),
+  body: z.string().trim().min(1).max(20_000),
+  intent: messageIntentSchema,
+  responseOwnerId: idSchema.optional(),
+  responseDueAt: z.iso.datetime().optional(),
+  responseState: messageResponseStateSchema.optional(),
+  linkedEntityType: z.string().trim().max(80).optional(),
+  linkedEntityId: idSchema.optional(),
+  metadata: z.record(z.string(), z.unknown()),
+  editedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+
+export const createConversationSchema = conversationSchema
+  .omit({
+    id: true,
+    organizationId: true,
+    lastMessageAt: true,
+    createdAt: true,
+  })
+  .superRefine((value, context) => {
+    if (value.kind === "hub" && !value.hubId)
+      context.addIssue({
+        code: "custom",
+        path: ["hubId"],
+        message: "A Hub room must be linked to a Hub.",
+      });
+    if (value.kind === "direct" && value.participantIds.length !== 2)
+      context.addIssue({
+        code: "custom",
+        path: ["participantIds"],
+        message: "A direct conversation must have exactly two participants.",
+      });
+    if (value.kind === "external" && value.visibility !== "guest_scoped")
+      context.addIssue({
+        code: "custom",
+        path: ["visibility"],
+        message: "External rooms must use guest-scoped visibility.",
+      });
+  });
+
+export const createConversationMessageSchema = conversationMessageSchema
+  .omit({
+    id: true,
+    organizationId: true,
+    senderId: true,
+    responseState: true,
+    editedAt: true,
+    createdAt: true,
+  })
+  .superRefine((value, context) => {
+    if (
+      ["request", "decision"].includes(value.intent) &&
+      !value.responseOwnerId
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["responseOwnerId"],
+        message: "Requests and decisions need a response owner.",
+      });
+  });
+
+export const updateMessageResponseSchema = z.object({
+  responseState: messageResponseStateSchema,
+});
+
 export const paginatedItemsSchema = z.object({
   data: z.array(workItemSchema),
   nextCursor: z.string().nullable(),
@@ -267,6 +371,8 @@ export type PortfolioResponse = z.infer<typeof portfolioResponseSchema>;
 export type PortfolioDto = z.infer<typeof portfolioSchema>;
 export type AttentionSignalDto = z.infer<typeof attentionSignalSchema>;
 export type WaitingStateDto = z.infer<typeof waitingStateSchema>;
+export type ConversationDto = z.infer<typeof conversationSchema>;
+export type ConversationMessageDto = z.infer<typeof conversationMessageSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
 export const eventSchema = z.discriminatedUnion("type", [

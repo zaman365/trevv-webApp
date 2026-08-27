@@ -26,4 +26,34 @@ describe("learning resources", () => {
     );
     expect(searchLearningResources("kanban", "Administration")).toHaveLength(0);
   });
+
+  it("links guides only to application routes that exist", () => {
+    const applicationRoutes = new Set([
+      "/app/approvals",
+      "/app/attention",
+      "/app/blueprints",
+      "/app/dashboard",
+      "/app/decisions",
+      "/app/home",
+      "/app/hubs",
+      "/app/ideas",
+      "/app/inbox",
+      "/app/my-work",
+      "/app/notifications",
+      "/app/portfolio",
+      "/app/reviews",
+      "/app/search",
+      "/app/settings/import",
+      "/app/settings/integrations",
+      "/app/team",
+      "/app/waiting",
+    ]);
+    const linkedRoutes = learningResources
+      .map((resource) => resource.route?.split(/[?#]/, 1)[0])
+      .filter((route): route is string => Boolean(route));
+
+    expect(
+      linkedRoutes.filter((route) => !applicationRoutes.has(route)),
+    ).toEqual([]);
+  });
 });

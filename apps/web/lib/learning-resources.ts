@@ -105,7 +105,7 @@ export const learningResources: LearningResource[] = [
     title: "Use TREVV on mobile",
     summary:
       "Keep personal focus and capture close without shrinking the desktop UI.",
-    body: "The mobile layout prioritizes Portfolio, My Work, Quick capture, Inbox, and More. Dense tables become stacked cards and secondary navigation scrolls horizontally.",
+    body: "The mobile layout prioritizes My Work, Quick capture, Inbox, Messages, and More. Portfolio and the full workspace navigation remain available from More. Dense tables become stacked cards and secondary navigation scrolls horizontally.",
     duration: "3 min",
     tips: [
       "Use mobile for capture and decisions; use desktop for bulk board configuration.",

@@ -215,6 +215,7 @@ test("Inbox is actionable while Quick Capture remains separate", async ({
   page,
 }) => {
   await page.goto("/app/inbox");
+  await page.getByRole("tab", { name: /^Actionable Inbox/ }).click();
   await expect(
     page.getByRole("heading", {
       name: /^Actionable Inbox/,
@@ -239,6 +240,46 @@ test("Inbox is actionable while Quick Capture remains separate", async ({
   await expect(
     page.getByRole("tab", { name: "Needs response 3" }),
   ).toBeVisible();
+});
+
+test("Messages keeps requests, threads, and Hub context connected", async ({
+  page,
+}) => {
+  await page.goto("/app/messages");
+  await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Needs response \d+/ }),
+  ).toBeVisible();
+  const hubContextLink = page.getByRole("link", { name: "Open Hub" });
+  if (!(await hubContextLink.isVisible()))
+    await page.getByRole("button", { name: "Open room context" }).click();
+  await expect(hubContextLink).toBeVisible();
+  const closeContext = page.getByRole("button", { name: "Close room context" });
+  if (await closeContext.isVisible()) await closeContext.click();
+
+  await page.getByRole("button", { name: "Mark answered" }).click();
+  await expect(page.getByRole("status")).toContainText("Response loop closed");
+
+  await page.getByRole("button", { name: /1 reply Open thread/ }).click();
+  await page.getByPlaceholder("Reply in thread…").fill("Margin check noted.");
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(
+    page.getByRole("paragraph").filter({ hasText: "Margin check noted." }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close thread" }).click();
+
+  await page.getByRole("button", { name: "Create room" }).click();
+  await page.getByLabel("Room name").fill("Northstar launch support");
+  await page
+    .getByLabel("Purpose")
+    .fill("Coordinate launch-day support and escalation ownership.");
+  await page
+    .getByRole("dialog", { name: "Create a work room" })
+    .getByRole("button", { name: "Create room" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Northstar launch support is ready",
+  );
 });
 
 test("onboarding configures a generalized first Hub", async ({ page }) => {

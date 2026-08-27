@@ -94,6 +94,27 @@ export const attentionSeverityEnum = pgEnum("attention_severity", [
   "high",
   "critical",
 ]);
+export const conversationKindEnum = pgEnum("conversation_kind", [
+  "hub",
+  "team",
+  "direct",
+  "external",
+]);
+export const conversationVisibilityEnum = pgEnum("conversation_visibility", [
+  "organization",
+  "private",
+  "guest_scoped",
+]);
+export const messageIntentEnum = pgEnum("message_intent", [
+  "message",
+  "request",
+  "decision",
+  "update",
+]);
+export const messageResponseStateEnum = pgEnum("message_response_state", [
+  "open",
+  "resolved",
+]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -1330,6 +1351,169 @@ export const inboxItems = pgTable(
       table.userId,
       table.doneAt,
       table.snoozedUntil,
+    ),
+  ],
+);
+
+// Messaging is deliberately separate from Inbox. Inbox remains the user's
+// action queue; conversations keep durable communication and work context.
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    portfolioId: text("portfolio_id").references(() => portfolios.id, {
+      onDelete: "cascade",
+    }),
+    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    purpose: text("purpose").notNull().default(""),
+    kind: conversationKindEnum("kind").notNull(),
+    visibility: conversationVisibilityEnum("visibility").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ...timestamps,
+  },
+  (table) => [
+    index("conversations_org_activity_idx").on(
+      table.organizationId,
+      table.lastMessageAt,
+    ),
+    index("conversations_hub_activity_idx").on(
+      table.organizationId,
+      table.hubId,
+      table.lastMessageAt,
+    ),
+  ],
+);
+
+export const conversationParticipants = pgTable(
+  "conversation_participants",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    participantRole: text("participant_role").notNull().default("member"),
+    notificationLevel: text("notification_level").notNull().default("all"),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+    mutedUntil: timestamp("muted_until", { withTimezone: true }),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.conversationId, table.userId] }),
+    index("conversation_participants_user_idx").on(
+      table.organizationId,
+      table.userId,
+      table.removedAt,
+    ),
+  ],
+);
+
+export const conversationMessages = pgTable(
+  "conversation_messages",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    senderId: text("sender_id")
+      .notNull()
+      .references(() => users.id),
+    parentMessageId: text("parent_message_id"),
+    body: text("body").notNull(),
+    intent: messageIntentEnum("intent").notNull().default("message"),
+    responseOwnerId: text("response_owner_id").references(() => users.id),
+    responseDueAt: timestamp("response_due_at", { withTimezone: true }),
+    responseState: messageResponseStateEnum("response_state"),
+    linkedEntityType: text("linked_entity_type"),
+    linkedEntityId: text("linked_entity_id"),
+    metadata: jsonb("metadata").notNull().default({}),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("conversation_messages_timeline_idx").on(
+      table.organizationId,
+      table.conversationId,
+      table.createdAt,
+    ),
+    index("conversation_messages_thread_idx").on(
+      table.organizationId,
+      table.parentMessageId,
+      table.createdAt,
+    ),
+    index("conversation_messages_response_idx").on(
+      table.organizationId,
+      table.responseOwnerId,
+      table.responseState,
+      table.responseDueAt,
+    ),
+  ],
+);
+
+export const conversationReactions = pgTable(
+  "conversation_reactions",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.userId, table.emoji] }),
+  ],
+);
+
+export const messageAttachments = pgTable(
+  "message_attachments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    uploadedBy: text("uploaded_by")
+      .notNull()
+      .references(() => users.id),
+    ...timestamps,
+  },
+  (table) => [
+    index("message_attachments_message_idx").on(
+      table.organizationId,
+      table.messageId,
     ),
   ],
 );

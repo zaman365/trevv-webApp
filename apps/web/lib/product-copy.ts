@@ -6,6 +6,7 @@ export const productCopy = {
       attention: "Attention",
       myWork: "My Work",
       inbox: "Inbox",
+      messages: "Messages",
       waiting: "Waiting",
       decisions: "Decisions",
       approvals: "Approvals",

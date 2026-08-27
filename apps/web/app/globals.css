@@ -22,7 +22,8 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 button,
@@ -33,7 +34,8 @@ select {
 button:focus-visible,
 a:focus-visible,
 select:focus-visible,
-input:focus-visible {
+input:focus-visible,
+textarea:focus-visible {
   outline: none;
   box-shadow: var(--fh-focus);
 }
@@ -1979,7 +1981,7 @@ a {
     display: none;
   }
   .board-table-wrap {
-    display: none;
+    margin: 12px;
   }
   .board-main:has(.board-table-wrap) .drag-hint {
     display: none;

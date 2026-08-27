@@ -34,7 +34,7 @@ import {
 } from "@founderhq/core";
 import { useMemo, useState } from "react";
 import { useCapturedWork } from "@/lib/captured-work";
-import { Hint } from "./learning-center";
+import { Hint, useLearningCenter } from "./learning-center";
 
 const currentUser = "Mohammed Zaman";
 const today = "2026-08-27";
@@ -142,6 +142,7 @@ const modeLabels: Array<{ id: WorkMode; label: string; icon: typeof Focus }> = [
 
 export function MyWorkWorkflow() {
   const capturedWork = useCapturedWork();
+  const { openLearningCenter } = useLearningCenter();
   const [edits, setEdits] = useState<Record<string, WorkEdit>>({});
   const [scope, setScope] = useState<WorkScope>("assigned");
   const [mode, setMode] = useState<WorkMode>("all");
@@ -788,9 +789,12 @@ export function MyWorkWorkflow() {
                 </p>
               </li>
             </ul>
-            <a href="/app/learning?resource=my-work">
+            <button
+              type="button"
+              onClick={() => openLearningCenter("my-work")}
+            >
               Open My Work guide <ArrowRight size={12} />
-            </a>
+            </button>
           </section>
         </aside>
       </div>

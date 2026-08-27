@@ -33,6 +33,7 @@ const routes = [
   "/app/hubs/northstar-apparel/boards/b-northstar-launch",
   "/app/hubs/localreach/stakeholder",
   "/app/decisions",
+  "/app/messages",
   "/app/blueprints",
 ] as const;
 

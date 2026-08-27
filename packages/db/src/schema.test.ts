@@ -39,6 +39,11 @@ describe("tenant schema", () => {
       "stakeholderExposures",
       "importRuns",
       "inboxItems",
+      "conversations",
+      "conversationParticipants",
+      "conversationMessages",
+      "conversationReactions",
+      "messageAttachments",
     ])
       expect(schema).toHaveProperty(table);
   });

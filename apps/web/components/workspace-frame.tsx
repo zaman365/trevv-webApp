@@ -16,6 +16,7 @@ import {
   LayoutTemplate,
   Lightbulb,
   Menu,
+  MessageCircleMore,
   Moon,
   MoreHorizontal,
   Plus,
@@ -46,6 +47,7 @@ type ActivePage =
   | "attention"
   | "myWork"
   | "inbox"
+  | "messages"
   | "waiting"
   | "decisions"
   | "approvals"
@@ -156,6 +158,7 @@ function WorkspaceChrome({
     ],
     ["myWork", copy.nav.myWork, "/app/my-work", ClipboardCheck, undefined],
     ["inbox", copy.nav.inbox, "/app/inbox", Inbox, undefined],
+    ["messages", copy.nav.messages, "/app/messages", MessageCircleMore, 4],
   ] as const;
 
   return (
@@ -422,13 +425,6 @@ function WorkspaceChrome({
 
       <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
         <Link
-          className={active === "portfolio" ? "active" : ""}
-          href="/app/portfolio"
-        >
-          <Grid2X2 size={19} />
-          <span>{messages.nav.portfolio}</span>
-        </Link>
-        <Link
           className={active === "myWork" ? "active" : ""}
           href="/app/my-work"
         >
@@ -444,6 +440,13 @@ function WorkspaceChrome({
         <Link className={active === "inbox" ? "active" : ""} href="/app/inbox">
           <Inbox size={19} />
           <span>{messages.nav.inbox}</span>
+        </Link>
+        <Link
+          className={active === "messages" ? "active" : ""}
+          href="/app/messages"
+        >
+          <MessageCircleMore size={19} />
+          <span>Messages</span>
         </Link>
         <button onClick={() => setOpen(true)}>
           <MoreHorizontal size={19} />
