@@ -105,6 +105,9 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.dashboard-main .hero-actions {
+  align-items: flex-end;
+}
 .hero-select {
   display: flex;
   flex-direction: column;
