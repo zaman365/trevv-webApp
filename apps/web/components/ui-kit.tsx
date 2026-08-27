@@ -91,6 +91,8 @@ export function StatTile({
   note,
   tone = "neutral",
   href,
+  onClick,
+  active = false,
   meter,
   hintId,
 }: {
@@ -100,6 +102,8 @@ export function StatTile({
   note?: string;
   tone?: StatTone;
   href?: string;
+  onClick?: () => void;
+  active?: boolean;
   /** 0–100. Draws a thin fill under the tile. */
   meter?: number | null;
   hintId?: string;
@@ -115,11 +119,11 @@ export function StatTile({
         <strong>{value}</strong>
         <b className="stat-label-with-hint">
           {label}
-          {hintId && <Hint resourceId={hintId} />}
+          {hintId && !onClick && <Hint resourceId={hintId} />}
         </b>
         {note && <small>{note}</small>}
       </span>
-      {href && (
+      {(href || onClick) && (
         <span className="stat-arrow" aria-hidden="true">
           <ArrowRight size={15} />
         </span>
@@ -131,11 +135,20 @@ export function StatTile({
       )}
     </>
   );
-  const className = `stat-tile tone-${tone}`;
+  const className = `stat-tile tone-${tone}${href || onClick ? " is-actionable" : ""}${active ? " is-active" : ""}`;
   return href ? (
     <Link className={className} href={href}>
       {inner}
     </Link>
+  ) : onClick ? (
+    <button
+      className={className}
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {inner}
+    </button>
   ) : (
     <div className={className}>{inner}</div>
   );

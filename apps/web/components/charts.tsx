@@ -30,11 +30,15 @@ export function DonutChart({
   size = 190,
   thickness = 30,
   totalLabel = "total",
+  selectedKey,
+  onSelect,
 }: {
   slices: Slice[];
   size?: number;
   thickness?: number;
   totalLabel?: string;
+  selectedKey?: string;
+  onSelect?: (slice: Slice) => void;
 }) {
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   const r = (size - thickness) / 2;
@@ -65,7 +69,7 @@ export function DonutChart({
         <svg
           width={size}
           height={size}
-          role="img"
+          role={onSelect ? "group" : "img"}
           aria-label={slices.map((s) => `${s.label}: ${s.value}`).join(", ")}
         >
           <circle
@@ -78,12 +82,36 @@ export function DonutChart({
           />
           {arcs.map(({ slice, path }) => (
             <path
+              aria-label={
+                onSelect
+                  ? `Filter by ${slice.label}: ${slice.value}`
+                  : undefined
+              }
+              aria-pressed={onSelect ? selectedKey === slice.key : undefined}
+              className={
+                onSelect
+                  ? `donut-path is-interactive${selectedKey === slice.key ? " is-selected" : ""}`
+                  : "donut-path"
+              }
               key={slice.key}
               d={path}
               fill="none"
+              onClick={onSelect ? () => onSelect(slice) : undefined}
+              onKeyDown={
+                onSelect
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelect(slice);
+                      }
+                    }
+                  : undefined
+              }
+              role={onSelect ? "button" : undefined}
               stroke={slice.color}
               strokeWidth={thickness}
               strokeLinecap="butt"
+              tabIndex={onSelect ? 0 : undefined}
             />
           ))}
         </svg>
@@ -95,12 +123,30 @@ export function DonutChart({
       <ul className="donut-legend">
         {slices.map((slice) => (
           <li key={slice.key}>
-            <i style={{ background: slice.color }} aria-hidden="true" />
-            <span>{slice.label}</span>
-            <b>{slice.value}</b>
-            <small>
-              {total > 0 ? Math.round((slice.value / total) * 100) : 0}%
-            </small>
+            {onSelect ? (
+              <button
+                className={selectedKey === slice.key ? "is-selected" : ""}
+                type="button"
+                aria-pressed={selectedKey === slice.key}
+                onClick={() => onSelect(slice)}
+              >
+                <i style={{ background: slice.color }} aria-hidden="true" />
+                <span>{slice.label}</span>
+                <b>{slice.value}</b>
+                <small>
+                  {total > 0 ? Math.round((slice.value / total) * 100) : 0}%
+                </small>
+              </button>
+            ) : (
+              <>
+                <i style={{ background: slice.color }} aria-hidden="true" />
+                <span>{slice.label}</span>
+                <b>{slice.value}</b>
+                <small>
+                  {total > 0 ? Math.round((slice.value / total) * 100) : 0}%
+                </small>
+              </>
+            )}
           </li>
         ))}
       </ul>
@@ -126,11 +172,15 @@ export function BarChart({
   height = 190,
   accent = "var(--fh-primary)",
   emptyNote = "Nothing to show yet.",
+  selectedKey,
+  onSelect,
 }: {
   bars: Bar[];
   height?: number;
   accent?: string;
   emptyNote?: string;
+  selectedKey?: string;
+  onSelect?: (bar: Bar) => void;
 }) {
   if (!bars.length) return <p className="chart-empty">{emptyNote}</p>;
   const max = Math.max(...bars.map((bar) => bar.value), 1);
@@ -161,7 +211,23 @@ export function BarChart({
         </div>
         <ul className="bar-list">
           {bars.map((bar) => (
-            <li key={bar.key}>
+            <li
+              className={
+                onSelect
+                  ? `is-interactive${selectedKey === bar.key ? " is-selected" : ""}`
+                  : undefined
+              }
+              key={bar.key}
+            >
+              {onSelect && (
+                <button
+                  className="bar-hit"
+                  type="button"
+                  aria-label={`Filter by ${bar.label}: ${bar.value}`}
+                  aria-pressed={selectedKey === bar.key}
+                  onClick={() => onSelect(bar)}
+                />
+              )}
               <b>{bar.value}</b>
               <span
                 className="bar-fill"

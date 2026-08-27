@@ -39,6 +39,52 @@ test("Change Radar opens the project update context", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("Dashboard turns portfolio signals into auditable next actions", async ({
+  page,
+}) => {
+  await page.goto("/app/dashboard");
+  await expect(
+    page.getByRole("heading", { name: "TREVV Brief" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Decision runway" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Work lens · Needs intervention" }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("button", { name: /4 Stuck Blocked on something/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Work lens · Blocked work" }),
+  ).toBeVisible();
+  await expect(page.getByText("4 items", { exact: true })).toBeVisible();
+
+  const sourceSearch = page.getByRole("textbox", {
+    name: "Search dashboard source work",
+  });
+  await sourceSearch.fill("Northstar");
+  await expect(
+    page.getByRole("link", { name: /Confirm GPSR manufacturer evidence/ }),
+  ).toBeVisible();
+  await sourceSearch.fill("");
+
+  await page.getByRole("button", { name: /Working on it 7 41%/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Work lens · Working on it" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "All time" }).click();
+  await expect(page.getByRole("group", { name: /Done: 1/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Create a follow-up" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Create in TREVV" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close Create" }).click();
+});
+
 test("a new project creates a working Hub and board", async ({ page }) => {
   await page.goto("/app/portfolio");
   await page.getByRole("link", { name: "New project" }).click();
