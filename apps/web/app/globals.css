@@ -406,6 +406,7 @@ a {
   box-shadow: 0 6px 14px rgb(91 91 214 / 20%);
   font-size: var(--fh-text-md);
   font-weight: 680;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     transform 0.15s ease,
@@ -1062,6 +1063,7 @@ a {
   display: flex;
   align-items: center;
   gap: 5px;
+  overflow-x: auto;
   padding: 0 28px;
   background: var(--fh-surface);
   border-bottom: 1px solid var(--fh-border);

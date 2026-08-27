@@ -6946,6 +6946,7 @@
   border-radius: 9px;
   font-size: var(--fh-text-sm);
   font-weight: 700;
+  white-space: nowrap;
 }
 .danger-text-button {
   margin-right: auto;
@@ -9998,10 +9999,12 @@
 }
 .messaging-header-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 8px;
 }
 .messaging-header-actions > button {
   height: 36px;
+  flex: 0 0 auto;
 }
 .messaging-focus-bar {
   min-height: 42px;
@@ -12432,6 +12435,15 @@
   .my-work-row {
     grid-template-columns: 24px minmax(180px, 1fr) 78px 78px 62px 28px 26px;
   }
+  .my-work-command-bar {
+    flex-wrap: wrap;
+  }
+  .my-work-mode-chips {
+    width: 100%;
+  }
+  .my-work-search {
+    flex: 1;
+  }
 }
 
 @media (max-width: 980px) {
@@ -12445,15 +12457,6 @@
     position: static;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .my-work-command-bar {
-    flex-wrap: wrap;
-  }
-  .my-work-mode-chips {
-    width: 100%;
-  }
-  .my-work-search {
-    flex: 1;
   }
 }
 
