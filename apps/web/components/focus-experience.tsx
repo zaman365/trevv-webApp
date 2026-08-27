@@ -10,7 +10,6 @@ import {
   Filter,
   LayoutTemplate,
   Link2,
-  Plus,
   Search,
   Settings2,
   ShieldCheck,
@@ -24,7 +23,7 @@ import { productCopy } from "@/lib/product-copy";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { Hint } from "./learning-center";
 import { DecisionCenter } from "./decision-center";
-import { InboxWorkflow } from "./inbox-workflow";
+import { InboxExperience } from "./email-inbox-workflow";
 import { MyWorkWorkflow } from "./my-work-workflow";
 
 export type FocusKind =
@@ -84,20 +83,9 @@ export function FocusExperience({ kind }: { kind: FocusKind }) {
             </h1>
             <span>{copy[subtitleKey]}</span>
           </div>
-          {kind === "inbox" && (
-            <button
-              className="primary-button"
-              onClick={() =>
-                document.getElementById("inbox-quick-capture")?.focus()
-              }
-            >
-              <Plus size={16} />
-              {copy.newCapture}
-            </button>
-          )}
         </header>
         {kind === "myWork" && <MyWorkWorkflow />}
-        {kind === "inbox" && <InboxWorkflow />}
+        {kind === "inbox" && <InboxExperience />}
         {kind === "decisions" && <DecisionCenter />}
         {kind === "approvals" && <ApprovalView capturedWork={capturedWork} />}
         {kind === "search" && (

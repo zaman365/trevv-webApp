@@ -112,7 +112,8 @@ export const productCopy = {
       myWorkTitle: "My Work",
       myWorkSubtitle: "The work that needs you, ordered by time and risk.",
       inboxTitle: "Inbox",
-      inboxSubtitle: "Capture first, then place each thought where it belongs.",
+      inboxSubtitle:
+        "Read every connected mailbox and keep actionable requests one tab away.",
       decisionsTitle: "Decision Center",
       decisionsSubtitle:
         "Resolve the choices that unblock progress across every Hub.",

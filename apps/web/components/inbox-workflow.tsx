@@ -51,6 +51,14 @@ interface InboxAction {
   snoozedUntil?: string;
 }
 
+export interface EmailInboxAction {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  receivedAt: string;
+}
+
 const initialActions: InboxAction[] = [
   {
     id: "inbox-1",
@@ -127,8 +135,22 @@ const categoryLabels: Record<InboxCategory, string> = {
   "follow-up": "Follow-up",
 };
 
-export function InboxWorkflow() {
-  const [actions, setActions] = useState(initialActions);
+export function InboxWorkflow({
+  emailActions = [],
+}: {
+  emailActions?: EmailInboxAction[];
+}) {
+  const [actions, setActions] = useState<InboxAction[]>(() => [
+    ...emailActions.map((message) => ({
+      ...message,
+      category: "follow-up" as const,
+      hubId: "hub-centralops",
+      priority: "normal" as const,
+      route: "/app/inbox",
+      disposition: "open" as const,
+    })),
+    ...initialActions,
+  ]);
   const [view, setView] = useState<InboxDisposition>("open");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<InboxCategory | "all">("all");
