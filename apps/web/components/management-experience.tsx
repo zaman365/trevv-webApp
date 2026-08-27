@@ -38,11 +38,12 @@ import {
   demoReviewRituals,
   demoWaitingStates,
   previewBlueprintUpdate,
+  type HubType,
   type ImportPreset,
   type WaitingState,
 } from "@founderhq/core";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { HealthBar, PageHero, Panel, ProgressRing, StatTile } from "./ui-kit";
 import { ProjectTile } from "./project-tile";
 import { allPortfolioSummaries } from "@/lib/portfolios";
@@ -54,6 +55,7 @@ import { Hint } from "./learning-center";
 import { IdeasWorkflow } from "./ideas-workflow";
 import { TeamWorkflow } from "./team-workflow";
 import { AttentionCenter } from "./attention-center";
+import { createCustomHub, useCustomHubs } from "@/lib/custom-hubs";
 
 const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
 
@@ -69,6 +71,7 @@ function HomeMain() {
   const { scope, copy, portfolioId, setPortfolioId } = useWorkspace();
   const vocab = vocabularyFor();
   const portfolios = allPortfolioSummaries();
+  const customHubs = useCustomHubs();
   const active = portfolios.find((p) => p.portfolio.id === portfolioId);
   const changes = changesSinceCheckpoint(
     demoMeaningfulChanges,
@@ -88,7 +91,8 @@ function HomeMain() {
         project.hub.health !== "on_track" && project.hub.health !== "parked",
     )
     .slice(0, 3);
-  const totalProjects = portfolios.reduce((sum, p) => sum + p.count, 0);
+  const totalProjects =
+    portfolios.reduce((sum, p) => sum + p.count, 0) + customHubs.length;
 
   return (
     <main className="trevv-main home-main">
@@ -174,45 +178,57 @@ function HomeMain() {
         linkLabel="Open portfolio"
       >
         <div className="portfolio-cards">
-          {portfolios.map((summary) => (
-            <button
-              key={summary.portfolio.id}
-              className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
-              aria-pressed={summary.portfolio.id === portfolioId}
-              onClick={() => setPortfolioId(summary.portfolio.id)}
-            >
-              <header>
-                <div>
-                  <strong>{summary.portfolio.name}</strong>
-                  <span>
-                    {summary.count}{" "}
-                    {summary.count === 1
-                      ? vocab.one.toLowerCase()
-                      : vocab.many.toLowerCase()}
+          {portfolios.map((summary) => {
+            const customCount = customHubs.filter(
+              (record) => record.hub.portfolioId === summary.portfolio.id,
+            ).length;
+            const count = summary.count + customCount;
+            return (
+              <button
+                key={summary.portfolio.id}
+                className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
+                aria-pressed={summary.portfolio.id === portfolioId}
+                onClick={() => setPortfolioId(summary.portfolio.id)}
+              >
+                <header>
+                  <div>
+                    <strong>{summary.portfolio.name}</strong>
+                    <span>
+                      {count}{" "}
+                      {count === 1
+                        ? vocab.one.toLowerCase()
+                        : vocab.many.toLowerCase()}
+                    </span>
+                  </div>
+                  {summary.progress !== null && (
+                    <ProgressRing
+                      value={summary.progress}
+                      size={44}
+                      label={`${summary.portfolio.name} progress`}
+                    />
+                  )}
+                </header>
+                <HealthBar
+                  slices={summary.health.map((slice) =>
+                    slice.key === "on_track"
+                      ? { ...slice, count: slice.count + customCount }
+                      : slice,
+                  )}
+                />
+                <footer>
+                  <span className={summary.attentionCount ? "is-live" : ""}>
+                    <b>{summary.attentionCount}</b> need you
                   </span>
-                </div>
-                {summary.progress !== null && (
-                  <ProgressRing
-                    value={summary.progress}
-                    size={44}
-                    label={`${summary.portfolio.name} progress`}
-                  />
-                )}
-              </header>
-              <HealthBar slices={summary.health} />
-              <footer>
-                <span className={summary.attentionCount ? "is-live" : ""}>
-                  <b>{summary.attentionCount}</b> need you
-                </span>
-                <span className={summary.overdue ? "is-live" : ""}>
-                  <b>{summary.overdue}</b> overdue
-                </span>
-                <span className={summary.blocked ? "is-live" : ""}>
-                  <b>{summary.blocked}</b> blocked
-                </span>
-              </footer>
-            </button>
-          ))}
+                  <span className={summary.overdue ? "is-live" : ""}>
+                    <b>{summary.overdue}</b> overdue
+                  </span>
+                  <span className={summary.blocked ? "is-live" : ""}>
+                    <b>{summary.blocked}</b> blocked
+                  </span>
+                </footer>
+              </button>
+            );
+          })}
         </div>
       </Panel>
 
@@ -284,27 +300,40 @@ function HomeMain() {
         wide
       >
         <div className="change-groups">
-          {[...new Set(changes.map((change) => change.hubId))].map((hubId) => (
-            <article key={hubId}>
-              <header>
-                <HubMark hubId={hubId} />
-                <div>
-                  <strong>{hubFor(hubId)?.name}</strong>
-                  <small>
-                    {changes.filter((change) => change.hubId === hubId).length}{" "}
-                    meaningful changes
-                  </small>
-                </div>
-              </header>
-              <ul>
-                {changes
-                  .filter((change) => change.hubId === hubId)
-                  .map((change) => (
-                    <li key={change.id}>{change.summary}</li>
-                  ))}
-              </ul>
-            </article>
-          ))}
+          {[...new Set(changes.map((change) => change.hubId))].map((hubId) => {
+            const hub = hubFor(hubId);
+            const hubChanges = changes.filter(
+              (change) => change.hubId === hubId,
+            );
+            if (!hub) return null;
+            return (
+              <Link
+                className="change-group-card"
+                href={`/app/hubs/${hub.slug}#updates`}
+                aria-label={`Open ${hub.name} and review ${hubChanges.length} meaningful ${hubChanges.length === 1 ? "change" : "changes"}`}
+                key={hubId}
+              >
+                <article>
+                  <header>
+                    <HubMark hubId={hubId} />
+                    <div>
+                      <strong>{hub.name}</strong>
+                      <small>
+                        {hubChanges.length} meaningful{" "}
+                        {hubChanges.length === 1 ? "change" : "changes"}
+                      </small>
+                    </div>
+                    <ArrowRight className="change-group-arrow" size={15} />
+                  </header>
+                  <ul>
+                    {hubChanges.map((change) => (
+                      <li key={change.id}>{change.summary}</li>
+                    ))}
+                  </ul>
+                </article>
+              </Link>
+            );
+          })}
         </div>
       </Panel>
     </main>
@@ -854,58 +883,272 @@ export function TeamExperience() {
 
 export function HubsExperience() {
   const [portfolioId, setPortfolioId] = useState("portfolio-demo");
-  const hubs = demoHubs.filter((hub) => hub.portfolioId === portfolioId);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
+  const customHubs = useCustomHubs();
+  const hubs = [...customHubs.map((record) => record.hub), ...demoHubs].filter(
+    (hub) => hub.portfolioId === portfolioId,
+  );
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") !== "project") return;
+    const frame = window.requestAnimationFrame(() => setCreateOpen(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  const closeCreate = () => {
+    setCreateOpen(false);
+    if (window.location.search)
+      window.history.replaceState(null, "", window.location.pathname);
+  };
   return (
     <WorkspaceFrame active="hub">
-      <main className="trevv-main hubs-page">
-        <PageHeader
-          eyebrow="Responsibility containers"
-          title="All projects"
-          subtitle="Businesses, brands, clients, products, departments, ventures, initiatives, and projects — without forcing one vocabulary."
-          hintId="hubs"
-          action={
-            <button className="primary-button">
-              <Plus size={16} />
-              New Hub
-            </button>
-          }
-        />
-        <div className="hub-directory-filter">
-          <label>
-            Portfolio
-            <select
-              value={portfolioId}
-              onChange={(event) => setPortfolioId(event.target.value)}
-            >
-              {demoPortfolios.map((portfolio) => (
-                <option key={portfolio.id} value={portfolio.id}>
-                  {portfolio.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span>{hubs.length} Hubs</span>
-        </div>
-        <div className="hub-directory">
-          {hubs.map((hub) => (
-            <a href={`/app/hubs/${hub.slug}`} key={hub.id}>
-              <HubMark hubId={hub.id} />
-              <div>
-                <p>
-                  {hub.type.replaceAll("_", " ")} · {hub.stage}
-                </p>
-                <h2>{hub.name}</h2>
-                <span>{hub.priority}</span>
-              </div>
-              <b className={`health-badge ${hub.health}`}>
-                {hub.health.replace("_", " ")}
-              </b>
-              <ArrowRight size={15} />
-            </a>
-          ))}
-        </div>
-      </main>
+      <>
+        <main className="trevv-main hubs-page">
+          {createdSlug && (
+            <div className="workflow-toast success-toast" role="status">
+              <CheckCircle2 size={15} />
+              <span>Your project and its first board are ready.</span>
+              <Link href={`/app/hubs/${createdSlug}`}>Open project</Link>
+              <button
+                aria-label="Dismiss project confirmation"
+                onClick={() => setCreatedSlug(null)}
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
+          <PageHeader
+            eyebrow="Responsibility containers"
+            title="All projects"
+            subtitle="Businesses, brands, clients, products, departments, ventures, initiatives, and projects — without forcing one vocabulary."
+            hintId="hubs"
+            action={
+              <button
+                className="primary-button"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus size={16} />
+                New Hub
+              </button>
+            }
+          />
+          <div className="hub-directory-filter">
+            <label>
+              Portfolio
+              <select
+                value={portfolioId}
+                onChange={(event) => setPortfolioId(event.target.value)}
+              >
+                {demoPortfolios.map((portfolio) => (
+                  <option key={portfolio.id} value={portfolio.id}>
+                    {portfolio.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span>
+              {hubs.length} {hubs.length === 1 ? "Hub" : "Hubs"}
+            </span>
+          </div>
+          <div className="hub-directory">
+            {hubs.map((hub) => (
+              <Link href={`/app/hubs/${hub.slug}`} key={hub.id}>
+                <HubMark
+                  hubId={hub.id}
+                  fallback={hub.icon}
+                  accent={hub.accent}
+                />
+                <div>
+                  <p>
+                    {hub.type.replaceAll("_", " ")} · {hub.stage}
+                  </p>
+                  <h2>{hub.name}</h2>
+                  <span>{hub.priority}</span>
+                </div>
+                <b className={`health-badge ${hub.health}`}>
+                  {hub.health.replace("_", " ")}
+                </b>
+                <ArrowRight size={15} />
+              </Link>
+            ))}
+          </div>
+        </main>
+        {createOpen && (
+          <CreateHubDialog
+            initialPortfolioId={portfolioId}
+            onClose={closeCreate}
+            onCreated={(slug) => {
+              setCreatedSlug(slug);
+              closeCreate();
+            }}
+          />
+        )}
+      </>
     </WorkspaceFrame>
+  );
+}
+
+function CreateHubDialog({
+  initialPortfolioId,
+  onClose,
+  onCreated,
+}: {
+  initialPortfolioId: string;
+  onClose: () => void;
+  onCreated: (slug: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
+  const [type, setType] = useState<HubType>("project");
+  const [lead, setLead] = useState("Mohammed Zaman");
+  const [priority, setPriority] = useState("");
+  const [milestone, setMilestone] = useState("First operating review");
+  const [milestoneDate, setMilestoneDate] = useState("2026-09-30");
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || !milestoneDate) return;
+    const record = createCustomHub({
+      name,
+      portfolioId,
+      type,
+      lead,
+      priority,
+      milestone,
+      milestoneDate,
+    });
+    onCreated(record.hub.slug);
+  };
+  const types: Array<[HubType, string]> = [
+    ["business", "Business"],
+    ["brand", "Brand"],
+    ["client", "Client"],
+    ["product", "Product"],
+    ["venture", "Venture"],
+    ["initiative", "Initiative"],
+    ["project", "Project"],
+    ["department", "Department"],
+  ];
+  return (
+    <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
+      <form
+        className="capture-dialog create-hub-dialog"
+        aria-labelledby="create-hub-title"
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={submit}
+        role="dialog"
+      >
+        <header>
+          <span className="attention-icon">
+            <Grid2X2 size={17} />
+          </span>
+          <div>
+            <h2 id="create-hub-title">Create a project Hub</h2>
+            <p>
+              A Hub keeps work, decisions, updates, evidence, and ownership
+              together.
+            </p>
+          </div>
+          <button
+            aria-label="Close project creation"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={17} />
+          </button>
+        </header>
+        <div className="create-hub-fields">
+          <label>
+            Project name
+            <input
+              autoFocus
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Name the responsibility clearly"
+              required
+              value={name}
+            />
+          </label>
+          <div>
+            <label>
+              Portfolio
+              <select
+                value={portfolioId}
+                onChange={(event) => setPortfolioId(event.target.value)}
+              >
+                {demoPortfolios.map((portfolio) => (
+                  <option key={portfolio.id} value={portfolio.id}>
+                    {portfolio.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Type
+              <select
+                value={type}
+                onChange={(event) => setType(event.target.value as HubType)}
+              >
+                {types.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label>
+            Lead
+            <input
+              required
+              value={lead}
+              onChange={(event) => setLead(event.target.value)}
+            />
+          </label>
+          <label>
+            Current priority
+            <input
+              value={priority}
+              onChange={(event) => setPriority(event.target.value)}
+              placeholder="What outcome matters first?"
+            />
+          </label>
+          <div>
+            <label>
+              First milestone
+              <input
+                required
+                value={milestone}
+                onChange={(event) => setMilestone(event.target.value)}
+              />
+            </label>
+            <label>
+              Target date
+              <input
+                required
+                type="date"
+                value={milestoneDate}
+                onChange={(event) => setMilestoneDate(event.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+        <footer>
+          <span>Creates a project overview and an empty operating board.</span>
+          <div>
+            <button onClick={onClose} type="button">
+              Cancel
+            </button>
+            <button
+              className="primary-button"
+              disabled={!name.trim() || !milestoneDate}
+              type="submit"
+            >
+              <Plus size={14} /> Create project
+            </button>
+          </div>
+        </footer>
+      </form>
+    </div>
   );
 }
 
@@ -934,6 +1177,11 @@ export function BlueprintsExperience() {
       date: "18 Aug 2026, 09:24",
     },
   ]);
+  useEffect(() => {
+    if (window.location.hash !== "#available-blueprints") return;
+    const frame = window.requestAnimationFrame(() => setView("catalog"));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const toggle = (entry: string) =>
     setSelected((currentSet) => {
       const nextSet = new Set(currentSet);
@@ -1139,7 +1387,7 @@ export function BlueprintsExperience() {
         )}
 
         {view === "catalog" && (
-          <section className="blueprint-catalog">
+          <section className="blueprint-catalog" id="available-blueprints">
             {blueprintCatalog.map((blueprint) => {
               const isInstalled = installed.has(blueprint.name);
               return (
@@ -1403,12 +1651,31 @@ function BlueprintDetachDialog({
 export function ImportExperience() {
   const [preset, setPreset] = useState<ImportPreset>("generic_csv");
   const [previewed, setPreviewed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [imported, setImported] = useState(false);
   const presets: Array<[ImportPreset, string]> = [
     ["generic_csv", "Generic CSV"],
     ["monday", "monday.com CSV/export"],
     ["clickup", "ClickUp CSV"],
     ["asana", "Asana CSV"],
   ];
+  const downloadReport = () => {
+    const report = [
+      "TREVV import dry-run report",
+      `Preset,${preset}`,
+      "Rows detected,184",
+      "Ready,179",
+      "Needs review,5",
+      "Unmatched owners,3",
+      "Unsupported time-tracking fields,2",
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([report], { type: "text/csv" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "trevv-import-dry-run.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
   return (
     <WorkspaceFrame active="settings">
       <main className="trevv-main import-page">
@@ -1423,9 +1690,9 @@ export function ImportExperience() {
           <i />
           <b className={previewed ? "active" : ""}>2 Mapping</b>
           <i />
-          <b>3 Dry run</b>
+          <b className={confirming || imported ? "active" : ""}>3 Dry run</b>
           <i />
-          <b>4 Import report</b>
+          <b className={imported ? "active" : ""}>4 Import report</b>
         </div>
         <section className="trevv-panel import-card">
           <div className="import-source">
@@ -1436,6 +1703,8 @@ export function ImportExperience() {
                 onChange={(event) => {
                   setPreset(event.target.value as ImportPreset);
                   setPreviewed(false);
+                  setConfirming(false);
+                  setImported(false);
                 }}
               >
                 {presets.map(([value, label]) => (
@@ -1504,9 +1773,54 @@ export function ImportExperience() {
                 </div>
               </div>
               <footer>
-                <button>Download dry-run report</button>
-                <button className="primary-button">Continue to import</button>
+                <button onClick={downloadReport}>
+                  Download dry-run report
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => setConfirming(true)}
+                >
+                  Continue to import
+                </button>
               </footer>
+            </div>
+          )}
+          {confirming && !imported && (
+            <div className="import-confirmation" role="alert">
+              <ShieldCheck size={18} />
+              <div>
+                <strong>Confirm the safe import</strong>
+                <span>
+                  179 ready rows will be created. Five rows will remain in the
+                  report and no existing TREVV work will be overwritten.
+                </span>
+              </div>
+              <button onClick={() => setConfirming(false)}>Back</button>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  setImported(true);
+                  setConfirming(false);
+                }}
+              >
+                Import 179 rows
+              </button>
+            </div>
+          )}
+          {imported && (
+            <div className="import-complete" role="status">
+              <CheckCircle2 size={24} />
+              <div>
+                <strong>Import complete</strong>
+                <span>
+                  179 work items were created. Five review rows remain
+                  documented in the report.
+                </span>
+              </div>
+              <button onClick={downloadReport}>Download final report</button>
+              <Link className="primary-button" href="/app/portfolio">
+                Open Portfolio
+              </Link>
             </div>
           )}
         </section>
@@ -1648,14 +1962,20 @@ function PanelHeading({
   );
 }
 
-function HubMark({ hubId }: { hubId: string }) {
+function HubMark({
+  hubId,
+  fallback = "H",
+  accent,
+}: {
+  hubId: string;
+  fallback?: string;
+  accent?: string;
+}) {
   const hub = hubFor(hubId);
+  const color = hub?.accent ?? accent ?? "var(--fh-primary)";
   return (
-    <span
-      className="hub-mark"
-      style={{ background: `${hub?.accent}18`, color: hub?.accent }}
-    >
-      {hub?.icon ?? "H"}
+    <span className="hub-mark" style={{ background: `${color}18`, color }}>
+      {hub?.icon ?? fallback}
     </span>
   );
 }

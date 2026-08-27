@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { demoHubs, demoItems } from "@founderhq/core";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
@@ -116,7 +117,8 @@ export function FocusExperience({ kind }: { kind: FocusKind }) {
 function ApprovalView({ capturedWork }: { capturedWork: CapturedWorkItem[] }) {
   const [resolved, setResolved] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
-  const approvals = [
+  const [projectFilter, setProjectFilter] = useState("all");
+  const allApprovals = [
     ...demoItems
       .filter((item) => item.type === "approval")
       .map((item) => ({
@@ -138,6 +140,9 @@ function ApprovalView({ capturedWork }: { capturedWork: CapturedWorkItem[] }) {
         evidenceUrl: item.evidenceUrl,
       })),
   ].filter((item) => !resolved.includes(item.id));
+  const approvals = allApprovals.filter(
+    (item) => projectFilter === "all" || item.hubId === projectFilter,
+  );
   return (
     <div className="approval-layout">
       {notice && (
@@ -184,10 +189,25 @@ function ApprovalView({ capturedWork }: { capturedWork: CapturedWorkItem[] }) {
       <section className="approval-list">
         <header>
           <h2>Pending approvals</h2>
-          <button>
+          <label className="approval-project-filter">
             <Filter size={14} />
-            All projects
-          </button>
+            <select
+              aria-label="Filter approvals by project"
+              onChange={(event) => setProjectFilter(event.target.value)}
+              value={projectFilter}
+            >
+              <option value="all">All projects</option>
+              {demoHubs
+                .filter((hub) =>
+                  allApprovals.some((item) => item.hubId === hub.id),
+                )
+                .map((hub) => (
+                  <option key={hub.id} value={hub.id}>
+                    {hub.name}
+                  </option>
+                ))}
+            </select>
+          </label>
         </header>
         {approvals.map((item, index) => (
           <article key={item.id}>
@@ -205,10 +225,16 @@ function ApprovalView({ capturedWork }: { capturedWork: CapturedWorkItem[] }) {
                 by {item.requestedBy}
               </span>
               <div>
-                <a href={item.evidenceUrl ?? "#"}>
-                  <Link2 size={12} />
-                  Linked review resource <ExternalLink size={11} />
-                </a>
+                {item.evidenceUrl ? (
+                  <a href={item.evidenceUrl} rel="noreferrer" target="_blank">
+                    <Link2 size={12} />
+                    Linked review resource <ExternalLink size={11} />
+                  </a>
+                ) : (
+                  <span>
+                    <Link2 size={12} /> No review resource attached
+                  </span>
+                )}
                 <span>
                   <Clock3 size={12} />
                   Due {item.dueDate}
@@ -251,6 +277,60 @@ function SearchView({
   setQuery: (value: string) => void;
   results: typeof demoItems;
 }) {
+  const [filter, setFilter] = useState<
+    "everything" | "work" | "hubs" | "updates" | "resources"
+  >("everything");
+  const normalized = query.trim().toLocaleLowerCase();
+  const hubResults =
+    normalized.length < 2
+      ? []
+      : demoHubs.filter((hub) =>
+          [hub.name, hub.priority, hub.healthNote]
+            .join(" ")
+            .toLocaleLowerCase()
+            .includes(normalized),
+        );
+  const updateResults =
+    normalized.length < 2
+      ? []
+      : demoHubs.filter((hub) =>
+          hub.latestUpdate.text.toLocaleLowerCase().includes(normalized),
+        );
+  const resources = [
+    {
+      name: "Northstar storefront designs",
+      provider: "Figma",
+      href: "https://www.figma.com",
+    },
+    {
+      name: "MealFlow product repository",
+      provider: "GitHub",
+      href: "https://github.com",
+    },
+    {
+      name: "LocalReach proof pack",
+      provider: "Google Drive",
+      href: "https://docs.google.com",
+    },
+  ].filter((resource) =>
+    `${resource.name} ${resource.provider}`
+      .toLocaleLowerCase()
+      .includes(normalized),
+  );
+  const total =
+    (filter === "everything" || filter === "work" ? results.length : 0) +
+    (filter === "everything" || filter === "hubs" ? hubResults.length : 0) +
+    (filter === "everything" || filter === "updates"
+      ? updateResults.length
+      : 0) +
+    (filter === "everything" || filter === "resources" ? resources.length : 0);
+  const chips = [
+    ["everything", "Everything"],
+    ["work", "Work items"],
+    ["hubs", "Hubs"],
+    ["updates", "Updates"],
+    ["resources", "Resources"],
+  ] as const;
   return (
     <div className="search-page">
       <div className="big-search">
@@ -264,11 +344,16 @@ function SearchView({
         <kbd>⌘ K</kbd>
       </div>
       <div className="search-chips">
-        <button className="active">Everything</button>
-        <button>Work items</button>
-        <button>Hubs</button>
-        <button>Updates</button>
-        <button>Resources</button>
+        {chips.map(([value, label]) => (
+          <button
+            aria-pressed={filter === value}
+            className={filter === value ? "active" : ""}
+            key={value}
+            onClick={() => setFilter(value)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       {query.length < 2 ? (
         <section className="recent-searches">
@@ -285,25 +370,80 @@ function SearchView({
         </section>
       ) : (
         <section className="search-results">
-          <h2>{results.length} accessible results</h2>
-          {results.map((item) => (
-            <a
-              href={`/app/hubs/${demoHubs.find((hub) => hub.id === item.hubId)?.slug}/boards/${item.boardId}`}
-              key={item.id}
-            >
-              <span className={`result-icon ${item.type}`}>
-                <FileText size={15} />
-              </span>
-              <div>
-                <strong>{item.title}</strong>
-                <span>
-                  {demoHubs.find((hub) => hub.id === item.hubId)?.name} · Work
-                  item · {item.status}
+          <h2>{total} accessible results</h2>
+          {(filter === "everything" || filter === "work") &&
+            results.map((item) => (
+              <Link
+                href={`/app/hubs/${demoHubs.find((hub) => hub.id === item.hubId)?.slug}/boards/${item.boardId}#${item.id}`}
+                key={item.id}
+              >
+                <span className={`result-icon ${item.type}`}>
+                  <FileText size={15} />
                 </span>
-              </div>
-              <ArrowRight size={14} />
-            </a>
-          ))}
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>
+                    {demoHubs.find((hub) => hub.id === item.hubId)?.name} · Work
+                    item · {item.status}
+                  </span>
+                </div>
+                <ArrowRight size={14} />
+              </Link>
+            ))}
+          {(filter === "everything" || filter === "hubs") &&
+            hubResults.map((hub) => (
+              <Link href={`/app/hubs/${hub.slug}`} key={`hub-${hub.id}`}>
+                <span className="result-icon hub">{hub.icon}</span>
+                <div>
+                  <strong>{hub.name}</strong>
+                  <span>
+                    Project · {hub.stage} · {hub.health.replace("_", " ")}
+                  </span>
+                </div>
+                <ArrowRight size={14} />
+              </Link>
+            ))}
+          {(filter === "everything" || filter === "updates") &&
+            updateResults.map((hub) => (
+              <Link
+                href={`/app/hubs/${hub.slug}#updates`}
+                key={`update-${hub.id}`}
+              >
+                <span className="result-icon update">
+                  <Clock3 size={15} />
+                </span>
+                <div>
+                  <strong>{hub.latestUpdate.text}</strong>
+                  <span>
+                    {hub.name} · Update · {hub.latestUpdate.date}
+                  </span>
+                </div>
+                <ArrowRight size={14} />
+              </Link>
+            ))}
+          {(filter === "everything" || filter === "resources") &&
+            resources.map((resource) => (
+              <a
+                href={resource.href}
+                key={resource.name}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span className="result-icon resource">
+                  <Link2 size={15} />
+                </span>
+                <div>
+                  <strong>{resource.name}</strong>
+                  <span>{resource.provider} · Connected resource</span>
+                </div>
+                <ExternalLink size={14} />
+              </a>
+            ))}
+          {total === 0 && (
+            <p className="search-empty">
+              No accessible results match this search and filter.
+            </p>
+          )}
         </section>
       )}
     </div>
@@ -341,9 +481,9 @@ function TemplatesView() {
             <span>
               {4 + (index % 3)} groups · {7 + index} fields
             </span>
-            <button>
+            <Link href={`/app/blueprints#available-blueprints`}>
               Use template <ArrowRight size={12} />
-            </button>
+            </Link>
           </footer>
         </article>
       ))}
@@ -387,18 +527,18 @@ function SettingsView() {
   return (
     <div className="settings-layout">
       <aside>
-        <button className="active">
+        <Link className="active" href="/app/settings/integrations">
           <Settings2 size={14} />
           Integrations
-        </button>
-        <button>
+        </Link>
+        <Link href="/app/settings/integrations#security">
           <ShieldCheck size={14} />
           Security
-        </button>
-        <button>Organization</button>
-        <button>Members</button>
-        <button>Audit log</button>
-        <button>Export</button>
+        </Link>
+        <Link href="/app/settings/integrations#organization">Organization</Link>
+        <Link href="/app/settings/integrations#members">Members</Link>
+        <Link href="/app/settings/integrations#audit-log">Audit log</Link>
+        <Link href="/app/settings/import">Import / Export</Link>
       </aside>
       <section>
         <div className="settings-note">
@@ -425,14 +565,14 @@ function SettingsView() {
                 <span>{description}</span>
               </div>
               {state === "configured" ? (
-                <button className="configured">
+                <Link className="configured" href="/app/settings/integrations">
                   <CheckCircle2 size={14} />
                   Configured
-                </button>
+                </Link>
               ) : state === "preview" ? (
-                <button>
+                <Link href="/app/settings/integrations">
                   Set up <ArrowRight size={12} />
-                </button>
+                </Link>
               ) : (
                 <span className="later-badge">Later release</span>
               )}

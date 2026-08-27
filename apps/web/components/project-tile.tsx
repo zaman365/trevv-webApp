@@ -7,11 +7,18 @@ import {
   CircleDashed,
   MoreHorizontal,
 } from "lucide-react";
-import type { Hub, HubHealth, HubRollup, WorkItem } from "@founderhq/core";
+import {
+  boardForHub,
+  type Hub,
+  type HubHealth,
+  type HubRollup,
+  type WorkItem,
+} from "@founderhq/core";
 import { getMessages } from "@founderhq/i18n";
 import Link from "next/link";
 import { ProgressRing } from "./ui-kit";
 import { labelForType } from "@/lib/terminology";
+import { useState } from "react";
 
 const healthIcon: Record<HubHealth, typeof CheckCircle2> = {
   on_track: CheckCircle2,
@@ -47,7 +54,9 @@ export function ProjectTile({
   showMetrics?: boolean;
   compact?: boolean;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const HealthIcon = healthIcon[hub.health];
+  const board = boardForHub(hub.id);
   const staleDays = Math.floor(
     (new Date("2026-08-24").getTime() -
       new Date(hub.latestUpdate.date).getTime()) /
@@ -87,9 +96,34 @@ export function ProjectTile({
           />
         )}
         {!compact && (
-          <button className="tile-more" aria-label={`Actions for ${hub.name}`}>
-            <MoreHorizontal size={18} />
-          </button>
+          <div className="tile-action-wrap">
+            <button
+              aria-expanded={menuOpen}
+              className="tile-more"
+              aria-label={`Actions for ${hub.name}`}
+              onClick={() => setMenuOpen((current) => !current)}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {menuOpen && (
+              <div className="tile-action-menu" role="menu">
+                <Link href={`/app/hubs/${hub.slug}`} role="menuitem">
+                  Open project
+                </Link>
+                {board && (
+                  <Link
+                    href={`/app/hubs/${hub.slug}/boards/${board.id}`}
+                    role="menuitem"
+                  >
+                    Open board
+                  </Link>
+                )}
+                <Link href={`/app/attention`} role="menuitem">
+                  Review attention
+                </Link>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

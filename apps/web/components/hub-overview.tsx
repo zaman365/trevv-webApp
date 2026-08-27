@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CheckCircle2,
   CircleDashed,
+  Copy,
   ExternalLink,
   FileQuestion,
   FolderKanban,
@@ -14,8 +15,10 @@ import {
   Link2,
   MoreHorizontal,
   Plus,
+  Send,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react";
 import {
   boardForHub,
@@ -30,6 +33,7 @@ import { WorkspaceFrame } from "./workspace-frame";
 import { PageHero, StatTile } from "./ui-kit";
 import { productCopy } from "@/lib/product-copy";
 import { labelForType } from "@/lib/terminology";
+import { useCustomHubs } from "@/lib/custom-hubs";
 
 const hubHealthCopy: Record<string, string> = {
   on_track: "On track",
@@ -51,7 +55,10 @@ const hubTabIds = [
 type HubTabId = (typeof hubTabIds)[number];
 
 export function HubOverview({ slug }: { slug: string }) {
-  const hub = hubBySlug(slug);
+  const customRecord = useCustomHubs().find(
+    (record) => record.hub.slug === slug,
+  );
+  const hub = hubBySlug(slug) ?? customRecord?.hub;
   if (!hub)
     return (
       <WorkspaceFrame active="hub" hubSlug={slug}>
@@ -61,15 +68,33 @@ export function HubOverview({ slug }: { slug: string }) {
         </main>
       </WorkspaceFrame>
     );
-  return <HubWorkspace key={hub.id} hub={hub} />;
+  return (
+    <HubWorkspace boardOverride={customRecord?.board} key={hub.id} hub={hub} />
+  );
 }
 
 function HubWorkspace({
   hub,
+  boardOverride,
 }: {
   hub: NonNullable<ReturnType<typeof hubBySlug>>;
+  boardOverride?: ReturnType<typeof boardForHub>;
 }) {
   const [activeTab, setActiveTab] = useState<HubTabId>("overview");
+  const [summary, setSummary] = useState(
+    `${hub.healthNote} The team is focused on ${hub.priority.toLocaleLowerCase()}, with the next review aligned to ${hub.nextMilestone.title}.`,
+  );
+  const [summaryDraft, setSummaryDraft] = useState(summary);
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateText, setUpdateText] = useState("");
+  const [updates, setUpdates] = useState([
+    { id: "seed", text: hub.latestUpdate.text, date: hub.latestUpdate.date },
+  ]);
+  const [showAllUpdates, setShowAllUpdates] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [showAllTeam, setShowAllTeam] = useState(false);
   useEffect(() => {
     const syncHash = () => {
       const hash = window.location.hash.slice(1) as HubTabId;
@@ -93,7 +118,7 @@ function HubWorkspace({
     hubItems,
     new Date("2026-08-24T12:00:00+02:00"),
   );
-  const board = boardForHub(hub.id);
+  const board = boardForHub(hub.id) ?? boardOverride;
   const boardHref = board
     ? `/app/hubs/${hub.slug}/boards/${board.id}`
     : `/app/hubs/${hub.slug}`;
@@ -133,6 +158,18 @@ function HubWorkspace({
         className="hub-main"
         style={{ "--hub-accent": hub.accent } as React.CSSProperties}
       >
+        {notice && (
+          <div className="workflow-toast success-toast" role="status">
+            <CheckCircle2 size={15} />
+            <span>{notice}</span>
+            <button
+              aria-label="Dismiss notification"
+              onClick={() => setNotice("")}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
         <PageHero
           eyebrow={
             <>
@@ -155,7 +192,12 @@ function HubWorkspace({
                 <Plus size={16} />
                 <span>{copy.addItem}</span>
               </Link>
-              <button className="quiet-button">{copy.postUpdate}</button>
+              <button
+                className="quiet-button"
+                onClick={() => setUpdateOpen(true)}
+              >
+                {copy.postUpdate}
+              </button>
               {hub.slug === "localreach" && (
                 <Link
                   className="quiet-button"
@@ -165,9 +207,38 @@ function HubWorkspace({
                   Stakeholder view
                 </Link>
               )}
-              <button className="icon-button" aria-label="More actions">
-                <MoreHorizontal size={17} />
-              </button>
+              <div className="hub-more-wrap">
+                <button
+                  aria-expanded={moreOpen}
+                  className="icon-button"
+                  aria-label="More actions"
+                  onClick={() => setMoreOpen((current) => !current)}
+                >
+                  <MoreHorizontal size={17} />
+                </button>
+                {moreOpen && (
+                  <div className="hub-action-menu" role="menu">
+                    <Link href={boardHref} role="menuitem">
+                      Open board
+                    </Link>
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(
+                          window.location.href,
+                        );
+                        setNotice("Project link copied.");
+                        setMoreOpen(false);
+                      }}
+                    >
+                      <Copy size={13} /> Copy project link
+                    </button>
+                    <Link href="/app/settings/integrations" role="menuitem">
+                      Connected tools
+                    </Link>
+                  </div>
+                )}
+              </div>
             </>
           }
           stats={
@@ -243,13 +314,39 @@ function HubWorkspace({
                   <span>Executive pulse</span>
                   <h2>{copy.executive}</h2>
                 </div>
-                <button>{copy.editSummary}</button>
+                <button
+                  onClick={() => {
+                    if (editingSummary) {
+                      setSummaryDraft(summary);
+                      setEditingSummary(false);
+                    } else setEditingSummary(true);
+                  }}
+                >
+                  {editingSummary ? "Cancel" : copy.editSummary}
+                </button>
               </header>
-              <p>
-                {hub.healthNote} The team is focused on{" "}
-                <strong>{hub.priority.toLocaleLowerCase()}</strong>, with the
-                next review aligned to {hub.nextMilestone.title}.
-              </p>
+              {editingSummary ? (
+                <div className="executive-summary-editor">
+                  <textarea
+                    aria-label="Executive summary"
+                    onChange={(event) => setSummaryDraft(event.target.value)}
+                    value={summaryDraft}
+                  />
+                  <button
+                    className="primary-button"
+                    disabled={!summaryDraft.trim()}
+                    onClick={() => {
+                      setSummary(summaryDraft.trim());
+                      setEditingSummary(false);
+                      setNotice("Executive summary updated.");
+                    }}
+                  >
+                    Save summary
+                  </button>
+                </div>
+              ) : (
+                <p>{summary}</p>
+              )}
               <div className="executive-grid">
                 <div>
                   <span>{copy.currentFocus}</span>
@@ -311,44 +408,54 @@ function HubWorkspace({
                   <h2>{copy.latestUpdate}</h2>
                   <p>Published by {hub.lead.name} · 1 day ago</p>
                 </div>
-                <button>View all updates</button>
+                <button
+                  aria-expanded={showAllUpdates}
+                  onClick={() => setShowAllUpdates((current) => !current)}
+                >
+                  {showAllUpdates ? "Show latest" : "View all updates"}
+                </button>
               </div>
-              <article className="weekly-update">
-                <div className="update-lead">
-                  <span
-                    className="avatar"
-                    style={{ background: hub.lead.color }}
-                  >
-                    {hub.lead.initials}
-                  </span>
-                  <div>
-                    <strong>What moved</strong>
-                    <p>{hub.latestUpdate.text}</p>
-                  </div>
-                </div>
-                <div className="weekly-update-grid">
-                  <div>
-                    <span>Current priority</span>
-                    <p>{hub.priority}</p>
-                  </div>
-                  <div>
-                    <span>Help needed</span>
-                    <p>
-                      {rollup.blocked > 0
-                        ? `Resolve ${rollup.blocked} blocked item${rollup.blocked === 1 ? "" : "s"} and record the evidence.`
-                        : rollup.decisions + rollup.approvals > 0
-                          ? `Resolve ${rollup.decisions + rollup.approvals} open decision${rollup.decisions + rollup.approvals === 1 ? "" : "s"} or approval${rollup.decisions + rollup.approvals === 1 ? "" : "s"}.`
-                          : "No immediate escalation is required."}
-                    </p>
-                  </div>
-                  <div>
-                    <span>Next milestone</span>
-                    <p>
-                      {hub.nextMilestone.title} · {hub.nextMilestone.date}
-                    </p>
-                  </div>
-                </div>
-              </article>
+              {(showAllUpdates ? updates : updates.slice(0, 1)).map(
+                (update) => (
+                  <article className="weekly-update" key={update.id}>
+                    <div className="update-lead">
+                      <span
+                        className="avatar"
+                        style={{ background: hub.lead.color }}
+                      >
+                        {hub.lead.initials}
+                      </span>
+                      <div>
+                        <strong>What moved</strong>
+                        <p>{update.text}</p>
+                        <small>{update.date}</small>
+                      </div>
+                    </div>
+                    <div className="weekly-update-grid">
+                      <div>
+                        <span>Current priority</span>
+                        <p>{hub.priority}</p>
+                      </div>
+                      <div>
+                        <span>Help needed</span>
+                        <p>
+                          {rollup.blocked > 0
+                            ? `Resolve ${rollup.blocked} blocked item${rollup.blocked === 1 ? "" : "s"} and record the evidence.`
+                            : rollup.decisions + rollup.approvals > 0
+                              ? `Resolve ${rollup.decisions + rollup.approvals} open decision${rollup.decisions + rollup.approvals === 1 ? "" : "s"} or approval${rollup.decisions + rollup.approvals === 1 ? "" : "s"}.`
+                              : "No immediate escalation is required."}
+                        </p>
+                      </div>
+                      <div>
+                        <span>Next milestone</span>
+                        <p>
+                          {hub.nextMilestone.title} · {hub.nextMilestone.date}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                ),
+              )}
             </section>
             <section className="overview-section" id="ideas">
               <div className="overview-section-title">
@@ -364,6 +471,7 @@ function HubWorkspace({
                     tone="primary"
                     title={`${item.title} · ${item.status.replace("_", " ")}`}
                     meta={`${item.assignee ?? "Unassigned"} · ${item.dueDate ?? "No due date"}`}
+                    href="/app/ideas"
                     key={item.id}
                   />
                 ))}
@@ -480,7 +588,7 @@ function HubWorkspace({
                 <h2>{copy.team}</h2>
               </header>
               <div>
-                {team.slice(0, 5).map((name) => (
+                {team.slice(0, showAllTeam ? team.length : 5).map((name) => (
                   <span className="avatar avatar-mz" title={name} key={name}>
                     {name
                       .split(" ")
@@ -489,11 +597,88 @@ function HubWorkspace({
                       .slice(0, 2)}
                   </span>
                 ))}
-                {team.length > 5 && <button>+{team.length - 5}</button>}
+                {team.length > 5 && (
+                  <button
+                    aria-expanded={showAllTeam}
+                    onClick={() => setShowAllTeam((current) => !current)}
+                  >
+                    {showAllTeam ? "Show less" : `+${team.length - 5}`}
+                  </button>
+                )}
               </div>
             </section>
           </aside>
         </div>
+        {updateOpen && (
+          <div
+            className="dialog-layer"
+            role="presentation"
+            onMouseDown={() => setUpdateOpen(false)}
+          >
+            <form
+              className="capture-dialog hub-update-dialog"
+              aria-labelledby="hub-update-title"
+              aria-modal="true"
+              onMouseDown={(event) => event.stopPropagation()}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!updateText.trim()) return;
+                setUpdates((current) => [
+                  {
+                    id: `update-${Date.now()}`,
+                    text: updateText.trim(),
+                    date: new Date().toISOString().slice(0, 10),
+                  },
+                  ...current,
+                ]);
+                setUpdateText("");
+                setUpdateOpen(false);
+                setNotice("Project update published.");
+              }}
+              role="dialog"
+            >
+              <header>
+                <span className="attention-icon">
+                  <Send size={16} />
+                </span>
+                <div>
+                  <h2 id="hub-update-title">Post a project update</h2>
+                  <p>
+                    Record what moved, what is blocked, and what happens next.
+                  </p>
+                </div>
+                <button
+                  aria-label="Close update"
+                  onClick={() => setUpdateOpen(false)}
+                  type="button"
+                >
+                  <X size={17} />
+                </button>
+              </header>
+              <label className="stacked-field">
+                What changed?
+                <textarea
+                  autoFocus
+                  onChange={(event) => setUpdateText(event.target.value)}
+                  placeholder="Summarize meaningful movement and the next commitment…"
+                  value={updateText}
+                />
+              </label>
+              <footer>
+                <button onClick={() => setUpdateOpen(false)} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={!updateText.trim()}
+                  type="submit"
+                >
+                  <Send size={14} /> Publish update
+                </button>
+              </footer>
+            </form>
+          </div>
+        )}
       </main>
     </WorkspaceFrame>
   );
@@ -527,11 +712,13 @@ function Activity({
   tone,
   title,
   meta,
+  href,
 }: {
   icon: typeof CheckCircle2;
   tone: string;
   title: string;
   meta: string;
+  href: string;
 }) {
   return (
     <article>
@@ -542,9 +729,9 @@ function Activity({
         <strong>{title}</strong>
         <small>{meta}</small>
       </div>
-      <button aria-label={`Actions for ${title}`}>
-        <MoreHorizontal size={15} />
-      </button>
+      <Link aria-label={`Open ${title}`} href={href}>
+        <ArrowRight size={15} />
+      </Link>
     </article>
   );
 }

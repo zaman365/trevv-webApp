@@ -38,6 +38,7 @@ import {
   routeForCapturedType,
   UniversalCreateDialog,
 } from "./universal-create";
+import { useCustomHubs } from "@/lib/custom-hubs";
 
 type ActivePage =
   | "home"
@@ -95,6 +96,7 @@ function WorkspaceChrome({
   const [latestCapture, setLatestCapture] = useState<CapturedWorkItem | null>(
     null,
   );
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const {
     copy: messages,
     scope,
@@ -104,7 +106,11 @@ function WorkspaceChrome({
     toggleLocale,
     captureOpen,
     setCaptureOpen,
+    portfolioId,
   } = useWorkspace();
+  const customHubs = useCustomHubs()
+    .filter((record) => record.hub.portfolioId === portfolioId)
+    .map((record) => record.hub);
   const copy = productCopy.en;
   const vocab = vocabularyFor();
   const { openLearningCenter } = useLearningCenter();
@@ -190,7 +196,7 @@ function WorkspaceChrome({
             </Link>
           ))}
           <p className="nav-label spaced">{vocab.many} · Favorites</p>
-          {scope.hubs.slice(0, 4).map((hub) => (
+          {[...customHubs, ...scope.hubs].slice(0, 4).map((hub) => (
             <Link
               className={`nav-item hub-nav ${active === "hub" && hubSlug === hub.slug ? "active" : ""}`}
               href={`/app/hubs/${hub.slug}`}
@@ -287,14 +293,18 @@ function WorkspaceChrome({
             <Settings2 size={17} />
             <span>{copy.nav.settings}</span>
           </Link>
-          <div className="user-card">
+          <button
+            aria-expanded={userMenuOpen}
+            className="user-card"
+            onClick={() => setUserMenuOpen((current) => !current)}
+          >
             <span className="avatar avatar-mz">MZ</span>
             <div>
               <strong>Mohammed</strong>
               <span>Owner</span>
             </div>
             <MoreHorizontal size={18} />
-          </div>
+          </button>
         </div>
       </aside>
       {open && (
@@ -360,12 +370,51 @@ function WorkspaceChrome({
               <Bell size={18} />
               <span />
             </Link>
-            <button
-              className="avatar avatar-mz avatar-button"
-              aria-label={copy.shell.userMenu}
-            >
-              MZ
-            </button>
+            <div className="user-menu-wrap">
+              <button
+                aria-expanded={userMenuOpen}
+                className="avatar avatar-mz avatar-button"
+                aria-label={copy.shell.userMenu}
+                onClick={() => setUserMenuOpen((current) => !current)}
+              >
+                MZ
+              </button>
+              {userMenuOpen && (
+                <div className="user-menu" role="menu">
+                  <header>
+                    <span className="avatar avatar-mz">MZ</span>
+                    <div>
+                      <strong>Mohammed</strong>
+                      <small>Owner · TREVV Demo</small>
+                    </div>
+                  </header>
+                  <Link
+                    href="/app/settings/integrations"
+                    role="menuitem"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <Settings2 size={14} /> Workspace settings
+                  </Link>
+                  <Link
+                    href="/app/team"
+                    role="menuitem"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <Users size={14} /> Team and access
+                  </Link>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      toggleTheme();
+                      setUserMenuOpen(false);
+                    }}
+                  >
+                    {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
+                    Switch to {theme === "light" ? "dark" : "light"} mode
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         {children}

@@ -26,6 +26,43 @@ test("operator starts in Home and opens a Hub from Portfolio", async ({
   ).toBeVisible();
 });
 
+test("Change Radar opens the project update context", async ({ page }) => {
+  await page.goto("/app/home");
+  const change = page.getByRole("link", {
+    name: /Open Northstar Apparel and review 2 meaningful changes/,
+  });
+  await expect(change).toBeVisible();
+  await change.click();
+  await expect(page).toHaveURL(/\/app\/hubs\/northstar-apparel#updates$/);
+  await expect(
+    page.getByRole("heading", { name: /latest weekly update/i }),
+  ).toBeVisible();
+});
+
+test("a new project creates a working Hub and board", async ({ page }) => {
+  await page.goto("/app/portfolio");
+  await page.getByRole("link", { name: "New project" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Create a project Hub" }),
+  ).toBeVisible();
+  await page.getByLabel("Project name").fill("Customer Onboarding Lab");
+  await page
+    .getByLabel("Current priority")
+    .fill("Validate the first onboarding outcome");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "project and its first board are ready",
+  );
+  await page.getByRole("link", { name: "Open project" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Customer Onboarding Lab" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Add item" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Customer Onboarding Lab Board" }),
+  ).toBeVisible();
+});
+
 test("team member updates a board item inline and uses the detail panel", async ({
   page,
 }) => {
@@ -51,20 +88,51 @@ test("team member updates a board item inline and uses the detail panel", async 
   await expect(panel.getByText("Changes saved")).toBeVisible();
 });
 
+test("board controls add, filter, and expose item editing", async ({
+  page,
+}) => {
+  await page.goto("/app/hubs/northstar-apparel/boards/b-northstar-launch");
+  const initiallySelected = page.locator(".item-panel");
+  if (await initiallySelected.isVisible()) {
+    await initiallySelected.getByLabel("Close").click();
+  }
+  await page
+    .getByRole("main")
+    .locator("header")
+    .getByRole("button", { name: "Add item", exact: true })
+    .click();
+  const panel = page.locator(".item-panel");
+  await expect(panel).toBeVisible();
+  await panel.getByLabel("Item title").fill("Confirm retail launch checklist");
+  await panel.getByLabel("Close").click();
+  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByPlaceholder("Find a work item…").fill("retail launch");
+  await expect(
+    page.getByRole("button", {
+      name: "Confirm retail launch checklist",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
 test("Attention signals support accountable actions", async ({ page }) => {
   await page.goto("/app/attention");
   await expect(
     page.getByRole("heading", { name: "Attention Center" }),
   ).toBeVisible();
-  const signalCount = await page.locator(".attention-detail-card").count();
-  const firstSignal = page.locator(".attention-detail-card").first();
+  const signalCount = await page.locator(".attention-action-card").count();
+  const firstSignal = page.locator(".attention-action-card").first();
   await expect(firstSignal).toBeVisible();
   await firstSignal.getByRole("button", { name: "Snooze" }).click();
-  await firstSignal
-    .getByPlaceholder("Waiting until Friday for client response")
+  const snoozeDialog = page.getByRole("dialog", {
+    name: "Snooze with a reason",
+  });
+  await snoozeDialog
+    .getByPlaceholder("Waiting for the supplier response before Friday…")
     .fill("Waiting for the signed document until Friday");
-  await firstSignal.getByRole("button", { name: "Save snooze" }).click();
-  await expect(page.locator(".attention-detail-card")).toHaveCount(
+  await snoozeDialog.getByLabel("Snooze until").fill("2026-08-30");
+  await snoozeDialog.getByRole("button", { name: "Save snooze" }).click();
+  await expect(page.locator(".attention-action-card")).toHaveCount(
     signalCount - 1,
   );
 });
@@ -78,8 +146,16 @@ test("Waiting Center supports nudging and resolving dependencies", async ({
   ).toBeVisible();
   const waitingItem = page.locator(".waiting-list article").first();
   await waitingItem.getByRole("button", { name: "Nudge" }).click();
-  await expect(page.getByRole("status")).toContainText("Nudge prepared");
+  await page
+    .getByRole("dialog", { name: "Prepare a focused nudge" })
+    .getByRole("button", { name: "Record email note" })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Follow-up prepared");
   await waitingItem.getByRole("button", { name: "Resolve" }).click();
+  await page
+    .getByRole("dialog", { name: "Mark this dependency resolved?" })
+    .getByRole("button", { name: "Mark resolved" })
+    .click();
   await expect(waitingItem).toBeHidden();
 });
 
@@ -99,7 +175,9 @@ test("Blueprint updates are previewed and preserve local overrides", async ({
   page,
 }) => {
   await page.goto("/app/blueprints");
-  await expect(page.getByRole("heading", { name: "Blueprints" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /^Blueprints/, level: 1 }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Local overrides preserved" }),
   ).toBeVisible();
@@ -138,24 +216,29 @@ test("Inbox is actionable while Quick Capture remains separate", async ({
 }) => {
   await page.goto("/app/inbox");
   await expect(
-    page.getByRole("heading", { name: "Actionable Inbox" }),
+    page.getByRole("heading", {
+      name: /^Actionable Inbox/,
+      level: 2,
+    }),
   ).toBeVisible();
   await page
-    .getByPlaceholder("Capture a task, idea, link or note…")
+    .getByPlaceholder("Capture a task, idea, link, note, request, or decision…")
     .fill("Confirm pilot outcome");
   await page
     .locator(".capture-card")
     .getByRole("button", { name: "Capture", exact: true })
     .click();
   await expect(
-    page.getByText(/personal capture saved outside Inbox/),
+    page.getByText(/Task captured for later organization/),
   ).toBeVisible();
   await page
     .locator(".inbox-list article")
     .first()
     .getByRole("button", { name: "Done" })
     .click();
-  await expect(page.getByText("3 requests need a response")).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Needs response 3" }),
+  ).toBeVisible();
 });
 
 test("onboarding configures a generalized first Hub", async ({ page }) => {

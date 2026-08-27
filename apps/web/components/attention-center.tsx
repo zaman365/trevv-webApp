@@ -53,6 +53,13 @@ const attentionTabs = [
   "Waiting",
 ] as const;
 type AttentionTab = (typeof attentionTabs)[number];
+const attentionHashTabs: Record<string, AttentionTab> = {
+  "at-risk": "At Risk",
+  blocked: "Blocked",
+  overdue: "Overdue",
+  stale: "Stale",
+  waiting: "Waiting",
+};
 type AttentionAction = "resolve" | "snooze" | "dismiss";
 
 interface AttentionToast {
@@ -106,7 +113,14 @@ export function AttentionCenter() {
     let frame = 0;
     const openFromHash = () => {
       const hash = decodeURIComponent(window.location.hash.slice(1));
-      if (!hash || !attentionIds.current.has(hash)) return;
+      if (!hash) return;
+      if (attentionHashTabs[hash]) {
+        setTab(attentionHashTabs[hash]);
+        setSeverityFilter("all");
+        setSelectedId(null);
+        return;
+      }
+      if (!attentionIds.current.has(hash)) return;
       frame = window.requestAnimationFrame(() => setSelectedId(hash));
     };
     openFromHash();

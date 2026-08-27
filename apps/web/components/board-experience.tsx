@@ -62,10 +62,11 @@ import {
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { Hint } from "./learning-center";
+import { useCustomHubs } from "@/lib/custom-hubs";
 
 type Status = "planned" | "working" | "blocked" | "review" | "done";
 type Priority = "Urgent" | "High" | "Normal" | "Low";
@@ -78,7 +79,7 @@ interface BoardItem {
   priority: Priority;
   due: string;
   /** ISO date, kept so ranges can sort. `due` is display-only. */
-  dueDate?: string;
+  dueDate?: string | undefined;
   resources: number;
   updates: number;
   description: string;
@@ -138,6 +139,19 @@ const toBoardItem = (item: WorkItem): BoardItem => ({
   group: groupNameFor(item.groupId),
 });
 
+const isBoardItem = (value: unknown): value is BoardItem => {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<BoardItem>;
+  return Boolean(
+    item.id &&
+    item.title &&
+    item.owner &&
+    item.status &&
+    item.priority &&
+    item.groupId,
+  );
+};
+
 /** Items without a Group still need a band, so they get a real one. */
 const UNGROUPED_ID = "ungrouped";
 
@@ -159,8 +173,14 @@ export function BoardExperience({
   hubSlug: string;
   boardId: string;
 }) {
-  const hub = hubBySlug(hubSlug);
-  const board = hub ? boardForHub(hub.id, boardId) : undefined;
+  const customRecord = useCustomHubs().find(
+    (record) => record.hub.slug === hubSlug,
+  );
+  const hub = hubBySlug(hubSlug) ?? customRecord?.hub;
+  const board = hub
+    ? (boardForHub(hub.id, boardId) ??
+      (customRecord?.board.id === boardId ? customRecord.board : undefined))
+    : undefined;
   if (!hub || !board)
     return (
       <WorkspaceFrame active="hub" hubSlug={hubSlug}>
@@ -218,6 +238,17 @@ function BoardWorkspace({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [showCounts, setShowCounts] = useState(true);
+  const [boardMenuOpen, setBoardMenuOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const [automationOpen, setAutomationOpen] = useState(false);
+  const [automationEnabled, setAutomationEnabled] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [bulkMode, setBulkMode] = useState<"move" | "assign" | null>(null);
   const groupColor = (groupId: string) =>
     boardGroups.find((group) => group.id === groupId)?.color ??
     "var(--fh-border-strong)";
@@ -235,10 +266,9 @@ function BoardWorkspace({
     try {
       const stored = window.localStorage.getItem(storageKey);
       if (stored) {
-        const parsed = JSON.parse(stored) as BoardItem[];
-        const allowedIds = new Set(seedItems.map((item) => item.id));
-        const valid = parsed.filter((item) => allowedIds.has(item.id));
-        if (valid.length === seedItems.length) storedItems = valid;
+        const parsed = JSON.parse(stored) as unknown;
+        if (Array.isArray(parsed) && parsed.every(isBoardItem))
+          storedItems = parsed;
       }
     } catch {
       // Keep the server seed if client storage is unavailable or malformed.
@@ -257,6 +287,14 @@ function BoardWorkspace({
       // Board editing remains available even when persistence is unavailable.
     }
   }, [items, storageKey, storageReady]);
+  useEffect(() => {
+    const hash = decodeURIComponent(window.location.hash.slice(1));
+    if (!hash) return;
+    const item = items.find((candidate) => candidate.id === hash);
+    if (!item) return;
+    const frame = window.requestAnimationFrame(() => setSelected(item));
+    return () => window.cancelAnimationFrame(frame);
+  }, [items]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 7 } }),
     useSensor(KeyboardSensor, {
@@ -267,6 +305,34 @@ function BoardWorkspace({
     setItems((current) =>
       current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     );
+  const addItem = (status: Status = "planned", groupId?: string) => {
+    const effectiveGroupId = groupId ?? boardGroups[0]?.id ?? UNGROUPED_ID;
+    const item: BoardItem = {
+      id: `board-item-${Date.now()}`,
+      title: "Untitled work item",
+      owner: hub.lead.name.split(" ")[0] ?? hub.lead.name,
+      initials: hub.lead.initials,
+      status,
+      priority: "Normal",
+      due: "No date",
+      resources: 0,
+      updates: 0,
+      description:
+        "Describe the expected outcome, evidence, and completion criteria.",
+      groupId: effectiveGroupId,
+      group: groupNameFor(effectiveGroupId),
+    };
+    setItems((current) => [...current, item]);
+    setSelected(item);
+    setNotice("New work item created. Add the details in the open panel.");
+  };
+  const owners = Array.from(new Set(items.map((item) => item.owner))).sort();
+  const visibleItems = items.filter((item) => {
+    if (statusFilter !== "all" && item.status !== statusFilter) return false;
+    if (ownerFilter !== "all" && item.owner !== ownerFilter) return false;
+    const normalized = query.trim().toLocaleLowerCase();
+    return !normalized || item.title.toLocaleLowerCase().includes(normalized);
+  });
   const columns = useMemo<LegacyColumnDef<BoardItem>[]>(
     () => [
       {
@@ -276,11 +342,14 @@ function BoardWorkspace({
             <input
               aria-label="Select all"
               type="checkbox"
-              checked={checked.size === items.length && items.length > 0}
+              checked={
+                visibleItems.length > 0 &&
+                visibleItems.every((item) => checked.has(item.id))
+              }
               onChange={(event) =>
                 setChecked(
                   event.target.checked
-                    ? new Set(items.map((item) => item.id))
+                    ? new Set(visibleItems.map((item) => item.id))
                     : new Set(),
                 )
               }
@@ -322,7 +391,10 @@ function BoardWorkspace({
         accessorKey: "owner",
         header: copy.owner,
         cell: ({ row }) => (
-          <button className="owner-cell">
+          <button
+            className="owner-cell"
+            onClick={() => setSelected(row.original)}
+          >
             <span
               className={`avatar avatar-${row.original.initials.toLowerCase()}`}
             >
@@ -383,6 +455,7 @@ function BoardWorkspace({
         cell: ({ row }) => (
           <button
             className={`date-cell ${row.original.due === "Aug 22" ? "overdue" : ""}`}
+            onClick={() => setSelected(row.original)}
           >
             <CalendarDays size={13} />
             {row.original.due}
@@ -394,7 +467,10 @@ function BoardWorkspace({
         accessorKey: "resources",
         header: copy.resources,
         cell: ({ row }) => (
-          <button className="count-cell">
+          <button
+            className="count-cell"
+            onClick={() => setSelected(row.original)}
+          >
             <Paperclip size={13} />
             {row.original.resources}
           </button>
@@ -405,7 +481,10 @@ function BoardWorkspace({
         accessorKey: "updates",
         header: copy.updates,
         cell: ({ row }) => (
-          <button className="count-cell">
+          <button
+            className="count-cell"
+            onClick={() => setSelected(row.original)}
+          >
             <MessageSquare size={13} />
             {row.original.updates}
           </button>
@@ -413,13 +492,19 @@ function BoardWorkspace({
         size: 80,
       },
     ],
-    [checked, items, copy],
+    [checked, copy, visibleItems],
   );
   const table = useLegacyTable({
-    data: items,
+    data: visibleItems,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
+    state: {
+      columnVisibility: {
+        resources: showCounts,
+        updates: showCounts,
+      },
+    },
   });
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (over && active.id !== over.id)
@@ -450,10 +535,53 @@ function BoardWorkspace({
         (source) => source.id === item.id && source.type === "milestone",
       ),
     )?.title ?? "No dependency";
+  const applyBulkMove = (groupId: string) => {
+    setItems((current) =>
+      current.map((item) =>
+        checked.has(item.id)
+          ? { ...item, groupId, group: groupNameFor(groupId) }
+          : item,
+      ),
+    );
+    setNotice(
+      `${checked.size} selected item${checked.size === 1 ? "" : "s"} moved.`,
+    );
+    setChecked(new Set());
+    setBulkMode(null);
+  };
+  const applyBulkOwner = (owner: string) => {
+    setItems((current) =>
+      current.map((item) =>
+        checked.has(item.id)
+          ? { ...item, owner, initials: initialsFor(owner) }
+          : item,
+      ),
+    );
+    setNotice(
+      `${checked.size} selected item${checked.size === 1 ? "" : "s"} assigned to ${owner}.`,
+    );
+    setChecked(new Set());
+    setBulkMode(null);
+  };
 
   return (
     <WorkspaceFrame active="hub" hubSlug={hub.slug}>
       <main className="board-main">
+        {notice && (
+          <div
+            className={`workflow-toast success-toast board-toast${selected ? " with-item-panel" : ""}`}
+            role="status"
+          >
+            <CheckCircle2 size={15} />
+            <span>{notice}</span>
+            <button
+              aria-label="Dismiss notification"
+              onClick={() => setNotice("")}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
         <header className="board-header">
           <div className="board-title-wrap">
             <p>{`${hub.name} / ${board.category}`}</p>
@@ -461,14 +589,42 @@ function BoardWorkspace({
               <span className="board-mark">{hub.icon}</span>
               <h1>{board.name}</h1>
               <Hint resourceId="boards" />
-              <button aria-label="Board menu">
-                <MoreHorizontal size={18} />
-              </button>
+              <span className="board-menu-wrap">
+                <button
+                  aria-expanded={boardMenuOpen}
+                  aria-label="Board menu"
+                  onClick={() => setBoardMenuOpen((current) => !current)}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+                {boardMenuOpen && (
+                  <span className="board-action-menu" role="menu">
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(
+                          window.location.href,
+                        );
+                        setNotice("Board link copied.");
+                        setBoardMenuOpen(false);
+                      }}
+                    >
+                      <Copy size={13} /> Copy board link
+                    </button>
+                    <Link href={`/app/hubs/${hub.slug}`} role="menuitem">
+                      Open project overview
+                    </Link>
+                  </span>
+                )}
+              </span>
             </div>
             <small>{board.description}</small>
           </div>
           <div className="board-header-actions">
-            <button>
+            <button
+              aria-expanded={teamOpen}
+              onClick={() => setTeamOpen((current) => !current)}
+            >
               <Users size={15} />
               <span className="avatar-stack">
                 <i>MZ</i>
@@ -476,16 +632,30 @@ function BoardWorkspace({
                 <i>+3</i>
               </span>
             </button>
-            <button>
+            <button onClick={() => setAutomationOpen(true)}>
               <SlidersHorizontal size={15} />
               {copy.automate}
             </button>
-            <button className="primary-button">
+            <button className="primary-button" onClick={() => addItem()}>
               <Plus size={16} />
               {copy.addItem}
             </button>
           </div>
         </header>
+        {teamOpen && (
+          <section className="board-people-popover" aria-label="Board members">
+            <strong>Board members</strong>
+            {[hub.lead.name, "Mohammed Zaman", "Nora Klein", "Amira Demir"]
+              .filter((name, index, all) => all.indexOf(name) === index)
+              .map((name) => (
+                <span key={name}>
+                  <i className="avatar avatar-mz">{initialsFor(name)}</i>
+                  {name}
+                </span>
+              ))}
+            <Link href="/app/team">Manage team</Link>
+          </section>
+        )}
         <div className="view-toolbar">
           <div className="view-switch">
             <button
@@ -504,15 +674,29 @@ function BoardWorkspace({
             </button>
           </div>
           <span className="toolbar-rule" />
-          <button>
+          <button
+            aria-pressed={filtersOpen}
+            onClick={() => setFiltersOpen((current) => !current)}
+          >
             <Filter size={14} />
             {copy.filter}
           </button>
-          <button>
+          <button
+            onClick={() =>
+              setCollapsedGroups((current) =>
+                current.size
+                  ? new Set()
+                  : new Set(items.map((item) => item.groupId)),
+              )
+            }
+          >
             <Rows3 size={14} />
             {copy.group}
           </button>
-          <button>
+          <button
+            aria-pressed={showCounts}
+            onClick={() => setShowCounts((current) => !current)}
+          >
             <SlidersHorizontal size={14} />
             {copy.fields}
           </button>
@@ -529,13 +713,118 @@ function BoardWorkspace({
             </b>
           </div>
         </div>
+        {filtersOpen && (
+          <section className="board-filter-panel" aria-label="Board filters">
+            <label>
+              Search
+              <input
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Find a work item…"
+                value={query}
+              />
+            </label>
+            <label>
+              Status
+              <select
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as Status | "all")
+                }
+                value={statusFilter}
+              >
+                <option value="all">All statuses</option>
+                {Object.entries(statusLabel).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Owner
+              <select
+                onChange={(event) => setOwnerFilter(event.target.value)}
+                value={ownerFilter}
+              >
+                <option value="all">All owners</option>
+                {owners.map((owner) => (
+                  <option key={owner}>{owner}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              onClick={() => {
+                setQuery("");
+                setStatusFilter("all");
+                setOwnerFilter("all");
+              }}
+            >
+              Clear filters
+            </button>
+            <span>
+              {visibleItems.length} of {items.length} items
+            </span>
+          </section>
+        )}
         {checked.size > 0 && (
           <div className="bulk-bar">
             <strong>
               {checked.size} {copy.selected}
             </strong>
-            <button>{copy.bulkMove}</button>
-            <button>{copy.assign}</button>
+            <button
+              onClick={() => setBulkMode(bulkMode === "move" ? null : "move")}
+            >
+              {copy.bulkMove}
+            </button>
+            <button
+              onClick={() =>
+                setBulkMode(bulkMode === "assign" ? null : "assign")
+              }
+            >
+              {copy.assign}
+            </button>
+            {bulkMode === "move" && (
+              <select
+                aria-label="Move selected items"
+                defaultValue=""
+                onChange={(event) =>
+                  event.target.value && applyBulkMove(event.target.value)
+                }
+              >
+                <option disabled value="">
+                  Choose group…
+                </option>
+                {boardGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+                <option value={UNGROUPED_ID}>Ungrouped</option>
+              </select>
+            )}
+            {bulkMode === "assign" && (
+              <select
+                aria-label="Assign selected items"
+                defaultValue=""
+                onChange={(event) =>
+                  event.target.value && applyBulkOwner(event.target.value)
+                }
+              >
+                <option disabled value="">
+                  Choose owner…
+                </option>
+                {[
+                  hub.lead.name,
+                  "Mohammed Zaman",
+                  "Nora Klein",
+                  "Amira Demir",
+                  "Unassigned",
+                ]
+                  .filter((name, index, all) => all.indexOf(name) === index)
+                  .map((owner) => (
+                    <option key={owner}>{owner}</option>
+                  ))}
+              </select>
+            )}
             <button onClick={() => setChecked(new Set())}>{copy.clear}</button>
           </div>
         )}
@@ -565,7 +854,7 @@ function BoardWorkspace({
                   ))}
                 </thead>
                 <SortableContext
-                  items={items.map((item) => item.id)}
+                  items={visibleItems.map((item) => item.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   <tbody>
@@ -630,7 +919,9 @@ function BoardWorkspace({
                     <tr className="add-row">
                       <td />
                       <td colSpan={7}>
-                        <button>
+                        <button
+                          onClick={() => addItem("planned", boardGroups[0]?.id)}
+                        >
                           <Plus size={14} />
                           {copy.addBelow}
                         </button>
@@ -646,9 +937,73 @@ function BoardWorkspace({
             items={items}
             updateItem={updateItem}
             onSelect={setSelected}
+            onAdd={addItem}
           />
         )}
         <p className="drag-hint">{copy.dragHint}</p>
+        {automationOpen && (
+          <div
+            className="dialog-layer"
+            role="presentation"
+            onMouseDown={() => setAutomationOpen(false)}
+          >
+            <section
+              className="capture-dialog automation-preview-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="automation-title"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <header>
+                <span className="attention-icon">
+                  <SlidersHorizontal size={16} />
+                </span>
+                <div>
+                  <h2 id="automation-title">Board automation</h2>
+                  <p>Preview a safe rule before enabling it.</p>
+                </div>
+                <button
+                  aria-label="Close automation"
+                  onClick={() => setAutomationOpen(false)}
+                >
+                  <X size={17} />
+                </button>
+              </header>
+              <div className="automation-rule-preview">
+                <strong>When an item moves to Done</strong>
+                <span>Record a completion update and notify followers.</span>
+                <label>
+                  <input
+                    checked={automationEnabled}
+                    onChange={(event) =>
+                      setAutomationEnabled(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  Enable this preview rule
+                </label>
+              </div>
+              <footer>
+                <span>
+                  Advanced custom automations remain a later-release capability.
+                </span>
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    setAutomationOpen(false);
+                    setNotice(
+                      automationEnabled
+                        ? "Board automation enabled."
+                        : "Automation preview saved without enabling.",
+                    );
+                  }}
+                >
+                  Save automation
+                </button>
+              </footer>
+            </section>
+          </div>
+        )}
       </main>
       {selected && (
         <ItemPanel
@@ -658,6 +1013,7 @@ function BoardWorkspace({
           hubName={hub.name}
           boardName={board.name}
           dependencyTitle={dependencyTitle}
+          onNotice={setNotice}
         />
       )}
     </WorkspaceFrame>
@@ -801,10 +1157,12 @@ function Kanban({
   items,
   updateItem,
   onSelect,
+  onAdd,
 }: {
   items: BoardItem[];
   updateItem: (id: string, patch: Partial<BoardItem>) => void;
   onSelect: (item: BoardItem) => void;
+  onAdd: (status?: Status, groupId?: string) => void;
 }) {
   const statuses: Status[] = [
     "planned",
@@ -821,7 +1179,10 @@ function Kanban({
             <span className={`type-dot ${status}`} />
             <strong>{statusLabel[status]}</strong>
             <b>{items.filter((item) => item.status === status).length}</b>
-            <button>
+            <button
+              aria-label={`Add item to ${statusLabel[status]}`}
+              onClick={() => onAdd(status)}
+            >
               <Plus size={14} />
             </button>
           </header>
@@ -869,7 +1230,7 @@ function Kanban({
                   </article>
                 );
               })}
-            <button className="kanban-add">
+            <button className="kanban-add" onClick={() => onAdd(status)}>
               <Plus size={14} />
               Add item
             </button>
@@ -887,6 +1248,7 @@ function ItemPanel({
   hubName,
   boardName,
   dependencyTitle,
+  onNotice,
 }: {
   item: BoardItem;
   onClose: () => void;
@@ -894,6 +1256,7 @@ function ItemPanel({
   hubName: string;
   boardName: string;
   dependencyTitle: string;
+  onNotice: (message: string) => void;
 }) {
   const copy = productCopy.en.item;
   const [subitems, setSubitems] = useState([
@@ -902,6 +1265,15 @@ function ItemPanel({
     { title: "Outcome recorded in the project update", done: false },
   ]);
   const [comment, setComment] = useState("");
+  const [newSubitem, setNewSubitem] = useState("");
+  const [addingSubitem, setAddingSubitem] = useState(false);
+  const [following, setFollowing] = useState(true);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [addingLink, setAddingLink] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const people = ["Mohammed", "Nora", "Amira", "Elias", "Unassigned"];
   return (
     <aside className="item-panel" aria-label={item.title}>
       <header>
@@ -916,15 +1288,50 @@ function ItemPanel({
           </span>
         </div>
         <div>
-          <button aria-label={copy.copyLink}>
+          <button
+            aria-label={copy.copyLink}
+            onClick={() => {
+              const url = `${window.location.origin}${window.location.pathname}#${item.id}`;
+              void navigator.clipboard.writeText(url);
+              onNotice("Item link copied.");
+            }}
+          >
             <Copy size={16} />
           </button>
-          <button aria-label={copy.more}>
+          <button
+            aria-expanded={moreOpen}
+            aria-label={copy.more}
+            onClick={() => setMoreOpen((current) => !current)}
+          >
             <MoreHorizontal size={17} />
           </button>
           <button aria-label={copy.close} onClick={onClose}>
             <X size={18} />
           </button>
+          {moreOpen && (
+            <div className="item-action-menu" role="menu">
+              <button
+                role="menuitem"
+                onClick={() => {
+                  void navigator.clipboard.writeText(item.title);
+                  onNotice("Item title copied.");
+                  setMoreOpen(false);
+                }}
+              >
+                Copy title
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  updateItem(item.id, { status: "blocked" });
+                  onNotice("Item marked blocked.");
+                  setMoreOpen(false);
+                }}
+              >
+                Mark blocked
+              </button>
+            </div>
+          )}
         </div>
       </header>
       <div className="item-panel-scroll">
@@ -949,11 +1356,26 @@ function ItemPanel({
             <UserRound size={14} />
             {copy.assignees}
           </span>
-          <button>
+          <label className="property-select-control">
             <span className="avatar avatar-mz">{item.initials}</span>
-            {item.owner}
+            <select
+              aria-label={`Owner for ${item.title}`}
+              onChange={(event) =>
+                updateItem(item.id, {
+                  owner: event.target.value,
+                  initials: initialsFor(event.target.value),
+                })
+              }
+              value={item.owner}
+            >
+              {[item.owner, ...people]
+                .filter((name, index, all) => all.indexOf(name) === index)
+                .map((name) => (
+                  <option key={name}>{name}</option>
+                ))}
+            </select>
             <ChevronDown size={13} />
-          </button>
+          </label>
           <span>
             <Circle size={14} />
             Status
@@ -992,15 +1414,30 @@ function ItemPanel({
             <CalendarDays size={14} />
             {copy.dates}
           </span>
-          <button>
-            {item.due}
-            <ChevronDown size={13} />
-          </button>
+          <input
+            aria-label={`Due date for ${item.title}`}
+            type="date"
+            value={item.dueDate ?? ""}
+            onChange={(event) =>
+              updateItem(item.id, {
+                dueDate: event.target.value || undefined,
+                due: formatDueDate(event.target.value || undefined),
+              })
+            }
+          />
           <span>
             <Link2 size={14} />
             {copy.dependency}
           </span>
-          <button>
+          <button
+            onClick={() =>
+              onNotice(
+                dependencyTitle === "No dependency"
+                  ? "This item has no linked dependency."
+                  : `Dependency: ${dependencyTitle}`,
+              )
+            }
+          >
             {dependencyTitle}
             <ExternalLink size={12} />
           </button>
@@ -1059,10 +1496,43 @@ function ItemPanel({
               </li>
             ))}
           </ul>
-          <button className="text-action">
-            <Plus size={14} />
-            {copy.addSubitem}
-          </button>
+          {addingSubitem ? (
+            <form
+              className="subitem-create"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!newSubitem.trim()) return;
+                setSubitems((current) => [
+                  ...current,
+                  { title: newSubitem.trim(), done: false },
+                ]);
+                setNewSubitem("");
+                setAddingSubitem(false);
+              }}
+            >
+              <input
+                autoFocus
+                aria-label="New checklist item"
+                onChange={(event) => setNewSubitem(event.target.value)}
+                placeholder="Describe the next checklist step"
+                value={newSubitem}
+              />
+              <button disabled={!newSubitem.trim()} type="submit">
+                Add
+              </button>
+              <button onClick={() => setAddingSubitem(false)} type="button">
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <button
+              className="text-action"
+              onClick={() => setAddingSubitem(true)}
+            >
+              <Plus size={14} />
+              {copy.addSubitem}
+            </button>
+          )}
         </section>
         <section className="panel-section">
           <h3>{copy.links}</h3>
@@ -1098,8 +1568,18 @@ function ItemPanel({
         <section className="panel-section">
           <div className="panel-section-title">
             <h3>{copy.activity}</h3>
-            <button>
-              {copy.following}
+            <button
+              aria-pressed={following}
+              onClick={() => {
+                setFollowing((current) => !current);
+                onNotice(
+                  following
+                    ? "You are no longer following this item."
+                    : "You are now following this item.",
+                );
+              }}
+            >
+              {following ? copy.following : "Follow"}
               <ChevronDown size={12} />
             </button>
           </div>
@@ -1128,20 +1608,77 @@ function ItemPanel({
             onChange={(event) => setComment(event.target.value)}
             placeholder={copy.addComment}
           />
+          {attachments.length > 0 && (
+            <small className="comment-attachments">
+              {attachments.join(", ")}
+            </small>
+          )}
+          {addingLink && (
+            <input
+              aria-label="Link to add"
+              autoFocus
+              onChange={(event) => setLinkDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && linkDraft.trim()) {
+                  event.preventDefault();
+                  setAttachments((current) => [...current, linkDraft.trim()]);
+                  setLinkDraft("");
+                  setAddingLink(false);
+                }
+              }}
+              placeholder="Paste a URL and press Enter"
+              type="url"
+              value={linkDraft}
+            />
+          )}
           <span>
-            <button aria-label="Attach file">
+            <input
+              hidden
+              multiple
+              onChange={(event) =>
+                setAttachments((current) => [
+                  ...current,
+                  ...Array.from(event.target.files ?? []).map(
+                    (file) => file.name,
+                  ),
+                ])
+              }
+              ref={fileInputRef}
+              type="file"
+            />
+            <button
+              aria-label="Attach file"
+              onClick={() => fileInputRef.current?.click()}
+            >
               <Paperclip size={14} />
             </button>
-            <button aria-label="Add link">
+            <button
+              aria-label="Add link"
+              onClick={() => setAddingLink((current) => !current)}
+            >
               <Link2 size={14} />
             </button>
-            <button aria-label="Mention teammate">
+            <button
+              aria-label="Mention teammate"
+              onClick={() =>
+                setComment(
+                  (current) => `${current}${current ? " " : ""}@${item.owner} `,
+                )
+              }
+            >
               <span>@</span>
             </button>
             <button
               className="send-button"
               disabled={!comment}
-              onClick={() => setComment("")}
+              onClick={() => {
+                updateItem(item.id, { updates: item.updates + 1 });
+                setComment("");
+                setAttachments([]);
+                setAddingLink(false);
+                setLinkDraft("");
+                onNotice("Comment posted to the item activity.");
+              }}
             >
               <Send size={14} />
               {copy.send}

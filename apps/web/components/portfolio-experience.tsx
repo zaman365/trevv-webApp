@@ -22,6 +22,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceFrame } from "./workspace-frame";
 import { ProjectTile } from "./project-tile";
 import { HealthBar, PageHero, Panel, StatTile } from "./ui-kit";
+import { useCustomHubs } from "@/lib/custom-hubs";
 
 export function PortfolioExperience() {
   return (
@@ -37,15 +38,43 @@ function PortfolioMain() {
   const [health, setHealth] = useState<HubHealth | "all">("all");
   // §5: "choose optional metrics" — on by default, dismissable.
   const [showMetrics, setShowMetrics] = useState(true);
+  const customHubs = useCustomHubs().filter(
+    (record) => record.hub.portfolioId === portfolioId,
+  );
 
   const portfolio = demoPortfolios.find((item) => item.id === portfolioId);
   const summary = useMemo(
     () => (portfolio ? summarizePortfolio(portfolio) : undefined),
     [portfolio],
   );
-  const projects = (summary?.projects ?? []).filter(
-    (project) => health === "all" || project.hub.health === health,
-  );
+  const projects = [
+    ...customHubs.map(({ hub }) => ({
+      hub,
+      rollup: {
+        open: 0,
+        overdue: 0,
+        blocked: 0,
+        decisions: 0,
+        approvals: 0,
+        score: 0,
+      },
+      progress: null,
+    })),
+    ...(summary?.projects ?? []),
+  ].filter((project) => health === "all" || project.hub.health === health);
+  const projectCount = (summary?.count ?? 0) + customHubs.length;
+  const healthMix = summary
+    ? summary.health.map((slice) =>
+        slice.key === "on_track"
+          ? { ...slice, count: slice.count + customHubs.length }
+          : slice,
+      )
+    : [
+        { key: "critical", label: "Critical", count: 0 },
+        { key: "watch", label: "Watch", count: 0 },
+        { key: "on_track", label: "On track", count: customHubs.length },
+        { key: "parked", label: "Parked", count: 0 },
+      ];
   const signals = scope.breakdown;
 
   const cards = [
@@ -109,7 +138,7 @@ function PortfolioMain() {
       <PageHero
         eyebrow={
           <>
-            {vocab.groupOne} · {summary?.count ?? 0} {vocab.many.toLowerCase()}
+            {vocab.groupOne} · {projectCount} {vocab.many.toLowerCase()}
           </>
         }
         title={portfolio?.name ?? vocab.groupOne}
@@ -131,10 +160,10 @@ function PortfolioMain() {
           </label>
         }
         actions={
-          <button className="primary-button">
+          <Link className="primary-button" href="/app/hubs?create=project">
             <Plus size={17} />
             <span>New {vocab.one.toLowerCase()}</span>
-          </button>
+          </Link>
         }
         stats={
           <>
@@ -182,7 +211,7 @@ function PortfolioMain() {
           wide
         >
           <div className="health-mix">
-            <HealthBar slices={summary.health} />
+            <HealthBar slices={healthMix} />
             {summary.focus && (
               <p className="health-focus">
                 <b>Most urgent</b>
@@ -212,6 +241,15 @@ function PortfolioMain() {
           {orderedCards.map((card) => (
             <SignalCard
               key={card.key}
+              href={
+                card.key === "decisions"
+                  ? "/app/decisions"
+                  : card.key === "approvals"
+                    ? "/app/approvals"
+                    : card.key === "unassignedUrgent"
+                      ? "/app/team"
+                      : `/app/attention#${card.key === "overdueMilestones" ? "overdue" : card.key === "staleUpdates" ? "stale" : "blocked"}`
+              }
               tone={SIGNAL_TONES[card.key]}
               icon={card.icon}
               count={card.count}
@@ -280,16 +318,21 @@ function SignalCard({
   count,
   label,
   note,
+  href,
 }: {
   tone: SignalTone;
   icon: typeof FileQuestion;
   count: number;
   label: string;
   note: string;
+  href: string;
 }) {
   const clear = count === 0;
   return (
-    <button className={`signal-card signal-${tone} ${clear ? "is-clear" : ""}`}>
+    <Link
+      className={`signal-card signal-${tone} ${clear ? "is-clear" : ""}`}
+      href={href}
+    >
       <span className="signal-icon">
         <Icon size={17} />
       </span>
@@ -301,6 +344,6 @@ function SignalCard({
       <span className="signal-arrow" aria-hidden="true">
         →
       </span>
-    </button>
+    </Link>
   );
 }
