@@ -36,6 +36,11 @@
   background: var(--brand);
   content: "";
 }
+.hub-main > .page-hero {
+  border-inline: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
 .hero-top {
   display: flex;
   align-items: flex-start;
