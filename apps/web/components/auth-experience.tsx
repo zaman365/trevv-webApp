@@ -94,7 +94,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
           <p>
             {mode === "sign-in" ? copy.signInSubtitle : copy.signUpSubtitle}
           </p>
-          <form action="/app/home">
+          <form action="/app/portfolio">
             {mode === "sign-up" && (
               <label>
                 {copy.name}
@@ -143,7 +143,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
           <div className="auth-separator">
             <span>or</span>
           </div>
-          <a className="demo-auth-button" href="/app/home">
+          <a className="demo-auth-button" href="/app/portfolio">
             <Grid2X2 size={16} />
             {copy.demo}
           </a>
@@ -403,7 +403,7 @@ export function OnboardingExperience() {
               <ArrowRight size={14} />
             </button>
           ) : (
-            <a className="primary-button" href="/app/home">
+            <a className="primary-button" href="/app/portfolio">
               Open TREVV
               <ArrowRight size={14} />
             </a>

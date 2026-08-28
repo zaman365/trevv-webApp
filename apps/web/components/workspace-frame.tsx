@@ -352,7 +352,6 @@ function WorkspaceChrome({
   const attentionCount = scope.attentionCount;
 
   const nav = [
-    ["portfolio", copy.nav.portfolio, "/app/home", Grid2X2, undefined],
     ...(workspaceLevel === "project" && contextProject
       ? [
           [
@@ -380,6 +379,184 @@ function WorkspaceChrome({
   return (
     <div className="product-shell workspace-product">
       <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
+        {contextPortfolio && contextPortfolioVisual && (
+          <div className="sidebar-portfolio-head" ref={portfolioMenuRef}>
+            <div
+              className={`sidebar-portfolio-control ${active === "home" || active === "portfolio" ? "active" : ""}`}
+            >
+              <Link
+                className="sidebar-portfolio-link"
+                href="/app/portfolio"
+                aria-current={
+                  active === "home" || active === "portfolio"
+                    ? "page"
+                    : undefined
+                }
+                onClick={() => setOpen(false)}
+              >
+                <span
+                  className="workspace-context-icon portfolio portfolio-logo"
+                  style={{
+                    background: `${contextPortfolioVisual.accent}18`,
+                    color: contextPortfolioVisual.accent,
+                  }}
+                >
+                  {contextPortfolioVisual.mark}
+                </span>
+                <span className="workspace-context-copy">
+                  <small>Portfolio overview</small>
+                  <strong>{contextPortfolio.name}</strong>
+                </span>
+              </Link>
+              <button
+                type="button"
+                className="sidebar-portfolio-menu-button"
+                aria-label="Switch portfolio"
+                aria-haspopup="dialog"
+                aria-expanded={portfolioMenuOpen}
+                onClick={() =>
+                  setPortfolioMenuOpen((currentOpen) => !currentOpen)
+                }
+              >
+                <ChevronDown
+                  className={`workspace-context-chevron ${portfolioMenuOpen ? "open" : ""}`}
+                  size={15}
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+
+            {portfolioMenuOpen && (
+              <section
+                className="portfolio-switcher-popover"
+                role="dialog"
+                aria-label="Portfolio switcher"
+              >
+                <header className="portfolio-switcher-header">
+                  <div>
+                    <small>Portfolio level</small>
+                    <h2>Choose portfolio</h2>
+                  </div>
+                  <span>{accessiblePortfolios.length}</span>
+                </header>
+
+                <div className="workspace-switcher-search portfolio-switcher-search">
+                  <Search size={15} aria-hidden="true" />
+                  <input
+                    value={portfolioQuery}
+                    onChange={(event) =>
+                      setPortfolioQuery(event.currentTarget.value)
+                    }
+                    placeholder="Find a portfolio"
+                    aria-label="Find a portfolio"
+                  />
+                  {portfolioQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setPortfolioQuery("")}
+                      aria-label="Clear portfolio search"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="portfolio-switcher-list">
+                  {visiblePortfolios.map((portfolio) => {
+                    const visual = portfolioVisualFor(
+                      portfolio,
+                      customPortfolioRecords,
+                    );
+                    const portfolioProjectCount = accessibleProjects.filter(
+                      (project) => project.portfolioId === portfolio.id,
+                    ).length;
+                    const isSelected = portfolio.id === contextPortfolio.id;
+
+                    return (
+                      <button
+                        type="button"
+                        className={`portfolio-switcher-option ${isSelected ? "selected" : ""}`}
+                        aria-pressed={isSelected}
+                        key={portfolio.id}
+                        onClick={() => {
+                          const canViewPortfolio =
+                            allowedPortfolioIds.has(portfolio.id) ||
+                            customPortfolioIds.has(portfolio.id);
+                          if (canViewPortfolio) {
+                            setPortfolioId(portfolio.id);
+                          } else {
+                            const firstProject = accessibleProjects.find(
+                              (project) => project.portfolioId === portfolio.id,
+                            );
+                            if (firstProject) {
+                              selectProject(
+                                firstProject.id,
+                                firstProject.portfolioId,
+                              );
+                            }
+                          }
+                          setPortfolioMenuOpen(false);
+                          setPortfolioQuery("");
+                          setOpen(false);
+                          router.push("/app/portfolio");
+                        }}
+                      >
+                        <span
+                          className="portfolio-option-logo"
+                          style={{
+                            background: `${visual.accent}18`,
+                            color: visual.accent,
+                          }}
+                        >
+                          {visual.mark}
+                        </span>
+                        <span className="portfolio-option-copy">
+                          <strong>{portfolio.name}</strong>
+                          <small>
+                            {portfolioProjectCount}{" "}
+                            {portfolioProjectCount === 1
+                              ? "workspace"
+                              : "workspaces"}
+                          </small>
+                        </span>
+                        {isSelected && (
+                          <CheckCircle2
+                            className="workspace-switcher-selected"
+                            size={17}
+                            aria-label="Current portfolio"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                  {visiblePortfolios.length === 0 && (
+                    <p className="workspace-switcher-empty">
+                      No portfolio matches “{portfolioQuery.trim()}”.
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="portfolio-switcher-create"
+                  onClick={() => {
+                    setPortfolioMenuOpen(false);
+                    setPortfolioQuery("");
+                    setPortfolioCreateOpen(true);
+                  }}
+                >
+                  <span>
+                    <Plus size={16} />
+                  </span>
+                  <span>
+                    <strong>New portfolio</strong>
+                    <small>Create a new workspace collection</small>
+                  </span>
+                </button>
+              </section>
+            )}
+          </div>
+        )}
         <div className="brand-row workspace-context-row">
           {contextPortfolio ? (
             <div className="workspace-switcher-wrap" ref={workspaceMenuRef}>
@@ -627,10 +804,7 @@ function WorkspaceChrome({
         <nav aria-label="Primary navigation">
           <p className="nav-label">Workspace</p>
           {nav.map(([key, label, href, Icon, badge]) => {
-            const isActive =
-              key === "portfolio"
-                ? active === "home" || active === "portfolio"
-                : active === key;
+            const isActive = active === key;
 
             return (
               <Link
@@ -744,169 +918,6 @@ function WorkspaceChrome({
             <Settings2 size={17} />
             <span>{copy.nav.settings}</span>
           </Link>
-          {contextPortfolio && (
-            <div className="portfolio-switcher-wrap" ref={portfolioMenuRef}>
-              <button
-                type="button"
-                className="workspace-context-switcher sidebar-portfolio-switcher portfolio-switcher-trigger"
-                aria-haspopup="dialog"
-                aria-expanded={portfolioMenuOpen}
-                onClick={() =>
-                  setPortfolioMenuOpen((currentOpen) => !currentOpen)
-                }
-              >
-                <span
-                  className="workspace-context-icon portfolio portfolio-logo"
-                  style={{
-                    background: `${contextPortfolioVisual?.accent ?? "#5b56db"}18`,
-                    color: contextPortfolioVisual?.accent ?? "#5b56db",
-                  }}
-                >
-                  {contextPortfolioVisual?.mark ?? "P"}
-                </span>
-                <span className="workspace-context-copy">
-                  <small>Portfolio</small>
-                  <strong>{contextPortfolio.name}</strong>
-                </span>
-                <ChevronDown
-                  className={`workspace-context-chevron ${portfolioMenuOpen ? "open" : ""}`}
-                  size={15}
-                  aria-hidden="true"
-                />
-              </button>
-
-              {portfolioMenuOpen && (
-                <section
-                  className="portfolio-switcher-popover"
-                  role="dialog"
-                  aria-label="Portfolio switcher"
-                >
-                  <header className="portfolio-switcher-header">
-                    <div>
-                      <small>Portfolio level</small>
-                      <h2>Choose portfolio</h2>
-                    </div>
-                    <span>{accessiblePortfolios.length}</span>
-                  </header>
-
-                  <div className="workspace-switcher-search portfolio-switcher-search">
-                    <Search size={15} aria-hidden="true" />
-                    <input
-                      value={portfolioQuery}
-                      onChange={(event) =>
-                        setPortfolioQuery(event.currentTarget.value)
-                      }
-                      placeholder="Find a portfolio"
-                      aria-label="Find a portfolio"
-                    />
-                    {portfolioQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setPortfolioQuery("")}
-                        aria-label="Clear portfolio search"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="portfolio-switcher-list">
-                    {visiblePortfolios.map((portfolio) => {
-                      const visual = portfolioVisualFor(
-                        portfolio,
-                        customPortfolioRecords,
-                      );
-                      const portfolioProjectCount = accessibleProjects.filter(
-                        (project) => project.portfolioId === portfolio.id,
-                      ).length;
-                      const isSelected = portfolio.id === contextPortfolio.id;
-
-                      return (
-                        <button
-                          type="button"
-                          className={`portfolio-switcher-option ${isSelected ? "selected" : ""}`}
-                          aria-pressed={isSelected}
-                          key={portfolio.id}
-                          onClick={() => {
-                            const canViewPortfolio =
-                              allowedPortfolioIds.has(portfolio.id) ||
-                              customPortfolioIds.has(portfolio.id);
-                            if (canViewPortfolio) {
-                              setPortfolioId(portfolio.id);
-                            } else {
-                              const firstProject = accessibleProjects.find(
-                                (project) =>
-                                  project.portfolioId === portfolio.id,
-                              );
-                              if (firstProject) {
-                                selectProject(
-                                  firstProject.id,
-                                  firstProject.portfolioId,
-                                );
-                              }
-                            }
-                            setPortfolioMenuOpen(false);
-                            setPortfolioQuery("");
-                            setOpen(false);
-                            if (active === "hub") router.push("/app/home");
-                          }}
-                        >
-                          <span
-                            className="portfolio-option-logo"
-                            style={{
-                              background: `${visual.accent}18`,
-                              color: visual.accent,
-                            }}
-                          >
-                            {visual.mark}
-                          </span>
-                          <span className="portfolio-option-copy">
-                            <strong>{portfolio.name}</strong>
-                            <small>
-                              {portfolioProjectCount}{" "}
-                              {portfolioProjectCount === 1
-                                ? "project"
-                                : "projects"}
-                            </small>
-                          </span>
-                          {isSelected && (
-                            <CheckCircle2
-                              className="workspace-switcher-selected"
-                              size={17}
-                              aria-label="Current portfolio"
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                    {visiblePortfolios.length === 0 && (
-                      <p className="workspace-switcher-empty">
-                        No portfolio matches “{portfolioQuery.trim()}”.
-                      </p>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    className="portfolio-switcher-create"
-                    onClick={() => {
-                      setPortfolioMenuOpen(false);
-                      setPortfolioQuery("");
-                      setPortfolioCreateOpen(true);
-                    }}
-                  >
-                    <span>
-                      <Plus size={16} />
-                    </span>
-                    <span>
-                      <strong>New portfolio</strong>
-                      <small>Create a new project collection</small>
-                    </span>
-                  </button>
-                </section>
-              )}
-            </div>
-          )}
         </div>
       </aside>
       {open && (
@@ -1133,7 +1144,7 @@ function WorkspaceChrome({
             setPortfolioCreateOpen(false);
             setPortfolioId(record.portfolio.id);
             setOpen(false);
-            router.push("/app/home");
+            router.push("/app/portfolio");
           }}
         />
       )}
