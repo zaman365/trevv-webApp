@@ -107,6 +107,7 @@ export function MessagingWorkspace() {
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
+  const directLinkHandledRef = useRef<string | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -141,6 +142,70 @@ export function MessagingWorkspace() {
       // State remains functional for the current session.
     }
   }, [conversations, hydrated, messages]);
+
+  useEffect(() => {
+    if (!hydrated || !workspace) return;
+
+    const requestedPersonId = new URLSearchParams(window.location.search).get(
+      "person",
+    );
+    if (
+      !requestedPersonId ||
+      directLinkHandledRef.current === requestedPersonId
+    )
+      return;
+
+    const person = messagingPeople.find(
+      (candidate) =>
+        candidate.id === requestedPersonId &&
+        candidate.id !== currentMessagingUserId,
+    );
+    if (!person) return;
+    if (
+      person.external &&
+      !seedConversations.some(
+        (conversation) =>
+          conversation.hubId === workspace.id &&
+          conversation.participantIds.includes(person.id),
+      )
+    )
+      return;
+
+    directLinkHandledRef.current = requestedPersonId;
+    const frame = window.requestAnimationFrame(() => {
+      const existing = conversations.find(
+        (conversation) =>
+          conversation.kind === "direct" &&
+          conversation.hubId === workspace.id &&
+          conversation.participantIds.includes(person.id),
+      );
+
+      if (existing) {
+        setSelectedId(existing.id);
+      } else {
+        const conversation: Conversation = {
+          id: createLocalId("conversation"),
+          title: person.name,
+          purpose: "Direct conversation",
+          kind: "direct",
+          participantIds: [currentMessagingUserId, person.id],
+          hubId: workspace.id,
+          hubSlug: workspace.slug,
+          unread: 0,
+          visibility: person.external ? "guest-scoped" : "private",
+          lastActivity: new Date().toISOString(),
+        };
+        setConversations((current) => [...current, conversation]);
+        setSelectedId(conversation.id);
+      }
+
+      setFocus("all");
+      setQuery("");
+      setThreadId(null);
+      setContextOpen(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [conversations, hydrated, workspace]);
 
   const scopedHubIds = useMemo(
     () => new Set(scope.hubs.map((hub) => hub.id)),

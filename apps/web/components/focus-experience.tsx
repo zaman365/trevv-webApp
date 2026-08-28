@@ -10,6 +10,8 @@ import {
   Filter,
   LayoutTemplate,
   Link2,
+  Mail,
+  MessageCircleMore,
   Search,
   Settings2,
   ShieldCheck,
@@ -23,6 +25,11 @@ import { productCopy } from "@/lib/product-copy";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
+import {
+  currentMessagingUserId,
+  messagingPeople,
+  seedConversations,
+} from "@/lib/messaging-data";
 import { Hint } from "./learning-center";
 import { DecisionCenter } from "./decision-center";
 import { InboxExperience } from "./email-inbox-workflow";
@@ -118,6 +125,7 @@ function FocusMain({ kind }: { kind: FocusKind }) {
           setQuery={setQuery}
           results={searchResults}
           allowedHubIds={scope.hubs.map((project) => project.id)}
+          {...(scope.hubs[0] ? { workspaceSlug: scope.hubs[0].slug } : {})}
         />
       )}
       {kind === "templates" && <TemplatesView />}
@@ -296,18 +304,39 @@ function SearchView({
   setQuery,
   results,
   allowedHubIds,
+  workspaceSlug,
 }: {
   query: string;
   setQuery: (value: string) => void;
   results: typeof demoItems;
   allowedHubIds: readonly string[];
+  workspaceSlug?: string;
 }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState<
-    "everything" | "work" | "hubs" | "updates" | "resources"
+    "everything" | "work" | "people" | "hubs" | "updates" | "resources"
   >("everything");
   const normalized = query.trim().toLocaleLowerCase();
   const allowedHubIdSet = new Set(allowedHubIds);
+  const accessibleExternalPersonIds = new Set(
+    seedConversations
+      .filter(
+        (conversation) =>
+          conversation.hubId && allowedHubIdSet.has(conversation.hubId),
+      )
+      .flatMap((conversation) => conversation.participantIds),
+  );
+  const peopleResults =
+    normalized.length < 2
+      ? []
+      : messagingPeople.filter(
+          (person) =>
+            person.id !== currentMessagingUserId &&
+            (!person.external || accessibleExternalPersonIds.has(person.id)) &&
+            `${person.name} ${person.email} ${person.role}`
+              .toLocaleLowerCase()
+              .includes(normalized),
+        );
   const hubResults =
     normalized.length < 2
       ? []
@@ -355,6 +384,9 @@ function SearchView({
   );
   const total =
     (filter === "everything" || filter === "work" ? results.length : 0) +
+    (filter === "everything" || filter === "people"
+      ? peopleResults.length
+      : 0) +
     (filter === "everything" || filter === "hubs" ? hubResults.length : 0) +
     (filter === "everything" || filter === "updates"
       ? updateResults.length
@@ -363,6 +395,7 @@ function SearchView({
   const chips = [
     ["everything", "Everything"],
     ["work", "Work items"],
+    ["people", "People"],
     ["hubs", "Workspaces"],
     ["updates", "Updates"],
     ["resources", "Resources"],
@@ -378,7 +411,7 @@ function SearchView({
           aria-keyshortcuts="/"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search work, Workspaces, comments and resources…"
+          placeholder="Search work, people, Workspaces, comments and resources…"
         />
         {query ? (
           <button
@@ -443,6 +476,46 @@ function SearchView({
                 </div>
                 <ArrowRight size={14} />
               </Link>
+            ))}
+          {(filter === "everything" || filter === "people") &&
+            peopleResults.map((person) => (
+              <article className="search-person-result" key={person.id}>
+                <span
+                  className="search-person-avatar"
+                  style={{ backgroundColor: person.color }}
+                  aria-hidden="true"
+                >
+                  {person.initials}
+                </span>
+                <div className="search-person-copy">
+                  <strong>{person.name}</strong>
+                  <span>
+                    {person.role} · {person.presence} · {person.email}
+                  </span>
+                </div>
+                <div
+                  className="search-person-actions"
+                  role="group"
+                  aria-label={`Actions for ${person.name}`}
+                >
+                  {workspaceSlug && (
+                    <Link
+                      href={`${workspaceHref(workspaceSlug, "messages")}?person=${encodeURIComponent(person.id)}`}
+                      aria-label={`Message ${person.name}`}
+                    >
+                      <MessageCircleMore size={14} />
+                      <span>Message</span>
+                    </Link>
+                  )}
+                  <a
+                    href={`mailto:${person.email}`}
+                    aria-label={`Email ${person.name}`}
+                  >
+                    <Mail size={14} />
+                    <span>Email</span>
+                  </a>
+                </div>
+              </article>
             ))}
           {(filter === "everything" || filter === "hubs") &&
             hubResults.map((hub) => (

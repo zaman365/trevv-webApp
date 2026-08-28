@@ -6,6 +6,7 @@ export interface MessagingPerson {
   id: string;
   name: string;
   initials: string;
+  email: string;
   role: string;
   color: string;
   presence: "online" | "away" | "offline";
@@ -56,6 +57,7 @@ export const messagingPeople: MessagingPerson[] = [
     id: currentMessagingUserId,
     name: "Mohammed Zaman",
     initials: "MZ",
+    email: "mohammed@trevv.de",
     role: "Owner",
     color: "#5b5bd6",
     presence: "online",
@@ -64,6 +66,7 @@ export const messagingPeople: MessagingPerson[] = [
     id: "person-nora",
     name: "Nora Klein",
     initials: "NK",
+    email: "nora@trevv.de",
     role: "Product lead",
     color: "#b95043",
     presence: "online",
@@ -72,6 +75,7 @@ export const messagingPeople: MessagingPerson[] = [
     id: "person-amira",
     name: "Amira Demir",
     initials: "AD",
+    email: "amira@trevv.de",
     role: "Operations",
     color: "#505c73",
     presence: "online",
@@ -80,6 +84,7 @@ export const messagingPeople: MessagingPerson[] = [
     id: "person-elias",
     name: "Elias Hart",
     initials: "EH",
+    email: "elias@trevv.de",
     role: "Delivery lead",
     color: "#17846b",
     presence: "away",
@@ -88,6 +93,7 @@ export const messagingPeople: MessagingPerson[] = [
     id: "person-jana",
     name: "Jana Roth",
     initials: "JR",
+    email: "jana@trevv.de",
     role: "Studio lead",
     color: "#2b77b9",
     presence: "online",
@@ -96,6 +102,7 @@ export const messagingPeople: MessagingPerson[] = [
     id: "person-tim",
     name: "Tim Bauer",
     initials: "TB",
+    email: "tim@trevv.de",
     role: "Technical lead",
     color: "#1f8c94",
     presence: "offline",
@@ -104,6 +111,7 @@ export const messagingPeople: MessagingPerson[] = [
     id: "person-lena",
     name: "Lena Weber",
     initials: "LW",
+    email: "lena.weber@legal.example",
     role: "Northstar legal counsel",
     color: "#8d5c32",
     presence: "away",

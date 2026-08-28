@@ -123,7 +123,7 @@ export const productCopy = {
         "Review assets and requests without losing their context.",
       searchTitle: "Search",
       searchSubtitle:
-        "Permission-aware results across Workspaces, work, comments, updates and links.",
+        "Permission-aware results across people, Workspaces, work, comments, updates and links.",
       templatesTitle: "Templates",
       templatesSubtitle:
         "Start proven operating workflows without adding hierarchy.",
