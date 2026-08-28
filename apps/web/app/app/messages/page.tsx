@@ -5,7 +5,7 @@ import { WorkspaceFrame } from "@/components/workspace-frame";
 export const metadata: Metadata = {
   title: "Messages",
   description:
-    "Work-context messaging, requests, decisions, and updates across TREVV.",
+    "Work-context messaging, requests, decisions, and updates within a workspace.",
 };
 
 export default function MessagesPage() {

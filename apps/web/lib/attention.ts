@@ -136,9 +136,7 @@ export interface WorkspaceScope {
   breakdown: ReturnType<typeof portfolioSignals>;
 }
 
-/**
- * Scope the whole workspace to one Portfolio and derive every count from it.
- */
+/** Derive either the Portfolio summary scope or one selected Workspace scope. */
 export function scopeWorkspace(
   portfolioId: string = DEFAULT_PORTFOLIO_ID,
   now = NOW,

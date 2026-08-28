@@ -81,37 +81,40 @@ function FocusMain({ kind }: { kind: FocusKind }) {
     kind === "search"
       ? "Search"
       : productCopy.en.nav[kind === "settings" ? "settings" : kind];
+  const workspaceName = scope.hubs[0]?.name ?? "Selected workspace";
   return (
     <main className="focus-main">
-        <header className="focus-header">
-          <div>
-            <p>TREVV / {crumb}</p>
-            <h1 className="page-title-with-hint">
-              {copy[titleKey]}
-              <Hint resourceId={focusHintIds[kind]} />
-            </h1>
-            <span>{copy[subtitleKey]}</span>
-          </div>
-        </header>
-        {kind === "myWork" && <MyWorkWorkflow />}
-        {kind === "inbox" && <InboxExperience />}
-        {kind === "decisions" && <DecisionCenter />}
-        {kind === "approvals" && (
-          <ApprovalView
-            capturedWork={capturedWork}
-            allowedHubIds={scope.hubs.map((project) => project.id)}
-          />
-        )}
-        {kind === "search" && (
-          <SearchView
-            query={query}
-            setQuery={setQuery}
-            results={searchResults}
-            allowedHubIds={scope.hubs.map((project) => project.id)}
-          />
-        )}
-        {kind === "templates" && <TemplatesView />}
-        {kind === "settings" && <SettingsView />}
+      <header className="focus-header">
+        <div>
+          <p>
+            Workspace · {workspaceName} / {crumb}
+          </p>
+          <h1 className="page-title-with-hint">
+            {copy[titleKey]}
+            <Hint resourceId={focusHintIds[kind]} />
+          </h1>
+          <span>{copy[subtitleKey]}</span>
+        </div>
+      </header>
+      {kind === "myWork" && <MyWorkWorkflow />}
+      {kind === "inbox" && <InboxExperience />}
+      {kind === "decisions" && <DecisionCenter />}
+      {kind === "approvals" && (
+        <ApprovalView
+          capturedWork={capturedWork}
+          allowedHubIds={scope.hubs.map((project) => project.id)}
+        />
+      )}
+      {kind === "search" && (
+        <SearchView
+          query={query}
+          setQuery={setQuery}
+          results={searchResults}
+          allowedHubIds={scope.hubs.map((project) => project.id)}
+        />
+      )}
+      {kind === "templates" && <TemplatesView />}
+      {kind === "settings" && <SettingsView />}
     </main>
   );
 }
@@ -149,8 +152,7 @@ function ApprovalView({
         evidenceUrl: item.evidenceUrl,
       })),
   ].filter(
-    (item) =>
-      allowedHubIdSet.has(item.hubId) && !resolved.includes(item.id),
+    (item) => allowedHubIdSet.has(item.hubId) && !resolved.includes(item.id),
   );
   const approvals = allApprovals.filter(
     (item) => projectFilter === "all" || item.hubId === projectFilter,

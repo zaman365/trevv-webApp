@@ -89,6 +89,7 @@ const intentDetails: Record<
 
 export function MessagingWorkspace() {
   const { scope } = useWorkspace();
+  const workspace = scope.hubs[0];
   const [conversations, setConversations] = useState(seedConversations);
   const [messages, setMessages] = useState(seedMessages);
   const [selectedId, setSelectedId] = useState(seedConversations[0]!.id);
@@ -421,12 +422,13 @@ export function MessagingWorkspace() {
       <header className="messaging-page-header">
         <div>
           <span className="messaging-eyebrow">
-            <MessagesSquare size={15} /> Team communication
+            <MessagesSquare size={15} /> Workspace ·{" "}
+            {workspace?.name ?? "Selected workspace"}
           </span>
           <h1>Messages</h1>
           <p>
             Talk where the work lives. Requests, decisions, and updates stay
-            connected to the Hub they move forward.
+            connected to the workspace they move forward.
           </p>
         </div>
         <div className="messaging-header-actions">

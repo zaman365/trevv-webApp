@@ -13,8 +13,8 @@ import {
   ExternalLink,
   FileCheck2,
   Flag,
-  FolderKanban,
   Gauge,
+  Grid2X2,
   History,
   Link2,
   ListChecks,
@@ -34,7 +34,6 @@ import {
   demoDependencies,
   demoHubs,
   demoItems,
-  demoPortfolios,
   demoWaitingStates,
   type AttentionSignal,
 } from "@founderhq/core";
@@ -85,10 +84,9 @@ const owners = [
 
 export function AttentionCenter() {
   const { scope } = useWorkspace();
-  const [groups, setGroups] = useState<GroupedSignal[]>(scope.attention);
+  const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set());
   const [tab, setTab] = useState<AttentionTab>("Needs You");
   const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [acting, setActing] = useState<{
@@ -110,8 +108,8 @@ export function AttentionCenter() {
     [scope.attention],
   );
   const scopedGroups = useMemo(
-    () => groups.filter((group) => scopedGroupIds.has(group.id)),
-    [groups, scopedGroupIds],
+    () => scope.attention.filter((group) => !removedIds.has(group.id)),
+    [removedIds, scope.attention],
   );
 
   useEffect(() => {
@@ -136,17 +134,13 @@ export function AttentionCenter() {
     };
   }, [scopedGroupIds]);
 
-  const portfolio = demoPortfolios.find(
-    (candidate) => candidate.id === scope.portfolioId,
-  );
+  const workspace = scope.hubs[0];
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return scopedGroups.filter((group) => {
       const hub = hubFor(group);
       const item = itemFor(group);
       if (!groupMatchesTab(group, tab)) return false;
-      if (projectFilter !== "all" && group.hubId !== projectFilter)
-        return false;
       if (severityFilter !== "all" && group.severity !== severityFilter)
         return false;
       if (!normalized) return true;
@@ -162,7 +156,7 @@ export function AttentionCenter() {
           String(value).toLocaleLowerCase().includes(normalized),
         );
     });
-  }, [projectFilter, query, scopedGroups, severityFilter, tab]);
+  }, [query, scopedGroups, severityFilter, tab]);
 
   const summary = useMemo(
     () => ({
@@ -186,8 +180,7 @@ export function AttentionCenter() {
   );
   const selected =
     scopedGroups.find((group) => group.id === selectedId) ?? null;
-  const hasFilters =
-    query.length > 0 || projectFilter !== "all" || severityFilter !== "all";
+  const hasFilters = query.length > 0 || severityFilter !== "all";
 
   function openSignal(group: GroupedSignal) {
     setSelectedId(group.id);
@@ -200,9 +193,7 @@ export function AttentionCenter() {
   }
 
   function removeSignal(group: GroupedSignal, message: string) {
-    setGroups((current) =>
-      current.filter((candidate) => candidate.id !== group.id),
-    );
+    setRemovedIds((current) => new Set(current).add(group.id));
     setSelectedId(null);
     setActing(null);
     setToast({ message, restore: group });
@@ -211,11 +202,11 @@ export function AttentionCenter() {
 
   function restoreSignal() {
     if (!toast?.restore) return;
-    setGroups((current) =>
-      [...current, toast.restore!].sort(
-        (left, right) => right.score - left.score,
-      ),
-    );
+    setRemovedIds((current) => {
+      const next = new Set(current);
+      next.delete(toast.restore!.id);
+      return next;
+    });
     setToast(null);
   }
 
@@ -243,7 +234,6 @@ export function AttentionCenter() {
 
   function resetFilters() {
     setQuery("");
-    setProjectFilter("all");
     setSeverityFilter("all");
     setTab("Needs You");
   }
@@ -273,13 +263,13 @@ export function AttentionCenter() {
 
       <header className="trevv-page-header attention-page-header">
         <div>
-          <p>Portfolio · {portfolio?.name ?? "Venture Portfolio"}</p>
+          <p>Workspace · {workspace?.name ?? "Selected workspace"}</p>
           <h1 className="page-title-with-hint">
             Attention Center <Hint resourceId="attention" />
           </h1>
           <span>
-            Turn operational risk into a clear next action—with the evidence and
-            project context attached.
+            Turn this workspace&apos;s operational risk into a clear next
+            action—with the evidence and source work attached.
           </span>
         </div>
         <button
@@ -422,7 +412,7 @@ export function AttentionCenter() {
           <input
             aria-label="Search Attention Center"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search signals, projects, owners…"
+            placeholder="Search signals, owners, or evidence…"
             value={query}
           />
           {query && (
@@ -430,21 +420,6 @@ export function AttentionCenter() {
               <X size={12} />
             </button>
           )}
-        </label>
-        <label className="attention-filter-select">
-          <FolderKanban size={13} />
-          <select
-            aria-label="Filter by project"
-            onChange={(event) => setProjectFilter(event.target.value)}
-            value={projectFilter}
-          >
-            <option value="all">All projects</option>
-            {scope.hubs.map((hub) => (
-              <option key={hub.id} value={hub.id}>
-                {hub.name}
-              </option>
-            ))}
-          </select>
         </label>
         <label className="attention-filter-select">
           <Gauge size={13} />
@@ -491,7 +466,7 @@ export function AttentionCenter() {
             </h2>
             <p>
               {scopedGroups.length
-                ? "Broaden the project, severity, or search filters."
+                ? "Broaden the severity or search filters."
                 : "Resolved, snoozed, and dismissed signals no longer compete for attention."}
             </p>
             {hasFilters && (
@@ -616,7 +591,7 @@ function AttentionCard({
               )}
             </>
           ) : (
-            <span>Portfolio-wide signal</span>
+            <span>Workspace signal</span>
           )}
           <b className={`signal-severity ${group.severity}`}>
             {group.severity}
@@ -756,7 +731,7 @@ function AttentionDetailPanel({
           </div>
           <div>
             <p>
-              {hub?.name ?? "Portfolio"} · {group.severity} attention
+              {hub?.name ?? "Workspace"} · {group.severity} attention
             </p>
             <h2 id="attention-detail-title">{group.title}</h2>
           </div>
@@ -788,7 +763,7 @@ function AttentionDetailPanel({
           >
             {hub && (
               <Link href={`/app/hubs/${hub.slug}`}>
-                <FolderKanban size={13} /> Project overview{" "}
+                <Grid2X2 size={13} /> Workspace overview{" "}
                 <ExternalLink size={10} />
               </Link>
             )}
@@ -838,8 +813,8 @@ function AttentionDetailPanel({
           <section className="attention-detail-section">
             <header>
               <div>
-                <FolderKanban size={14} />
-                <strong>Project relevance</strong>
+                <Grid2X2 size={14} />
+                <strong>Workspace relevance</strong>
               </div>
             </header>
             {hub ? (
@@ -1172,7 +1147,7 @@ function AttentionActionDialog({
             <p>
               <strong>{group.title}</strong>
               <span>
-                {hubFor(group)?.name ?? "Portfolio"} ·{" "}
+                {hubFor(group)?.name ?? "Workspace"} ·{" "}
                 {capitalize(group.severity)}
               </span>
             </p>

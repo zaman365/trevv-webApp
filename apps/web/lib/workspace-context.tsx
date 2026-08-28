@@ -1,6 +1,7 @@
 "use client";
 
 import { getMessages, type Locale } from "@founderhq/i18n";
+import { demoHubs } from "@founderhq/core";
 import {
   createContext,
   useCallback,
@@ -26,6 +27,7 @@ type Theme = "light" | "dark";
 export type WorkspaceLevel = "portfolio" | "project";
 
 const workspaceSelectionKey = "trevv:workspace-selection";
+const portfolioSelectionKey = "trevv:portfolio-selection";
 
 interface WorkspaceContextValue {
   locale: Locale;
@@ -77,58 +79,110 @@ export function WorkspaceProvider({
   );
 
   useEffect(() => {
+    if (selectionHydrated) return;
     const frame = window.requestAnimationFrame(() => {
       if (!initialProjectId) {
         try {
-          const stored = JSON.parse(
-            localStorage.getItem(workspaceSelectionKey) ?? "null",
-          ) as unknown;
-          if (stored && typeof stored === "object") {
-            const selection = stored as {
-              portfolioId?: unknown;
-              projectId?: unknown;
-              level?: unknown;
-            };
-            if (typeof selection.portfolioId === "string")
-              setPortfolioState(selection.portfolioId);
-            if (
-              restoreStoredProject &&
-              selection.level === "project" &&
-              typeof selection.projectId === "string"
-            ) {
+          if (restoreStoredProject) {
+            const stored = JSON.parse(
+              localStorage.getItem(workspaceSelectionKey) ?? "null",
+            ) as unknown;
+            const selection =
+              stored && typeof stored === "object"
+                ? (stored as {
+                    portfolioId?: unknown;
+                    projectId?: unknown;
+                  })
+                : undefined;
+            const storedPortfolioId =
+              typeof selection?.portfolioId === "string"
+                ? selection.portfolioId
+                : initialPortfolioId;
+            const storedProjectId =
+              typeof selection?.projectId === "string"
+                ? selection.projectId
+                : undefined;
+            const storedProject = [...customHubs, ...demoHubs].find(
+              (project) => project.id === storedProjectId,
+            );
+            const fallbackProject = [...customHubs, ...demoHubs].find(
+              (project) => project.portfolioId === storedPortfolioId,
+            );
+            const nextProject =
+              storedProject?.portfolioId === storedPortfolioId
+                ? storedProject
+                : fallbackProject;
+
+            setPortfolioState(nextProject?.portfolioId ?? storedPortfolioId);
+            if (nextProject) {
               setWorkspaceLevel("project");
-              setProjectId(selection.projectId);
+              setProjectId(nextProject.id);
             }
+          } else {
+            const storedPortfolioId = localStorage.getItem(
+              portfolioSelectionKey,
+            );
+            if (storedPortfolioId) setPortfolioState(storedPortfolioId);
           }
         } catch {
-          // The default portfolio remains available when preferences are blocked.
+          if (restoreStoredProject) {
+            const fallbackProject = [...customHubs, ...demoHubs].find(
+              (project) => project.portfolioId === initialPortfolioId,
+            );
+            if (fallbackProject) {
+              setWorkspaceLevel("project");
+              setProjectId(fallbackProject.id);
+            }
+          }
         }
       }
       setSelectionHydrated(true);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [initialProjectId, restoreStoredProject]);
+  }, [
+    customHubs,
+    initialPortfolioId,
+    initialProjectId,
+    restoreStoredProject,
+    selectionHydrated,
+  ]);
 
   useEffect(() => {
     if (!selectionHydrated) return;
     try {
-      localStorage.setItem(
-        workspaceSelectionKey,
-        JSON.stringify({
-          level: workspaceLevel,
-          portfolioId,
-          projectId: workspaceLevel === "project" ? projectId : null,
-        }),
-      );
+      if (restoreStoredProject) {
+        if (workspaceLevel !== "project" || !projectId) return;
+        localStorage.setItem(
+          workspaceSelectionKey,
+          JSON.stringify({
+            level: "project",
+            portfolioId,
+            projectId,
+          }),
+        );
+      } else {
+        localStorage.setItem(portfolioSelectionKey, portfolioId);
+      }
     } catch {
       // Selection still works for the current page when storage is unavailable.
     }
-  }, [portfolioId, projectId, selectionHydrated, workspaceLevel]);
+  }, [
+    portfolioId,
+    projectId,
+    restoreStoredProject,
+    selectionHydrated,
+    workspaceLevel,
+  ]);
 
   const setPortfolioId = useCallback((id: string) => {
     setPortfolioState(id);
     setWorkspaceLevel("portfolio");
     setProjectId(null);
+    try {
+      localStorage.setItem(portfolioSelectionKey, id);
+    } catch {
+      // The selection still applies for the current session.
+    }
   }, []);
 
   const selectProject = useCallback(

@@ -3,8 +3,7 @@ import { DashboardExperience } from "@/components/dashboard-experience";
 
 export const metadata: Metadata = {
   title: "Dashboard",
-  description:
-    "Access-aware reporting across portfolio, project, team, and personal views.",
+  description: "Access-aware reporting within the selected workspace.",
 };
 
 export default function DashboardPage() {

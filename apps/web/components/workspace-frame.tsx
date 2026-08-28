@@ -717,6 +717,9 @@ function WorkspaceChrome({
                               customPortfolioIds.has(portfolio.id);
                             if (canViewPortfolio) {
                               setPortfolioId(portfolio.id);
+                              if (active !== "portfolio") {
+                                router.push("/app/portfolio");
+                              }
                             } else {
                               const firstProject = accessibleProjects.find(
                                 (project) =>
@@ -727,11 +730,11 @@ function WorkspaceChrome({
                                   firstProject.id,
                                   firstProject.portfolioId,
                                 );
+                                router.push(`/app/hubs/${firstProject.slug}`);
                               }
                             }
                             setPortfolioMenuOpen(false);
                             setOpen(false);
-                            if (active === "hub") router.push("/app/home");
                           }}
                         >
                           <span

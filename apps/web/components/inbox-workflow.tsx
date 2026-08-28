@@ -156,7 +156,6 @@ export function InboxWorkflow({
   const [view, setView] = useState<InboxDisposition>("open");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<InboxCategory | "all">("all");
-  const [hubId, setHubId] = useState("all");
   const [priority, setPriority] = useState<InboxPriority | "all">("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -180,7 +179,6 @@ export function InboxWorkflow({
       .filter((action) => {
         if (action.disposition !== view) return false;
         if (category !== "all" && action.category !== category) return false;
-        if (hubId !== "all" && action.hubId !== hubId) return false;
         if (priority !== "all" && action.priority !== priority) return false;
         return (
           !normalized ||
@@ -193,13 +191,13 @@ export function InboxWorkflow({
         (left, right) =>
           priorityWeight[left.priority] - priorityWeight[right.priority],
       );
-  }, [category, hubId, priority, query, scopedActions, view]);
+  }, [category, priority, query, scopedActions, view]);
 
   const selectedAction = scopedActions.find((action) => action.id === detailId);
   const openActions = scopedActions.filter(
     (action) => action.disposition === "open",
   );
-  const activeFilterCount = [category, hubId, priority].filter(
+  const activeFilterCount = [category, priority].filter(
     (value) => value !== "all",
   ).length;
 
@@ -371,20 +369,6 @@ export function InboxWorkflow({
               </select>
             </label>
             <label>
-              <span>Project</span>
-              <select
-                value={hubId}
-                onChange={(event) => setHubId(event.target.value)}
-              >
-                <option value="all">All projects</option>
-                {scope.hubs.map((hub) => (
-                    <option key={hub.id} value={hub.id}>
-                      {hub.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
               <span>Priority</span>
               <select
                 value={priority}
@@ -401,7 +385,6 @@ export function InboxWorkflow({
             <button
               onClick={() => {
                 setCategory("all");
-                setHubId("all");
                 setPriority("all");
               }}
             >
@@ -775,10 +758,10 @@ function QuickCapture({
               >
                 <option value="">Organize later</option>
                 {projects.map((hub) => (
-                    <option key={hub.id} value={hub.id}>
-                      {hub.name}
-                    </option>
-                  ))}
+                  <option key={hub.id} value={hub.id}>
+                    {hub.name}
+                  </option>
+                ))}
               </select>
               <ChevronDown size={12} />
             </label>
