@@ -60,6 +60,7 @@ import {
   portfolioVisualFor,
   useCustomPortfolios,
 } from "@/lib/custom-portfolios";
+import { workspaceHref } from "@/lib/workspace-routes";
 
 const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
 
@@ -153,7 +154,7 @@ function HomeMain() {
               label="Needs you"
               note="Ranked by impact"
               tone="danger"
-              href="/app/attention"
+              href="/app/portfolio"
             />
             <StatTile
               icon={FileQuestion}
@@ -161,7 +162,7 @@ function HomeMain() {
               label="Decisions"
               note="Waiting on your call"
               tone="primary"
-              href="/app/decisions"
+              href="/app/portfolio"
             />
             <StatTile
               icon={Hourglass}
@@ -169,14 +170,14 @@ function HomeMain() {
               label="Waiting"
               note="On someone else"
               tone="warning"
-              href="/app/waiting"
+              href="/app/portfolio"
             />
             <StatTile
               icon={CalendarClock}
               value={2}
               label="Reviews due"
               note="Weekly and monthly"
-              href="/app/reviews"
+              href="/app/portfolio"
             />
           </>
         }
@@ -302,7 +303,7 @@ function HomeMain() {
           icon={Sparkles}
           title="Needs You"
           subtitle={`Top ${topNeedsYou.length} of ${scope.attentionCount}, ranked by impact, urgency, and your responsibility.`}
-          href="/app/attention"
+          href="/app/portfolio"
         >
           <div className="attention-list compact">
             {topNeedsYou.map((group) => (
@@ -322,7 +323,7 @@ function HomeMain() {
               .map((item) => (
                 <Link
                   key={item.id}
-                  href={`/app/hubs/${hubFor(item.hubId)?.slug}/boards/${item.boardId}`}
+                  href={`${workspaceHref(hubFor(item.hubId)!.slug)}/boards/${item.boardId}`}
                 >
                   <span className={`priority-dot ${item.priority}`} />
                   <div>
@@ -354,7 +355,7 @@ function HomeMain() {
             return (
               <Link
                 className="change-group-card"
-                href={`/app/hubs/${hub.slug}#updates`}
+                href={workspaceHref(hub.slug, undefined, "updates")}
                 aria-label={`Open ${hub.name} and review ${hubChanges.length} meaningful ${hubChanges.length === 1 ? "change" : "changes"}`}
                 key={hubId}
               >
@@ -385,9 +386,13 @@ function HomeMain() {
   );
 }
 
-export function AttentionExperience() {
+export function AttentionExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+}) {
   return (
-    <WorkspaceFrame active="attention">
+    <WorkspaceFrame active="attention" hubSlug={workspaceSlug}>
       <AttentionCenter />
     </WorkspaceFrame>
   );
@@ -415,9 +420,13 @@ function inWaitingSection(waiting: WaitingState, section: WaitingSection) {
   return Boolean(waiting.expectedBy && waiting.expectedBy < "2026-08-24");
 }
 
-export function WaitingExperience() {
+export function WaitingExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+}) {
   return (
-    <WorkspaceFrame active="waiting">
+    <WorkspaceFrame active="waiting" hubSlug={workspaceSlug}>
       <WaitingMain />
     </WorkspaceFrame>
   );
@@ -749,16 +758,20 @@ function WaitingResolveDialog({
   );
 }
 
-export function ReviewsExperience() {
+export function ReviewsExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+}) {
   return (
-    <WorkspaceFrame active="reviews">
+    <WorkspaceFrame active="reviews" hubSlug={workspaceSlug}>
       <ReviewsMain />
     </WorkspaceFrame>
   );
 }
 
 function ReviewsMain() {
-  const { scope, workspaceLevel, projectId } = useWorkspace();
+  const { scope } = useWorkspace();
   const [posted, setPosted] = useState(false);
   const [enabled, setEnabled] = useState(
     () =>
@@ -775,11 +788,8 @@ function ReviewsMain() {
       else next.add(id);
       return next;
     });
-  const activeProject =
-    workspaceLevel === "project"
-      ? scope.hubs.find((hub) => hub.id === projectId)
-      : undefined;
-  const reviewLabel = activeProject?.name ?? "Portfolio";
+  const activeProject = scope.hubs[0];
+  const reviewLabel = activeProject?.name ?? "Selected workspace";
   const decisionCount = scope.items.filter(
     (item) => item.type === "decision" && item.status !== "done",
   ).length;
@@ -830,7 +840,7 @@ function ReviewsMain() {
         <section className="trevv-panel weekly-review">
           <PanelHeading
             icon={MessageSquareText}
-            title={`Weekly ${activeProject ? "project" : "portfolio"} review`}
+            title="Weekly workspace review"
             subtitle={`${reviewLabel} · due today`}
           />
           {posted ? (
@@ -841,9 +851,11 @@ function ReviewsMain() {
                 Structured update posted, a project snapshot captured, and
                 Attention signals refreshed for {reviewLabel}.
               </p>
-              <a href="/app/portfolio">
-                See refreshed workspace <ArrowRight size={13} />
-              </a>
+              {activeProject && (
+                <Link href={workspaceHref(activeProject.slug)}>
+                  See refreshed workspace <ArrowRight size={13} />
+                </Link>
+              )}
             </div>
           ) : (
             <form
@@ -975,9 +987,9 @@ function ReviewsMain() {
   );
 }
 
-export function IdeasExperience() {
+export function IdeasExperience({ workspaceSlug }: { workspaceSlug?: string }) {
   return (
-    <WorkspaceFrame active="ideas">
+    <WorkspaceFrame active="ideas" hubSlug={workspaceSlug}>
       <main className="trevv-main ideas-page">
         <IdeasWorkflow />
       </main>
@@ -985,9 +997,9 @@ export function IdeasExperience() {
   );
 }
 
-export function TeamExperience() {
+export function TeamExperience({ workspaceSlug }: { workspaceSlug?: string }) {
   return (
-    <WorkspaceFrame active="team">
+    <WorkspaceFrame active="team" hubSlug={workspaceSlug}>
       <main className="trevv-main team-page">
         <TeamWorkflow />
       </main>
@@ -995,7 +1007,7 @@ export function TeamExperience() {
   );
 }
 
-export function HubsExperience() {
+export function WorkspacesExperience() {
   const [portfolioId, setPortfolioId] = useState("portfolio-demo");
   const [createOpen, setCreateOpen] = useState(false);
   const [createdSlug, setCreatedSlug] = useState<string | null>(null);
@@ -1008,9 +1020,10 @@ export function HubsExperience() {
     ],
     [customPortfolioRecords],
   );
-  const hubs = [...customHubs.map((record) => record.hub), ...demoHubs].filter(
-    (hub) => hub.portfolioId === portfolioId,
-  );
+  const workspaces = [
+    ...customHubs.map((record) => record.hub),
+    ...demoHubs,
+  ].filter((hub) => hub.portfolioId === portfolioId);
   useEffect(() => {
     let frame = 0;
     let selectionFrame = 0;
@@ -1038,7 +1051,8 @@ export function HubsExperience() {
       // The built-in portfolio remains selected when preferences are blocked.
     }
     const params = new URLSearchParams(window.location.search);
-    if (params.get("create") === "project") openCreator();
+    if (["workspace", "project"].includes(params.get("create") ?? ""))
+      openCreator();
     return () => {
       window.cancelAnimationFrame(frame);
       window.cancelAnimationFrame(selectionFrame);
@@ -1057,10 +1071,10 @@ export function HubsExperience() {
           {createdSlug && (
             <div className="workflow-toast success-toast" role="status">
               <CheckCircle2 size={15} />
-              <span>Your project and its first board are ready.</span>
-              <Link href={`/app/hubs/${createdSlug}`}>Open project</Link>
+              <span>Your workspace and its first board are ready.</span>
+              <Link href={workspaceHref(createdSlug)}>Open workspace</Link>
               <button
-                aria-label="Dismiss project confirmation"
+                aria-label="Dismiss workspace confirmation"
                 onClick={() => setCreatedSlug(null)}
               >
                 <X size={13} />
@@ -1068,9 +1082,9 @@ export function HubsExperience() {
             </div>
           )}
           <PageHeader
-            eyebrow="Portfolio projects"
-            title="All projects"
-            subtitle="Businesses, brands, clients, products, departments, ventures, initiatives, and projects — without forcing one vocabulary."
+            eyebrow="Portfolio workspaces"
+            title="All workspaces"
+            subtitle="Choose the responsibility container where work, decisions, updates, evidence, and ownership belong."
             hintId="hubs"
             action={
               <button
@@ -1078,7 +1092,7 @@ export function HubsExperience() {
                 onClick={() => setCreateOpen(true)}
               >
                 <Plus size={16} />
-                New project
+                New workspace
               </button>
             }
           />
@@ -1097,12 +1111,13 @@ export function HubsExperience() {
               </select>
             </label>
             <span>
-              {hubs.length} {hubs.length === 1 ? "project" : "projects"}
+              {workspaces.length}{" "}
+              {workspaces.length === 1 ? "workspace" : "workspaces"}
             </span>
           </div>
           <div className="hub-directory">
-            {hubs.map((hub) => (
-              <Link href={`/app/hubs/${hub.slug}`} key={hub.id}>
+            {workspaces.map((hub) => (
+              <Link href={workspaceHref(hub.slug)} key={hub.id}>
                 <HubMark
                   hubId={hub.id}
                   fallback={hub.icon}
@@ -1196,14 +1211,14 @@ function CreateHubDialog({
             <Grid2X2 size={17} />
           </span>
           <div>
-            <h2 id="create-hub-title">Create a project</h2>
+            <h2 id="create-hub-title">Create a workspace</h2>
             <p>
-              A project keeps work, decisions, updates, evidence, and ownership
-              together.
+              A workspace keeps work, decisions, updates, evidence, and
+              ownership together.
             </p>
           </div>
           <button
-            aria-label="Close project creation"
+            aria-label="Close workspace creation"
             onClick={onClose}
             type="button"
           >
@@ -1212,7 +1227,7 @@ function CreateHubDialog({
         </header>
         <div className="create-hub-fields">
           <label>
-            Project name
+            Workspace name
             <input
               autoFocus
               onChange={(event) => setName(event.target.value)}
@@ -1286,7 +1301,9 @@ function CreateHubDialog({
           </div>
         </div>
         <footer>
-          <span>Creates a project overview and an empty operating board.</span>
+          <span>
+            Creates a workspace overview and an empty operating board.
+          </span>
           <div>
             <button onClick={onClose} type="button">
               Cancel
@@ -1296,7 +1313,7 @@ function CreateHubDialog({
               disabled={!name.trim() || !milestoneDate}
               type="submit"
             >
-              <Plus size={14} /> Create project
+              <Plus size={14} /> Create workspace
             </button>
           </div>
         </footer>
@@ -1305,7 +1322,11 @@ function CreateHubDialog({
   );
 }
 
-export function BlueprintsExperience() {
+export function BlueprintsExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+}) {
   const current = demoBlueprintVersions[0]!;
   const next = demoBlueprintVersions[1]!;
   const instance = demoBlueprintInstances[0]!;
@@ -1343,7 +1364,7 @@ export function BlueprintsExperience() {
       return nextSet;
     });
   return (
-    <WorkspaceFrame active="templates">
+    <WorkspaceFrame active="templates" hubSlug={workspaceSlug}>
       <main className="trevv-main blueprint-page">
         <PageHeader
           eyebrow="Managed standards"
@@ -1801,7 +1822,11 @@ function BlueprintDetachDialog({
   );
 }
 
-export function ImportExperience() {
+export function ImportExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+} = {}) {
   const [preset, setPreset] = useState<ImportPreset>("generic_csv");
   const [previewed, setPreviewed] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -1830,7 +1855,7 @@ export function ImportExperience() {
     URL.revokeObjectURL(url);
   };
   return (
-    <WorkspaceFrame active="settings">
+    <WorkspaceFrame active="settings" hubSlug={workspaceSlug}>
       <main className="trevv-main import-page">
         <PageHeader
           eyebrow="Migration"
@@ -1982,74 +2007,97 @@ export function ImportExperience() {
   );
 }
 
-export function NotificationsExperience() {
+export function NotificationsExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+}) {
+  return (
+    <WorkspaceFrame active="notifications" hubSlug={workspaceSlug}>
+      <NotificationsMain />
+    </WorkspaceFrame>
+  );
+}
+
+function NotificationsMain() {
+  const { scope } = useWorkspace();
   const [events, setEvents] = useState([
     {
       id: "notification-1",
+      hubId: "hub-localreach",
       title: "LocalReach weekly update published",
       detail: "Delivery remains On Track · 18 minutes ago",
     },
     {
       id: "notification-2",
+      hubId: "hub-mealflow",
       title: "MealFlow blocker resolved",
       detail: "Pilot access checklist can continue · 1 hour ago",
     },
     {
       id: "notification-3",
+      hubId: "hub-northstar",
       title: "Northstar Apparel milestone changed",
       detail: "Storefront launch moved by 3 days · Today",
     },
   ]);
+  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
+  const visibleEvents = events.filter((event) => scopedHubIds.has(event.hubId));
   return (
-    <WorkspaceFrame active="notifications">
-      <main className="trevv-main notifications-page">
-        <PageHeader
-          eyebrow="Informational"
-          title="Notifications"
-          subtitle="Events worth knowing. Anything requiring action lives in Inbox instead."
-          hintId="notifications"
-          action={
-            <a className="primary-button" href="/app/inbox">
-              Open actionable Inbox
-            </a>
-          }
+    <main className="trevv-main notifications-page">
+      <PageHeader
+        eyebrow="Informational"
+        title="Notifications"
+        subtitle="Events worth knowing. Anything requiring action lives in Inbox instead."
+        hintId="notifications"
+        action={
+          <Link
+            className="primary-button"
+            href={
+              scope.hubs[0]
+                ? workspaceHref(scope.hubs[0].slug, "inbox")
+                : "/app/workspaces"
+            }
+          >
+            Open actionable Inbox
+          </Link>
+        }
+      />
+      <section className="trevv-panel notification-feed">
+        <PanelHeading
+          icon={BellRing}
+          title="Recent activity"
+          subtitle="Read when useful—there is no expectation to process this queue."
         />
-        <section className="trevv-panel notification-feed">
-          <PanelHeading
-            icon={BellRing}
-            title="Recent activity"
-            subtitle="Read when useful—there is no expectation to process this queue."
+        {visibleEvents.map((event) => (
+          <article key={event.id}>
+            <span>
+              <BellRing size={15} />
+            </span>
+            <div>
+              <strong>{event.title}</strong>
+              <small>{event.detail}</small>
+            </div>
+            <button
+              onClick={() =>
+                setEvents((current) =>
+                  current.filter((candidate) => candidate.id !== event.id),
+                )
+              }
+            >
+              Mark read
+            </button>
+          </article>
+        ))}
+        {!visibleEvents.length && (
+          <EmptyState
+            icon={CheckCircle2}
+            title="You're caught up"
+            note="New informational events will appear here without becoming Inbox work."
           />
-          {events.map((event) => (
-            <article key={event.id}>
-              <span>
-                <BellRing size={15} />
-              </span>
-              <div>
-                <strong>{event.title}</strong>
-                <small>{event.detail}</small>
-              </div>
-              <button
-                onClick={() =>
-                  setEvents((current) =>
-                    current.filter((candidate) => candidate.id !== event.id),
-                  )
-                }
-              >
-                Mark read
-              </button>
-            </article>
-          ))}
-          {!events.length && (
-            <EmptyState
-              icon={CheckCircle2}
-              title="You're caught up"
-              note="New informational events will appear here without becoming Inbox work."
-            />
-          )}
-        </section>
-      </main>
-    </WorkspaceFrame>
+        )}
+      </section>
+    </main>
   );
 }
 
@@ -2135,7 +2183,14 @@ function HubMark({
 
 function AttentionRow({ group }: { group: GroupedSignal }) {
   return (
-    <Link className="attention-row" href={`/app/attention#${group.id}`}>
+    <Link
+      className="attention-row"
+      href={
+        hubFor(group.hubId)
+          ? workspaceHref(hubFor(group.hubId)!.slug, "attention", group.id)
+          : "/app/workspaces"
+      }
+    >
       <span className={`signal-pip ${group.severity}`} />
       <div>
         <p>

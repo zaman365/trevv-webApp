@@ -48,7 +48,8 @@ type ProviderKey =
 type ProviderStatus = "connected" | "enabled" | "off";
 type AuditCategory =
   "Integration" | "Security" | "Organization" | "Member" | "Export";
-type MemberRole = "Owner" | "Admin" | "Project lead" | "Member" | "Stakeholder";
+type MemberRole =
+  "Owner" | "Admin" | "Workspace lead" | "Member" | "Stakeholder";
 
 interface ProviderDefinition {
   key: ProviderKey;
@@ -276,7 +277,7 @@ const initialSettings: StoredSettings = {
       name: "Amira Demir",
       email: "amira@example.com",
       initials: "AD",
-      role: "Project lead",
+      role: "Workspace lead",
       status: "active",
       lastActive: "Yesterday",
     },
@@ -396,8 +397,8 @@ function loadStoredSettings(raw: string | null): StoredSettings {
       organization: { ...initialSettings.organization, ...parsed.organization },
       members: Array.isArray(parsed.members)
         ? parsed.members.map((member) =>
-            (member.role as string) === "Hub lead"
-              ? { ...member, role: "Project lead" as const }
+            ["Hub lead", "Project lead"].includes(member.role as string)
+              ? { ...member, role: "Workspace lead" as const }
               : member,
           )
         : initialSettings.members,
@@ -495,7 +496,11 @@ function formatAuditTime(value: string): string {
   }).format(new Date(value));
 }
 
-export function SettingsExperience() {
+export function SettingsExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+}) {
   const sectionHash = useSyncExternalStore(
     subscribeToSettingsSection,
     getSettingsSectionSnapshot,
@@ -881,7 +886,7 @@ export function SettingsExperience() {
     providers.find((provider) => provider.key === providerDialog) ?? null;
 
   return (
-    <WorkspaceFrame active="settings">
+    <WorkspaceFrame active="settings" hubSlug={workspaceSlug}>
       <main className="focus-main settings-page">
         <header className="focus-header settings-page-header">
           <div>
@@ -1004,6 +1009,11 @@ export function SettingsExperience() {
                 onOrganization={exportOrganization}
                 onMembers={exportMembers}
                 onAudit={exportAudit}
+                importHref={
+                  workspaceSlug
+                    ? `/app/workspaces/${encodeURIComponent(workspaceSlug)}/settings/import`
+                    : "/app/settings/import"
+                }
               />
             )}
           </section>
@@ -1061,7 +1071,7 @@ function IntegrationsPanel({
         <div>
           <strong>Optional by design</strong>
           <span>
-            Your projects, boards and decisions keep working if every provider
+            Your Workspaces, boards and decisions keep working if every provider
             is disconnected.
           </span>
         </div>
@@ -1393,7 +1403,7 @@ function MembersPanel({
             >
               <option>Owner</option>
               <option>Admin</option>
-              <option>Project lead</option>
+              <option>Workspace lead</option>
               <option>Member</option>
               <option>Stakeholder</option>
             </select>
@@ -1524,12 +1534,14 @@ function ExportPanel({
   onOrganization,
   onMembers,
   onAudit,
+  importHref,
 }: {
   members: number;
   auditEvents: number;
   onOrganization: () => void;
   onMembers: () => void;
   onAudit: () => void;
+  importHref: string;
 }) {
   return (
     <div className="settings-stack">
@@ -1570,7 +1582,7 @@ function ExportPanel({
             CSV rows.
           </p>
         </div>
-        <Link href="/app/settings/import">
+        <Link href={importHref}>
           Open importer <ArrowRight size={13} />
         </Link>
       </section>
@@ -1850,7 +1862,7 @@ function InviteDialog({
               onChange={(event) => onRole(event.target.value as MemberRole)}
             >
               <option>Admin</option>
-              <option>Project lead</option>
+              <option>Workspace lead</option>
               <option>Member</option>
               <option>Stakeholder</option>
             </select>
@@ -1980,9 +1992,9 @@ function roleDescription(role: MemberRole): string {
       "Full organization access, including ownership and deletion controls.",
     Admin:
       "Can manage organization settings, members, templates, and integrations.",
-    "Project lead":
-      "Can manage assigned projects and the people working in them.",
-    Member: "Can create and update work in projects they can access.",
+    "Workspace lead":
+      "Can manage assigned Workspaces and the people working in them.",
+    Member: "Can create and update work in Workspaces they can access.",
     Stakeholder: "Read-only access to explicitly shared stakeholder views.",
   };
   return descriptions[role];

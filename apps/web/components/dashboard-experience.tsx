@@ -34,12 +34,7 @@ import {
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
-import {
-  useMemo,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { type GroupedSignal, NOW } from "@/lib/attention";
 import { useCapturedWork } from "@/lib/captured-work";
 import {
@@ -52,6 +47,7 @@ import {
 } from "@/lib/dashboard-access";
 import { vocabularyFor } from "@/lib/terminology";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { WorkspaceFrame } from "./workspace-frame";
 import { BarChart, DonutChart, type Bar, type Slice } from "./charts";
 import { HealthBar, PageHero, StatTile } from "./ui-kit";
@@ -107,9 +103,13 @@ const PRIORITY_META: Record<string, { label: string; color: string }> = {
 
 const DAY = 86_400_000;
 
-export function DashboardExperience() {
+export function DashboardExperience({
+  workspaceSlug,
+}: {
+  workspaceSlug?: string;
+}) {
   return (
-    <WorkspaceFrame active="dashboard">
+    <WorkspaceFrame active="dashboard" hubSlug={workspaceSlug}>
       <DashboardMain />
     </WorkspaceFrame>
   );
@@ -132,10 +132,9 @@ function DashboardMain() {
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
   const allAvailableLevels = dashboardLevelsForAccess(dashboardAccess);
-  const availableLevels =
-    workspaceLevel === "project"
-      ? allAvailableLevels.filter((level) => level === "project")
-      : allAvailableLevels;
+  const availableLevels = allAvailableLevels.filter(
+    (level) => level !== "portfolio",
+  );
   const accessibleTeams = dashboardTeamsForAccess(dashboardAccess);
   const accessiblePortfolioIds = new Set(dashboardAccess.portfolioIds);
   const accessiblePortfolios = demoPortfolios.filter((item) =>
@@ -152,8 +151,7 @@ function DashboardMain() {
     () => workspaceProjectId ?? accessibleProjects[0]?.id ?? "",
   );
   const [teamId, setTeamId] = useState(() => accessibleTeams[0]?.id ?? "");
-  const activeViewLevel =
-    workspaceLevel === "project" ? "project" : viewLevel;
+  const activeViewLevel = viewLevel;
   const activeProjectId =
     workspaceLevel === "project" && workspaceProjectId
       ? workspaceProjectId
@@ -194,7 +192,7 @@ function DashboardMain() {
       }));
   }, [capturedWork, scope.hubs, scope.items]);
 
-  const portfolioItems = useMemo(
+  const workspaceItems = useMemo(
     () => [...scope.items, ...capturedItems],
     [capturedItems, scope.items],
   );
@@ -202,11 +200,11 @@ function DashboardMain() {
   const allItems = useMemo(
     () =>
       filterItemsForDashboardView(
-        portfolioItems,
+        workspaceItems,
         activeViewLevel,
         viewTargetId,
       ),
-    [activeViewLevel, portfolioItems, viewTargetId],
+    [activeViewLevel, viewTargetId, workspaceItems],
   );
 
   const viewItemIds = useMemo(
@@ -650,7 +648,14 @@ function DashboardMain() {
             >
               <Target size={15} /> Review priority work
             </button>
-            <Link className="secondary-button" href="/app/attention">
+            <Link
+              className="secondary-button"
+              href={
+                selectedProject
+                  ? workspaceHref(selectedProject.slug, "attention")
+                  : "/app/workspaces"
+              }
+            >
               Open Attention center <ArrowRight size={14} />
             </Link>
           </div>
@@ -883,7 +888,8 @@ function DashboardMain() {
                   <span className="dashboard-work-copy">
                     <strong>{item.title}</strong>
                     <small>
-                      {hub?.name ?? "Unknown project"} · {typeLabel(item.type)}
+                      {hub?.name ?? "Unknown workspace"} ·{" "}
+                      {typeLabel(item.type)}
                     </small>
                   </span>
                   <span
@@ -1110,7 +1116,7 @@ function DashboardMain() {
             {viewFocusHub && (
               <p className="widget-focus">
                 <b>Most urgent</b>
-                <Link href={`/app/hubs/${viewFocusHub.slug}`}>
+                <Link href={workspaceHref(viewFocusHub.slug)}>
                   {viewFocusHub.name}
                 </Link>
                 <small>{viewFocusHub.healthNote}</small>
@@ -1134,14 +1140,14 @@ const DASHBOARD_VIEW_META: Record<
 > = {
   portfolio: {
     label: "Portfolio",
-    caption: "All projects",
+    caption: "All Workspaces",
     targetLabel: "Portfolio view",
     icon: Layers3,
   },
   project: {
-    label: "Project",
-    caption: "One project",
-    targetLabel: "Project view",
+    label: "Workspace",
+    caption: "Operational scope",
+    targetLabel: "Workspace view",
     icon: LayoutGrid,
   },
   team: {
@@ -1243,6 +1249,17 @@ function DashboardTargetSelector({
     );
   }
 
+  if (level === "project" && projects.length <= 1) {
+    return (
+      <div className="hero-select dashboard-target-readonly">
+        <span>{meta.targetLabel}</span>
+        <strong>
+          <LayoutGrid size={14} /> {projects[0]?.name ?? "Selected workspace"}
+        </strong>
+      </div>
+    );
+  }
+
   const value =
     level === "portfolio"
       ? portfolioId
@@ -1294,27 +1311,28 @@ function dashboardViewDescriptor(
       levelLabel: "Portfolio view",
       levelNoun: "portfolio",
       name: portfolioName ?? "Accessible portfolio",
-      description: "Executive visibility across every accessible project.",
+      description: "Executive visibility across every accessible Workspace.",
     };
   if (level === "project")
     return {
-      levelLabel: "Project view",
-      levelNoun: "project",
-      name: project?.name ?? "Accessible project",
-      description: "Delivery, risk, ownership, and decisions for one project.",
+      levelLabel: "Workspace view",
+      levelNoun: "workspace",
+      name: project?.name ?? "Accessible workspace",
+      description:
+        "Delivery, risk, ownership, and decisions for this workspace only.",
     };
   if (level === "team")
     return {
       levelLabel: "Team view",
       levelNoun: "team",
       name: team?.name ?? "Accessible team",
-      description: `Shared commitments owned by this team${portfolioName ? ` within ${portfolioName}` : ""}.`,
+      description: "Shared commitments owned by this team in this workspace.",
     };
   return {
     levelLabel: "Personal view",
     levelNoun: "workload",
     name: "My work",
-    description: `Your owned commitments${portfolioName ? ` within ${portfolioName}` : ""}.`,
+    description: "Your owned commitments in this workspace.",
   };
 }
 
@@ -1591,21 +1609,27 @@ function workActionLabel(item: WorkItem) {
 }
 
 function workItemHref(item: WorkItem) {
-  if (item.type === "decision") return "/app/decisions";
-  if (item.type === "approval") return "/app/approvals";
   const hub = demoHubs.find((candidate) => candidate.id === item.hubId);
-  return hub ? `/app/hubs/${hub.slug}/boards/${item.boardId}` : "/app/my-work";
+  if (item.type === "decision" && hub)
+    return workspaceHref(hub.slug, "decisions");
+  if (item.type === "approval" && hub)
+    return workspaceHref(hub.slug, "approvals");
+  return hub
+    ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
+    : "/app/workspaces";
 }
 
 function signalHref(group: GroupedSignal) {
   const item = demoItems.find((candidate) => candidate.id === group.entityId);
   const hub = demoHubs.find((candidate) => candidate.id === group.hubId);
   if (group.signals.some((signal) => signal.signalType === "waiting_too_long"))
-    return "/app/waiting";
-  if (item?.type === "decision") return "/app/decisions";
-  if (item?.type === "approval") return "/app/approvals";
-  if (item && hub) return `/app/hubs/${hub.slug}/boards/${item.boardId}`;
-  return hub ? `/app/hubs/${hub.slug}` : "/app/attention";
+    return hub ? workspaceHref(hub.slug, "waiting") : "/app/workspaces";
+  if (item?.type === "decision" && hub)
+    return workspaceHref(hub.slug, "decisions");
+  if (item?.type === "approval" && hub)
+    return workspaceHref(hub.slug, "approvals");
+  if (item && hub) return `${workspaceHref(hub.slug)}/boards/${item.boardId}`;
+  return hub ? workspaceHref(hub.slug) : "/app/workspaces";
 }
 
 function signalActionLabel(group: GroupedSignal) {
@@ -1636,7 +1660,7 @@ function exportDashboard(items: WorkItem[], scopeName?: string) {
   );
   downloadDashboardFile(
     `trevv-dashboard-${scopeName?.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "view"}.csv`,
-    ["id,title,type,status,priority,owner,due_date,project", ...rows].join(
+    ["id,title,type,status,priority,owner,due_date,workspace", ...rows].join(
       "\n",
     ),
     "text/csv;charset=utf-8",
@@ -1657,5 +1681,5 @@ function csvValue(value: string): string {
 }
 
 function hubForDashboard(hubId: string): string {
-  return demoHubs.find((hub) => hub.id === hubId)?.name ?? "Unknown project";
+  return demoHubs.find((hub) => hub.id === hubId)?.name ?? "Unknown workspace";
 }

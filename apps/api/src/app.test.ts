@@ -96,6 +96,35 @@ describe("TREVV API v1", () => {
     expect(resolved.status).toBe(200);
   });
 
+  it("enforces Workspace scope when listing Attention signals", async () => {
+    const response = await app.request(
+      "/api/v1/attention?portfolioId=portfolio-demo&workspaceId=hub-northstar",
+    );
+    expect(response.status).toBe(200);
+    const signals = (await response.json()) as Array<{ hubId?: string }>;
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((signal) => signal.hubId === "hub-northstar")).toBe(
+      true,
+    );
+
+    const missing = await app.request(
+      "/api/v1/attention?workspaceId=workspace-does-not-exist",
+    );
+    expect(missing.status).toBe(404);
+  });
+
+  it("provides canonical permission-scoped Workspace routes", async () => {
+    const list = await app.request("/api/v1/workspaces");
+    expect(list.status).toBe(200);
+    expect(((await list.json()) as unknown[]).length).toBeGreaterThan(0);
+
+    const workspace = await app.request("/api/v1/workspaces/northstar-apparel");
+    expect(workspace.status).toBe(200);
+    expect(
+      (await workspace.json()) as { workspace: { id: string } },
+    ).toMatchObject({ workspace: { id: "hub-northstar" } });
+  });
+
   it("separates Waiting follow-ups and commercial entitlements", async () => {
     const waiting = await app.request("/api/v1/waiting");
     expect(waiting.status).toBe(200);

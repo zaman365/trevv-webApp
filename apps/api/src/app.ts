@@ -140,10 +140,20 @@ app.get("/api/v1/session", (context) =>
 );
 
 app.get("/api/v1/portfolios", (context) => {
-  requireAccess(context.get("access"), "read", "portfolio", {
+  const access = context.get("access");
+  requireAccess(access, "read", "portfolio", {
     organizationId: "org-demo",
   });
-  return context.json(demoPortfolios);
+  const accessiblePortfolioIds = new Set(
+    demoHubs
+      .filter((hub) => access.accessibleHubIds.has(hub.id))
+      .map((hub) => hub.portfolioId),
+  );
+  return context.json(
+    demoPortfolios.filter((portfolio) =>
+      accessiblePortfolioIds.has(portfolio.id),
+    ),
+  );
 });
 
 app.get("/api/v1/portfolio", (context) => {
@@ -161,7 +171,10 @@ app.get("/api/v1/portfolio", (context) => {
       "resource_not_found",
       "The requested Portfolio is unavailable.",
     );
-  const hubs = hubsForPortfolio(portfolio.id);
+  const access = context.get("access");
+  const hubs = hubsForPortfolio(portfolio.id).filter((hub) =>
+    access.accessibleHubIds.has(hub.id),
+  );
   const hubIds = new Set(hubs.map((hub) => hub.id));
   const items = currentItems().filter((item) => hubIds.has(item.hubId));
   return context.json({
@@ -175,12 +188,40 @@ app.get("/api/v1/portfolio", (context) => {
 });
 
 app.get("/api/v1/attention", (context) => {
-  requireAccess(context.get("access"), "read", "portfolio", {
+  const access = context.get("access");
+  requireAccess(access, "read", "portfolio", {
     organizationId: "org-demo",
   });
   const portfolioId = context.req.query("portfolioId");
+  const workspaceId =
+    context.req.query("workspaceId") ?? context.req.query("hubId");
+  if (workspaceId) {
+    const workspace = hubForId(workspaceId);
+    if (!workspace)
+      return failure(
+        context,
+        404,
+        "resource_not_found",
+        "The requested workspace is unavailable.",
+      );
+    requireAccess(access, "read", "hub", {
+      organizationId: "org-demo",
+      hubId: workspace.id,
+    });
+    if (portfolioId && workspace.portfolioId !== portfolioId)
+      return failure(
+        context,
+        422,
+        "scope_mismatch",
+        "The workspace does not belong to the requested Portfolio.",
+      );
+  }
   const signals = [...attentionStore.values()]
     .filter((signal) => !portfolioId || signal.portfolioId === portfolioId)
+    .filter((signal) => !workspaceId || signal.hubId === workspaceId)
+    .filter(
+      (signal) => !signal.hubId || access.accessibleHubIds.has(signal.hubId),
+    )
     .filter((signal) => !signal.resolvedAt && !signal.dismissedAt)
     .filter(
       (signal) =>
@@ -447,6 +488,13 @@ app.get("/api/v1/hubs", (context) => {
   );
 });
 
+app.get("/api/v1/workspaces", (context) => {
+  const access = context.get("access");
+  return context.json(
+    demoHubs.filter((workspace) => access.accessibleHubIds.has(workspace.id)),
+  );
+});
+
 app.get("/api/v1/hubs/:slug", (context) => {
   const hub = demoHubs.find(
     (candidate) => candidate.slug === context.req.param("slug"),
@@ -469,24 +517,50 @@ app.get("/api/v1/hubs/:slug", (context) => {
   });
 });
 
+app.get("/api/v1/workspaces/:slug", (context) => {
+  const workspace = demoHubs.find(
+    (candidate) => candidate.slug === context.req.param("slug"),
+  );
+  if (!workspace)
+    return failure(
+      context,
+      404,
+      "resource_not_found",
+      "The requested Workspace is unavailable.",
+    );
+  requireAccess(context.get("access"), "read", "hub", {
+    organizationId: "org-demo",
+    hubId: workspace.id,
+  });
+  return context.json({
+    workspace,
+    rollup: rollupHub(workspace, currentItems(), now),
+    items: currentItems().filter((item) => item.hubId === workspace.id),
+  });
+});
+
 app.get(
   "/api/v1/items",
   zValidator(
     "query",
     z.object({
       cursor: z.string().optional(),
+      workspaceId: z.string().optional(),
       hubId: z.string().optional(),
       assignee: z.string().optional(),
       limit: z.coerce.number().int().min(1).max(100).default(50),
     }),
   ),
   (context) => {
-    const { cursor, hubId, assignee, limit } = context.req.valid("query");
+    const { cursor, workspaceId, hubId, assignee, limit } =
+      context.req.valid("query");
     const access = context.get("access");
+    const selectedWorkspaceId = workspaceId ?? hubId;
     let items = currentItems().filter((item) =>
       access.accessibleHubIds.has(item.hubId),
     );
-    if (hubId) items = items.filter((item) => item.hubId === hubId);
+    if (selectedWorkspaceId)
+      items = items.filter((item) => item.hubId === selectedWorkspaceId);
     if (assignee) items = items.filter((item) => item.assignee === assignee);
     const offset = cursor
       ? Number.parseInt(
@@ -614,7 +688,7 @@ app.get(
         access.accessibleHubIds.has(item.hubId) &&
         item.title.toLocaleLowerCase().includes(query),
     );
-    return context.json({ hubs, items: items.slice(0, 50) });
+    return context.json({ workspaces: hubs, hubs, items: items.slice(0, 50) });
   },
 );
 

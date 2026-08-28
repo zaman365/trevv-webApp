@@ -253,8 +253,8 @@ export const messageResponseStateSchema = z.enum(["open", "resolved"]);
 export const conversationSchema = z.object({
   id: idSchema,
   organizationId: idSchema,
-  portfolioId: idSchema.optional(),
-  hubId: idSchema.optional(),
+  portfolioId: idSchema,
+  hubId: idSchema,
   title: z.string().trim().min(1).max(160),
   purpose: z.string().trim().max(1_000),
   kind: conversationKindSchema,
@@ -290,12 +290,6 @@ export const createConversationSchema = conversationSchema
     createdAt: true,
   })
   .superRefine((value, context) => {
-    if (value.kind === "hub" && !value.hubId)
-      context.addIssue({
-        code: "custom",
-        path: ["hubId"],
-        message: "A project room must be linked to a project.",
-      });
     if (value.kind === "direct" && value.participantIds.length !== 2)
       context.addIssue({
         code: "custom",

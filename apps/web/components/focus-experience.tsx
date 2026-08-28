@@ -22,6 +22,7 @@ import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint } from "./learning-center";
 import { DecisionCenter } from "./decision-center";
 import { InboxExperience } from "./email-inbox-workflow";
@@ -55,10 +56,16 @@ const focusHintIds: Record<FocusKind, string> = {
   settings: "integrations",
 };
 
-export function FocusExperience({ kind }: { kind: FocusKind }) {
+export function FocusExperience({
+  kind,
+  workspaceSlug,
+}: {
+  kind: FocusKind;
+  workspaceSlug?: string;
+}) {
   const active = kind === "settings" ? "settings" : kind;
   return (
-    <WorkspaceFrame active={active}>
+    <WorkspaceFrame active={active} hubSlug={workspaceSlug}>
       <FocusMain kind={kind} />
     </WorkspaceFrame>
   );
@@ -203,25 +210,27 @@ function ApprovalView({
       <section className="approval-list">
         <header>
           <h2>Pending approvals</h2>
-          <label className="approval-project-filter">
-            <Filter size={14} />
-            <select
-              aria-label="Filter approvals by project"
-              onChange={(event) => setProjectFilter(event.target.value)}
-              value={projectFilter}
-            >
-              <option value="all">All projects</option>
-              {demoHubs
-                .filter((hub) =>
-                  allApprovals.some((item) => item.hubId === hub.id),
-                )
-                .map((hub) => (
-                  <option key={hub.id} value={hub.id}>
-                    {hub.name}
-                  </option>
-                ))}
-            </select>
-          </label>
+          {allowedHubIds.length > 1 && (
+            <label className="approval-project-filter">
+              <Filter size={14} />
+              <select
+                aria-label="Filter approvals by workspace"
+                onChange={(event) => setProjectFilter(event.target.value)}
+                value={projectFilter}
+              >
+                <option value="all">All workspaces</option>
+                {demoHubs
+                  .filter((hub) =>
+                    allApprovals.some((item) => item.hubId === hub.id),
+                  )
+                  .map((hub) => (
+                    <option key={hub.id} value={hub.id}>
+                      {hub.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
         </header>
         {approvals.map((item, index) => (
           <article key={item.id}>
@@ -353,7 +362,7 @@ function SearchView({
   const chips = [
     ["everything", "Everything"],
     ["work", "Work items"],
-    ["hubs", "Projects"],
+    ["hubs", "Workspaces"],
     ["updates", "Updates"],
     ["resources", "Resources"],
   ] as const;
@@ -365,7 +374,7 @@ function SearchView({
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search work, projects, comments and resources…"
+          placeholder="Search work, Workspaces, comments and resources…"
         />
         <kbd>⌘ K</kbd>
       </div>
@@ -400,7 +409,7 @@ function SearchView({
           {(filter === "everything" || filter === "work") &&
             results.map((item) => (
               <Link
-                href={`/app/hubs/${demoHubs.find((hub) => hub.id === item.hubId)?.slug}/boards/${item.boardId}#${item.id}`}
+                href={`${workspaceHref(demoHubs.find((hub) => hub.id === item.hubId)!.slug)}/boards/${item.boardId}#${item.id}`}
                 key={item.id}
               >
                 <span className={`result-icon ${item.type}`}>
@@ -418,12 +427,12 @@ function SearchView({
             ))}
           {(filter === "everything" || filter === "hubs") &&
             hubResults.map((hub) => (
-              <Link href={`/app/hubs/${hub.slug}`} key={`hub-${hub.id}`}>
+              <Link href={workspaceHref(hub.slug)} key={`hub-${hub.id}`}>
                 <span className="result-icon hub">{hub.icon}</span>
                 <div>
                   <strong>{hub.name}</strong>
                   <span>
-                    Project · {hub.stage} · {hub.health.replace("_", " ")}
+                    Workspace · {hub.stage} · {hub.health.replace("_", " ")}
                   </span>
                 </div>
                 <ArrowRight size={14} />
@@ -432,7 +441,7 @@ function SearchView({
           {(filter === "everything" || filter === "updates") &&
             updateResults.map((hub) => (
               <Link
-                href={`/app/hubs/${hub.slug}#updates`}
+                href={workspaceHref(hub.slug, undefined, "updates")}
                 key={`update-${hub.id}`}
               >
                 <span className="result-icon update">
@@ -518,6 +527,18 @@ function TemplatesView() {
 }
 
 function SettingsView() {
+  const { scope } = useWorkspace();
+  const workspaceSlug = scope.hubs[0]?.slug;
+  const settingsHref = workspaceSlug
+    ? workspaceHref(workspaceSlug, "settings")
+    : "/app/settings/integrations";
+  const settingsSectionHref = (section: string) =>
+    workspaceSlug
+      ? workspaceHref(workspaceSlug, "settings", section)
+      : `/app/settings/integrations#${section}`;
+  const importHref = workspaceSlug
+    ? `/app/workspaces/${encodeURIComponent(workspaceSlug)}/settings/import`
+    : "/app/settings/import";
   const providers = [
     [
       "Google Drive",
@@ -553,18 +574,18 @@ function SettingsView() {
   return (
     <div className="settings-layout">
       <aside>
-        <Link className="active" href="/app/settings/integrations">
+        <Link className="active" href={settingsHref}>
           <Settings2 size={14} />
           Integrations
         </Link>
-        <Link href="/app/settings/integrations#security">
+        <Link href={settingsSectionHref("security")}>
           <ShieldCheck size={14} />
           Security
         </Link>
-        <Link href="/app/settings/integrations#organization">Organization</Link>
-        <Link href="/app/settings/integrations#members">Members</Link>
-        <Link href="/app/settings/integrations#audit-log">Audit log</Link>
-        <Link href="/app/settings/import">Import / Export</Link>
+        <Link href={settingsSectionHref("organization")}>Organization</Link>
+        <Link href={settingsSectionHref("members")}>Members</Link>
+        <Link href={settingsSectionHref("audit-log")}>Audit log</Link>
+        <Link href={importHref}>Import / Export</Link>
       </aside>
       <section>
         <div className="settings-note">
@@ -572,8 +593,8 @@ function SettingsView() {
           <div>
             <strong>Optional by design</strong>
             <span>
-              Your projects, boards and decisions keep working if every provider
-              is disconnected.
+              Your Workspace, boards, and decisions keep working if every
+              provider is disconnected.
             </span>
           </div>
         </div>
@@ -591,12 +612,12 @@ function SettingsView() {
                 <span>{description}</span>
               </div>
               {state === "configured" ? (
-                <Link className="configured" href="/app/settings/integrations">
+                <Link className="configured" href={settingsHref}>
                   <CheckCircle2 size={14} />
                   Configured
                 </Link>
               ) : state === "preview" ? (
-                <Link href="/app/settings/integrations">
+                <Link href={settingsHref}>
                   Set up <ArrowRight size={12} />
                 </Link>
               ) : (

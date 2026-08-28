@@ -5,14 +5,17 @@ import {
   vocabularyFor,
 } from "./terminology";
 
-describe("customer-facing project terminology", () => {
-  it("uses projects as the default responsibility name", () => {
+describe("customer-facing Workspace terminology", () => {
+  it("uses Workspace as the default responsibility name", () => {
     expect(DEFAULT_VOCABULARY).toBe("projects");
-    expect(vocabularyFor()).toMatchObject({ one: "Project", many: "Projects" });
+    expect(vocabularyFor()).toMatchObject({
+      one: "Workspace",
+      many: "Workspaces",
+    });
   });
 
-  it("describes a project's type without bringing back Hub jargon", () => {
-    expect(labelForProjectType("brand")).toBe("Brand project");
-    expect(labelForProjectType("project")).toBe("Project");
+  it("describes a Workspace type without bringing back Hub jargon", () => {
+    expect(labelForProjectType("brand")).toBe("Brand workspace");
+    expect(labelForProjectType("project")).toBe("Project workspace");
   });
 });

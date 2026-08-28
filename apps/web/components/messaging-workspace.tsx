@@ -42,6 +42,7 @@ import {
 import { storeCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { labelForProjectType } from "@/lib/terminology";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import {
   currentMessagingUserId,
   messagingPeople,
@@ -145,14 +146,27 @@ export function MessagingWorkspace() {
     () => new Set(scope.hubs.map((hub) => hub.id)),
     [scope.hubs],
   );
-  const scopedConversations = useMemo(
-    () =>
-      conversations.filter(
-        (conversation) =>
-          !conversation.hubId || scopedHubIds.has(conversation.hubId),
-      ),
-    [conversations, scopedHubIds],
-  );
+  const scopedConversations = useMemo(() => {
+    const matching = conversations.filter(
+      (conversation) =>
+        Boolean(conversation.hubId) && scopedHubIds.has(conversation.hubId!),
+    );
+    if (matching.length || !workspace) return matching;
+    return [
+      {
+        id: `conversation-${workspace.id}-general`,
+        title: `${workspace.name} · General`,
+        purpose: "Workspace-wide coordination and context.",
+        kind: "hub" as const,
+        participantIds: [currentMessagingUserId],
+        hubId: workspace.id,
+        hubSlug: workspace.slug,
+        unread: 0,
+        visibility: "organization" as const,
+        lastActivity: new Date(0).toISOString(),
+      },
+    ];
+  }, [conversations, scopedHubIds, workspace]);
   const scopedConversationIds = useMemo(
     () => new Set(scopedConversations.map((conversation) => conversation.id)),
     [scopedConversations],
@@ -465,7 +479,7 @@ export function MessagingWorkspace() {
           className={focus === "all" ? "active" : ""}
           onClick={() => setFocus("all")}
         >
-          All conversations <b>{conversations.length}</b>
+          All conversations <b>{scopedConversations.length}</b>
         </button>
         <button
           className={focus === "needs-response" ? "active" : ""}
@@ -480,7 +494,7 @@ export function MessagingWorkspace() {
           Unread <b>{totalUnread}</b>
         </button>
         <span>
-          <ShieldCheck size={14} /> Hub and guest permissions apply
+          <ShieldCheck size={14} /> Workspace and guest permissions apply
           automatically
         </span>
       </section>
@@ -595,8 +609,8 @@ export function MessagingWorkspace() {
                 <strong>{selected.title}</strong>
                 <p>{selected.purpose}</p>
                 {selectedHub && (
-                  <Link href={`/app/hubs/${selectedHub.slug}`}>
-                    {selectedHub.icon} Open {selectedHub.name} Hub{" "}
+                  <Link href={workspaceHref(selectedHub.slug)}>
+                    {selectedHub.icon} Open {selectedHub.name} Workspace{" "}
                     <ArrowRight size={12} />
                   </Link>
                 )}
@@ -622,6 +636,11 @@ export function MessagingWorkspace() {
                   onResolve={() => resolveResponse(message.id)}
                   onConvert={() => convertToWork(message)}
                   onReact={(emoji) => toggleReaction(message.id, emoji)}
+                  {...((selectedHub?.slug ?? workspace?.slug)
+                    ? {
+                        workspaceSlug: selectedHub?.slug ?? workspace!.slug,
+                      }
+                    : {})}
                 />
               );
             })}
@@ -801,6 +820,7 @@ function MessageEntry({
   onResolve,
   onConvert,
   onReact,
+  workspaceSlug,
 }: {
   message: ConversationMessage;
   compact: boolean;
@@ -809,6 +829,7 @@ function MessageEntry({
   onResolve: () => void;
   onConvert: () => void;
   onReact: (emoji: string) => void;
+  workspaceSlug?: string;
 }) {
   const sender = personById(message.senderId);
   const owner = message.responseOwnerId
@@ -857,8 +878,11 @@ function MessageEntry({
             )}
           </div>
         )}
-        {message.linkedWorkTitle && (
-          <Link className="message-work-link" href="/app/my-work">
+        {message.linkedWorkTitle && workspaceSlug && (
+          <Link
+            className="message-work-link"
+            href={workspaceHref(workspaceSlug, "my-work")}
+          >
             <Link2 size={12} /> {message.linkedWorkTitle}{" "}
             <ArrowRight size={11} />
           </Link>
@@ -970,8 +994,8 @@ function RoomContext({
                 blocked
               </span>
             </div>
-            <Link href={`/app/hubs/${hub.slug}`}>
-              Open project <ArrowRight size={12} />
+            <Link href={workspaceHref(hub.slug)}>
+              Open workspace <ArrowRight size={12} />
             </Link>
           </section>
         ) : (
@@ -1046,7 +1070,7 @@ function RoomContext({
                 ? "Guests only see this room and explicitly shared work."
                 : conversation.visibility === "private"
                   ? "Only invited participants can open this room."
-                  : "Access follows organization and project membership."}
+                  : "Access follows organization and Workspace membership."}
             </span>
           </div>
         </section>
@@ -1152,7 +1176,7 @@ function NewConversationDialog({
   const [title, setTitle] = useState("");
   const [purpose, setPurpose] = useState("");
   const [kind, setKind] = useState<ConversationKind>("hub");
-  const [hubId, setHubId] = useState(currentHubs[0]?.id ?? "");
+  const hubId = currentHubs[0]?.id ?? "";
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [directPersonId, setDirectPersonId] = useState(
     availablePeople.find((person) => !person.external)?.id ?? "",
@@ -1168,6 +1192,9 @@ function NewConversationDialog({
         purpose: "Direct conversation",
         kind: "direct",
         participantIds: [currentMessagingUserId, person.id],
+        ...(currentHubs[0]
+          ? { hubId: currentHubs[0].id, hubSlug: currentHubs[0].slug }
+          : {}),
         unread: 0,
         visibility: "private",
         lastActivity: new Date().toISOString(),
@@ -1181,7 +1208,7 @@ function NewConversationDialog({
       purpose: purpose.trim(),
       kind,
       participantIds: [currentMessagingUserId, ...participantIds],
-      ...(kind === "hub" && hub ? { hubId: hub.id, hubSlug: hub.slug } : {}),
+      ...(hub ? { hubId: hub.id, hubSlug: hub.slug } : {}),
       unread: 0,
       visibility: kind === "external" ? "guest-scoped" : "organization",
       lastActivity: new Date().toISOString(),
@@ -1279,7 +1306,7 @@ function NewConversationDialog({
                       setKind(event.target.value as ConversationKind)
                     }
                   >
-                    <option value="hub">Project room</option>
+                    <option value="hub">Workspace room</option>
                     <option value="team">Internal team room</option>
                     <option value="external">Guest-scoped room</option>
                   </select>
@@ -1295,20 +1322,13 @@ function NewConversationDialog({
                   rows={3}
                 />
               </label>
-              {kind === "hub" && (
-                <label className="stacked-field">
-                  <span>Linked project</span>
-                  <select
-                    value={hubId}
-                    onChange={(event) => setHubId(event.target.value)}
-                  >
-                    {currentHubs.map((hub) => (
-                      <option key={hub.id} value={hub.id}>
-                        {hub.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {kind === "hub" && currentHubs[0] && (
+                <div className="stacked-field messaging-workspace-binding">
+                  <span>Linked workspace</span>
+                  <strong>
+                    {currentHubs[0].icon} {currentHubs[0].name}
+                  </strong>
+                </div>
               )}
               <fieldset className="room-participant-grid">
                 <legend>Participants</legend>
@@ -1337,7 +1357,7 @@ function NewConversationDialog({
                   {kind === "external"
                     ? "External people receive access only to this room and explicitly shared work."
                     : kind === "hub"
-                      ? "Membership stays aligned with the linked project."
+                      ? "Membership stays aligned with the active Workspace."
                       : "Only workspace members added here can participate."}
                 </span>
               </div>

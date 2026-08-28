@@ -1,12 +1,5 @@
-import type { Metadata } from "next";
-import { HomeExperience } from "@/components/management-experience";
-
-export const metadata: Metadata = {
-  title: "Home",
-  description:
-    "Personalized focus, meaningful changes, decisions, and waiting follow-ups.",
-};
+import { permanentRedirect } from "next/navigation";
 
 export default function HomePage() {
-  return <HomeExperience />;
+  permanentRedirect("/app/portfolio");
 }

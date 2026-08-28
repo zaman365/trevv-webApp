@@ -67,6 +67,7 @@ import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { Hint } from "./learning-center";
 import { useCustomHubs } from "@/lib/custom-hubs";
+import { workspaceDirectoryHref, workspaceHref } from "@/lib/workspace-routes";
 
 type Status = "planned" | "working" | "blocked" | "review" | "done";
 type Priority = "Urgent" | "High" | "Normal" | "Low";
@@ -186,9 +187,9 @@ export function BoardExperience({
       <WorkspaceFrame active="hub" hubSlug={hubSlug}>
         <main className="board-main board-not-found">
           <h1>Board not found</h1>
-          <p>This board does not belong to the requested project.</p>
-          <Link href={hub ? `/app/hubs/${hub.slug}` : "/app/hubs"}>
-            Return to {hub?.name ?? "all projects"}
+          <p>This board does not belong to the requested workspace.</p>
+          <Link href={hub ? workspaceHref(hub.slug) : workspaceDirectoryHref()}>
+            Return to {hub?.name ?? "all workspaces"}
           </Link>
         </main>
       </WorkspaceFrame>
@@ -611,8 +612,8 @@ function BoardWorkspace({
                     >
                       <Copy size={13} /> Copy board link
                     </button>
-                    <Link href={`/app/hubs/${hub.slug}`} role="menuitem">
-                      Open project overview
+                    <Link href={workspaceHref(hub.slug)} role="menuitem">
+                      Open workspace overview
                     </Link>
                   </span>
                 )}
@@ -653,7 +654,7 @@ function BoardWorkspace({
                   {name}
                 </span>
               ))}
-            <Link href="/app/team">Manage team</Link>
+            <Link href={workspaceHref(hub.slug, "team")}>Manage team</Link>
           </section>
         )}
         <div className="view-toolbar">
@@ -1262,7 +1263,7 @@ function ItemPanel({
   const [subitems, setSubitems] = useState([
     { title: `${item.title} acceptance criteria confirmed`, done: true },
     { title: "Supporting evidence attached", done: false },
-    { title: "Outcome recorded in the project update", done: false },
+    { title: "Outcome recorded in the Workspace update", done: false },
   ]);
   const [comment, setComment] = useState("");
   const [newSubitem, setNewSubitem] = useState("");

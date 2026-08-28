@@ -25,7 +25,7 @@ export function StakeholderExperience({ slug }: { slug: string }) {
       <main className="stakeholder-page stakeholder-unavailable">
         <ShieldCheck size={28} />
         <h1>This stakeholder view is not shared</h1>
-        <p>Ask a project lead or Admin to expose selected information.</p>
+        <p>Ask a Workspace lead or Admin to expose selected information.</p>
       </main>
     );
   const work = demoItems.filter((item) =>
@@ -79,7 +79,7 @@ export function StakeholderExperience({ slug }: { slug: string }) {
               <time>{hub.latestUpdate.date}</time>
             </header>
             <p>{hub.latestUpdate.text}</p>
-            <small>Shared by the project lead</small>
+            <small>Shared by the Workspace lead</small>
           </section>
         )}
         {demoStakeholderExposure.milestones && (

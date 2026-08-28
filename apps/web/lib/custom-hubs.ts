@@ -63,7 +63,7 @@ export function createCustomHub(input: CustomHubInput): CustomHubRecord {
       stage: "idea",
       health: "on_track",
       healthNote:
-        "New project — define the first commitment and publish an update.",
+        "New Workspace — define the first commitment and publish an update.",
       priority: input.priority.trim() || "Define the first meaningful outcome",
       lead: { name: lead, initials, color: "#5b56db" },
       nextMilestone: {
@@ -71,7 +71,7 @@ export function createCustomHub(input: CustomHubInput): CustomHubRecord {
         date: input.milestoneDate,
       },
       latestUpdate: {
-        text: "Project created in TREVV. Add the first work item to begin tracking movement.",
+        text: "Workspace created in TREVV. Add the first work item to begin tracking movement.",
         date: new Date(timestamp).toISOString().slice(0, 10),
       },
       metrics: [],
@@ -82,7 +82,7 @@ export function createCustomHub(input: CustomHubInput): CustomHubRecord {
       hubId: id,
       name: `${input.name.trim()} Board`,
       category: "Work",
-      description: "The operating board created with this project.",
+      description: "The operating board created with this Workspace.",
     },
   };
   const current = readStorage();

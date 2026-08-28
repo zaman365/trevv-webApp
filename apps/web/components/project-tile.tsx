@@ -18,6 +18,7 @@ import { getMessages } from "@founderhq/i18n";
 import Link from "next/link";
 import { ProgressRing } from "./ui-kit";
 import { labelForType } from "@/lib/terminology";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { useState } from "react";
 
 const healthIcon: Record<HubHealth, typeof CheckCircle2> = {
@@ -78,7 +79,7 @@ export function ProjectTile({
         </span>
         <div className="tile-title">
           <h3>
-            <Link className="tile-link" href={`/app/hubs/${hub.slug}`}>
+            <Link className="tile-link" href={workspaceHref(hub.slug)}>
               {hub.name}
             </Link>
           </h3>
@@ -107,19 +108,22 @@ export function ProjectTile({
             </button>
             {menuOpen && (
               <div className="tile-action-menu" role="menu">
-                <Link href={`/app/hubs/${hub.slug}`} role="menuitem">
-                  Open project
+                <Link href={workspaceHref(hub.slug)} role="menuitem">
+                  Open workspace
                 </Link>
                 {board && (
                   <Link
-                    href={`/app/hubs/${hub.slug}/boards/${board.id}`}
+                    href={`${workspaceHref(hub.slug)}/boards/${board.id}`}
                     role="menuitem"
                   >
                     Open board
                   </Link>
                 )}
-                <Link href={`/app/attention`} role="menuitem">
-                  Review attention
+                <Link
+                  href={workspaceHref(hub.slug, "attention")}
+                  role="menuitem"
+                >
+                  Review Workspace Attention
                 </Link>
               </div>
             )}

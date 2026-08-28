@@ -1,9 +1,9 @@
-import { HubOverview } from "@/components/hub-overview";
+import { permanentRedirect } from "next/navigation";
 export default async function HubPage({
   params,
 }: {
   params: Promise<{ hubSlug: string }>;
 }) {
   const { hubSlug } = await params;
-  return <HubOverview slug={hubSlug} />;
+  permanentRedirect(`/app/workspaces/${encodeURIComponent(hubSlug)}`);
 }

@@ -26,6 +26,7 @@ import {
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint } from "./learning-center";
 
 type MemberStatus = "active" | "away" | "invited";
@@ -64,7 +65,7 @@ const initialMembers: TeamMember[] = calculateResourcePressure(
 }));
 
 export function TeamWorkflow() {
-  const { scope, workspaceLevel } = useWorkspace();
+  const { scope } = useWorkspace();
   const [members, setMembers] = useState(initialMembers);
   const [query, setQuery] = useState("");
   const [pressureFilter, setPressureFilter] = useState("all");
@@ -120,7 +121,7 @@ export function TeamWorkflow() {
     <>
       <header className="trevv-page-header">
         <div>
-          <p>{workspaceLevel === "project" ? "Project team" : "Portfolio team"}</p>
+          <p>Workspace team</p>
           <h1 className="page-title-with-hint">
             Team workspace <Hint resourceId="team-pressure" />
           </h1>
@@ -194,7 +195,7 @@ export function TeamWorkflow() {
             <span>
               {elevated} {elevated === 1 ? "person has" : "people have"}{" "}
               elevated or critical pressure based on urgent work, blockers,
-              dates, and critical Hub responsibility.
+              dates, and critical Workspace responsibility.
             </span>
           </div>
           <button
@@ -321,6 +322,7 @@ export function TeamWorkflow() {
         <MemberDetailDialog
           member={selected}
           projects={scope.hubs}
+          {...(scope.hubs[0] ? { workspaceSlug: scope.hubs[0].slug } : {})}
           onClose={() => setSelectedId(null)}
           onUpdate={(update, message) => {
             updateMember(selected.userId, update);
@@ -373,12 +375,14 @@ export function TeamWorkflow() {
 function MemberDetailDialog({
   member,
   projects,
+  workspaceSlug,
   onClose,
   onUpdate,
   onRebalance,
 }: {
   member: TeamMember;
   projects: typeof demoHubs;
+  workspaceSlug?: string;
   onClose: () => void;
   onUpdate: (update: Partial<TeamMember>, message: string) => void;
   onRebalance: () => void;
@@ -456,7 +460,7 @@ function MemberDetailDialog({
               </select>
             </label>
             <div className="member-access-list">
-              <b>Project access</b>
+              <b>Workspace access</b>
               {projects.slice(0, 5).map((hub) => (
                 <label key={hub.id}>
                   <input
@@ -471,7 +475,11 @@ function MemberDetailDialog({
             </div>
             <Link
               className="linked-work-callout"
-              href="/app/settings/integrations"
+              href={
+                workspaceSlug
+                  ? workspaceHref(workspaceSlug, "settings")
+                  : "/app/workspaces"
+              }
             >
               <ShieldCheck size={14} /> Manage organization permissions{" "}
               <ArrowRight size={13} />
@@ -649,7 +657,7 @@ function InviteMemberDialog({
             </small>
           </label>
           <fieldset className="invite-hub-access">
-            <legend>Initial project access</legend>
+            <legend>Initial Workspace access</legend>
             {projects.slice(0, 6).map((hub) => (
               <label key={hub.id}>
                 <input

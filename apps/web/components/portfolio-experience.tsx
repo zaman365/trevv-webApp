@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  ArrowRight,
   Blocks,
   ChevronDown,
   CircleDashed,
@@ -10,6 +11,7 @@ import {
   Grid2X2,
   Sparkles,
   Users,
+  X,
 } from "lucide-react";
 import { demoPortfolios, type HubHealth } from "@founderhq/core";
 import Link from "next/link";
@@ -26,6 +28,16 @@ import {
   portfolioVisualFor,
   useCustomPortfolios,
 } from "@/lib/custom-portfolios";
+import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
+
+type PortfolioDetailKind =
+  | "attention"
+  | "decisions"
+  | "blocked"
+  | "approvals"
+  | "overdueMilestones"
+  | "unassignedUrgent"
+  | "staleUpdates";
 
 export function PortfolioExperience() {
   return (
@@ -41,6 +53,7 @@ function PortfolioMain() {
   const [health, setHealth] = useState<HubHealth | "all">("all");
   // §5: "choose optional metrics" — on by default, dismissable.
   const [showMetrics, setShowMetrics] = useState(true);
+  const [detail, setDetail] = useState<PortfolioDetailKind | null>(null);
   const customPortfolioRecords = useCustomPortfolios();
   const customHubs = useCustomHubs().filter(
     (record) => record.hub.portfolioId === portfolioId,
@@ -143,17 +156,81 @@ function PortfolioMain() {
     if (left.count > 0 !== right.count > 0) return left.count > 0 ? -1 : 1;
     return toneRank[SIGNAL_TONES[left.key]] - toneRank[SIGNAL_TONES[right.key]];
   });
+  const detailEntries = useMemo(() => {
+    if (!detail) return [];
+    if (detail === "staleUpdates") {
+      return scope.hubs
+        .filter((hub) =>
+          scope.attention.some(
+            (group) =>
+              group.hubId === hub.id &&
+              group.signals.some((signal) =>
+                ["stale_update", "missing_update"].includes(signal.signalType),
+              ),
+          ),
+        )
+        .map((hub) => ({
+          id: hub.id,
+          title: hub.name,
+          note: hub.healthNote,
+          hub,
+          view: undefined as WorkspaceView | undefined,
+        }));
+    }
+
+    return scope.items
+      .filter((item) => {
+        if (item.status === "done") return false;
+        if (detail === "attention")
+          return scope.attention.some((group) => group.entityId === item.id);
+        if (detail === "decisions") return item.type === "decision";
+        if (detail === "approvals") return item.type === "approval";
+        if (detail === "blocked") return item.status === "blocked";
+        if (detail === "unassignedUrgent")
+          return item.priority === "urgent" && !item.assignee;
+        return (
+          item.type === "milestone" &&
+          Boolean(item.dueDate && item.dueDate < "2026-08-28")
+        );
+      })
+      .map((item) => {
+        const hub = scope.hubs.find(
+          (candidate) => candidate.id === item.hubId,
+        )!;
+        const view: WorkspaceView =
+          detail === "decisions"
+            ? "decisions"
+            : detail === "approvals"
+              ? "approvals"
+              : detail === "unassignedUrgent"
+                ? "team"
+                : "attention";
+        return {
+          id: item.id,
+          title: item.title,
+          note: `${hub.name} · ${item.status.replaceAll("_", " ")}`,
+          hub,
+          view,
+        };
+      });
+  }, [detail, scope.attention, scope.hubs, scope.items]);
+  const detailTitle =
+    detail === "attention"
+      ? "Portfolio attention"
+      : (cards.find((card) => card.key === detail)?.label ??
+        "Portfolio detail");
 
   return (
     <main className="trevv-main portfolio-main">
       <PageHero
         eyebrow={
           <>
-            {vocab.groupOne} · {projectCount} {vocab.many.toLowerCase()}
+            Portfolio · {projectCount}{" "}
+            {projectCount === 1 ? "workspace" : "workspaces"}
           </>
         }
         title={portfolio?.name ?? vocab.groupOne}
-        subtitle={portfolio?.description ?? copy.portfolio.subtitle}
+        subtitle={`${portfolio?.description ?? copy.portfolio.subtitle} This page is the cumulative view across every accessible workspace. Choose a workspace below when you need its detailed operational view.`}
         {...(portfolioVisual
           ? {
               accent: portfolioVisual.accent,
@@ -201,7 +278,7 @@ function PortfolioMain() {
               label="Need you"
               note="Across this portfolio"
               tone="danger"
-              href="/app/attention"
+              onClick={() => setDetail("attention")}
             />
             <StatTile
               icon={AlertTriangle}
@@ -209,6 +286,7 @@ function PortfolioMain() {
               label="Overdue"
               note="Past their due date"
               tone="warning"
+              onClick={() => setDetail("overdueMilestones")}
             />
             <StatTile
               icon={Blocks}
@@ -216,6 +294,7 @@ function PortfolioMain() {
               label="Blocked"
               note="Waiting on a dependency"
               tone="warning"
+              onClick={() => setDetail("blocked")}
             />
             <StatTile
               icon={Grid2X2}
@@ -243,7 +322,7 @@ function PortfolioMain() {
             {summary.focus && (
               <p className="health-focus">
                 <b>Most urgent</b>
-                <Link href={`/app/hubs/${summary.focus.hub.slug}`}>
+                <Link href={workspaceHref(summary.focus.hub.slug)}>
                   {summary.focus.hub.name}
                 </Link>
                 <span>{summary.focus.hub.healthNote}</span>
@@ -257,7 +336,6 @@ function PortfolioMain() {
         icon={Sparkles}
         title={copy.portfolio.attentionTitle}
         subtitle={copy.portfolio.attentionSubtitle}
-        href="/app/attention"
         aside={
           <span className="signal-total">
             {scope.attentionCount} {copy.common.signals}
@@ -269,15 +347,7 @@ function PortfolioMain() {
           {orderedCards.map((card) => (
             <SignalCard
               key={card.key}
-              href={
-                card.key === "decisions"
-                  ? "/app/decisions"
-                  : card.key === "approvals"
-                    ? "/app/approvals"
-                    : card.key === "unassignedUrgent"
-                      ? "/app/team"
-                      : `/app/attention#${card.key === "overdueMilestones" ? "overdue" : card.key === "staleUpdates" ? "stale" : "blocked"}`
-              }
+              onClick={() => setDetail(card.key)}
               tone={SIGNAL_TONES[card.key]}
               icon={card.icon}
               count={card.count}
@@ -296,8 +366,8 @@ function PortfolioMain() {
 
       <Panel
         icon={Grid2X2}
-        title={vocab.many}
-        subtitle="Prioritized by health, urgency, and update freshness."
+        title="Workspaces"
+        subtitle="Select a workspace to enter its complete operational view. Prioritized here by health, urgency, and update freshness."
         aside={
           <div className="filters">
             <select
@@ -336,6 +406,67 @@ function PortfolioMain() {
           ))}
         </div>
       </Panel>
+      {detail && (
+        <div
+          className="portfolio-detail-layer"
+          role="presentation"
+          onMouseDown={() => setDetail(null)}
+        >
+          <section
+            className="portfolio-detail-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="portfolio-detail-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <small>Portfolio roll-up</small>
+                <h2 id="portfolio-detail-title">{detailTitle}</h2>
+                <p>
+                  Review the cross-workspace picture here, then enter a specific
+                  workspace only when you want to act.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close portfolio detail"
+                onClick={() => setDetail(null)}
+              >
+                <X size={17} />
+              </button>
+            </header>
+            <div className="portfolio-detail-list">
+              {detailEntries.map((entry) => (
+                <article key={entry.id}>
+                  <span
+                    style={{
+                      background: `${entry.hub.accent}18`,
+                      color: entry.hub.accent,
+                    }}
+                  >
+                    {entry.hub.icon}
+                  </span>
+                  <div>
+                    <strong>{entry.title}</strong>
+                    <small>{entry.note}</small>
+                  </div>
+                  <Link href={workspaceHref(entry.hub.slug, entry.view)}>
+                    Open workspace <ArrowRight size={13} />
+                  </Link>
+                </article>
+              ))}
+              {!detailEntries.length && (
+                <div className="portfolio-detail-empty">
+                  <ClipboardCheck size={20} />
+                  <strong>Nothing is waiting here</strong>
+                  <span>This roll-up is currently clear.</span>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -346,20 +477,21 @@ function SignalCard({
   count,
   label,
   note,
-  href,
+  onClick,
 }: {
   tone: SignalTone;
   icon: typeof FileQuestion;
   count: number;
   label: string;
   note: string;
-  href: string;
+  onClick: () => void;
 }) {
   const clear = count === 0;
   return (
-    <Link
+    <button
+      type="button"
       className={`signal-card signal-${tone} ${clear ? "is-clear" : ""}`}
-      href={href}
+      onClick={onClick}
     >
       <span className="signal-icon">
         <Icon size={17} />
@@ -372,6 +504,6 @@ function SignalCard({
       <span className="signal-arrow" aria-hidden="true">
         →
       </span>
-    </Link>
+    </button>
   );
 }

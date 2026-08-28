@@ -15,10 +15,10 @@ export const productCopy = {
       reviews: "Reviews",
       templates: "Templates",
       settings: "Settings",
-      hubs: "Projects",
+      hubs: "Workspaces",
     },
     shell: {
-      search: "Search work, projects and people…",
+      search: "Search work, Workspaces and people…",
       capture: "Quick capture",
       notifications: "Notifications",
       userMenu: "Open user menu",
@@ -114,16 +114,16 @@ export const productCopy = {
       myWorkSubtitle: "The work that needs you, ordered by time and risk.",
       inboxTitle: "Inbox",
       inboxSubtitle:
-        "Read every connected mailbox and keep actionable requests one tab away.",
+        "A Workspace action queue for requests, assignments, and promoted email that needs tracked follow-through.",
       decisionsTitle: "Decision Center",
       decisionsSubtitle:
-        "Resolve the choices that unblock progress across every project.",
+        "Resolve the choices that unblock progress in this workspace.",
       approvalsTitle: "Approval Center",
       approvalsSubtitle:
         "Review assets and requests without losing their context.",
       searchTitle: "Search",
       searchSubtitle:
-        "Permission-aware results across projects, work, comments, updates and links.",
+        "Permission-aware results across Workspaces, work, comments, updates and links.",
       templatesTitle: "Templates",
       templatesSubtitle:
         "Start proven operating workflows without adding hierarchy.",
@@ -171,7 +171,7 @@ export const productCopy = {
       organization: "Organization name",
       language: "Language",
       timezone: "Time zone",
-      chooseHubs: "Choose starter projects",
+      chooseHubs: "Choose starter Workspaces",
       invite: "Invite your team",
       optional: "Optional",
     },

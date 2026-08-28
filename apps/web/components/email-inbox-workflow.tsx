@@ -45,13 +45,7 @@ import {
 import { InboxWorkflow, type EmailInboxAction } from "./inbox-workflow";
 
 type InboxArea = "email" | "actionable";
-type MailFolder =
-  | "inbox"
-  | "starred"
-  | "sent"
-  | "drafts"
-  | "archive"
-  | "trash";
+type MailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | "trash";
 type ComposeMode = "new" | "reply" | "forward";
 
 interface EmailAccount {
@@ -238,7 +232,8 @@ const initialMessages: EmailMessage[] = [
     fromEmail: "workspace-noreply@google.com",
     to: "mohammed@trevv.de",
     subject: "Your monthly security report",
-    preview: "Review the sign-in and account protection activity for your organization.",
+    preview:
+      "Review the sign-in and account protection activity for your organization.",
     body: [
       "Review the sign-in and account protection activity for your organization.",
     ],
@@ -285,9 +280,15 @@ function getEmailAccountsSnapshot() {
   return window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
 }
 
-export function InboxExperience() {
-  const [area, setArea] = useState<InboxArea>("email");
-  const [promotedMessages, setPromotedMessages] = useState<EmailInboxAction[]>([]);
+export function InboxExperience({
+  initialArea = "actionable",
+}: {
+  initialArea?: InboxArea;
+}) {
+  const [area, setArea] = useState<InboxArea>(initialArea);
+  const [promotedMessages, setPromotedMessages] = useState<EmailInboxAction[]>(
+    [],
+  );
 
   const promoteMessage = (message: EmailMessage) => {
     setPromotedMessages((current) =>
@@ -309,7 +310,11 @@ export function InboxExperience() {
 
   return (
     <div className="unified-inbox">
-      <div className="unified-inbox-tabs" role="tablist" aria-label="Inbox type">
+      <div
+        className="unified-inbox-tabs"
+        role="tablist"
+        aria-label="Inbox type"
+      >
         <button
           role="tab"
           aria-selected={area === "email"}
@@ -317,7 +322,7 @@ export function InboxExperience() {
           onClick={() => setArea("email")}
         >
           <Mail size={16} />
-          Email
+          Account Email
           <b>2</b>
         </button>
         <button
@@ -327,11 +332,12 @@ export function InboxExperience() {
           onClick={() => setArea("actionable")}
         >
           <Sparkles size={16} />
-          Actionable Inbox
+          Workspace Actionable
           <b>{4 + promotedMessages.length}</b>
         </button>
         <span>
-          Email stays email. Promote only the messages that need tracked work.
+          Account email stays separate; promote only messages that need tracked
+          Workspace work.
         </span>
       </div>
       <div role="tabpanel">
@@ -442,7 +448,10 @@ function EmailInboxWorkflow({
         <div className="workflow-toast email-toast" role="status">
           <CheckCircle2 size={15} />
           <span>{notice}</span>
-          <button aria-label="Dismiss notification" onClick={() => setNotice("")}>
+          <button
+            aria-label="Dismiss notification"
+            onClick={() => setNotice("")}
+          >
             <X size={14} />
           </button>
         </div>
@@ -485,7 +494,10 @@ function EmailInboxWorkflow({
           >
             <RefreshCw size={14} /> Sync now
           </button>
-          <button className="email-manage-button" onClick={() => setAccountsOpen(true)}>
+          <button
+            className="email-manage-button"
+            onClick={() => setAccountsOpen(true)}
+          >
             <Settings2 size={14} /> Manage accounts
           </button>
         </div>
@@ -523,7 +535,9 @@ function EmailInboxWorkflow({
                 >
                   <span
                     className={`email-provider-mark tone-${provider.tone}`}
-                    style={{ "--account-color": account.color } as CSSProperties}
+                    style={
+                      { "--account-color": account.color } as CSSProperties
+                    }
                   >
                     {provider.mark}
                   </span>
@@ -535,7 +549,10 @@ function EmailInboxWorkflow({
                 </button>
               );
             })}
-            <button className="email-add-account" onClick={() => setAccountsOpen(true)}>
+            <button
+              className="email-add-account"
+              onClick={() => setAccountsOpen(true)}
+            >
               <Plus size={14} /> Add account
             </button>
           </div>
@@ -568,7 +585,9 @@ function EmailInboxWorkflow({
           </div>
         </aside>
 
-        <div className={`email-message-list ${selected ? "has-selection" : ""}`}>
+        <div
+          className={`email-message-list ${selected ? "has-selection" : ""}`}
+        >
           <header>
             <div>
               <h2>{folderLabels.find((item) => item.key === folder)?.label}</h2>
@@ -641,13 +660,20 @@ function EmailInboxWorkflow({
                     message.unread ? "unread" : ""
                   }`}
                 >
-                  <button className="email-message-open" onClick={() => openMessage(message)}>
+                  <button
+                    className="email-message-open"
+                    onClick={() => openMessage(message)}
+                  >
                     <span className="email-message-meta">
                       <strong>{message.from}</strong>
                       <time>{message.receivedAt}</time>
                     </span>
-                    <span className="email-message-subject">{message.subject}</span>
-                    <span className="email-message-preview">{message.preview}</span>
+                    <span className="email-message-subject">
+                      {message.subject}
+                    </span>
+                    <span className="email-message-preview">
+                      {message.preview}
+                    </span>
                     <span className="email-message-foot">
                       <i style={{ background: account?.color }} />
                       {account?.label}
@@ -664,7 +690,10 @@ function EmailInboxWorkflow({
                       }))
                     }
                   >
-                    <Star size={14} fill={message.starred ? "currentColor" : "none"} />
+                    <Star
+                      size={14}
+                      fill={message.starred ? "currentColor" : "none"}
+                    />
                   </button>
                 </article>
               );
@@ -698,7 +727,9 @@ function EmailInboxWorkflow({
                     <Archive size={15} />
                   </button>
                   <button
-                    aria-label={selected.unread ? "Mark as read" : "Mark as unread"}
+                    aria-label={
+                      selected.unread ? "Mark as read" : "Mark as unread"
+                    }
                     onClick={() =>
                       updateMessage(selected.id, (current) => ({
                         ...current,
@@ -706,7 +737,11 @@ function EmailInboxWorkflow({
                       }))
                     }
                   >
-                    {selected.unread ? <MailOpen size={15} /> : <Mail size={15} />}
+                    {selected.unread ? (
+                      <MailOpen size={15} />
+                    ) : (
+                      <Mail size={15} />
+                    )}
                   </button>
                   <button
                     aria-label="Delete message"
@@ -794,15 +829,20 @@ function EmailInboxWorkflow({
               <div className="email-reading-scroll">
                 <div className="email-reading-title">
                   <span>
-                    {emailProvider(
-                      accounts.find((account) => account.id === selected.accountId)
-                        ?.provider ?? "custom",
-                    ).shortName}
+                    {
+                      emailProvider(
+                        accounts.find(
+                          (account) => account.id === selected.accountId,
+                        )?.provider ?? "custom",
+                      ).shortName
+                    }
                   </span>
                   <h2>{selected.subject}</h2>
                 </div>
                 <div className="email-sender-row">
-                  <span className="email-sender-avatar">{initials(selected.from)}</span>
+                  <span className="email-sender-avatar">
+                    {initials(selected.from)}
+                  </span>
                   <div>
                     <strong>{selected.from}</strong>
                     <button
@@ -828,7 +868,10 @@ function EmailInboxWorkflow({
                       }))
                     }
                   >
-                    <Star size={15} fill={selected.starred ? "currentColor" : "none"} />
+                    <Star
+                      size={15}
+                      fill={selected.starred ? "currentColor" : "none"}
+                    />
                   </button>
                 </div>
                 {senderDetailsOpen && (
@@ -861,7 +904,8 @@ function EmailInboxWorkflow({
                 {selected.attachments && (
                   <div className="email-attachments">
                     <strong>
-                      <Paperclip size={13} /> {selected.attachments.length} attachment
+                      <Paperclip size={13} /> {selected.attachments.length}{" "}
+                      attachment
                       {selected.attachments.length === 1 ? "" : "s"}
                     </strong>
                     <div>
@@ -910,7 +954,9 @@ function EmailInboxWorkflow({
             <div className="email-reading-empty">
               <MailOpen size={30} />
               <strong>Select a message</strong>
-              <span>Read, reply, archive, or turn an email into tracked work.</span>
+              <span>
+                Read, reply, archive, or turn an email into tracked work.
+              </span>
             </div>
           )}
         </div>
@@ -983,7 +1029,9 @@ function ComposeDialog({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const account = accounts.find((candidate) => candidate.id === fromAccountId);
+    const account = accounts.find(
+      (candidate) => candidate.id === fromAccountId,
+    );
     if (!account || !to.trim() || !subject.trim() || !body.trim()) return;
     onSend({
       id: `mail-${Date.now()}`,
@@ -1042,7 +1090,10 @@ function ComposeDialog({
           </label>
           <label>
             <span>Subject</span>
-            <input value={subject} onChange={(event) => setSubject(event.target.value)} />
+            <input
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+            />
           </label>
           <label>
             <span className="sr-only">Message</span>
@@ -1059,12 +1110,18 @@ function ComposeDialog({
             <ShieldCheck size={13} /> Sent through the selected account
           </span>
           <div>
-            <button type="button" className="secondary-button" onClick={onClose}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onClose}
+            >
               Cancel
             </button>
             <button
               className="primary-button"
-              disabled={!fromAccountId || !to.trim() || !subject.trim() || !body.trim()}
+              disabled={
+                !fromAccountId || !to.trim() || !subject.trim() || !body.trim()
+              }
             >
               <Send size={14} /> Send
             </button>
@@ -1122,7 +1179,8 @@ function AccountManagerDialog({
       return;
     if (
       accounts.some(
-        (account) => account.email.toLocaleLowerCase() === email.toLocaleLowerCase(),
+        (account) =>
+          account.email.toLocaleLowerCase() === email.toLocaleLowerCase(),
       )
     ) {
       onNotice("That email account is already connected.");
@@ -1139,7 +1197,9 @@ function AccountManagerDialog({
       lastSyncedAt: new Date().toISOString(),
     };
     onChange([...accounts, next]);
-    onNotice(`${next.label} connected. Mail will appear after the first secure sync.`);
+    onNotice(
+      `${next.label} connected. Mail will appear after the first secure sync.`,
+    );
     setSelectedProvider(null);
   };
 
@@ -1150,14 +1210,22 @@ function AccountManagerDialog({
 
   return (
     <div className="settings-dialog-layer" role="presentation">
-      <section className="settings-dialog email-accounts-dialog" role="dialog" aria-modal="true">
+      <section
+        className="settings-dialog email-accounts-dialog"
+        role="dialog"
+        aria-modal="true"
+      >
         <header className="settings-dialog-header">
           <span className="dialog-title-icon">
             <Mail size={17} />
           </span>
           <div>
             <p>Email</p>
-            <h2>{selectedProvider ? `Connect ${selectedProvider.shortName}` : "Mail accounts"}</h2>
+            <h2>
+              {selectedProvider
+                ? `Connect ${selectedProvider.shortName}`
+                : "Mail accounts"}
+            </h2>
           </div>
           <button aria-label="Close account manager" onClick={onClose}>
             <X size={17} />
@@ -1172,7 +1240,9 @@ function AccountManagerDialog({
                 const provider = emailProvider(account.provider);
                 return (
                   <article key={account.id}>
-                    <span className={`email-provider-mark tone-${provider.tone}`}>
+                    <span
+                      className={`email-provider-mark tone-${provider.tone}`}
+                    >
                       {provider.mark}
                     </span>
                     <div>
@@ -1185,8 +1255,14 @@ function AccountManagerDialog({
                     <button
                       aria-label={`Disconnect ${account.email}`}
                       onClick={() => {
-                        onChange(accounts.filter((candidate) => candidate.id !== account.id));
-                        onNotice(`${account.email} disconnected. Stored email remains untouched.`);
+                        onChange(
+                          accounts.filter(
+                            (candidate) => candidate.id !== account.id,
+                          ),
+                        );
+                        onNotice(
+                          `${account.email} disconnected. Stored email remains untouched.`,
+                        );
                       }}
                     >
                       Disconnect
@@ -1199,8 +1275,13 @@ function AccountManagerDialog({
               <strong>Add another account</strong>
               <div>
                 {emailProviderDefinitions.map((provider) => (
-                  <button key={provider.key} onClick={() => chooseProvider(provider)}>
-                    <span className={`email-provider-mark tone-${provider.tone}`}>
+                  <button
+                    key={provider.key}
+                    onClick={() => chooseProvider(provider)}
+                  >
+                    <span
+                      className={`email-provider-mark tone-${provider.tone}`}
+                    >
                       {provider.mark}
                     </span>
                     <span>
@@ -1217,8 +1298,8 @@ function AccountManagerDialog({
               <span>
                 <strong>Passwords never live in this browser</strong>
                 <small>
-                  This demo saves account labels only. Production OAuth tokens and app
-                  passwords belong in encrypted server-side storage.
+                  This demo saves account labels only. Production OAuth tokens
+                  and app passwords belong in encrypted server-side storage.
                 </small>
               </span>
             </div>
@@ -1226,8 +1307,12 @@ function AccountManagerDialog({
         ) : (
           <form onSubmit={connect}>
             <div className="settings-dialog-body email-connect-form">
-              <div className={`email-provider-summary tone-${selectedProvider.tone}`}>
-                <span className={`email-provider-mark tone-${selectedProvider.tone}`}>
+              <div
+                className={`email-provider-summary tone-${selectedProvider.tone}`}
+              >
+                <span
+                  className={`email-provider-mark tone-${selectedProvider.tone}`}
+                >
                   {selectedProvider.mark}
                 </span>
                 <div>
@@ -1323,8 +1408,8 @@ function AccountManagerDialog({
                 ))}
               </div>
               <p className="email-demo-disclaimer">
-                <Clock3 size={13} /> Demo mode validates the setup experience without
-                contacting the provider.
+                <Clock3 size={13} /> Demo mode validates the setup experience
+                without contacting the provider.
               </p>
             </div>
             <footer className="settings-dialog-actions split-actions">

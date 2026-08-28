@@ -16,7 +16,8 @@ export const openApiDocument = {
     { name: "Insights" },
     { name: "Blueprints" },
     { name: "Commercial" },
-    { name: "Hubs" },
+    { name: "Workspaces" },
+    { name: "Hubs", description: "Legacy Workspace route aliases" },
     { name: "Items" },
     { name: "Search" },
     { name: "Exports" },
@@ -63,6 +64,12 @@ export const openApiDocument = {
         operationId: "listAttentionSignals",
         parameters: [
           { name: "portfolioId", in: "query", schema: { type: "string" } },
+          {
+            name: "workspaceId",
+            in: "query",
+            description: "Limit signals to one accessible Workspace.",
+            schema: { type: "string" },
+          },
         ],
         responses: {
           "200": { description: "Active explainable Attention signals" },
@@ -169,6 +176,7 @@ export const openApiDocument = {
       get: {
         tags: ["Hubs"],
         operationId: "listHubs",
+        deprecated: true,
         responses: { "200": { description: "Accessible Hubs" } },
       },
     },
@@ -176,9 +184,28 @@ export const openApiDocument = {
       get: {
         tags: ["Hubs"],
         operationId: "getHub",
+        deprecated: true,
         parameters: [{ $ref: "#/components/parameters/HubSlug" }],
         responses: {
           "200": { description: "Hub overview and accessible work" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/v1/workspaces": {
+      get: {
+        tags: ["Workspaces"],
+        operationId: "listWorkspaces",
+        responses: { "200": { description: "Accessible Workspaces" } },
+      },
+    },
+    "/api/v1/workspaces/{slug}": {
+      get: {
+        tags: ["Workspaces"],
+        operationId: "getWorkspace",
+        parameters: [{ $ref: "#/components/parameters/HubSlug" }],
+        responses: {
+          "200": { description: "Workspace overview and accessible work" },
           "404": { $ref: "#/components/responses/NotFound" },
         },
       },
@@ -190,6 +217,11 @@ export const openApiDocument = {
         parameters: [
           { name: "cursor", in: "query", schema: { type: "string" } },
           { name: "hubId", in: "query", schema: { type: "string" } },
+          {
+            name: "workspaceId",
+            in: "query",
+            schema: { type: "string" },
+          },
           { name: "assignee", in: "query", schema: { type: "string" } },
           {
             name: "limit",

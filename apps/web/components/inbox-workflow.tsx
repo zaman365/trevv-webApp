@@ -32,6 +32,7 @@ import {
   type CapturedWorkType,
 } from "@/lib/captured-work";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint } from "./learning-center";
 
 type InboxCategory = "decision" | "mention" | "approval" | "follow-up";
@@ -71,7 +72,7 @@ const initialActions: InboxAction[] = [
     hubId: "hub-mealflow",
     receivedAt: "8 min ago",
     priority: "urgent",
-    route: "/app/decisions",
+    route: workspaceHref("mealflow", "decisions"),
     disposition: "open",
   },
   {
@@ -84,7 +85,7 @@ const initialActions: InboxAction[] = [
     hubId: "hub-northstar",
     receivedAt: "24 min ago",
     priority: "high",
-    route: "/app/hubs/northstar-apparel",
+    route: workspaceHref("northstar-apparel"),
     disposition: "open",
   },
   {
@@ -97,7 +98,7 @@ const initialActions: InboxAction[] = [
     hubId: "hub-localreach",
     receivedAt: "1 hr ago",
     priority: "high",
-    route: "/app/approvals",
+    route: workspaceHref("localreach", "approvals"),
     disposition: "open",
   },
   {
@@ -110,7 +111,7 @@ const initialActions: InboxAction[] = [
     hubId: "hub-centralops",
     receivedAt: "Today, 08:00",
     priority: "urgent",
-    route: "/app/waiting",
+    route: workspaceHref("centralops", "waiting"),
     disposition: "open",
   },
   {
@@ -123,7 +124,7 @@ const initialActions: InboxAction[] = [
     hubId: "hub-northstar",
     receivedAt: "Yesterday",
     priority: "normal",
-    route: "/app/hubs/northstar-apparel",
+    route: workspaceHref("northstar-apparel"),
     disposition: "snoozed",
     snoozedUntil: "Tomorrow, 09:00",
   },
@@ -146,9 +147,11 @@ export function InboxWorkflow({
     ...emailActions.map((message) => ({
       ...message,
       category: "follow-up" as const,
-      hubId: "hub-centralops",
+      hubId: scope.hubs[0]?.id ?? "hub-centralops",
       priority: "normal" as const,
-      route: "/app/inbox",
+      route: scope.hubs[0]
+        ? workspaceHref(scope.hubs[0].slug, "inbox")
+        : "/app/workspaces",
       disposition: "open" as const,
     })),
     ...initialActions,
@@ -475,7 +478,7 @@ export function InboxWorkflow({
                   </span>
                   <strong>{action.title}</strong>
                   <small>
-                    {action.source} · {hub?.name ?? "No project"} ·{" "}
+                    {action.source} · {hub?.name ?? "No workspace"} ·{" "}
                     {action.receivedAt}
                   </small>
                   {action.disposition === "snoozed" && (
@@ -750,7 +753,7 @@ function QuickCapture({
               <ChevronDown size={12} />
             </label>
             <label>
-              <span className="sr-only">Capture project</span>
+              <span className="sr-only">Capture Workspace</span>
               <Inbox size={13} />
               <select
                 value={hubId}
@@ -876,7 +879,7 @@ function InboxDetailDialog({
             <div>
               <strong>{action.source}</strong>
               <small>
-                {hub?.name ?? "No project"} · {action.receivedAt}
+                {hub?.name ?? "No workspace"} · {action.receivedAt}
               </small>
             </div>
             <span className={`inbox-priority ${action.priority}`}>

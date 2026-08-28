@@ -34,6 +34,7 @@ import { PageHero, StatTile } from "./ui-kit";
 import { productCopy } from "@/lib/product-copy";
 import { labelForType } from "@/lib/terminology";
 import { useCustomHubs } from "@/lib/custom-hubs";
+import { workspaceDirectoryHref, workspaceHref } from "@/lib/workspace-routes";
 
 const hubHealthCopy: Record<string, string> = {
   on_track: "On track",
@@ -63,8 +64,8 @@ export function HubOverview({ slug }: { slug: string }) {
     return (
       <WorkspaceFrame active="hub" hubSlug={slug}>
         <main className="hub-main board-not-found">
-          <h1>Project not found</h1>
-          <Link href="/app/hubs">Return to all projects</Link>
+          <h1>Workspace not found</h1>
+          <Link href={workspaceDirectoryHref()}>Return to all workspaces</Link>
         </main>
       </WorkspaceFrame>
     );
@@ -120,8 +121,8 @@ function HubWorkspace({
   );
   const board = boardForHub(hub.id) ?? boardOverride;
   const boardHref = board
-    ? `/app/hubs/${hub.slug}/boards/${board.id}`
-    : `/app/hubs/${hub.slug}`;
+    ? `${workspaceHref(hub.slug)}/boards/${board.id}`
+    : workspaceHref(hub.slug);
   const progress = calculateHubProgress(hub);
   const decisions = hubItems.filter(
     (item) =>
@@ -182,7 +183,7 @@ function HubWorkspace({
             <>
               <span className="scope-view-badge project-scope-badge">
                 <FolderKanban size={13} />
-                Project workspace
+                Workspace
               </span>
               <span className={`health-badge ${hub.health}`}>
                 {hubHealthCopy[hub.health]}
@@ -207,7 +208,7 @@ function HubWorkspace({
               {hub.slug === "localreach" && (
                 <Link
                   className="quiet-button"
-                  href={`/app/hubs/${hub.slug}/stakeholder`}
+                  href={`${workspaceHref(hub.slug)}/stakeholder`}
                 >
                   <ExternalLink size={14} />
                   Stakeholder view
@@ -233,13 +234,16 @@ function HubWorkspace({
                         void navigator.clipboard.writeText(
                           window.location.href,
                         );
-                        setNotice("Project link copied.");
+                        setNotice("Workspace link copied.");
                         setMoreOpen(false);
                       }}
                     >
                       <Copy size={13} /> Copy project link
                     </button>
-                    <Link href="/app/settings/integrations" role="menuitem">
+                    <Link
+                      href={workspaceHref(hub.slug, "settings")}
+                      role="menuitem"
+                    >
                       Connected tools
                     </Link>
                   </div>
@@ -282,7 +286,7 @@ function HubWorkspace({
                 tone={
                   rollup.decisions + rollup.approvals ? "warning" : "neutral"
                 }
-                href="/app/decisions"
+                href={workspaceHref(hub.slug, "decisions")}
               />
             </>
           }
@@ -477,7 +481,7 @@ function HubWorkspace({
                     tone="primary"
                     title={`${item.title} · ${item.status.replace("_", " ")}`}
                     meta={`${item.assignee ?? "Unassigned"} · ${item.dueDate ?? "No due date"}`}
-                    href="/app/ideas"
+                    href={workspaceHref(hub.slug, "ideas")}
                     key={item.id}
                   />
                 ))}
@@ -532,11 +536,11 @@ function HubWorkspace({
                 <h2>{copy.decisions}</h2>
               </header>
               {decisions.map((item) => (
-                <a
+                <Link
                   href={
                     item.type === "decision"
-                      ? "/app/decisions"
-                      : "/app/approvals"
+                      ? workspaceHref(hub.slug, "decisions")
+                      : workspaceHref(hub.slug, "approvals")
                   }
                   key={item.id}
                 >
@@ -552,7 +556,7 @@ function HubWorkspace({
                     </small>
                   </div>
                   <ArrowRight size={13} />
-                </a>
+                </Link>
               ))}
               {decisions.length === 0 && <p>No open decisions or approvals.</p>}
             </section>
@@ -639,7 +643,7 @@ function HubWorkspace({
                 ]);
                 setUpdateText("");
                 setUpdateOpen(false);
-                setNotice("Project update published.");
+                setNotice("Workspace update published.");
               }}
               role="dialog"
             >
@@ -648,7 +652,7 @@ function HubWorkspace({
                   <Send size={16} />
                 </span>
                 <div>
-                  <h2 id="hub-update-title">Post a project update</h2>
+                  <h2 id="hub-update-title">Post a workspace update</h2>
                   <p>
                     Record what moved, what is blocked, and what happens next.
                   </p>

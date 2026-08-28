@@ -16,6 +16,7 @@ import {
   Languages,
   LayoutTemplate,
   Lightbulb,
+  Mail,
   Menu,
   MessageCircleMore,
   Moon,
@@ -44,10 +45,7 @@ import { trevvBrand } from "@/lib/branding";
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
 import { LearningCenterProvider, useLearningCenter } from "./learning-center";
 import type { CapturedWorkItem } from "@/lib/captured-work";
-import {
-  routeForCapturedType,
-  UniversalCreateDialog,
-} from "./universal-create";
+import { UniversalCreateDialog } from "./universal-create";
 import { useCustomHubs } from "@/lib/custom-hubs";
 import {
   createCustomPortfolio,
@@ -56,6 +54,11 @@ import {
   useCustomPortfolios,
   type CustomPortfolioRecord,
 } from "@/lib/custom-portfolios";
+import {
+  workspaceDirectoryHref,
+  workspaceHref,
+  type WorkspaceView,
+} from "@/lib/workspace-routes";
 
 type ActivePage =
   | "home"
@@ -64,6 +67,7 @@ type ActivePage =
   | "attention"
   | "myWork"
   | "inbox"
+  | "mail"
   | "messages"
   | "waiting"
   | "decisions"
@@ -100,6 +104,16 @@ function formatWorkspaceDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(`${value}T12:00:00`));
+}
+
+function workspaceViewForCapturedType(
+  type: CapturedWorkItem["type"],
+): WorkspaceView {
+  if (type === "decision") return "decisions";
+  if (type === "approval") return "approvals";
+  if (type === "idea") return "ideas";
+  if (type === "note" || type === "link") return "inbox";
+  return "my-work";
 }
 
 /**
@@ -317,30 +331,38 @@ function WorkspaceChrome({
 
   // One number, from one place. See lib/attention.ts.
   const attentionCount = scope.attentionCount;
+  const scopedHref = (view?: WorkspaceView) =>
+    contextProject
+      ? workspaceHref(contextProject.slug, view)
+      : workspaceDirectoryHref();
 
   const nav = [
-    ...(workspaceLevel === "project" && contextProject
-      ? [
-          [
-            "hub",
-            "Project",
-            `/app/hubs/${contextProject.slug}`,
-            FolderKanban,
-            undefined,
-          ] as const,
-        ]
+    ...(contextProject
+      ? [["hub", "Overview", scopedHref(), FolderKanban, undefined] as const]
       : []),
-    ["dashboard", "Dashboard", "/app/dashboard", ChartColumn, undefined],
+    ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
     [
       "attention",
       copy.nav.attention,
-      "/app/attention",
+      scopedHref("attention"),
       Sparkles,
       attentionCount,
     ],
-    ["myWork", copy.nav.myWork, "/app/my-work", ClipboardCheck, undefined],
-    ["inbox", copy.nav.inbox, "/app/inbox", Inbox, undefined],
-    ["messages", copy.nav.messages, "/app/messages", MessageCircleMore, 4],
+    [
+      "myWork",
+      copy.nav.myWork,
+      scopedHref("my-work"),
+      ClipboardCheck,
+      undefined,
+    ],
+    ["inbox", copy.nav.inbox, scopedHref("inbox"), Inbox, undefined],
+    [
+      "messages",
+      copy.nav.messages,
+      scopedHref("messages"),
+      MessageCircleMore,
+      4,
+    ],
   ] as const;
 
   return (
@@ -433,7 +455,7 @@ function WorkspaceChrome({
                       </p>
                       <div className="workspace-switcher-actions">
                         <Link
-                          href={`/app/hubs/${contextProject.slug}`}
+                          href={workspaceHref(contextProject.slug)}
                           onClick={() => {
                             setWorkspaceMenuOpen(false);
                             setOpen(false);
@@ -442,7 +464,7 @@ function WorkspaceChrome({
                           <FolderKanban size={15} /> Open workspace
                         </Link>
                         <Link
-                          href="/app/team"
+                          href={workspaceHref(contextProject.slug, "team")}
                           onClick={() => {
                             setWorkspaceMenuOpen(false);
                             setOpen(false);
@@ -474,7 +496,7 @@ function WorkspaceChrome({
                             setWorkspaceMenuOpen(false);
                             setOpen(false);
                             if (active !== "hub" || project.slug !== hubSlug) {
-                              router.push(`/app/hubs/${project.slug}`);
+                              router.push(workspaceHref(project.slug));
                             }
                           }}
                         >
@@ -522,7 +544,7 @@ function WorkspaceChrome({
                       window.dispatchEvent(
                         new Event("trevv:open-workspace-creator"),
                       );
-                      router.push("/app/hubs?create=project");
+                      router.push(workspaceDirectoryHref(true));
                     }}
                   >
                     <span className="workspace-switcher-create-icon">
@@ -584,27 +606,41 @@ function WorkspaceChrome({
               </Link>
             );
           })}
-          <p className="nav-label spaced">Workflows</p>
+          <p className="nav-label spaced">Work</p>
           <Link
             className={`nav-item ${active === "decisions" ? "active" : ""}`}
-            href="/app/decisions"
+            href={scopedHref("decisions")}
           >
             <FileQuestion size={17} />
             <span>{copy.nav.decisions}</span>
           </Link>
           <Link
+            className={`nav-item ${active === "approvals" ? "active" : ""}`}
+            href={scopedHref("approvals")}
+          >
+            <CheckCircle2 size={17} />
+            <span>{copy.nav.approvals}</span>
+          </Link>
+          <Link
             className={`nav-item ${active === "ideas" ? "active" : ""}`}
-            href="/app/ideas"
+            href={scopedHref("ideas")}
           >
             <Lightbulb size={17} />
             <span>{copy.nav.ideas}</span>
           </Link>
           <Link
-            className={`nav-item ${active === "team" ? "active" : ""}`}
-            href="/app/team"
+            className={`nav-item ${active === "reviews" ? "active" : ""}`}
+            href={scopedHref("reviews")}
           >
-            <Users size={17} />
-            <span>{copy.nav.team}</span>
+            <ClipboardCheck size={17} />
+            <span>{copy.nav.reviews}</span>
+          </Link>
+          <Link
+            className={`nav-item ${active === "waiting" ? "active" : ""}`}
+            href={scopedHref("waiting")}
+          >
+            <Hourglass size={17} />
+            <span>{copy.nav.waiting}</span>
           </Link>
           <button
             className="nav-item nav-button"
@@ -613,21 +649,23 @@ function WorkspaceChrome({
             <Plus size={16} />
             <span>Create</span>
           </button>
+          <p className="nav-label spaced">People</p>
+          <Link
+            className={`nav-item ${active === "team" ? "active" : ""}`}
+            href={scopedHref("team")}
+          >
+            <Users size={17} />
+            <span>{copy.nav.team}</span>
+          </Link>
         </nav>
         <div className="sidebar-foot">
+          <p className="nav-label">System</p>
           <Link
             className={`nav-item ${active === "templates" ? "active" : ""}`}
-            href="/app/blueprints"
+            href={scopedHref("blueprints")}
           >
             <LayoutTemplate size={17} />
             <span>Blueprints</span>
-          </Link>
-          <Link
-            className={`nav-item ${active === "waiting" ? "active" : ""}`}
-            href="/app/waiting"
-          >
-            <Hourglass size={17} />
-            <span>{copy.nav.waiting}</span>
           </Link>
           <button
             className="nav-item nav-button learning-center-nav"
@@ -644,7 +682,7 @@ function WorkspaceChrome({
           </button>
           <Link
             className={`nav-item ${active === "settings" ? "active" : ""}`}
-            href="/app/settings/integrations"
+            href={scopedHref("settings")}
           >
             <Settings2 size={17} />
             <span>{copy.nav.settings}</span>
@@ -688,7 +726,7 @@ function WorkspaceChrome({
                 >
                   <header className="portfolio-switcher-header">
                     <div>
-                      <small>Portfolio level</small>
+                      <small>Portfolio</small>
                       <h2>Choose portfolio</h2>
                     </div>
                     <span>{accessiblePortfolios.length}</span>
@@ -730,7 +768,7 @@ function WorkspaceChrome({
                                   firstProject.id,
                                   firstProject.portfolioId,
                                 );
-                                router.push(`/app/hubs/${firstProject.slug}`);
+                                router.push(workspaceHref(firstProject.slug));
                               }
                             }
                             setPortfolioMenuOpen(false);
@@ -751,8 +789,8 @@ function WorkspaceChrome({
                             <small>
                               {portfolioProjectCount}{" "}
                               {portfolioProjectCount === 1
-                                ? "project"
-                                : "projects"}
+                                ? "Workspace"
+                                : "Workspaces"}
                             </small>
                           </span>
                           {isSelected && (
@@ -780,7 +818,7 @@ function WorkspaceChrome({
                     </span>
                     <span>
                       <strong>New portfolio</strong>
-                      <small>Create a new project collection</small>
+                      <small>Create a new Workspace collection</small>
                     </span>
                   </button>
                 </section>
@@ -805,7 +843,7 @@ function WorkspaceChrome({
           >
             <Menu size={20} />
           </button>
-          <Link href="/app/search" className="search-trigger">
+          <Link href={scopedHref("search")} className="search-trigger">
             <Search size={17} />
             <span>{copy.shell.search}</span>
             <kbd>
@@ -833,7 +871,7 @@ function WorkspaceChrome({
               className={`topbar-tool topbar-tool-attention ${active === "attention" ? "active" : ""}`}
               aria-label={`Attention, ${attentionCount} items`}
               aria-current={active === "attention" ? "page" : undefined}
-              href="/app/attention"
+              href={scopedHref("attention")}
               title={`Attention · ${attentionCount} items`}
             >
               <Sparkles size={17} />
@@ -847,17 +885,26 @@ function WorkspaceChrome({
               className={`topbar-tool topbar-tool-inbox ${active === "inbox" ? "active" : ""}`}
               aria-label="Actionable Inbox"
               aria-current={active === "inbox" ? "page" : undefined}
-              href="/app/inbox"
+              href={scopedHref("inbox")}
               title="Actionable Inbox"
             >
               <Inbox size={17} />
               <span className="topbar-tool-dot" aria-hidden="true" />
             </Link>
             <Link
+              className={`topbar-tool topbar-tool-mail ${active === "mail" ? "active" : ""}`}
+              aria-label="Email"
+              aria-current={active === "mail" ? "page" : undefined}
+              href="/app/mail"
+              title="Email"
+            >
+              <Mail size={18} />
+            </Link>
+            <Link
               className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
               aria-label="Messages"
               aria-current={active === "messages" ? "page" : undefined}
-              href="/app/messages"
+              href={scopedHref("messages")}
               title="Messages"
             >
               <MessageCircleMore size={18} />
@@ -866,7 +913,7 @@ function WorkspaceChrome({
               className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
               aria-label={copy.shell.notifications}
               aria-current={active === "notifications" ? "page" : undefined}
-              href="/app/notifications"
+              href={scopedHref("notifications")}
               title={copy.shell.notifications}
             >
               <Bell size={18} />
@@ -902,14 +949,14 @@ function WorkspaceChrome({
                     </div>
                   </header>
                   <Link
-                    href="/app/settings/integrations"
+                    href={scopedHref("settings")}
                     role="menuitem"
                     onClick={() => setUserMenuOpen(false)}
                   >
                     <Settings2 size={14} /> Workspace settings
                   </Link>
                   <Link
-                    href="/app/team"
+                    href={scopedHref("team")}
                     role="menuitem"
                     onClick={() => setUserMenuOpen(false)}
                   >
@@ -946,7 +993,7 @@ function WorkspaceChrome({
       <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
         <Link
           className={active === "myWork" ? "active" : ""}
-          href="/app/my-work"
+          href={scopedHref("my-work")}
         >
           <ClipboardCheck size={19} />
           <span>{messages.nav.myWork}</span>
@@ -957,13 +1004,16 @@ function WorkspaceChrome({
           </span>
           <span>{messages.common.quickCapture}</span>
         </button>
-        <Link className={active === "inbox" ? "active" : ""} href="/app/inbox">
+        <Link
+          className={active === "inbox" ? "active" : ""}
+          href={scopedHref("inbox")}
+        >
           <Inbox size={19} />
           <span>{messages.nav.inbox}</span>
         </Link>
         <Link
           className={active === "messages" ? "active" : ""}
-          href="/app/messages"
+          href={scopedHref("messages")}
         >
           <MessageCircleMore size={19} />
           <span>Messages</span>
@@ -984,7 +1034,11 @@ function WorkspaceChrome({
               {latestCapture.sendToInbox ? " and added to Inbox" : ""}.
             </span>
           </div>
-          <Link href={routeForCapturedType(latestCapture.type)}>Open</Link>
+          <Link
+            href={scopedHref(workspaceViewForCapturedType(latestCapture.type))}
+          >
+            Open
+          </Link>
           <button
             aria-label="Dismiss capture confirmation"
             onClick={() => setLatestCapture(null)}
@@ -1068,7 +1122,7 @@ function PortfolioCreateDialog({
           <div>
             <h2 id="create-portfolio-title">Create a portfolio</h2>
             <p>
-              Group related projects under one recognizable identity and
+              Group related Workspaces under one recognizable identity and
               overview.
             </p>
           </div>
@@ -1135,7 +1189,7 @@ function PortfolioCreateDialog({
             Purpose
             <textarea
               onChange={(event) => setDescription(event.currentTarget.value)}
-              placeholder="What related projects and outcomes belong here?"
+              placeholder="What related Workspaces and outcomes belong here?"
               rows={3}
               value={description}
             />

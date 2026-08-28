@@ -41,6 +41,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { type GroupedSignal } from "@/lib/attention";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint } from "./learning-center";
 
 const attentionTabs = [
@@ -225,7 +226,7 @@ export function AttentionCenter() {
     logActivity(
       group,
       "Structured update requested",
-      `Sent to ${itemFor(group)?.assignee ?? hub?.lead.name ?? "the project lead"}.`,
+      `Sent to ${itemFor(group)?.assignee ?? hub?.lead.name ?? "the Workspace lead"}.`,
     );
     setToast({
       message: `Update request sent for “${group.title}”. The signal stays visible until evidence changes.`,
@@ -362,7 +363,7 @@ export function AttentionCenter() {
         <div>
           <strong>TREVV shows the path, not just the problem</strong>
           <p>
-            Signals stay attached to their project, source work, evidence,
+            Signals stay attached to their Workspace, source work, evidence,
             owner, and recommended resolution. Resolving one records why it can
             leave your queue.
           </p>
@@ -572,7 +573,7 @@ function AttentionCard({
         <header className="attention-project-path">
           {hub ? (
             <>
-              <Link href={`/app/hubs/${hub.slug}`}>
+              <Link href={workspaceHref(hub.slug)}>
                 <span
                   style={{
                     background: `${hub.accent}18`,
@@ -762,7 +763,7 @@ function AttentionDetailPanel({
             aria-label="Signal source navigation"
           >
             {hub && (
-              <Link href={`/app/hubs/${hub.slug}`}>
+              <Link href={workspaceHref(hub.slug)}>
                 <Grid2X2 size={13} /> Workspace overview{" "}
                 <ExternalLink size={10} />
               </Link>
@@ -841,7 +842,7 @@ function AttentionDetailPanel({
                 <p>{hub.healthNote}</p>
                 <dl>
                   <div>
-                    <dt>Project priority</dt>
+                    <dt>Workspace priority</dt>
                     <dd>{hub.priority}</dd>
                   </div>
                   <div>
@@ -863,7 +864,7 @@ function AttentionDetailPanel({
               </div>
             ) : (
               <p className="attention-no-context">
-                This signal affects the portfolio rather than one project.
+                No additional Workspace context is attached to this signal.
               </p>
             )}
           </section>
@@ -910,8 +911,8 @@ function AttentionDetailPanel({
                   <Link
                     href={
                       dependencyHub
-                        ? `/app/hubs/${dependencyHub.slug}/boards/${dependencyItem.boardId}`
-                        : "/app/attention"
+                        ? `${workspaceHref(dependencyHub.slug)}/boards/${dependencyItem.boardId}`
+                        : "/app/workspaces"
                     }
                   >
                     <ExternalLink size={12} />
@@ -933,7 +934,13 @@ function AttentionDetailPanel({
                     </span>
                     <p>{waiting.waitingNote}</p>
                   </div>
-                  <Link href="/app/waiting">
+                  <Link
+                    href={
+                      hub
+                        ? workspaceHref(hub.slug, "waiting")
+                        : "/app/workspaces"
+                    }
+                  >
                     Open Waiting <ArrowRight size={11} />
                   </Link>
                 </div>
@@ -1251,18 +1258,22 @@ function boardHref(group: GroupedSignal) {
   const hub = hubFor(group);
   const item = itemFor(group);
   return hub && item
-    ? `/app/hubs/${hub.slug}/boards/${item.boardId}`
+    ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
     : hub
-      ? `/app/hubs/${hub.slug}`
-      : "/app/portfolio";
+      ? workspaceHref(hub.slug)
+      : "/app/workspaces";
 }
 
 function workflowHref(group: GroupedSignal) {
   const item = itemFor(group);
   if (group.signals.some((signal) => signal.signalType === "waiting_too_long"))
-    return "/app/waiting";
-  if (item?.type === "decision") return "/app/decisions";
-  if (item?.type === "approval") return "/app/approvals";
+    return hubFor(group)
+      ? workspaceHref(hubFor(group)!.slug, "waiting")
+      : "/app/workspaces";
+  if (item?.type === "decision" && hubFor(group))
+    return workspaceHref(hubFor(group)!.slug, "decisions");
+  if (item?.type === "approval" && hubFor(group))
+    return workspaceHref(hubFor(group)!.slug, "approvals");
   return boardHref(group);
 }
 
@@ -1305,7 +1316,7 @@ function resolutionSteps(group: GroupedSignal) {
     ];
   if (types.some((type) => type.includes("stale") || type === "missing_update"))
     return [
-      "Request a structured update from the project lead.",
+      "Request a structured update from the Workspace lead.",
       "Reassess health against the new evidence.",
       "Publish the next milestone and resolve the stale signal.",
     ];

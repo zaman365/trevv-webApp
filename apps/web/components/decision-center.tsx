@@ -195,21 +195,23 @@ export function DecisionCenter() {
             placeholder="Search decisions…"
           />
         </label>
-        <label className="workflow-filter-select">
-          <Filter size={14} />
-          <span className="sr-only">Filter by project</span>
-          <select
-            value={hubId}
-            onChange={(event) => setHubId(event.target.value)}
-          >
-            <option value="all">All projects</option>
-            {scope.hubs.map((hub) => (
+        {scope.hubs.length > 1 && (
+          <label className="workflow-filter-select">
+            <Filter size={14} />
+            <span className="sr-only">Filter by workspace</span>
+            <select
+              value={hubId}
+              onChange={(event) => setHubId(event.target.value)}
+            >
+              <option value="all">All workspaces</option>
+              {scope.hubs.map((hub) => (
                 <option key={hub.id} value={hub.id}>
                   {hub.name}
                 </option>
               ))}
-          </select>
-        </label>
+            </select>
+          </label>
+        )}
         <button className="primary-button" onClick={() => setCreateOpen(true)}>
           <Plus size={15} /> New decision
         </button>
@@ -252,7 +254,7 @@ export function DecisionCenter() {
                 </span>
               </header>
               <p>
-                {hub?.name ?? "No project"} /{" "}
+                {hub?.name ?? "No workspace"} /{" "}
                 {decision.boardId.replaceAll("-", " ")}
               </p>
               <h2>{decision.title}</h2>
@@ -369,7 +371,7 @@ function DecisionDialog({
           </span>
           <div>
             <p>
-              {hub?.name ?? "No project"} · {stateLabels[decision.state]}
+              {hub?.name ?? "No workspace"} · {stateLabels[decision.state]}
             </p>
             <h2 id="decision-dialog-title">{decision.title}</h2>
           </div>
@@ -591,9 +593,7 @@ function CreateDecisionDialog({
 }) {
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
-  const [hubId, setHubId] = useState(
-    projects[0]?.id ?? "",
-  );
+  const [hubId, setHubId] = useState(projects[0]?.id ?? "");
   const [dueDate, setDueDate] = useState("2026-09-04");
   const [recommendation, setRecommendation] = useState("");
 
@@ -679,10 +679,10 @@ function CreateDecisionDialog({
                 onChange={(event) => setHubId(event.target.value)}
               >
                 {projects.map((hub) => (
-                    <option key={hub.id} value={hub.id}>
-                      {hub.name}
-                    </option>
-                  ))}
+                  <option key={hub.id} value={hub.id}>
+                    {hub.name}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="stacked-field">

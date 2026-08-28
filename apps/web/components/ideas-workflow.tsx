@@ -24,6 +24,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { scoreOpportunity } from "@/lib/workflow-rules";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint } from "./learning-center";
 
 type IdeaStage = "captured" | "evaluating" | "promoted" | "archived";
@@ -274,21 +275,23 @@ export function IdeasWorkflow() {
             placeholder="Search ideas and evidence…"
           />
         </label>
-        <label className="workflow-filter-select">
-          <Filter size={14} />
-          <span className="sr-only">Filter by project</span>
-          <select
-            value={hubId}
-            onChange={(event) => setHubId(event.target.value)}
-          >
-            <option value="all">All projects</option>
-            {scope.hubs.map((hub) => (
+        {scope.hubs.length > 1 && (
+          <label className="workflow-filter-select">
+            <Filter size={14} />
+            <span className="sr-only">Filter by workspace</span>
+            <select
+              value={hubId}
+              onChange={(event) => setHubId(event.target.value)}
+            >
+              <option value="all">All workspaces</option>
+              {scope.hubs.map((hub) => (
                 <option value={hub.id} key={hub.id}>
                   {hub.name}
                 </option>
               ))}
-          </select>
-        </label>
+            </select>
+          </label>
+        )}
       </div>
 
       <div
@@ -330,7 +333,7 @@ export function IdeasWorkflow() {
                 </span>
                 <div>
                   <p>
-                    {hub?.name ?? "No project"} · {stageLabels[idea.stage]}
+                    {hub?.name ?? "No workspace"} · {stageLabels[idea.stage]}
                   </p>
                   <h2>{idea.title}</h2>
                 </div>
@@ -490,7 +493,7 @@ function IdeaDetailDialog({
           </span>
           <div>
             <p>
-              {hub?.name ?? "No project"} · {stageLabels[idea.stage]}
+              {hub?.name ?? "No workspace"} · {stageLabels[idea.stage]}
             </p>
             <h2 id="idea-detail-title">{idea.title}</h2>
           </div>
@@ -702,7 +705,13 @@ function IdeaDetailDialog({
                   : "Promote idea"}
               </button>
               {idea.promotedTo === "decision" && (
-                <Link className="linked-work-callout" href="/app/decisions">
+                <Link
+                  className="linked-work-callout"
+                  href={workspaceHref(
+                    demoHubs.find((hub) => hub.id === idea.hubId)!.slug,
+                    "decisions",
+                  )}
+                >
                   <Sparkles size={14} /> Open linked decision{" "}
                   <ArrowRight size={13} />
                 </Link>
@@ -838,10 +847,10 @@ function CaptureIdeaDialog({
                 onChange={(event) => setHubId(event.target.value)}
               >
                 {projects.map((hub) => (
-                    <option key={hub.id} value={hub.id}>
-                      {hub.name}
-                    </option>
-                  ))}
+                  <option key={hub.id} value={hub.id}>
+                    {hub.name}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="stacked-field">

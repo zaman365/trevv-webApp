@@ -8,10 +8,9 @@ import type { HubType } from "@founderhq/core";
  * arrives knowing, and asking a new user to learn a word before they learn
  * the product is a real cost.
  *
- * So the word is data, not a constant. The model stays `hub`; the label comes
- * from what the customer said they were managing during onboarding (§29).
- * A venture studio sees Businesses, an agency sees Clients, and everyone else
- * sees Projects — the most widely understood default.
+ * The model stays `hub` for data compatibility, while the product-level label
+ * is Workspace. Per-item type labels still explain whether a Workspace is a
+ * business, brand, client, project, department, or initiative.
  */
 export type VocabularyKey =
   | "projects"
@@ -36,8 +35,8 @@ export interface Vocabulary {
 export const VOCABULARIES: Record<VocabularyKey, Vocabulary> = {
   projects: {
     key: "projects",
-    one: "Project",
-    many: "Projects",
+    one: "Workspace",
+    many: "Workspaces",
     groupOne: "Portfolio",
     groupMany: "Portfolios",
     prompt: "Projects and initiatives",
@@ -84,7 +83,7 @@ export const VOCABULARIES: Record<VocabularyKey, Vocabulary> = {
   },
 };
 
-/** Projects is the default: it is the word the most people already know. */
+/** The legacy key remains stable while the customer-facing default is Workspace. */
 export const DEFAULT_VOCABULARY: VocabularyKey = "projects";
 
 export function vocabularyFor(key: VocabularyKey = DEFAULT_VOCABULARY) {
@@ -119,10 +118,12 @@ export function labelForType(type: HubType) {
 }
 
 /**
- * A project can still describe the kind of responsibility it contains without
+ * A Workspace can describe the kind of responsibility it contains without
  * reintroducing the old "Hub" product jargon in compact labels.
  */
 export function labelForProjectType(type: HubType) {
   const typeLabel = labelForType(type);
-  return typeLabel === "Project" ? typeLabel : `${typeLabel} project`;
+  return typeLabel === "Project"
+    ? "Project workspace"
+    : `${typeLabel} workspace`;
 }

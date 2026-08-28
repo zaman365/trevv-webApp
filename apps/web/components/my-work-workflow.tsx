@@ -35,6 +35,7 @@ import {
 import { useMemo, useState } from "react";
 import { useCapturedWork } from "@/lib/captured-work";
 import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint, useLearningCenter } from "./learning-center";
 
 const currentUser = "Mohammed Zaman";
@@ -82,24 +83,24 @@ interface WorkToast {
 }
 
 const workspaceRecords: MyWorkRecord[] = demoItems.map((item, index) => ({
-    id: item.id,
-    title: item.title,
-    type: item.type,
-    priority: item.priority,
-    status: item.status,
-    dueDate: item.dueDate,
-    assignee: item.assignee ?? "Unassigned",
-    hubId: item.hubId,
-    boardId: item.boardId,
-    following: index % 3 === 0 || item.assignee === currentUser,
-    createdByMe:
-      index % 4 === 0 || (item.assignee === currentUser && index % 2 === 0),
-    source: "workspace",
-    notes:
-      item.status === "blocked"
-        ? "Capture the blocker, who can resolve it, and the next follow-up date."
-        : "Add context, the expected outcome, or the next useful step.",
-  }));
+  id: item.id,
+  title: item.title,
+  type: item.type,
+  priority: item.priority,
+  status: item.status,
+  dueDate: item.dueDate,
+  assignee: item.assignee ?? "Unassigned",
+  hubId: item.hubId,
+  boardId: item.boardId,
+  following: index % 3 === 0 || item.assignee === currentUser,
+  createdByMe:
+    index % 4 === 0 || (item.assignee === currentUser && index % 2 === 0),
+  source: "workspace",
+  notes:
+    item.status === "blocked"
+      ? "Capture the blocker, who can resolve it, and the next follow-up date."
+      : "Add context, the expected outcome, or the next useful step.",
+}));
 
 const statusLabels: Record<WorkStatus, string> = {
   not_started: "Not started",
@@ -794,10 +795,7 @@ export function MyWorkWorkflow() {
                 </p>
               </li>
             </ul>
-            <button
-              type="button"
-              onClick={() => openLearningCenter("my-work")}
-            >
+            <button type="button" onClick={() => openLearningCenter("my-work")}>
               Open My Work guide <ArrowRight size={12} />
             </button>
           </section>
@@ -1129,7 +1127,9 @@ function hubFor(item: MyWorkRecord) {
 
 function boardHref(item: MyWorkRecord) {
   const hub = hubFor(item);
-  return hub ? `/app/hubs/${hub.slug}/boards/${item.boardId}` : "/app/inbox";
+  return hub
+    ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
+    : "/app/workspaces";
 }
 
 function dueLabel(item: MyWorkRecord) {

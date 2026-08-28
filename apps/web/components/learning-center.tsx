@@ -37,6 +37,8 @@ import {
   type LearningCategory,
   type LearningResource,
 } from "@/lib/learning-resources";
+import { useWorkspace } from "@/lib/workspace-context";
+import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
 
 interface LearningCenterContextValue {
   openLearningCenter: (resourceId?: string) => void;
@@ -497,6 +499,9 @@ function LearningResourceDetail({
   onClose: () => void;
 }) {
   const CategoryIcon = categoryIcons[resource.category];
+  const { scope } = useWorkspace();
+  const workspaceSlug = scope.hubs[0]?.slug;
+  const resourceRoute = resolveLearningRoute(resource.route, workspaceSlug);
   return (
     <div className="learning-detail">
       <div className="learning-detail-meta">
@@ -555,12 +560,45 @@ function LearningResourceDetail({
           {completed ? <Check size={14} /> : <CheckCircle2 size={14} />}
           {completed ? "Completed" : "Mark complete"}
         </button>
-        {resource.route && (
-          <Link href={resource.route} onClick={onClose}>
+        {resourceRoute && (
+          <Link href={resourceRoute} onClick={onClose}>
             Open in TREVV <ArrowRight size={13} />
           </Link>
         )}
       </footer>
     </div>
   );
+}
+
+const workspaceLearningRoutes: Record<string, WorkspaceView> = {
+  "/app/attention": "attention",
+  "/app/approvals": "approvals",
+  "/app/blueprints": "blueprints",
+  "/app/dashboard": "dashboard",
+  "/app/decisions": "decisions",
+  "/app/ideas": "ideas",
+  "/app/inbox": "inbox",
+  "/app/my-work": "my-work",
+  "/app/notifications": "notifications",
+  "/app/reviews": "reviews",
+  "/app/search": "search",
+  "/app/team": "team",
+  "/app/waiting": "waiting",
+};
+
+function resolveLearningRoute(
+  route: string | undefined,
+  workspaceSlug?: string,
+) {
+  if (!route || !workspaceSlug) return route;
+  const workspaceView = workspaceLearningRoutes[route];
+  if (workspaceView) return workspaceHref(workspaceSlug, workspaceView);
+  if (route === "/app/settings/import") {
+    return `/app/workspaces/${encodeURIComponent(workspaceSlug)}/settings/import`;
+  }
+  if (route.startsWith("/app/settings/integrations")) {
+    const hash = route.split("#")[1];
+    return workspaceHref(workspaceSlug, "settings", hash);
+  }
+  return route;
 }

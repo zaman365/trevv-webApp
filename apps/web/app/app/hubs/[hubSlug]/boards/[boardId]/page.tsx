@@ -1,4 +1,4 @@
-import { BoardExperience } from "@/components/board-experience";
+import { permanentRedirect } from "next/navigation";
 
 export default async function BoardPage({
   params,
@@ -6,5 +6,7 @@ export default async function BoardPage({
   params: Promise<{ hubSlug: string; boardId: string }>;
 }) {
   const { hubSlug, boardId } = await params;
-  return <BoardExperience hubSlug={hubSlug} boardId={boardId} />;
+  permanentRedirect(
+    `/app/workspaces/${encodeURIComponent(hubSlug)}/boards/${encodeURIComponent(boardId)}`,
+  );
 }

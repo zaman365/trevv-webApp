@@ -89,7 +89,7 @@ export function createCustomPortfolio(
       slug,
       description:
         input.description.trim() ||
-        "A focused collection of related projects and responsibilities.",
+        "A focused collection of related Workspaces and responsibilities.",
       isDefault: false,
     },
   };

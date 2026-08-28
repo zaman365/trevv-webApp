@@ -53,7 +53,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
             </li>
             <li>
               <Check size={13} />
-              One calm hierarchy for every project
+              One calm hierarchy for every Workspace
             </li>
           </ul>
         </div>
@@ -197,7 +197,7 @@ export function OnboardingExperience() {
           {step === 1
             ? "What are you managing?"
             : step === 2
-              ? "Create your first project"
+              ? "Create your first Workspace"
               : step === 3
                 ? "Choose a starter Blueprint"
                 : step === 4
@@ -206,11 +206,11 @@ export function OnboardingExperience() {
         </h1>
         <p>
           {step === 1
-            ? "This only selects sensible defaults. You can combine different project types later."
+            ? "This only selects sensible defaults. You can combine different Workspace types later."
             : step === 2
-              ? "A project is anything you are responsible for — a business, client, product, department, or initiative."
+              ? "A Workspace is anything you are responsible for — a business, client, product, department, or initiative."
               : step === 3
-                ? "Start with a useful structure or keep the project completely blank."
+                ? "Start with a useful structure or keep the Workspace completely blank."
                 : step === 4
                   ? "Invite, connect, or import now — every option can be skipped."
                   : "You can see health, priority, waiting work, and next attention in under five minutes."}
@@ -245,7 +245,7 @@ export function OnboardingExperience() {
         {step === 2 && (
           <div className="onboarding-form first-hub-form">
             <label>
-              Project name
+              Workspace name
               <input
                 defaultValue={
                   managing === "clients" ? "First client" : "Northstar Apparel"
@@ -285,7 +285,7 @@ export function OnboardingExperience() {
                   <input
                     type="color"
                     defaultValue="#5956c9"
-                    aria-label="Project color"
+                    aria-label="Workspace color"
                   />
                 </div>
               </label>
@@ -377,13 +377,13 @@ export function OnboardingExperience() {
             </span>
             <h2>Your Portfolio is ready</h2>
             <p>
-              TREVV created one Portfolio, your first project, a starter
+              TREVV created one Portfolio, your first Workspace, a starter
               Blueprint, and a calm Home view. Nothing is locked into a customer
               mode.
             </p>
             <div>
               <b>Venture Portfolio</b>
-              <span>1 project · 1 owner · private</span>
+              <span>1 Workspace · 1 owner · private</span>
             </div>
           </div>
         )}
