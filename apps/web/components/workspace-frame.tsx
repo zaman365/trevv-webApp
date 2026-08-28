@@ -576,12 +576,13 @@ function WorkspaceChrome({
         </div>
         <nav aria-label="Primary navigation">
           <Link
-            className={`nav-label nav-section-link ${active === "portfolio" ? "active" : ""}`}
+            className={`nav-item ${active === "portfolio" ? "active" : ""}`}
             href="/app/portfolio"
             aria-current={active === "portfolio" ? "page" : undefined}
             onClick={() => setOpen(false)}
           >
-            Portfolio
+            <Grid2X2 size={17} />
+            <span>Portfolio</span>
           </Link>
           <p className="nav-label spaced">Workspace</p>
           {contextProject ? (
