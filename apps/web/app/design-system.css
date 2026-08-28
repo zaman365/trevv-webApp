@@ -41,6 +41,12 @@
   border-radius: 0;
   box-shadow: none;
 }
+.portfolio-main > .page-hero {
+  border-radius: 0 0 var(--fh-radius-panel) var(--fh-radius-panel);
+}
+.portfolio-main > .page-hero.has-brand::before {
+  inset: 0 -1px auto;
+}
 .hero-top {
   display: flex;
   align-items: flex-start;
