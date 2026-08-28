@@ -67,6 +67,12 @@ test("Portfolio keeps the workspace selection; switching portfolio clears it", a
   await page.reload();
   await expect(switcher).toContainText("Northstar Apparel");
 
+  // The selection is server-rendered, so the shell paints it on the first
+  // frame instead of correcting itself after hydration. Requesting the
+  // page directly proves the HTML already carries it.
+  const ssr = await page.request.get("/app/portfolio");
+  expect(await ssr.text()).toContain("Northstar Apparel");
+
   // Choosing a different portfolio is the one action that clears it.
   await page
     .locator(".portfolio-hero-control select")

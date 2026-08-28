@@ -1,7 +1,6 @@
 "use client";
 
 import { getMessages, type Locale } from "@founderhq/i18n";
-import { demoWorkspaces } from "@founderhq/core";
 import {
   createContext,
   useCallback,
@@ -22,12 +21,13 @@ import {
   type DashboardAccess,
 } from "./dashboard-access";
 import { useCustomWorkspaces } from "./custom-workspaces";
+import {
+  writeWorkspaceSelection,
+  type StoredWorkspaceSelection,
+} from "./workspace-selection";
 
 type Theme = "light" | "dark";
 export type WorkspaceLevel = "portfolio" | "project";
-
-const workspaceSelectionKey = "trevv:workspace-selection";
-const portfolioSelectionKey = "trevv:portfolio-selection";
 
 interface WorkspaceContextValue {
   locale: Locale;
@@ -52,26 +52,31 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({
   children,
-  initialPortfolioId = DEFAULT_PORTFOLIO_ID,
-  initialProjectId,
+  routePortfolioId,
+  routeProjectId,
+  storedSelection,
   portfolioScoped = false,
 }: {
   children: ReactNode;
-  initialPortfolioId?: string;
-  initialProjectId?: string;
+  /** Workspace named by the current route, when the route names one. */
+  routePortfolioId?: string;
+  routeProjectId?: string;
+  /** Selection read from the cookie on the server, so SSR paints it. */
+  storedSelection?: StoredWorkspaceSelection;
   /** Report across the whole portfolio even while a workspace is selected. */
   portfolioScoped?: boolean;
 }) {
   const [locale, setLocale] = useState<Locale>("en");
   const [theme, setTheme] = useState<Theme>("light");
-  const [portfolioId, setPortfolioState] = useState(initialPortfolioId);
+  const [portfolioId, setPortfolioState] = useState(
+    routePortfolioId ?? storedSelection?.portfolioId ?? DEFAULT_PORTFOLIO_ID,
+  );
   const [workspaceLevel, setWorkspaceLevel] = useState<WorkspaceLevel>(
-    initialProjectId ? "project" : "portfolio",
+    (routeProjectId ?? storedSelection?.projectId) ? "project" : "portfolio",
   );
   const [projectId, setProjectId] = useState<string | null>(
-    initialProjectId ?? null,
+    routeProjectId ?? storedSelection?.projectId ?? null,
   );
-  const [selectionHydrated, setSelectionHydrated] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const customWorkspaceRecords = useCustomWorkspaces();
   const customWorkspaces = useMemo(
@@ -79,103 +84,40 @@ export function WorkspaceProvider({
     [customWorkspaceRecords],
   );
 
-  useEffect(() => {
-    if (selectionHydrated) return;
-    const frame = window.requestAnimationFrame(() => {
-      if (!initialProjectId) {
-        // Every surface rehydrates the same selection, so visiting the
-        // portfolio and returning keeps the member's workspace.
-        const workspaces = [...customWorkspaces, ...demoWorkspaces];
-        // A workspace-scoped surface needs some workspace to report on;
-        // the portfolio must not invent one the member never chose.
-        const fallbackFor = (candidatePortfolioId: string) =>
-          portfolioScoped
-            ? undefined
-            : workspaces.find(
-                (project) => project.portfolioId === candidatePortfolioId,
-              );
-        try {
-          const stored = JSON.parse(
-            localStorage.getItem(workspaceSelectionKey) ?? "null",
-          ) as unknown;
-          const selection =
-            stored && typeof stored === "object"
-              ? (stored as { portfolioId?: unknown; projectId?: unknown })
-              : undefined;
-          const storedPortfolioId =
-            typeof selection?.portfolioId === "string"
-              ? selection.portfolioId
-              : (localStorage.getItem(portfolioSelectionKey) ??
-                initialPortfolioId);
-          const storedProjectId =
-            typeof selection?.projectId === "string"
-              ? selection.projectId
-              : undefined;
-          const storedProject = workspaces.find(
-            (project) => project.id === storedProjectId,
-          );
-          const nextProject =
-            storedProject?.portfolioId === storedPortfolioId
-              ? storedProject
-              : fallbackFor(storedPortfolioId);
+  // The shell outlives navigation, so a route naming a workspace wins over
+  // the remembered one. Deriving this during render rather than syncing it
+  // in an effect keeps navigation to a single pass — the second pass is
+  // what showed up as a flicker in the switcher.
+  const activeProjectId = routeProjectId ?? projectId;
+  const activePortfolioId = routeProjectId
+    ? (routePortfolioId ?? portfolioId)
+    : portfolioId;
+  const activeWorkspaceLevel: WorkspaceLevel = routeProjectId
+    ? "project"
+    : workspaceLevel;
 
-          setPortfolioState(nextProject?.portfolioId ?? storedPortfolioId);
-          if (nextProject) {
-            setWorkspaceLevel("project");
-            setProjectId(nextProject.id);
-          }
-        } catch {
-          const fallbackProject = fallbackFor(initialPortfolioId);
-          if (fallbackProject) {
-            setWorkspaceLevel("project");
-            setProjectId(fallbackProject.id);
-          }
-        }
-      }
-      setSelectionHydrated(true);
+  useEffect(() => {
+    writeWorkspaceSelection({
+      portfolioId: activePortfolioId,
+      ...(activeWorkspaceLevel === "project" && activeProjectId
+        ? { projectId: activeProjectId }
+        : {}),
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [
-    customWorkspaces,
-    initialPortfolioId,
-    initialProjectId,
-    portfolioScoped,
-    selectionHydrated,
-  ]);
-
-  useEffect(() => {
-    if (!selectionHydrated) return;
-    try {
-      localStorage.setItem(portfolioSelectionKey, portfolioId);
-      if (workspaceLevel === "project" && projectId) {
-        localStorage.setItem(
-          workspaceSelectionKey,
-          JSON.stringify({ level: "project", portfolioId, projectId }),
-        );
-      }
-    } catch {
-      // Selection still works for the current page when storage is unavailable.
-    }
-  }, [portfolioId, projectId, selectionHydrated, workspaceLevel]);
+  }, [activePortfolioId, activeProjectId, activeWorkspaceLevel]);
 
   const setPortfolioId = useCallback(
     (id: string) => {
       // Switching portfolios is the only thing that clears the workspace.
       // Re-selecting the current one leaves the selection alone.
-      const switchingPortfolio = id !== portfolioId;
+      const switchingPortfolio = id !== activePortfolioId;
       setPortfolioState(id);
       if (switchingPortfolio) {
         setWorkspaceLevel("portfolio");
         setProjectId(null);
       }
-      try {
-        localStorage.setItem(portfolioSelectionKey, id);
-        if (switchingPortfolio) localStorage.removeItem(workspaceSelectionKey);
-      } catch {
-        // The selection still applies for the current session.
-      }
+      writeWorkspaceSelection({ portfolioId: id });
     },
-    [portfolioId],
+    [activePortfolioId],
   );
 
   const selectProject = useCallback(
@@ -203,16 +145,22 @@ export function WorkspaceProvider({
   const scope = useMemo(
     () =>
       scopeWorkspace(
-        portfolioId,
+        activePortfolioId,
         NOW,
         // The portfolio reports across every workspace even while one
         // stays selected in the switcher.
-        !portfolioScoped && workspaceLevel === "project"
-          ? (projectId ?? undefined)
+        !portfolioScoped && activeWorkspaceLevel === "project"
+          ? (activeProjectId ?? undefined)
           : undefined,
         customWorkspaces,
       ),
-    [customWorkspaces, portfolioId, portfolioScoped, projectId, workspaceLevel],
+    [
+      activePortfolioId,
+      activeProjectId,
+      activeWorkspaceLevel,
+      customWorkspaces,
+      portfolioScoped,
+    ],
   );
 
   const value = useMemo<WorkspaceContextValue>(
@@ -222,10 +170,10 @@ export function WorkspaceProvider({
       theme,
       toggleTheme,
       copy: getMessages(locale),
-      portfolioId,
+      portfolioId: activePortfolioId,
       setPortfolioId,
-      workspaceLevel,
-      projectId,
+      workspaceLevel: activeWorkspaceLevel,
+      projectId: activeProjectId,
       selectProject,
       scope,
       dashboardAccess: DEMO_DASHBOARD_ACCESS,
@@ -233,17 +181,17 @@ export function WorkspaceProvider({
       setCaptureOpen,
     }),
     [
+      activePortfolioId,
+      activeProjectId,
+      activeWorkspaceLevel,
       captureOpen,
       locale,
-      portfolioId,
-      projectId,
       scope,
       selectProject,
       setPortfolioId,
       theme,
       toggleLocale,
       toggleTheme,
-      workspaceLevel,
     ],
   );
 

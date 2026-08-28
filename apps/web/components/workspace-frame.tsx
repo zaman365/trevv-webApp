@@ -41,8 +41,8 @@ import {
 } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
-import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
-import { LearningCenterProvider, useLearningCenter } from "./learning-center";
+import { useWorkspace } from "@/lib/workspace-context";
+import { useLearningCenter } from "./learning-center";
 import type { CapturedWorkItem } from "@/lib/captured-work";
 import { UniversalCreateDialog } from "./universal-create";
 import { CreateWorkspaceDialog } from "./create-workspace-dialog";
@@ -130,30 +130,11 @@ export function WorkspaceFrame({
   active: ActivePage;
   workspaceSlug?: string | undefined;
 }) {
-  const customWorkspaces = useCustomWorkspaces().map(
-    (record) => record.workspace,
-  );
-  const routeProject = workspaceSlug
-    ? [...customWorkspaces, ...demoWorkspaces].find(
-        (project) => project.slug === workspaceSlug,
-      )
-    : undefined;
+  // Providers live in app/app/layout.tsx so they survive navigation.
   return (
-    <WorkspaceProvider
-      portfolioScoped={active === "portfolio"}
-      {...(routeProject
-        ? {
-            initialPortfolioId: routeProject.portfolioId,
-            initialProjectId: routeProject.id,
-          }
-        : {})}
-    >
-      <LearningCenterProvider>
-        <WorkspaceChrome active={active} workspaceSlug={workspaceSlug}>
-          {children}
-        </WorkspaceChrome>
-      </LearningCenterProvider>
-    </WorkspaceProvider>
+    <WorkspaceChrome active={active} workspaceSlug={workspaceSlug}>
+      {children}
+    </WorkspaceChrome>
   );
 }
 
