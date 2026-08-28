@@ -54,12 +54,13 @@ export function WorkspaceProvider({
   children,
   initialPortfolioId = DEFAULT_PORTFOLIO_ID,
   initialProjectId,
-  restoreStoredProject = true,
+  portfolioScoped = false,
 }: {
   children: ReactNode;
   initialPortfolioId?: string;
   initialProjectId?: string;
-  restoreStoredProject?: boolean;
+  /** Report across the whole portfolio even while a workspace is selected. */
+  portfolioScoped?: boolean;
 }) {
   const [locale, setLocale] = useState<Locale>("en");
   const [theme, setTheme] = useState<Theme>("light");
@@ -82,59 +83,52 @@ export function WorkspaceProvider({
     if (selectionHydrated) return;
     const frame = window.requestAnimationFrame(() => {
       if (!initialProjectId) {
+        // Every surface rehydrates the same selection, so visiting the
+        // portfolio and returning keeps the member's workspace.
+        const workspaces = [...customWorkspaces, ...demoWorkspaces];
+        // A workspace-scoped surface needs some workspace to report on;
+        // the portfolio must not invent one the member never chose.
+        const fallbackFor = (candidatePortfolioId: string) =>
+          portfolioScoped
+            ? undefined
+            : workspaces.find(
+                (project) => project.portfolioId === candidatePortfolioId,
+              );
         try {
-          if (restoreStoredProject) {
-            const stored = JSON.parse(
-              localStorage.getItem(workspaceSelectionKey) ?? "null",
-            ) as unknown;
-            const selection =
-              stored && typeof stored === "object"
-                ? (stored as {
-                    portfolioId?: unknown;
-                    projectId?: unknown;
-                  })
-                : undefined;
-            const storedPortfolioId =
-              typeof selection?.portfolioId === "string"
-                ? selection.portfolioId
-                : initialPortfolioId;
-            const storedProjectId =
-              typeof selection?.projectId === "string"
-                ? selection.projectId
-                : undefined;
-            const storedProject = [...customWorkspaces, ...demoWorkspaces].find(
-              (project) => project.id === storedProjectId,
-            );
-            const fallbackProject = [
-              ...customWorkspaces,
-              ...demoWorkspaces,
-            ].find((project) => project.portfolioId === storedPortfolioId);
-            const nextProject =
-              storedProject?.portfolioId === storedPortfolioId
-                ? storedProject
-                : fallbackProject;
+          const stored = JSON.parse(
+            localStorage.getItem(workspaceSelectionKey) ?? "null",
+          ) as unknown;
+          const selection =
+            stored && typeof stored === "object"
+              ? (stored as { portfolioId?: unknown; projectId?: unknown })
+              : undefined;
+          const storedPortfolioId =
+            typeof selection?.portfolioId === "string"
+              ? selection.portfolioId
+              : (localStorage.getItem(portfolioSelectionKey) ??
+                initialPortfolioId);
+          const storedProjectId =
+            typeof selection?.projectId === "string"
+              ? selection.projectId
+              : undefined;
+          const storedProject = workspaces.find(
+            (project) => project.id === storedProjectId,
+          );
+          const nextProject =
+            storedProject?.portfolioId === storedPortfolioId
+              ? storedProject
+              : fallbackFor(storedPortfolioId);
 
-            setPortfolioState(nextProject?.portfolioId ?? storedPortfolioId);
-            if (nextProject) {
-              setWorkspaceLevel("project");
-              setProjectId(nextProject.id);
-            }
-          } else {
-            const storedPortfolioId = localStorage.getItem(
-              portfolioSelectionKey,
-            );
-            if (storedPortfolioId) setPortfolioState(storedPortfolioId);
+          setPortfolioState(nextProject?.portfolioId ?? storedPortfolioId);
+          if (nextProject) {
+            setWorkspaceLevel("project");
+            setProjectId(nextProject.id);
           }
         } catch {
-          if (restoreStoredProject) {
-            const fallbackProject = [
-              ...customWorkspaces,
-              ...demoWorkspaces,
-            ].find((project) => project.portfolioId === initialPortfolioId);
-            if (fallbackProject) {
-              setWorkspaceLevel("project");
-              setProjectId(fallbackProject.id);
-            }
+          const fallbackProject = fallbackFor(initialPortfolioId);
+          if (fallbackProject) {
+            setWorkspaceLevel("project");
+            setProjectId(fallbackProject.id);
           }
         }
       }
@@ -145,47 +139,44 @@ export function WorkspaceProvider({
     customWorkspaces,
     initialPortfolioId,
     initialProjectId,
-    restoreStoredProject,
+    portfolioScoped,
     selectionHydrated,
   ]);
 
   useEffect(() => {
     if (!selectionHydrated) return;
     try {
-      if (restoreStoredProject) {
-        if (workspaceLevel !== "project" || !projectId) return;
+      localStorage.setItem(portfolioSelectionKey, portfolioId);
+      if (workspaceLevel === "project" && projectId) {
         localStorage.setItem(
           workspaceSelectionKey,
-          JSON.stringify({
-            level: "project",
-            portfolioId,
-            projectId,
-          }),
+          JSON.stringify({ level: "project", portfolioId, projectId }),
         );
-      } else {
-        localStorage.setItem(portfolioSelectionKey, portfolioId);
       }
     } catch {
       // Selection still works for the current page when storage is unavailable.
     }
-  }, [
-    portfolioId,
-    projectId,
-    restoreStoredProject,
-    selectionHydrated,
-    workspaceLevel,
-  ]);
+  }, [portfolioId, projectId, selectionHydrated, workspaceLevel]);
 
-  const setPortfolioId = useCallback((id: string) => {
-    setPortfolioState(id);
-    setWorkspaceLevel("portfolio");
-    setProjectId(null);
-    try {
-      localStorage.setItem(portfolioSelectionKey, id);
-    } catch {
-      // The selection still applies for the current session.
-    }
-  }, []);
+  const setPortfolioId = useCallback(
+    (id: string) => {
+      // Switching portfolios is the only thing that clears the workspace.
+      // Re-selecting the current one leaves the selection alone.
+      const switchingPortfolio = id !== portfolioId;
+      setPortfolioState(id);
+      if (switchingPortfolio) {
+        setWorkspaceLevel("portfolio");
+        setProjectId(null);
+      }
+      try {
+        localStorage.setItem(portfolioSelectionKey, id);
+        if (switchingPortfolio) localStorage.removeItem(workspaceSelectionKey);
+      } catch {
+        // The selection still applies for the current session.
+      }
+    },
+    [portfolioId],
+  );
 
   const selectProject = useCallback(
     (nextProjectId: string, nextPortfolioId: string) => {
@@ -214,10 +205,14 @@ export function WorkspaceProvider({
       scopeWorkspace(
         portfolioId,
         NOW,
-        workspaceLevel === "project" ? (projectId ?? undefined) : undefined,
+        // The portfolio reports across every workspace even while one
+        // stays selected in the switcher.
+        !portfolioScoped && workspaceLevel === "project"
+          ? (projectId ?? undefined)
+          : undefined,
         customWorkspaces,
       ),
-    [customWorkspaces, portfolioId, projectId, workspaceLevel],
+    [customWorkspaces, portfolioId, portfolioScoped, projectId, workspaceLevel],
   );
 
   const value = useMemo<WorkspaceContextValue>(

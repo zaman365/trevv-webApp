@@ -42,6 +42,38 @@ test("Portfolio carries the personal roll-ups and opens a workspace", async ({
   ).toBeVisible();
 });
 
+test("Portfolio keeps the workspace selection; switching portfolio clears it", async ({
+  page,
+}) => {
+  await gotoCanonical(page, workspaceRoute("dashboard"));
+  const switcher = page.locator(".workspace-switcher-trigger");
+  await expect(switcher).toContainText("Northstar Apparel");
+
+  // Visiting the portfolio reports across every workspace, but the
+  // member's workspace stays selected. The sidebar holding that link is
+  // off-canvas below 768px.
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  }
+  await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "Portfolio", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/app\/portfolio$/);
+  await expect(page.getByRole("heading", { name: "Health mix" })).toBeVisible();
+  await expect(switcher).toContainText("Northstar Apparel");
+
+  // It survives a reload, so the selection is genuinely persisted.
+  await page.reload();
+  await expect(switcher).toContainText("Northstar Apparel");
+
+  // Choosing a different portfolio is the one action that clears it.
+  await page
+    .locator(".portfolio-hero-control select")
+    .selectOption({ label: "Personal Projects" });
+  await expect(switcher).toContainText("Choose workspace");
+});
+
 test("Change Radar opens the workspace update context", async ({ page }) => {
   await gotoCanonical(page, "/app/portfolio");
   const change = page.getByRole("link", {

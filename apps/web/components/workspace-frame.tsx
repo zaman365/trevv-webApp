@@ -140,7 +140,7 @@ export function WorkspaceFrame({
     : undefined;
   return (
     <WorkspaceProvider
-      restoreStoredProject={active !== "home" && active !== "portfolio"}
+      portfolioScoped={active === "portfolio"}
       {...(routeProject
         ? {
             initialPortfolioId: routeProject.portfolioId,
