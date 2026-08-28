@@ -912,7 +912,7 @@ function AttentionDetailPanel({
                     href={
                       dependencyHub
                         ? `${workspaceHref(dependencyHub.slug)}/boards/${dependencyItem.boardId}`
-                        : "/app/workspaces"
+                        : "/app/portfolio"
                     }
                   >
                     <ExternalLink size={12} />
@@ -938,7 +938,7 @@ function AttentionDetailPanel({
                     href={
                       hub
                         ? workspaceHref(hub.slug, "waiting")
-                        : "/app/workspaces"
+                        : "/app/portfolio"
                     }
                   >
                     Open Waiting <ArrowRight size={11} />
@@ -1261,7 +1261,7 @@ function boardHref(group: GroupedSignal) {
     ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
     : hub
       ? workspaceHref(hub.slug)
-      : "/app/workspaces";
+      : "/app/portfolio";
 }
 
 function workflowHref(group: GroupedSignal) {
@@ -1269,7 +1269,7 @@ function workflowHref(group: GroupedSignal) {
   if (group.signals.some((signal) => signal.signalType === "waiting_too_long"))
     return hubFor(group)
       ? workspaceHref(hubFor(group)!.slug, "waiting")
-      : "/app/workspaces";
+      : "/app/portfolio";
   if (item?.type === "decision" && hubFor(group))
     return workspaceHref(hubFor(group)!.slug, "decisions");
   if (item?.type === "approval" && hubFor(group))

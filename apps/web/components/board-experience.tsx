@@ -67,7 +67,7 @@ import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { Hint } from "./learning-center";
 import { useCustomHubs } from "@/lib/custom-hubs";
-import { workspaceDirectoryHref, workspaceHref } from "@/lib/workspace-routes";
+import { workspaceHref } from "@/lib/workspace-routes";
 
 type Status = "planned" | "working" | "blocked" | "review" | "done";
 type Priority = "Urgent" | "High" | "Normal" | "Low";
@@ -188,8 +188,8 @@ export function BoardExperience({
         <main className="board-main board-not-found">
           <h1>Board not found</h1>
           <p>This board does not belong to the requested workspace.</p>
-          <Link href={hub ? workspaceHref(hub.slug) : workspaceDirectoryHref()}>
-            Return to {hub?.name ?? "all workspaces"}
+          <Link href={hub ? workspaceHref(hub.slug) : "/app/portfolio"}>
+            Return to {hub?.name ?? "Portfolio"}
           </Link>
         </main>
       </WorkspaceFrame>

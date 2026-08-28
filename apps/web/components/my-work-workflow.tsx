@@ -1129,7 +1129,7 @@ function boardHref(item: MyWorkRecord) {
   const hub = hubFor(item);
   return hub
     ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
-    : "/app/workspaces";
+    : "/app/portfolio";
 }
 
 function dueLabel(item: MyWorkRecord) {

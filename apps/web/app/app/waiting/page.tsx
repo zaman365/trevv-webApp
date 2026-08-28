@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { WaitingExperience } from "@/components/management-experience";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Waiting",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function WaitingPage() {
-  return <WaitingExperience />;
+  redirect("/app/portfolio");
 }

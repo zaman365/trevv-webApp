@@ -1018,6 +1018,9 @@ a {
     border-top: 1px solid var(--fh-border);
     backdrop-filter: blur(16px);
   }
+  .mobile-bottom-nav.portfolio-only {
+    grid-template-columns: repeat(4, 1fr);
+  }
   .mobile-bottom-nav a,
   .mobile-bottom-nav button {
     min-width: 0;

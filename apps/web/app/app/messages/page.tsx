@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { MessagingWorkspace } from "@/components/messaging-workspace";
-import { WorkspaceFrame } from "@/components/workspace-frame";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Messages",
@@ -9,9 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function MessagesPage() {
-  return (
-    <WorkspaceFrame active="messages">
-      <MessagingWorkspace />
-    </WorkspaceFrame>
-  );
+  redirect("/app/portfolio");
 }

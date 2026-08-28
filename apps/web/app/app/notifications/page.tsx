@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { NotificationsExperience } from "@/components/management-experience";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Notifications",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function NotificationsPage() {
-  return <NotificationsExperience />;
+  redirect("/app/portfolio");
 }

@@ -2056,7 +2056,7 @@ function NotificationsMain() {
             href={
               scope.hubs[0]
                 ? workspaceHref(scope.hubs[0].slug, "inbox")
-                : "/app/workspaces"
+                : "/app/portfolio"
             }
           >
             Open actionable Inbox
@@ -2188,7 +2188,7 @@ function AttentionRow({ group }: { group: GroupedSignal }) {
       href={
         hubFor(group.hubId)
           ? workspaceHref(hubFor(group.hubId)!.slug, "attention", group.id)
-          : "/app/workspaces"
+          : "/app/portfolio"
       }
     >
       <span className={`signal-pip ${group.severity}`} />

@@ -478,7 +478,7 @@ function MemberDetailDialog({
               href={
                 workspaceSlug
                   ? workspaceHref(workspaceSlug, "settings")
-                  : "/app/workspaces"
+                  : "/app/portfolio"
               }
             >
               <ShieldCheck size={14} /> Manage organization permissions{" "}

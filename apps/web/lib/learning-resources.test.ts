@@ -35,7 +35,6 @@ describe("learning resources", () => {
       "/app/dashboard",
       "/app/decisions",
       "/app/home",
-      "/app/workspaces",
       "/app/ideas",
       "/app/inbox",
       "/app/my-work",

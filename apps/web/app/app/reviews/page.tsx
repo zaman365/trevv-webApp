@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ReviewsExperience } from "@/components/management-experience";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Reviews",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function ReviewsPage() {
-  return <ReviewsExperience />;
+  redirect("/app/portfolio");
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isWorkspaceView,
-  workspaceDirectoryHref,
   workspaceHref,
+  workspaceScopeHref,
 } from "./workspace-routes";
 
 describe("workspace routes", () => {
@@ -24,10 +24,10 @@ describe("workspace routes", () => {
     expect(isWorkspaceView("unknown")).toBe(false);
   });
 
-  it("keeps workspace creation at the directory boundary", () => {
-    expect(workspaceDirectoryHref()).toBe("/app/workspaces");
-    expect(workspaceDirectoryHref(true)).toBe(
-      "/app/workspaces?create=workspace",
+  it("never invents an operational scope when no workspace is selected", () => {
+    expect(workspaceScopeHref(undefined, "attention")).toBe("/app/portfolio");
+    expect(workspaceScopeHref("northstar-apparel", "attention")).toBe(
+      "/app/workspaces/northstar-apparel/attention",
     );
   });
 });

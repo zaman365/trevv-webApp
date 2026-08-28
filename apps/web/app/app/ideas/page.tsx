@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IdeasExperience } from "@/components/management-experience";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Ideas & evidence",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function IdeasPage() {
-  return <IdeasExperience />;
+  redirect("/app/portfolio");
 }

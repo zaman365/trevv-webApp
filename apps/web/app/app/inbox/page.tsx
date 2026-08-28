@@ -1,4 +1,5 @@
-import { FocusExperience } from "@/components/focus-experience";
+import { redirect } from "next/navigation";
+
 export default function InboxPage() {
-  return <FocusExperience kind="inbox" />;
+  redirect("/app/portfolio");
 }

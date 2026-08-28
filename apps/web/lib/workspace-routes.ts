@@ -18,6 +18,8 @@ export const workspaceViews = [
 
 export type WorkspaceView = (typeof workspaceViews)[number];
 
+export const portfolioHref = "/app/portfolio";
+
 export function isWorkspaceView(value: string): value is WorkspaceView {
   return workspaceViews.includes(value as WorkspaceView);
 }
@@ -33,6 +35,12 @@ export function workspaceHref(
   return `${path}#${hash.replace(/^#/, "")}`;
 }
 
-export function workspaceDirectoryHref(create = false) {
-  return create ? "/app/workspaces?create=workspace" : "/app/workspaces";
+export function workspaceScopeHref(
+  workspaceSlug: string | undefined,
+  view?: WorkspaceView,
+  hash?: string,
+) {
+  return workspaceSlug
+    ? workspaceHref(workspaceSlug, view, hash)
+    : portfolioHref;
 }

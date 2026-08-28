@@ -46,6 +46,7 @@ import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
 import { LearningCenterProvider, useLearningCenter } from "./learning-center";
 import type { CapturedWorkItem } from "@/lib/captured-work";
 import { UniversalCreateDialog } from "./universal-create";
+import { CreateWorkspaceDialog } from "./create-workspace-dialog";
 import { useCustomHubs } from "@/lib/custom-hubs";
 import {
   createCustomPortfolio,
@@ -55,8 +56,8 @@ import {
   type CustomPortfolioRecord,
 } from "@/lib/custom-portfolios";
 import {
-  workspaceDirectoryHref,
   workspaceHref,
+  workspaceScopeHref,
   type WorkspaceView,
 } from "@/lib/workspace-routes";
 
@@ -168,6 +169,7 @@ function WorkspaceChrome({
   );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
   const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
   const [portfolioCreateOpen, setPortfolioCreateOpen] = useState(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
@@ -265,6 +267,7 @@ function WorkspaceChrome({
         setCaptureOpen(false);
       }
       if (
+        contextProject &&
         event.key.toLocaleLowerCase() === "q" &&
         !event.metaKey &&
         !event.ctrlKey &&
@@ -277,7 +280,7 @@ function WorkspaceChrome({
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [captureOpen, setCaptureOpen]);
+  }, [captureOpen, contextProject, setCaptureOpen]);
 
   useEffect(() => {
     if (!workspaceMenuOpen) return;
@@ -332,9 +335,7 @@ function WorkspaceChrome({
   // One number, from one place. See lib/attention.ts.
   const attentionCount = scope.attentionCount;
   const scopedHref = (view?: WorkspaceView) =>
-    contextProject
-      ? workspaceHref(contextProject.slug, view)
-      : workspaceDirectoryHref();
+    workspaceScopeHref(contextProject?.slug, view);
 
   const nav = [
     ...(contextProject
@@ -541,10 +542,7 @@ function WorkspaceChrome({
                     onClick={() => {
                       setWorkspaceMenuOpen(false);
                       setOpen(false);
-                      window.dispatchEvent(
-                        new Event("trevv:open-workspace-creator"),
-                      );
-                      router.push(workspaceDirectoryHref(true));
+                      setWorkspaceCreateOpen(true);
                     }}
                   >
                     <span className="workspace-switcher-create-icon">
@@ -586,107 +584,124 @@ function WorkspaceChrome({
             Portfolio
           </Link>
           <p className="nav-label spaced">Workspace</p>
-          {nav.map(([key, label, href, Icon, badge]) => {
-            const isActive = active === key;
+          {contextProject ? (
+            <>
+              {nav.map(([key, label, href, Icon, badge]) => {
+                const isActive = active === key;
 
-            return (
+                return (
+                  <Link
+                    key={key}
+                    className={`nav-item ${isActive ? "active" : ""}`}
+                    href={href}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => setOpen(false)}
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                    {key === "inbox" && <span className="nav-dot" />}
+                    {badge !== undefined && badge > 0 && (
+                      <span className="nav-badge">{badge}</span>
+                    )}
+                  </Link>
+                );
+              })}
+              <p className="nav-label spaced">Work</p>
               <Link
-                key={key}
-                className={`nav-item ${isActive ? "active" : ""}`}
-                href={href}
-                aria-current={isActive ? "page" : undefined}
-                onClick={() => setOpen(false)}
+                className={`nav-item ${active === "decisions" ? "active" : ""}`}
+                href={scopedHref("decisions")}
               >
-                <Icon size={17} />
-                <span>{label}</span>
-                {key === "inbox" && <span className="nav-dot" />}
-                {badge !== undefined && badge > 0 && (
-                  <span className="nav-badge">{badge}</span>
-                )}
+                <FileQuestion size={17} />
+                <span>{copy.nav.decisions}</span>
               </Link>
-            );
-          })}
-          <p className="nav-label spaced">Work</p>
-          <Link
-            className={`nav-item ${active === "decisions" ? "active" : ""}`}
-            href={scopedHref("decisions")}
-          >
-            <FileQuestion size={17} />
-            <span>{copy.nav.decisions}</span>
-          </Link>
-          <Link
-            className={`nav-item ${active === "approvals" ? "active" : ""}`}
-            href={scopedHref("approvals")}
-          >
-            <CheckCircle2 size={17} />
-            <span>{copy.nav.approvals}</span>
-          </Link>
-          <Link
-            className={`nav-item ${active === "ideas" ? "active" : ""}`}
-            href={scopedHref("ideas")}
-          >
-            <Lightbulb size={17} />
-            <span>{copy.nav.ideas}</span>
-          </Link>
-          <Link
-            className={`nav-item ${active === "reviews" ? "active" : ""}`}
-            href={scopedHref("reviews")}
-          >
-            <ClipboardCheck size={17} />
-            <span>{copy.nav.reviews}</span>
-          </Link>
-          <Link
-            className={`nav-item ${active === "waiting" ? "active" : ""}`}
-            href={scopedHref("waiting")}
-          >
-            <Hourglass size={17} />
-            <span>{copy.nav.waiting}</span>
-          </Link>
-          <button
-            className="nav-item nav-button"
-            onClick={() => setCaptureOpen(true)}
-          >
-            <Plus size={16} />
-            <span>Create</span>
-          </button>
-          <p className="nav-label spaced">People</p>
-          <Link
-            className={`nav-item ${active === "team" ? "active" : ""}`}
-            href={scopedHref("team")}
-          >
-            <Users size={17} />
-            <span>{copy.nav.team}</span>
-          </Link>
+              <Link
+                className={`nav-item ${active === "approvals" ? "active" : ""}`}
+                href={scopedHref("approvals")}
+              >
+                <CheckCircle2 size={17} />
+                <span>{copy.nav.approvals}</span>
+              </Link>
+              <Link
+                className={`nav-item ${active === "ideas" ? "active" : ""}`}
+                href={scopedHref("ideas")}
+              >
+                <Lightbulb size={17} />
+                <span>{copy.nav.ideas}</span>
+              </Link>
+              <Link
+                className={`nav-item ${active === "reviews" ? "active" : ""}`}
+                href={scopedHref("reviews")}
+              >
+                <ClipboardCheck size={17} />
+                <span>{copy.nav.reviews}</span>
+              </Link>
+              <Link
+                className={`nav-item ${active === "waiting" ? "active" : ""}`}
+                href={scopedHref("waiting")}
+              >
+                <Hourglass size={17} />
+                <span>{copy.nav.waiting}</span>
+              </Link>
+              <button
+                className="nav-item nav-button"
+                onClick={() => setCaptureOpen(true)}
+              >
+                <Plus size={16} />
+                <span>Create</span>
+              </button>
+              <p className="nav-label spaced">People</p>
+              <Link
+                className={`nav-item ${active === "team" ? "active" : ""}`}
+                href={scopedHref("team")}
+              >
+                <Users size={17} />
+                <span>{copy.nav.team}</span>
+              </Link>
+            </>
+          ) : (
+            <button
+              className="nav-item nav-button workspace-nav-select"
+              type="button"
+              onClick={() => setWorkspaceMenuOpen(true)}
+            >
+              <FolderKanban size={17} />
+              <span>Choose a workspace</span>
+            </button>
+          )}
         </nav>
         <div className="sidebar-foot">
-          <p className="nav-label">System</p>
-          <Link
-            className={`nav-item ${active === "templates" ? "active" : ""}`}
-            href={scopedHref("blueprints")}
-          >
-            <LayoutTemplate size={17} />
-            <span>Blueprints</span>
-          </Link>
-          <button
-            className="nav-item nav-button learning-center-nav"
-            onClick={() => {
-              setOpen(false);
-              openLearningCenter();
-            }}
-          >
-            <BookOpenText size={17} />
-            <span>Learning Center</span>
-            <span className="learning-nav-mark">
-              <Lightbulb size={11} />
-            </span>
-          </button>
-          <Link
-            className={`nav-item ${active === "settings" ? "active" : ""}`}
-            href={scopedHref("settings")}
-          >
-            <Settings2 size={17} />
-            <span>{copy.nav.settings}</span>
-          </Link>
+          {contextProject && (
+            <>
+              <p className="nav-label">System</p>
+              <Link
+                className={`nav-item ${active === "templates" ? "active" : ""}`}
+                href={scopedHref("blueprints")}
+              >
+                <LayoutTemplate size={17} />
+                <span>Blueprints</span>
+              </Link>
+              <button
+                className="nav-item nav-button learning-center-nav"
+                onClick={() => {
+                  setOpen(false);
+                  openLearningCenter();
+                }}
+              >
+                <BookOpenText size={17} />
+                <span>Learning Center</span>
+                <span className="learning-nav-mark">
+                  <Lightbulb size={11} />
+                </span>
+              </button>
+              <Link
+                className={`nav-item ${active === "settings" ? "active" : ""}`}
+                href={scopedHref("settings")}
+              >
+                <Settings2 size={17} />
+                <span>{copy.nav.settings}</span>
+              </Link>
+            </>
+          )}
           {contextPortfolio && (
             <div className="portfolio-switcher-wrap" ref={portfolioMenuRef}>
               <button
@@ -843,54 +858,60 @@ function WorkspaceChrome({
           >
             <Menu size={20} />
           </button>
-          <Link href={scopedHref("search")} className="search-trigger">
-            <Search size={17} />
-            <span>{copy.shell.search}</span>
-            <kbd>
-              <Command size={11} />K
-            </kbd>
-          </Link>
+          {contextProject && (
+            <Link href={scopedHref("search")} className="search-trigger">
+              <Search size={17} />
+              <span>{copy.shell.search}</span>
+              <kbd>
+                <Command size={11} />K
+              </kbd>
+            </Link>
+          )}
           <nav className="topbar-actions" aria-label="Workspace shortcuts">
-            <button
-              className="quiet-button capture-button topbar-create-button"
-              onClick={() => setCaptureOpen(true)}
-              aria-label="Create work"
-              aria-describedby="create-work-shortcut"
-            >
-              <Plus size={16} />
-              <span className="topbar-create-label">Create</span>
-              <span
-                className="topbar-create-shortcut"
-                id="create-work-shortcut"
-                role="tooltip"
-              >
-                Press <kbd>Q</kbd>
-              </span>
-            </button>
-            <Link
-              className={`topbar-tool topbar-tool-attention ${active === "attention" ? "active" : ""}`}
-              aria-label={`Attention, ${attentionCount} items`}
-              aria-current={active === "attention" ? "page" : undefined}
-              href={scopedHref("attention")}
-              title={`Attention · ${attentionCount} items`}
-            >
-              <Sparkles size={17} />
-              {attentionCount > 0 && (
-                <span className="topbar-tool-badge" aria-hidden="true">
-                  {attentionCount}
-                </span>
-              )}
-            </Link>
-            <Link
-              className={`topbar-tool topbar-tool-inbox ${active === "inbox" ? "active" : ""}`}
-              aria-label="Actionable Inbox"
-              aria-current={active === "inbox" ? "page" : undefined}
-              href={scopedHref("inbox")}
-              title="Actionable Inbox"
-            >
-              <Inbox size={17} />
-              <span className="topbar-tool-dot" aria-hidden="true" />
-            </Link>
+            {contextProject && (
+              <>
+                <button
+                  className="quiet-button capture-button topbar-create-button"
+                  onClick={() => setCaptureOpen(true)}
+                  aria-label="Create work"
+                  aria-describedby="create-work-shortcut"
+                >
+                  <Plus size={16} />
+                  <span className="topbar-create-label">Create</span>
+                  <span
+                    className="topbar-create-shortcut"
+                    id="create-work-shortcut"
+                    role="tooltip"
+                  >
+                    Press <kbd>Q</kbd>
+                  </span>
+                </button>
+                <Link
+                  className={`topbar-tool topbar-tool-attention ${active === "attention" ? "active" : ""}`}
+                  aria-label={`Attention, ${attentionCount} items`}
+                  aria-current={active === "attention" ? "page" : undefined}
+                  href={scopedHref("attention")}
+                  title={`Attention · ${attentionCount} items`}
+                >
+                  <Sparkles size={17} />
+                  {attentionCount > 0 && (
+                    <span className="topbar-tool-badge" aria-hidden="true">
+                      {attentionCount}
+                    </span>
+                  )}
+                </Link>
+                <Link
+                  className={`topbar-tool topbar-tool-inbox ${active === "inbox" ? "active" : ""}`}
+                  aria-label="Actionable Inbox"
+                  aria-current={active === "inbox" ? "page" : undefined}
+                  href={scopedHref("inbox")}
+                  title="Actionable Inbox"
+                >
+                  <Inbox size={17} />
+                  <span className="topbar-tool-dot" aria-hidden="true" />
+                </Link>
+              </>
+            )}
             <Link
               className={`topbar-tool topbar-tool-mail ${active === "mail" ? "active" : ""}`}
               aria-label="Email"
@@ -900,28 +921,32 @@ function WorkspaceChrome({
             >
               <Mail size={18} />
             </Link>
-            <Link
-              className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
-              aria-label="Messages"
-              aria-current={active === "messages" ? "page" : undefined}
-              href={scopedHref("messages")}
-              title="Messages"
-            >
-              <MessageCircleMore size={18} />
-            </Link>
-            <Link
-              className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
-              aria-label={copy.shell.notifications}
-              aria-current={active === "notifications" ? "page" : undefined}
-              href={scopedHref("notifications")}
-              title={copy.shell.notifications}
-            >
-              <Bell size={18} />
-              <span
-                className="topbar-tool-dot notification-dot"
-                aria-hidden="true"
-              />
-            </Link>
+            {contextProject && (
+              <>
+                <Link
+                  className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
+                  aria-label="Messages"
+                  aria-current={active === "messages" ? "page" : undefined}
+                  href={scopedHref("messages")}
+                  title="Messages"
+                >
+                  <MessageCircleMore size={18} />
+                </Link>
+                <Link
+                  className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
+                  aria-label={copy.shell.notifications}
+                  aria-current={active === "notifications" ? "page" : undefined}
+                  href={scopedHref("notifications")}
+                  title={copy.shell.notifications}
+                >
+                  <Bell size={18} />
+                  <span
+                    className="topbar-tool-dot notification-dot"
+                    aria-hidden="true"
+                  />
+                </Link>
+              </>
+            )}
             <button
               className="topbar-tool topbar-tool-help"
               onClick={() => openLearningCenter()}
@@ -948,20 +973,24 @@ function WorkspaceChrome({
                       <small>Owner · {trevvBrand.organization}</small>
                     </div>
                   </header>
-                  <Link
-                    href={scopedHref("settings")}
-                    role="menuitem"
-                    onClick={() => setUserMenuOpen(false)}
-                  >
-                    <Settings2 size={14} /> Workspace settings
-                  </Link>
-                  <Link
-                    href={scopedHref("team")}
-                    role="menuitem"
-                    onClick={() => setUserMenuOpen(false)}
-                  >
-                    <Users size={14} /> Team and access
-                  </Link>
+                  {contextProject && (
+                    <>
+                      <Link
+                        href={scopedHref("settings")}
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <Settings2 size={14} /> Workspace settings
+                      </Link>
+                      <Link
+                        href={scopedHref("team")}
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <Users size={14} /> Team and access
+                      </Link>
+                    </>
+                  )}
                   <button
                     role="menuitem"
                     onClick={() => {
@@ -990,41 +1019,63 @@ function WorkspaceChrome({
         {children}
       </div>
 
-      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
-        <Link
-          className={active === "myWork" ? "active" : ""}
-          href={scopedHref("my-work")}
-        >
-          <ClipboardCheck size={19} />
-          <span>{messages.nav.myWork}</span>
-        </Link>
-        <button onClick={() => setCaptureOpen(true)}>
-          <span className="mobile-capture">
-            <Plus size={22} />
-          </span>
-          <span>{messages.common.quickCapture}</span>
-        </button>
-        <Link
-          className={active === "inbox" ? "active" : ""}
-          href={scopedHref("inbox")}
-        >
-          <Inbox size={19} />
-          <span>{messages.nav.inbox}</span>
-        </Link>
-        <Link
-          className={active === "messages" ? "active" : ""}
-          href={scopedHref("messages")}
-        >
-          <MessageCircleMore size={19} />
-          <span>Messages</span>
-        </Link>
+      <nav
+        className={`mobile-bottom-nav ${contextProject ? "" : "portfolio-only"}`}
+        aria-label="Mobile navigation"
+      >
+        {contextProject ? (
+          <>
+            <Link
+              className={active === "myWork" ? "active" : ""}
+              href={scopedHref("my-work")}
+            >
+              <ClipboardCheck size={19} />
+              <span>{messages.nav.myWork}</span>
+            </Link>
+            <button onClick={() => setCaptureOpen(true)}>
+              <span className="mobile-capture">
+                <Plus size={22} />
+              </span>
+              <span>{messages.common.quickCapture}</span>
+            </button>
+            <Link
+              className={active === "inbox" ? "active" : ""}
+              href={scopedHref("inbox")}
+            >
+              <Inbox size={19} />
+              <span>{messages.nav.inbox}</span>
+            </Link>
+            <Link
+              className={active === "messages" ? "active" : ""}
+              href={scopedHref("messages")}
+            >
+              <MessageCircleMore size={19} />
+              <span>Messages</span>
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link className="active" href="/app/portfolio">
+              <Grid2X2 size={19} />
+              <span>Portfolio</span>
+            </Link>
+            <button onClick={() => setWorkspaceMenuOpen(true)}>
+              <FolderKanban size={19} />
+              <span>Workspace</span>
+            </button>
+            <Link href="/app/mail">
+              <Mail size={19} />
+              <span>Email</span>
+            </Link>
+          </>
+        )}
         <button onClick={() => setOpen(true)}>
           <MoreHorizontal size={19} />
           <span>{messages.common.more}</span>
         </button>
       </nav>
 
-      {latestCapture && (
+      {contextProject && latestCapture && (
         <div className="global-capture-toast" role="status">
           <CheckCircle2 size={16} />
           <div>
@@ -1047,7 +1098,7 @@ function WorkspaceChrome({
           </button>
         </div>
       )}
-      {captureOpen && (
+      {contextProject && captureOpen && (
         <UniversalCreateDialog
           availableHubIds={scope.hubs.map((hub) => hub.id)}
           {...(workspaceLevel === "project" && projectId
@@ -1068,6 +1119,19 @@ function WorkspaceChrome({
             setPortfolioId(record.portfolio.id);
             setOpen(false);
             router.push("/app/portfolio");
+          }}
+        />
+      )}
+      {workspaceCreateOpen && contextPortfolio && (
+        <CreateWorkspaceDialog
+          portfolios={accessiblePortfolios}
+          initialPortfolioId={contextPortfolio.id}
+          onClose={() => setWorkspaceCreateOpen(false)}
+          onCreated={(workspace) => {
+            setWorkspaceCreateOpen(false);
+            selectProject(workspace.id, workspace.portfolioId);
+            setOpen(false);
+            router.push(workspaceHref(workspace.slug));
           }}
         />
       )}

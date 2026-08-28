@@ -1,4 +1,5 @@
-import { FocusExperience } from "@/components/focus-experience";
+import { redirect } from "next/navigation";
+
 export default function ApprovalsPage() {
-  return <FocusExperience kind="approvals" />;
+  redirect("/app/portfolio");
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DashboardExperience } from "@/components/dashboard-experience";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function DashboardPage() {
-  return <DashboardExperience />;
+  redirect("/app/portfolio");
 }

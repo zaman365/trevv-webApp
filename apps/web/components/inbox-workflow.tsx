@@ -151,7 +151,7 @@ export function InboxWorkflow({
       priority: "normal" as const,
       route: scope.hubs[0]
         ? workspaceHref(scope.hubs[0].slug, "inbox")
-        : "/app/workspaces",
+        : "/app/portfolio",
       disposition: "open" as const,
     })),
     ...initialActions,

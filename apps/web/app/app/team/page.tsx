@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { TeamExperience } from "@/components/management-experience";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Team pressure",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function TeamPage() {
-  return <TeamExperience />;
+  redirect("/app/portfolio");
 }

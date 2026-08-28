@@ -1,5 +1,5 @@
-import { SettingsExperience } from "@/components/settings-experience";
+import { redirect } from "next/navigation";
 
 export default function IntegrationsPage() {
-  return <SettingsExperience />;
+  redirect("/app/portfolio");
 }

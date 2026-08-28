@@ -1,4 +1,5 @@
-import { FocusExperience } from "@/components/focus-experience";
+import { redirect } from "next/navigation";
+
 export default function TemplatesPage() {
-  return <FocusExperience kind="templates" />;
+  redirect("/app/portfolio");
 }

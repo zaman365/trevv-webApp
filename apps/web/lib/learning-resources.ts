@@ -137,7 +137,7 @@ export const learningResources: LearningResource[] = [
       "Use one flexible Workspace for a business, client, product, project, or function.",
     body: "A Workspace holds the boards, people, updates, resources, decisions, and health of one responsibility. Its type can be a business, brand, client, product, department, or initiative.",
     duration: "5 min",
-    route: "/app/workspaces",
+    route: "/app/portfolio",
     steps: [
       "Give the Workspace a clear outcome and owner.",
       "Choose the lifecycle stage that reflects its current reality.",

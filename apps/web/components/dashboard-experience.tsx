@@ -653,7 +653,7 @@ function DashboardMain() {
               href={
                 selectedProject
                   ? workspaceHref(selectedProject.slug, "attention")
-                  : "/app/workspaces"
+                  : "/app/portfolio"
               }
             >
               Open Attention center <ArrowRight size={14} />
@@ -1616,20 +1616,20 @@ function workItemHref(item: WorkItem) {
     return workspaceHref(hub.slug, "approvals");
   return hub
     ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
-    : "/app/workspaces";
+    : "/app/portfolio";
 }
 
 function signalHref(group: GroupedSignal) {
   const item = demoItems.find((candidate) => candidate.id === group.entityId);
   const hub = demoHubs.find((candidate) => candidate.id === group.hubId);
   if (group.signals.some((signal) => signal.signalType === "waiting_too_long"))
-    return hub ? workspaceHref(hub.slug, "waiting") : "/app/workspaces";
+    return hub ? workspaceHref(hub.slug, "waiting") : "/app/portfolio";
   if (item?.type === "decision" && hub)
     return workspaceHref(hub.slug, "decisions");
   if (item?.type === "approval" && hub)
     return workspaceHref(hub.slug, "approvals");
   if (item && hub) return `${workspaceHref(hub.slug)}/boards/${item.boardId}`;
-  return hub ? workspaceHref(hub.slug) : "/app/workspaces";
+  return hub ? workspaceHref(hub.slug) : "/app/portfolio";
 }
 
 function signalActionLabel(group: GroupedSignal) {

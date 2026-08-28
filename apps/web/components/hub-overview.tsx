@@ -34,7 +34,7 @@ import { PageHero, StatTile } from "./ui-kit";
 import { productCopy } from "@/lib/product-copy";
 import { labelForType } from "@/lib/terminology";
 import { useCustomHubs } from "@/lib/custom-hubs";
-import { workspaceDirectoryHref, workspaceHref } from "@/lib/workspace-routes";
+import { workspaceHref } from "@/lib/workspace-routes";
 
 const hubHealthCopy: Record<string, string> = {
   on_track: "On track",
@@ -65,7 +65,7 @@ export function HubOverview({ slug }: { slug: string }) {
       <WorkspaceFrame active="hub" hubSlug={slug}>
         <main className="hub-main board-not-found">
           <h1>Workspace not found</h1>
-          <Link href={workspaceDirectoryHref()}>Return to all workspaces</Link>
+          <Link href="/app/portfolio">Return to Portfolio</Link>
         </main>
       </WorkspaceFrame>
     );

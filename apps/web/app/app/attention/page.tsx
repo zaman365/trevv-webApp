@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AttentionExperience } from "@/components/management-experience";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Attention",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AttentionPage() {
-  return <AttentionExperience />;
+  redirect("/app/portfolio");
 }
