@@ -1,5 +1,12 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import {
+  boardRoute,
+  gotoCanonical,
+  STAKEHOLDER_WORKSPACE,
+  workspaceHome,
+  workspaceRoute,
+} from "./routes";
 
 const seriousViolations = (
   violations: Array<{
@@ -24,25 +31,30 @@ const seriousViolations = (
 const routes = [
   "/sign-in",
   "/onboarding",
-  "/app/home",
   "/app/portfolio",
-  "/app/dashboard",
-  "/app/attention",
-  "/app/waiting",
-  "/app/workspaces/northstar-apparel",
-  "/app/workspaces/northstar-apparel/boards/b-northstar-launch",
-  "/app/workspaces/localreach/stakeholder",
-  "/app/decisions",
-  "/app/messages",
-  "/app/blueprints",
+  workspaceHome(),
+  workspaceRoute("dashboard"),
+  workspaceRoute("attention"),
+  workspaceRoute("waiting"),
+  workspaceRoute("decisions"),
+  workspaceRoute("messages"),
+  workspaceRoute("blueprints"),
+  boardRoute(),
+  `${workspaceHome(STAKEHOLDER_WORKSPACE)}/stakeholder`,
 ] as const;
 
 for (const route of routes) {
   test(`${route} has no serious automated accessibility violations`, async ({
     page,
   }) => {
-    await page.goto(route);
-    await page.waitForLoadState("networkidle");
+    await gotoCanonical(page, route);
+    // Wait for the page's own landmark rather than networkidle, so Axe
+    // never audits a shell that has not rendered its content yet. Some
+    // pages hide their heading at mobile widths, so assert the landmark
+    // has real content instead of requiring an h1.
+    const main = page.locator("main");
+    await expect(main).toBeVisible();
+    await expect(main).not.toBeEmpty();
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
       .analyze();
@@ -53,7 +65,7 @@ for (const route of routes) {
 test("item detail panel has no serious automated accessibility violations", async ({
   page,
 }) => {
-  await page.goto("/app/workspaces/northstar-apparel/boards/b-northstar-launch");
+  await gotoCanonical(page, boardRoute());
   const panel = page.getByRole("complementary", {
     name: "Choose storefront launch offer",
   });

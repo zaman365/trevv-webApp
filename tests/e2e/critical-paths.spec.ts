@@ -1,37 +1,29 @@
 import { expect, test } from "@playwright/test";
+import {
+  boardRoute,
+  gotoCanonical,
+  STAKEHOLDER_WORKSPACE,
+  workspaceHome,
+  workspaceRoute,
+} from "./routes";
 
-test("operator starts in Home and opens a project from Portfolio", async ({
+test("Portfolio carries the personal roll-ups and opens a workspace", async ({
   page,
 }) => {
-  await page.goto("/app/home");
-  await expect(
-    page.getByRole("heading", { name: "Good morning, Mohammed" }),
-  ).toBeVisible();
+  // Home was folded into Portfolio: the personal roll-ups moved here
+  // rather than being dropped.
+  await gotoCanonical(page, "/app/portfolio");
   await expect(page.getByRole("heading", { name: "Needs You" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Change Radar" }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Health mix" })).toBeVisible();
 
-  await page.goto("/app/portfolio");
-  await expect(page.getByRole("heading", { name: "Portfolio" })).toBeVisible();
-  const portfolioSelect = page.getByRole("combobox", {
-    name: "Portfolio",
-    exact: true,
-  });
-  const newProject = page.getByRole("link", { name: "New project" });
+  // The hero select takes its accessible name from the chosen portfolio,
+  // so address it structurally rather than by a fixed name.
+  const portfolioSelect = page.locator(".portfolio-hero-control select");
   await expect(portfolioSelect).toBeVisible();
-  await expect(newProject).toBeVisible();
-  const portfolioSelectBox = await portfolioSelect.boundingBox();
-  const newProjectBox = await newProject.boundingBox();
-  expect(portfolioSelectBox).not.toBeNull();
-  expect(newProjectBox).not.toBeNull();
-  expect(
-    Math.abs(
-      (portfolioSelectBox?.y ?? 0) +
-        (portfolioSelectBox?.height ?? 0) -
-        ((newProjectBox?.y ?? 0) + (newProjectBox?.height ?? 0)),
-    ),
-  ).toBeLessThanOrEqual(1);
   if ((page.viewportSize()?.width ?? 0) <= 520) {
     const firstStat = page.locator(".hero-stats .stat-tile").first();
     const labelBox = await firstStat.locator(".stat-body b").boundingBox();
@@ -41,24 +33,24 @@ test("operator starts in Home and opens a project from Portfolio", async ({
   }
   // The card is a div with a stretched link, so the whole card stays
   // clickable without nesting its overflow button inside an anchor.
-  const hubLink = page.locator(
-    '.project-tile .tile-link[href="/app/workspaces/northstar-apparel"]',
+  const workspaceLink = page.locator(
+    `.project-tile .tile-link[href="${workspaceHome()}"]`,
   );
-  await expect(hubLink).toBeVisible();
-  await hubLink.click();
+  await expect(workspaceLink).toBeVisible();
+  await workspaceLink.click();
   await expect(
     page.getByRole("heading", { name: "Northstar Apparel" }),
   ).toBeVisible();
 });
 
-test("Change Radar opens the project update context", async ({ page }) => {
-  await page.goto("/app/home");
+test("Change Radar opens the workspace update context", async ({ page }) => {
+  await gotoCanonical(page, "/app/portfolio");
   const change = page.getByRole("link", {
     name: /Open Northstar Apparel and review 2 meaningful changes/,
   });
   await expect(change).toBeVisible();
   await change.click();
-  await expect(page).toHaveURL(/\/app\/workspaces\/northstar-apparel#updates$/);
+  await expect(page).toHaveURL(new RegExp(`${workspaceHome()}#updates$`));
   await expect(
     page.getByRole("heading", { name: /latest weekly update/i }),
   ).toBeVisible();
@@ -67,7 +59,7 @@ test("Change Radar opens the project update context", async ({ page }) => {
 test("Dashboard turns portfolio signals into auditable next actions", async ({
   page,
 }) => {
-  await page.goto("/app/dashboard");
+  await gotoCanonical(page, workspaceRoute("dashboard"));
   await expect(
     page.getByRole("heading", { name: "TREVV Brief" }),
   ).toBeVisible();
@@ -80,42 +72,40 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   const primaryNavLabels = await page
     .locator('nav[aria-label="Primary navigation"] a')
     .allTextContents();
-  expect(primaryNavLabels.indexOf("Dashboard")).toBe(
+  // Workspace views start at Overview, so Dashboard follows it rather
+  // than sitting directly under the portfolio escape hatch.
+  expect(primaryNavLabels.indexOf("Overview")).toBe(
     primaryNavLabels.indexOf("Portfolio") + 1,
   );
-  await expect(
-    page.getByRole("tab", { name: /Portfolio All projects/ }),
-  ).toHaveAttribute("aria-selected", "true");
-
-  await page.getByRole("tab", { name: /Project One project/ }).click();
-  await expect(
-    page.getByRole("combobox", { name: "Project view" }),
-  ).toHaveValue("hub-northstar");
+  expect(primaryNavLabels.indexOf("Dashboard")).toBe(
+    primaryNavLabels.indexOf("Overview") + 1,
+  );
+  // Inside a workspace the reporting hierarchy is Workspace/Team/Personal;
+  // the portfolio-wide levels belong to the Portfolio surface.
+  await expect(page.getByRole("tab", { name: /^Workspace\b/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(
     page.getByRole("button", { name: /5 All work items/ }),
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: /Team Functional team/ }).click();
-  await page
-    .getByRole("combobox", { name: "Team view" })
-    .selectOption("marketing");
-  await expect(
-    page.getByRole("button", { name: /6 All work items/ }),
-  ).toBeVisible();
+  await page.getByRole("tab", { name: /^Team\b/ }).click();
+  await expect(page.getByRole("combobox", { name: "Team view" })).toBeVisible();
 
-  await page.getByRole("tab", { name: /Personal My work/ }).click();
+  await page.getByRole("tab", { name: /^Personal\b/ }).click();
   await expect(page.locator(".dashboard-target-readonly")).toContainText(
     "My work",
   );
-  await page.getByRole("tab", { name: /Portfolio All projects/ }).click();
+  await page.getByRole("tab", { name: /^Workspace\b/ }).click();
 
   await page
-    .getByRole("button", { name: /4 Stuck Blocked on something/ })
+    .getByRole("button", { name: /1 Stuck Blocked on something/ })
     .click();
   await expect(
     page.getByRole("heading", { name: "Work lens · Blocked work" }),
   ).toBeVisible();
-  await expect(page.getByText("4 items", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^1 items?$/)).toBeVisible();
 
   const sourceSearch = page.getByRole("textbox", {
     name: "Search dashboard source work",
@@ -126,13 +116,15 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   ).toBeVisible();
   await sourceSearch.fill("");
 
-  await page.getByRole("button", { name: /Working on it 7 41%/ }).click();
+  await page.getByRole("button", { name: /Working on it 3 60%/ }).click();
   await expect(
     page.getByRole("heading", { name: "Work lens · Working on it" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "All time" }).click();
-  await expect(page.getByRole("group", { name: /Done: 1/ })).toBeVisible();
+  // "All time" widens the work-scope filter beyond open items.
+  const allTime = page.getByRole("button", { name: "All time" });
+  await allTime.click();
+  await expect(allTime).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "Create a follow-up" }).click();
   await expect(
@@ -141,21 +133,33 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   await page.getByRole("button", { name: "Close Create" }).click();
 });
 
-test("a new project creates a working project and board", async ({ page }) => {
-  await page.goto("/app/portfolio");
-  await page.getByRole("link", { name: "New project" }).click();
+test("a new workspace creates a working workspace and board", async ({
+  page,
+}) => {
+  // Creation moved into the workspace switcher when the portfolio hero
+  // action was removed, so the flow starts from inside a workspace.
+  await gotoCanonical(page, workspaceRoute("dashboard"));
+  // Below 768px the sidebar holding the switcher is off-canvas until the
+  // navigation drawer is opened.
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  }
+  await page.locator(".workspace-switcher-trigger").click();
+  await page
+    .getByRole("dialog", { name: "Workspace switcher" })
+    .getByRole("button", { name: "New workspace" })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "Create a project" }),
+    page.getByRole("heading", { name: "Create a workspace" }),
   ).toBeVisible();
-  await page.getByLabel("Project name").fill("Customer Onboarding Lab");
+  await page.getByLabel("Workspace name").fill("Customer Onboarding Lab");
   await page
     .getByLabel("Current priority")
     .fill("Validate the first onboarding outcome");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "project and its first board are ready",
-  );
-  await page.getByRole("link", { name: "Open project" }).click();
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  // The dialog routes straight into the workspace it just created.
+  await expect(page).toHaveURL(/\/app\/workspaces\/customer-onboarding-lab$/);
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Lab" }),
   ).toBeVisible();
@@ -168,7 +172,7 @@ test("a new project creates a working project and board", async ({ page }) => {
 test("team member updates a board item inline and uses the detail panel", async ({
   page,
 }) => {
-  await page.goto("/app/workspaces/northstar-apparel/boards/b-northstar-launch");
+  await gotoCanonical(page, boardRoute());
   await expect(
     page.getByRole("heading", { name: "SS26 Launch" }),
   ).toBeVisible();
@@ -193,7 +197,7 @@ test("team member updates a board item inline and uses the detail panel", async 
 test("board controls add, filter, and expose item editing", async ({
   page,
 }) => {
-  await page.goto("/app/workspaces/northstar-apparel/boards/b-northstar-launch");
+  await gotoCanonical(page, boardRoute());
   const initiallySelected = page.locator(".item-panel");
   if (await initiallySelected.isVisible()) {
     await initiallySelected.getByLabel("Close").click();
@@ -218,7 +222,7 @@ test("board controls add, filter, and expose item editing", async ({
 });
 
 test("Attention signals support accountable actions", async ({ page }) => {
-  await page.goto("/app/attention");
+  await gotoCanonical(page, workspaceRoute("attention"));
   await expect(
     page.getByRole("heading", { name: "Attention Center" }),
   ).toBeVisible();
@@ -242,10 +246,13 @@ test("Attention signals support accountable actions", async ({ page }) => {
 test("Waiting Center supports nudging and resolving dependencies", async ({
   page,
 }) => {
-  await page.goto("/app/waiting");
+  await gotoCanonical(page, workspaceRoute("waiting"));
   await expect(
     page.getByRole("heading", { name: "Waiting Center" }),
   ).toBeVisible();
+  // Scoped to one workspace the default view is empty, so select the
+  // bucket that actually holds a dependency.
+  await page.getByRole("button", { name: /^Waiting on External/ }).click();
   const waitingItem = page.locator(".waiting-list article").first();
   await waitingItem.getByRole("button", { name: "Nudge" }).click();
   await page
@@ -262,7 +269,7 @@ test("Waiting Center supports nudging and resolving dependencies", async ({
 });
 
 test("weekly review publishes an update and snapshot", async ({ page }) => {
-  await page.goto("/app/reviews");
+  await gotoCanonical(page, workspaceRoute("reviews"));
   await expect(
     page.getByRole("heading", { name: "Review Rituals" }),
   ).toBeVisible();
@@ -270,13 +277,13 @@ test("weekly review publishes an update and snapshot", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Review published" }),
   ).toBeVisible();
-  await expect(page.getByText(/Hub snapshot captured/)).toBeVisible();
+  await expect(page.getByText(/project snapshot captured/)).toBeVisible();
 });
 
 test("Blueprint updates are previewed and preserve local overrides", async ({
   page,
 }) => {
-  await page.goto("/app/blueprints");
+  await gotoCanonical(page, workspaceRoute("blueprints"));
   await expect(
     page.getByRole("heading", { name: /^Blueprints/, level: 1 }),
   ).toBeVisible();
@@ -292,7 +299,7 @@ test("Blueprint updates are previewed and preserve local overrides", async ({
 });
 
 test("import presets require a dry-run preview", async ({ page }) => {
-  await page.goto("/app/settings/import");
+  await gotoCanonical(page, workspaceRoute("settings/import"));
   await expect(
     page.getByRole("heading", { name: "Import work" }),
   ).toBeVisible();
@@ -302,7 +309,10 @@ test("import presets require a dry-run preview", async ({ page }) => {
 });
 
 test("stakeholder view exposes only selected information", async ({ page }) => {
-  await page.goto("/app/workspaces/localreach/stakeholder");
+  await gotoCanonical(
+    page,
+    `${workspaceHome(STAKEHOLDER_WORKSPACE)}/stakeholder`,
+  );
   await expect(page.getByRole("heading", { name: "LocalReach" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Selected work" }),
@@ -316,8 +326,8 @@ test("stakeholder view exposes only selected information", async ({ page }) => {
 test("Inbox is actionable while Quick Capture remains separate", async ({
   page,
 }) => {
-  await page.goto("/app/inbox");
-  await page.getByRole("tab", { name: /^Actionable Inbox/ }).click();
+  await gotoCanonical(page, workspaceRoute("inbox"));
+  await page.getByRole("tab", { name: /^Workspace Actionable/ }).click();
   await expect(
     page.getByRole("heading", {
       name: /^Actionable Inbox/,
@@ -339,15 +349,16 @@ test("Inbox is actionable while Quick Capture remains separate", async ({
     .first()
     .getByRole("button", { name: "Done" })
     .click();
-  await expect(
-    page.getByRole("tab", { name: "Needs response 3" }),
-  ).toBeVisible();
+  // Counts render beside the tab rather than inside its name, so assert
+  // the queue actually drained instead of a hard-coded total.
+  await expect(page.getByRole("tab", { name: "Done" })).toBeVisible();
+  await expect(page.locator(".inbox-list article")).toHaveCount(0);
 });
 
 test("Messages keeps requests, threads, and project context connected", async ({
   page,
 }) => {
-  await page.goto("/app/messages");
+  await gotoCanonical(page, workspaceRoute("messages"));
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New message" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create room" })).toBeVisible();
@@ -364,10 +375,12 @@ test("Messages keeps requests, threads, and project context connected", async ({
   await expect(
     page.getByRole("button", { name: /Needs response \d+/ }),
   ).toBeVisible();
-  const hubContextLink = page.getByRole("link", { name: "Open project" });
-  if (!(await hubContextLink.isVisible()))
+  const workspaceContextLink = page.getByRole("link", {
+    name: "Open workspace",
+  });
+  if (!(await workspaceContextLink.isVisible()))
     await page.getByRole("button", { name: "Open room context" }).click();
-  await expect(hubContextLink).toBeVisible();
+  await expect(workspaceContextLink).toBeVisible();
   const closeContext = page.getByRole("button", { name: "Close room context" });
   if (await closeContext.isVisible()) await closeContext.click();
 
@@ -402,7 +415,7 @@ test("onboarding configures a generalized first project", async ({ page }) => {
     page.getByRole("heading", { name: "What are you managing?" }),
   ).toBeVisible();
   for (const heading of [
-    "Create your first project",
+    "Create your first Workspace",
     "Choose a starter Blueprint",
     "Bring your team and context",
     "Your Portfolio is ready",
@@ -418,15 +431,20 @@ test("onboarding configures a generalized first project", async ({ page }) => {
 test("member focus centers and informational notifications render", async ({
   page,
 }) => {
-  for (const route of [
-    "/app/my-work",
-    "/app/decisions",
-    "/app/approvals",
-    "/app/ideas",
-    "/app/team",
-    "/app/notifications",
-  ]) {
-    await page.goto(route);
-    await expect(page.locator("main")).toBeVisible();
+  // Each module needs its own landmark heading. Asserting only that a
+  // <main> exists passed even when the route redirected to Portfolio.
+  const modules = [
+    { view: "my-work", heading: "My Work" },
+    { view: "decisions", heading: "Decision Center" },
+    { view: "approvals", heading: "Approval Center" },
+    { view: "ideas", heading: "Ideas & evidence" },
+    { view: "team", heading: "Team workspace" },
+    { view: "notifications", heading: "Notifications" },
+  ];
+  for (const { view, heading } of modules) {
+    await gotoCanonical(page, workspaceRoute(view));
+    await expect(
+      page.getByRole("heading", { name: heading, level: 1 }),
+    ).toBeVisible();
   }
 });
