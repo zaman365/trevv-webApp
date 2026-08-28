@@ -29,10 +29,10 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { demoHubs, demoPortfolios } from "@founderhq/core";
+import { demoHubs, demoItems, demoPortfolios } from "@founderhq/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
@@ -65,6 +65,31 @@ type ActivePage =
   | "settings"
   | "hub";
 
+const workspaceHealthLabels = {
+  on_track: "On track",
+  watch: "Needs attention",
+  critical: "Critical",
+  parked: "Parked",
+} as const;
+
+function workspaceWorkCounts(projectId: string) {
+  const openItems = demoItems.filter(
+    (item) => item.hubId === projectId && item.status !== "done",
+  );
+
+  return {
+    open: openItems.length,
+    blocked: openItems.filter((item) => item.status === "blocked").length,
+  };
+}
+
+function formatWorkspaceDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
 /**
  * The one workspace shell. Every screen renders inside it, so the navigation,
  * the theme and language controls, Quick capture and — critically — the
@@ -81,9 +106,7 @@ export function WorkspaceFrame({
 }) {
   const customHubs = useCustomHubs().map((record) => record.hub);
   const routeProject = hubSlug
-    ? [...customHubs, ...demoHubs].find(
-        (project) => project.slug === hubSlug,
-      )
+    ? [...customHubs, ...demoHubs].find((project) => project.slug === hubSlug)
     : undefined;
   return (
     <WorkspaceProvider
@@ -117,6 +140,9 @@ function WorkspaceChrome({
     null,
   );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [workspaceQuery, setWorkspaceQuery] = useState("");
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const {
     copy: messages,
@@ -172,7 +198,27 @@ function WorkspaceChrome({
     (workspaceLevel === "project"
       ? projectsInContext.find((project) => project.id === projectId)
       : undefined);
-  const projectScopeValue = contextProject?.id ?? "";
+  const normalizedWorkspaceQuery = workspaceQuery.trim().toLocaleLowerCase();
+  const visibleWorkspaceProjects = projectsInContext
+    .filter((project) =>
+      [
+        project.name,
+        project.lead.name,
+        project.stage,
+        workspaceHealthLabels[project.health],
+      ]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(normalizedWorkspaceQuery),
+    )
+    .sort((left, right) => {
+      if (left.id === contextProject?.id) return -1;
+      if (right.id === contextProject?.id) return 1;
+      return left.name.localeCompare(right.name);
+    });
+  const contextProjectCounts = contextProject
+    ? workspaceWorkCounts(contextProject.id)
+    : undefined;
   const favoriteHubs =
     workspaceLevel === "project" && contextProject
       ? [contextProject]
@@ -207,6 +253,33 @@ function WorkspaceChrome({
     return () => window.removeEventListener("keydown", handleShortcut);
   }, [captureOpen, setCaptureOpen]);
 
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (
+        workspaceMenuRef.current &&
+        !workspaceMenuRef.current.contains(event.target as Node)
+      ) {
+        setWorkspaceMenuOpen(false);
+        setWorkspaceQuery("");
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setWorkspaceMenuOpen(false);
+        setWorkspaceQuery("");
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [workspaceMenuOpen]);
+
   // One number, from one place. See lib/attention.ts.
   const attentionCount = scope.attentionCount;
 
@@ -239,67 +312,232 @@ function WorkspaceChrome({
       <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
         <div className="brand-row workspace-context-row">
           {contextPortfolio ? (
-            <label className="workspace-context-switcher workspace-context-project">
-              <span
-                className="workspace-context-icon project"
-                style={
-                  contextProject
-                    ? {
-                        background: `${contextProject.accent}18`,
-                        color: contextProject.accent,
-                      }
-                    : undefined
+            <div className="workspace-switcher-wrap" ref={workspaceMenuRef}>
+              <button
+                type="button"
+                className="workspace-context-switcher workspace-context-project workspace-switcher-trigger"
+                aria-haspopup="dialog"
+                aria-expanded={workspaceMenuOpen}
+                onClick={() =>
+                  setWorkspaceMenuOpen((currentOpen) => !currentOpen)
                 }
               >
-                {contextProject?.icon ?? <FolderKanban size={15} />}
-              </span>
-              <span className="workspace-context-copy">
-                <small>Workspace</small>
-                <strong>{contextProject?.name ?? "Choose workspace"}</strong>
-              </span>
-              <ChevronDown
-                className="workspace-context-chevron"
-                size={15}
-                aria-hidden="true"
-              />
-              <select
-                className="workspace-context-select"
-                aria-label="Current workspace"
-                value={projectScopeValue}
-                onChange={(event) => {
-                  const nextValue = event.currentTarget.value;
-                  if (nextValue === "create") {
-                    setOpen(false);
-                    window.dispatchEvent(
-                      new Event("trevv:open-workspace-creator"),
-                    );
-                    router.push("/app/hubs?create=project");
-                    return;
+                <span
+                  className="workspace-context-icon project"
+                  style={
+                    contextProject
+                      ? {
+                          background: `${contextProject.accent}18`,
+                          color: contextProject.accent,
+                        }
+                      : undefined
                   }
-                  const project = projectsInContext.find(
-                    (candidate) => candidate.id === nextValue,
-                  );
-                  if (!project) return;
-                  selectProject(project.id, project.portfolioId);
-                  setOpen(false);
-                  if (
-                    (active === "hub" || active === "portfolio") &&
-                    project.slug !== hubSlug
-                  )
-                    router.push(`/app/hubs/${project.slug}`);
-                }}
-              >
-                <option value="" disabled>
-                  Choose workspace
-                </option>
-                {projectsInContext.map((project) => (
-                  <option value={project.id} key={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-                <option value="create">＋ New workspace…</option>
-              </select>
-            </label>
+                >
+                  {contextProject?.icon ?? <FolderKanban size={15} />}
+                </span>
+                <span className="workspace-context-copy">
+                  <small>Workspace</small>
+                  <strong>{contextProject?.name ?? "Choose workspace"}</strong>
+                </span>
+                <ChevronDown
+                  className={`workspace-context-chevron ${workspaceMenuOpen ? "open" : ""}`}
+                  size={15}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {workspaceMenuOpen && (
+                <section
+                  className="workspace-switcher-popover"
+                  role="dialog"
+                  aria-label="Workspace switcher"
+                >
+                  <header className="workspace-switcher-header">
+                    <span
+                      className="workspace-switcher-mark"
+                      style={
+                        contextProject
+                          ? {
+                              background: `${contextProject.accent}18`,
+                              color: contextProject.accent,
+                            }
+                          : undefined
+                      }
+                    >
+                      {contextProject?.icon ?? <FolderKanban size={20} />}
+                    </span>
+                    <div>
+                      <small>Current workspace</small>
+                      <h2>{contextProject?.name ?? "Select a workspace"}</h2>
+                      <p>
+                        {contextProject
+                          ? `${contextProject.lead.name} · ${workspaceHealthLabels[contextProject.health]}`
+                          : `${projectsInContext.length} available in this portfolio`}
+                      </p>
+                    </div>
+                  </header>
+
+                  {contextProject && contextProjectCounts && (
+                    <div className="workspace-switcher-summary">
+                      <div className="workspace-switcher-stats">
+                        <span>
+                          <strong>{contextProjectCounts.open}</strong>
+                          <small>Open work</small>
+                        </span>
+                        <span>
+                          <strong>{contextProjectCounts.blocked}</strong>
+                          <small>Blocked</small>
+                        </span>
+                        <span>
+                          <strong>
+                            {formatWorkspaceDate(
+                              contextProject.nextMilestone.date,
+                            )}
+                          </strong>
+                          <small>Next milestone</small>
+                        </span>
+                      </div>
+                      <p className="workspace-switcher-milestone">
+                        {contextProject.nextMilestone.title}
+                      </p>
+                      <div className="workspace-switcher-actions">
+                        <Link
+                          href={`/app/hubs/${contextProject.slug}`}
+                          onClick={() => {
+                            setWorkspaceMenuOpen(false);
+                            setWorkspaceQuery("");
+                            setOpen(false);
+                          }}
+                        >
+                          <FolderKanban size={15} /> Open workspace
+                        </Link>
+                        <Link
+                          href="/app/team"
+                          onClick={() => {
+                            setWorkspaceMenuOpen(false);
+                            setWorkspaceQuery("");
+                            setOpen(false);
+                          }}
+                        >
+                          <Users size={15} /> People
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="workspace-switcher-search">
+                    <Search size={15} aria-hidden="true" />
+                    <input
+                      value={workspaceQuery}
+                      onChange={(event) =>
+                        setWorkspaceQuery(event.currentTarget.value)
+                      }
+                      placeholder="Find a workspace"
+                      aria-label="Find a workspace"
+                    />
+                    {workspaceQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setWorkspaceQuery("")}
+                        aria-label="Clear workspace search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="workspace-switcher-list">
+                    <header>
+                      <span>Switch workspace</span>
+                      <strong>{visibleWorkspaceProjects.length}</strong>
+                    </header>
+                    {visibleWorkspaceProjects.map((project) => {
+                      const counts = workspaceWorkCounts(project.id);
+                      const isSelected = project.id === contextProject?.id;
+
+                      return (
+                        <button
+                          type="button"
+                          className={`workspace-switcher-option ${isSelected ? "selected" : ""}`}
+                          aria-pressed={isSelected}
+                          key={project.id}
+                          onClick={() => {
+                            selectProject(project.id, project.portfolioId);
+                            setWorkspaceMenuOpen(false);
+                            setWorkspaceQuery("");
+                            setOpen(false);
+                            if (
+                              (active === "hub" || active === "portfolio") &&
+                              project.slug !== hubSlug
+                            ) {
+                              router.push(`/app/hubs/${project.slug}`);
+                            }
+                          }}
+                        >
+                          <span
+                            className="workspace-switcher-option-mark"
+                            style={{
+                              background: `${project.accent}18`,
+                              color: project.accent,
+                            }}
+                          >
+                            {project.icon}
+                          </span>
+                          <span className="workspace-switcher-option-copy">
+                            <strong>{project.name}</strong>
+                            <small>
+                              <i
+                                className={`workspace-switcher-health ${project.health}`}
+                                aria-hidden="true"
+                              />
+                              {workspaceHealthLabels[project.health]} ·{" "}
+                              {counts.open} open
+                              {counts.blocked > 0
+                                ? ` · ${counts.blocked} blocked`
+                                : ""}
+                            </small>
+                          </span>
+                          {isSelected && (
+                            <CheckCircle2
+                              className="workspace-switcher-selected"
+                              size={17}
+                              aria-label="Current workspace"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                    {visibleWorkspaceProjects.length === 0 && (
+                      <p className="workspace-switcher-empty">
+                        No workspace matches “{workspaceQuery.trim()}”.
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="workspace-switcher-create"
+                    onClick={() => {
+                      setWorkspaceMenuOpen(false);
+                      setWorkspaceQuery("");
+                      setOpen(false);
+                      window.dispatchEvent(
+                        new Event("trevv:open-workspace-creator"),
+                      );
+                      router.push("/app/hubs?create=project");
+                    }}
+                  >
+                    <span className="workspace-switcher-create-icon">
+                      <Plus size={16} />
+                    </span>
+                    <span>
+                      <strong>New workspace</strong>
+                      <small>Start with a project and its first board</small>
+                    </span>
+                  </button>
+                </section>
+              )}
+            </div>
           ) : (
             <div className="workspace-context-switcher is-static">
               <span className="workspace-context-icon portfolio">
