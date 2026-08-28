@@ -428,46 +428,71 @@ function WorkspaceChrome({
               <Command size={11} />K
             </kbd>
           </Link>
-          <div className="topbar-actions">
+          <nav className="topbar-actions" aria-label="Workspace shortcuts">
             <button
-              className="quiet-button capture-button"
+              className="quiet-button capture-button topbar-create-button"
               onClick={() => setCaptureOpen(true)}
+              aria-label="Create work"
+              title="Create work (Q)"
             >
               <Plus size={16} />
-              {copy.shell.capture}
+              <span className="topbar-create-label">Create</span>
               <kbd>Q</kbd>
             </button>
+            <Link
+              className={`topbar-tool topbar-tool-attention ${active === "attention" ? "active" : ""}`}
+              aria-label={`Attention, ${attentionCount} items`}
+              aria-current={active === "attention" ? "page" : undefined}
+              href="/app/attention"
+              title={`Attention · ${attentionCount} items`}
+            >
+              <Sparkles size={17} />
+              {attentionCount > 0 && (
+                <span className="topbar-tool-badge" aria-hidden="true">
+                  {attentionCount}
+                </span>
+              )}
+            </Link>
+            <Link
+              className={`topbar-tool topbar-tool-inbox ${active === "inbox" ? "active" : ""}`}
+              aria-label="Actionable Inbox"
+              aria-current={active === "inbox" ? "page" : undefined}
+              href="/app/inbox"
+              title="Actionable Inbox"
+            >
+              <Inbox size={17} />
+              <span className="topbar-tool-dot" aria-hidden="true" />
+            </Link>
+            <Link
+              className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
+              aria-label="Messages"
+              aria-current={active === "messages" ? "page" : undefined}
+              href="/app/messages"
+              title="Messages"
+            >
+              <MessageCircleMore size={18} />
+            </Link>
+            <Link
+              className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
+              aria-label={copy.shell.notifications}
+              aria-current={active === "notifications" ? "page" : undefined}
+              href="/app/notifications"
+              title={copy.shell.notifications}
+            >
+              <Bell size={18} />
+              <span
+                className="topbar-tool-dot notification-dot"
+                aria-hidden="true"
+              />
+            </Link>
             <button
-              className="icon-button"
+              className="topbar-tool topbar-tool-help"
               onClick={() => openLearningCenter()}
               aria-label="Open Learning Center"
               title="Learning Center"
             >
               <Lightbulb size={17} />
             </button>
-            <button
-              className="icon-button"
-              onClick={toggleLocale}
-              aria-label={messages.common.switchLanguage}
-            >
-              <Languages size={18} />
-              <span className="language-code">{locale.toUpperCase()}</span>
-            </button>
-            <button
-              className="icon-button"
-              onClick={toggleTheme}
-              aria-label={messages.common.theme}
-            >
-              {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
-            </button>
-            <Link
-              className="icon-button notification-button"
-              aria-label={copy.shell.notifications}
-              href="/app/notifications"
-            >
-              <Bell size={18} />
-              <span />
-            </Link>
             <div className="user-menu-wrap">
               <button
                 aria-expanded={userMenuOpen}
@@ -503,6 +528,16 @@ function WorkspaceChrome({
                   <button
                     role="menuitem"
                     onClick={() => {
+                      toggleLocale();
+                      setUserMenuOpen(false);
+                    }}
+                  >
+                    <Languages size={14} />
+                    Switch to {locale === "en" ? "German" : "English"}
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
                       toggleTheme();
                       setUserMenuOpen(false);
                     }}
@@ -513,7 +548,7 @@ function WorkspaceChrome({
                 </div>
               )}
             </div>
-          </div>
+          </nav>
         </header>
         {children}
       </div>

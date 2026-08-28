@@ -4597,6 +4597,86 @@
   height: 68px;
   padding-inline: 28px;
 }
+.topbar-actions {
+  gap: 3px;
+}
+.topbar-create-button {
+  min-width: 86px;
+  height: 38px;
+  margin-right: 4px;
+  color: white;
+  background: var(--fh-primary);
+  border-color: var(--fh-primary);
+  box-shadow: 0 5px 13px color-mix(in srgb, var(--fh-primary) 22%, transparent);
+}
+.topbar-create-button:hover {
+  color: white;
+  background: var(--fh-primary-strong);
+}
+.topbar-create-button kbd {
+  color: color-mix(in srgb, white 78%, transparent);
+}
+.topbar-tool {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--fh-ink-soft);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+.topbar-tool:hover {
+  color: var(--fh-ink);
+  background: var(--fh-canvas-deep);
+}
+.topbar-tool.active {
+  color: var(--fh-primary-strong);
+  background: var(--fh-primary-soft);
+}
+.topbar-tool-badge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  color: white;
+  background: var(--fh-primary);
+  border: 2px solid var(--fh-surface);
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.topbar-tool-dot {
+  position: absolute;
+  top: 7px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--fh-primary);
+  border: 1px solid var(--fh-surface);
+  border-radius: 50%;
+}
+.notification-button > .notification-dot {
+  top: 7px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--fh-danger);
+}
 .search-trigger {
   width: min(460px, 46vw);
   height: 40px;
@@ -4613,6 +4693,24 @@
 .icon-button {
   min-width: 38px;
   height: 38px;
+}
+@media (max-width: 1100px) {
+  .topbar-create-button {
+    min-width: 38px;
+    width: 38px;
+    padding: 0;
+  }
+  .topbar-create-label,
+  .topbar-create-button kbd,
+  .topbar-tool-help {
+    display: none;
+  }
+}
+@media (max-width: 380px) {
+  .topbar-tool-inbox,
+  .topbar-tool-messages {
+    display: none;
+  }
 }
 .portfolio-main {
   width: min(1560px, 100%);
