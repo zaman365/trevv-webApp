@@ -155,7 +155,6 @@ function WorkspaceChrome({
   );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
-  const [workspaceQuery, setWorkspaceQuery] = useState("");
   const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
   const [portfolioQuery, setPortfolioQuery] = useState("");
   const [portfolioCreateOpen, setPortfolioCreateOpen] = useState(false);
@@ -229,24 +228,13 @@ function WorkspaceChrome({
     (workspaceLevel === "project"
       ? projectsInContext.find((project) => project.id === projectId)
       : undefined);
-  const normalizedWorkspaceQuery = workspaceQuery.trim().toLocaleLowerCase();
-  const visibleWorkspaceProjects = projectsInContext
-    .filter((project) =>
-      [
-        project.name,
-        project.lead.name,
-        project.stage,
-        workspaceHealthLabels[project.health],
-      ]
-        .join(" ")
-        .toLocaleLowerCase()
-        .includes(normalizedWorkspaceQuery),
-    )
-    .sort((left, right) => {
+  const visibleWorkspaceProjects = [...projectsInContext].sort(
+    (left, right) => {
       if (left.id === contextProject?.id) return -1;
       if (right.id === contextProject?.id) return 1;
       return left.name.localeCompare(right.name);
-    });
+    },
+  );
   const contextProjectCounts = contextProject
     ? workspaceWorkCounts(contextProject.id)
     : undefined;
@@ -303,13 +291,11 @@ function WorkspaceChrome({
         !workspaceMenuRef.current.contains(event.target as Node)
       ) {
         setWorkspaceMenuOpen(false);
-        setWorkspaceQuery("");
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setWorkspaceMenuOpen(false);
-        setWorkspaceQuery("");
       }
     };
 
@@ -616,11 +602,6 @@ function WorkspaceChrome({
                     <div>
                       <small>Current workspace</small>
                       <h2>{contextProject?.name ?? "Select a workspace"}</h2>
-                      <p>
-                        {contextProject
-                          ? `${contextProject.lead.name} · ${workspaceHealthLabels[contextProject.health]}`
-                          : `${projectsInContext.length} available in this portfolio`}
-                      </p>
                     </div>
                   </header>
 
@@ -652,7 +633,6 @@ function WorkspaceChrome({
                           href={`/app/hubs/${contextProject.slug}`}
                           onClick={() => {
                             setWorkspaceMenuOpen(false);
-                            setWorkspaceQuery("");
                             setOpen(false);
                           }}
                         >
@@ -662,7 +642,6 @@ function WorkspaceChrome({
                           href="/app/team"
                           onClick={() => {
                             setWorkspaceMenuOpen(false);
-                            setWorkspaceQuery("");
                             setOpen(false);
                           }}
                         >
@@ -671,27 +650,6 @@ function WorkspaceChrome({
                       </div>
                     </div>
                   )}
-
-                  <div className="workspace-switcher-search">
-                    <Search size={15} aria-hidden="true" />
-                    <input
-                      value={workspaceQuery}
-                      onChange={(event) =>
-                        setWorkspaceQuery(event.currentTarget.value)
-                      }
-                      placeholder="Find a workspace"
-                      aria-label="Find a workspace"
-                    />
-                    {workspaceQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setWorkspaceQuery("")}
-                        aria-label="Clear workspace search"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
 
                   <div className="workspace-switcher-list">
                     <header>
@@ -711,7 +669,6 @@ function WorkspaceChrome({
                           onClick={() => {
                             selectProject(project.id, project.portfolioId);
                             setWorkspaceMenuOpen(false);
-                            setWorkspaceQuery("");
                             setOpen(false);
                             if (active !== "hub" || project.slug !== hubSlug) {
                               router.push(`/app/hubs/${project.slug}`);
@@ -751,11 +708,6 @@ function WorkspaceChrome({
                         </button>
                       );
                     })}
-                    {visibleWorkspaceProjects.length === 0 && (
-                      <p className="workspace-switcher-empty">
-                        No workspace matches “{workspaceQuery.trim()}”.
-                      </p>
-                    )}
                   </div>
 
                   <button
@@ -763,7 +715,6 @@ function WorkspaceChrome({
                     className="workspace-switcher-create"
                     onClick={() => {
                       setWorkspaceMenuOpen(false);
-                      setWorkspaceQuery("");
                       setOpen(false);
                       window.dispatchEvent(
                         new Event("trevv:open-workspace-creator"),
@@ -776,7 +727,6 @@ function WorkspaceChrome({
                     </span>
                     <span>
                       <strong>New workspace</strong>
-                      <small>Start with a project and its first board</small>
                     </span>
                   </button>
                 </section>

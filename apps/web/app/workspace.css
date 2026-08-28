@@ -4713,14 +4713,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.workspace-switcher-header p {
-  margin: 3px 0 0;
-  overflow: hidden;
-  color: var(--fh-muted);
-  font-size: var(--fh-text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .workspace-switcher-summary {
   margin: 0 12px 12px;
   padding: 10px;
@@ -5000,11 +4992,6 @@
 }
 .workspace-switcher-create strong {
   font-size: var(--fh-text-sm);
-}
-.workspace-switcher-create small {
-  margin-top: 1px;
-  color: var(--fh-muted);
-  font-size: var(--fh-text-2xs);
 }
 .workspace-context-row > .mobile-only {
   flex: 0 0 auto;
