@@ -42,7 +42,7 @@ test("operator starts in Home and opens a project from Portfolio", async ({
   // The card is a div with a stretched link, so the whole card stays
   // clickable without nesting its overflow button inside an anchor.
   const hubLink = page.locator(
-    '.project-tile .tile-link[href="/app/hubs/northstar-apparel"]',
+    '.project-tile .tile-link[href="/app/workspaces/northstar-apparel"]',
   );
   await expect(hubLink).toBeVisible();
   await hubLink.click();
@@ -58,7 +58,7 @@ test("Change Radar opens the project update context", async ({ page }) => {
   });
   await expect(change).toBeVisible();
   await change.click();
-  await expect(page).toHaveURL(/\/app\/hubs\/northstar-apparel#updates$/);
+  await expect(page).toHaveURL(/\/app\/workspaces\/northstar-apparel#updates$/);
   await expect(
     page.getByRole("heading", { name: /latest weekly update/i }),
   ).toBeVisible();
@@ -168,7 +168,7 @@ test("a new project creates a working project and board", async ({ page }) => {
 test("team member updates a board item inline and uses the detail panel", async ({
   page,
 }) => {
-  await page.goto("/app/hubs/northstar-apparel/boards/b-northstar-launch");
+  await page.goto("/app/workspaces/northstar-apparel/boards/b-northstar-launch");
   await expect(
     page.getByRole("heading", { name: "SS26 Launch" }),
   ).toBeVisible();
@@ -193,7 +193,7 @@ test("team member updates a board item inline and uses the detail panel", async 
 test("board controls add, filter, and expose item editing", async ({
   page,
 }) => {
-  await page.goto("/app/hubs/northstar-apparel/boards/b-northstar-launch");
+  await page.goto("/app/workspaces/northstar-apparel/boards/b-northstar-launch");
   const initiallySelected = page.locator(".item-panel");
   if (await initiallySelected.isVisible()) {
     await initiallySelected.getByLabel("Close").click();
@@ -302,7 +302,7 @@ test("import presets require a dry-run preview", async ({ page }) => {
 });
 
 test("stakeholder view exposes only selected information", async ({ page }) => {
-  await page.goto("/app/hubs/localreach/stakeholder");
+  await page.goto("/app/workspaces/localreach/stakeholder");
   await expect(page.getByRole("heading", { name: "LocalReach" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Selected work" }),

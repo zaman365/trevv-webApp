@@ -29,9 +29,9 @@ const routes = [
   "/app/dashboard",
   "/app/attention",
   "/app/waiting",
-  "/app/hubs/northstar-apparel",
-  "/app/hubs/northstar-apparel/boards/b-northstar-launch",
-  "/app/hubs/localreach/stakeholder",
+  "/app/workspaces/northstar-apparel",
+  "/app/workspaces/northstar-apparel/boards/b-northstar-launch",
+  "/app/workspaces/localreach/stakeholder",
   "/app/decisions",
   "/app/messages",
   "/app/blueprints",
@@ -53,7 +53,7 @@ for (const route of routes) {
 test("item detail panel has no serious automated accessibility violations", async ({
   page,
 }) => {
-  await page.goto("/app/hubs/northstar-apparel/boards/b-northstar-launch");
+  await page.goto("/app/workspaces/northstar-apparel/boards/b-northstar-launch");
   const panel = page.getByRole("complementary", {
     name: "Choose storefront launch offer",
   });
