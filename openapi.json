@@ -37,7 +37,11 @@
       "name": "Commercial"
     },
     {
-      "name": "Hubs"
+      "name": "Workspaces"
+    },
+    {
+      "name": "Hubs",
+      "description": "Legacy Workspace route aliases"
     },
     {
       "name": "Items"
@@ -55,7 +59,9 @@
   "paths": {
     "/api/v1/health": {
       "get": {
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "operationId": "health",
         "responses": {
           "200": {
@@ -66,7 +72,9 @@
     },
     "/api/v1/session": {
       "get": {
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "operationId": "getSession",
         "responses": {
           "200": {
@@ -80,7 +88,9 @@
     },
     "/api/v1/portfolio": {
       "get": {
-        "tags": ["Portfolio"],
+        "tags": [
+          "Portfolio"
+        ],
         "operationId": "getPortfolio",
         "responses": {
           "200": {
@@ -94,7 +104,9 @@
     },
     "/api/v1/portfolios": {
       "get": {
-        "tags": ["Portfolio"],
+        "tags": [
+          "Portfolio"
+        ],
         "operationId": "listPortfolios",
         "responses": {
           "200": {
@@ -105,12 +117,22 @@
     },
     "/api/v1/attention": {
       "get": {
-        "tags": ["Attention"],
+        "tags": [
+          "Attention"
+        ],
         "operationId": "listAttentionSignals",
         "parameters": [
           {
             "name": "portfolioId",
             "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "description": "Limit signals to one accessible Workspace.",
             "schema": {
               "type": "string"
             }
@@ -125,7 +147,9 @@
     },
     "/api/v1/attention/{id}": {
       "patch": {
-        "tags": ["Attention"],
+        "tags": [
+          "Attention"
+        ],
         "operationId": "actOnAttentionSignal",
         "parameters": [
           {
@@ -144,7 +168,9 @@
     },
     "/api/v1/waiting": {
       "get": {
-        "tags": ["Waiting"],
+        "tags": [
+          "Waiting"
+        ],
         "operationId": "listWaitingStates",
         "responses": {
           "200": {
@@ -155,7 +181,9 @@
     },
     "/api/v1/waiting/{id}": {
       "patch": {
-        "tags": ["Waiting"],
+        "tags": [
+          "Waiting"
+        ],
         "operationId": "updateWaitingState",
         "parameters": [
           {
@@ -171,7 +199,9 @@
     },
     "/api/v1/change-radar": {
       "get": {
-        "tags": ["Management Memory"],
+        "tags": [
+          "Management Memory"
+        ],
         "operationId": "getChangeRadar",
         "responses": {
           "200": {
@@ -182,7 +212,9 @@
     },
     "/api/v1/management-memory": {
       "get": {
-        "tags": ["Management Memory"],
+        "tags": [
+          "Management Memory"
+        ],
         "operationId": "getManagementMemory",
         "responses": {
           "200": {
@@ -193,7 +225,9 @@
     },
     "/api/v1/insights": {
       "get": {
-        "tags": ["Insights"],
+        "tags": [
+          "Insights"
+        ],
         "operationId": "listInsights",
         "responses": {
           "200": {
@@ -204,7 +238,9 @@
     },
     "/api/v1/blueprints": {
       "get": {
-        "tags": ["Blueprints"],
+        "tags": [
+          "Blueprints"
+        ],
         "operationId": "listBlueprints",
         "responses": {
           "200": {
@@ -215,7 +251,9 @@
     },
     "/api/v1/team/pressure": {
       "get": {
-        "tags": ["Attention"],
+        "tags": [
+          "Attention"
+        ],
         "operationId": "getTeamPressure",
         "responses": {
           "200": {
@@ -226,7 +264,9 @@
     },
     "/api/v1/entitlements": {
       "get": {
-        "tags": ["Commercial"],
+        "tags": [
+          "Commercial"
+        ],
         "operationId": "getEntitlements",
         "responses": {
           "200": {
@@ -237,7 +277,9 @@
     },
     "/api/v1/import/preview": {
       "post": {
-        "tags": ["Commercial"],
+        "tags": [
+          "Commercial"
+        ],
         "operationId": "previewImport",
         "responses": {
           "200": {
@@ -248,8 +290,11 @@
     },
     "/api/v1/hubs": {
       "get": {
-        "tags": ["Hubs"],
+        "tags": [
+          "Hubs"
+        ],
         "operationId": "listHubs",
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Accessible Hubs"
@@ -259,8 +304,11 @@
     },
     "/api/v1/hubs/{slug}": {
       "get": {
-        "tags": ["Hubs"],
+        "tags": [
+          "Hubs"
+        ],
         "operationId": "getHub",
+        "deprecated": true,
         "parameters": [
           {
             "$ref": "#/components/parameters/HubSlug"
@@ -276,9 +324,45 @@
         }
       }
     },
+    "/api/v1/workspaces": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "listWorkspaces",
+        "responses": {
+          "200": {
+            "description": "Accessible Workspaces"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{slug}": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "getWorkspace",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HubSlug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace overview and accessible work"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/api/v1/items": {
       "get": {
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "operationId": "listItems",
         "parameters": [
           {
@@ -290,6 +374,13 @@
           },
           {
             "name": "hubId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceId",
             "in": "query",
             "schema": {
               "type": "string"
@@ -320,7 +411,9 @@
         }
       },
       "post": {
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "operationId": "createItem",
         "parameters": [
           {
@@ -349,7 +442,9 @@
     },
     "/api/v1/items/{id}": {
       "patch": {
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "operationId": "updateItem",
         "parameters": [
           {
@@ -391,7 +486,9 @@
     },
     "/api/v1/search": {
       "get": {
-        "tags": ["Search"],
+        "tags": [
+          "Search"
+        ],
         "operationId": "search",
         "parameters": [
           {
@@ -414,7 +511,9 @@
     },
     "/api/v1/export/organization.json": {
       "get": {
-        "tags": ["Exports"],
+        "tags": [
+          "Exports"
+        ],
         "operationId": "exportOrganization",
         "responses": {
           "200": {
@@ -428,7 +527,9 @@
     },
     "/api/v1/export/board/{boardId}.csv": {
       "get": {
-        "tags": ["Exports"],
+        "tags": [
+          "Exports"
+        ],
         "operationId": "exportBoardCsv",
         "parameters": [
           {
@@ -455,7 +556,9 @@
     },
     "/api/v1/events": {
       "get": {
-        "tags": ["Events"],
+        "tags": [
+          "Events"
+        ],
         "operationId": "events",
         "responses": {
           "200": {
@@ -499,7 +602,14 @@
     "schemas": {
       "WorkItemInput": {
         "type": "object",
-        "required": ["hubId", "boardId", "title", "type", "priority", "status"],
+        "required": [
+          "hubId",
+          "boardId",
+          "title",
+          "type",
+          "priority",
+          "status"
+        ],
         "additionalProperties": false,
         "properties": {
           "hubId": {
@@ -526,11 +636,23 @@
           },
           "priority": {
             "type": "string",
-            "enum": ["urgent", "high", "normal", "low", "none"]
+            "enum": [
+              "urgent",
+              "high",
+              "normal",
+              "low",
+              "none"
+            ]
           },
           "status": {
             "type": "string",
-            "enum": ["not_started", "working", "blocked", "review", "done"]
+            "enum": [
+              "not_started",
+              "working",
+              "blocked",
+              "review",
+              "done"
+            ]
           },
           "dueDate": {
             "type": "string",
@@ -543,7 +665,11 @@
       },
       "HubInput": {
         "type": "object",
-        "required": ["portfolioId", "name", "type"],
+        "required": [
+          "portfolioId",
+          "name",
+          "type"
+        ],
         "properties": {
           "portfolioId": {
             "type": "string"
@@ -586,11 +712,17 @@
       },
       "Error": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "object",
-            "required": ["code", "message", "requestId"],
+            "required": [
+              "code",
+              "message",
+              "requestId"
+            ],
             "properties": {
               "code": {
                 "type": "string"
