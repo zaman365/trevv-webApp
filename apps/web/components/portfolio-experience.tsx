@@ -168,18 +168,29 @@ function PortfolioMain() {
           </span>
         }
         selector={
-          <label className="hero-select">
+          <label className="hero-select portfolio-hero-control">
             <span>{vocab.groupOne}</span>
-            <select
-              value={portfolioId}
-              onChange={(event) => setPortfolioId(event.target.value)}
-            >
-              {portfolios.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <div className="portfolio-hero-select-shell">
+              <span className="portfolio-hero-select-mark" aria-hidden="true">
+                {portfolioVisual?.mark ?? "P"}
+              </span>
+              <select
+                aria-label="Choose portfolio"
+                value={portfolioId}
+                onChange={(event) => setPortfolioId(event.target.value)}
+              >
+                {portfolios.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="portfolio-hero-select-chevron"
+                size={16}
+                aria-hidden="true"
+              />
+            </div>
           </label>
         }
         stats={

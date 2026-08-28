@@ -127,6 +127,79 @@
   font-size: var(--fh-text-sm);
   font-weight: var(--fh-weight-strong);
 }
+.portfolio-hero-control {
+  min-width: 226px;
+}
+.portfolio-hero-select-shell {
+  width: 240px;
+  max-width: 100%;
+  height: 46px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px 0 7px;
+  color: var(--fh-ink);
+  background: var(--fh-surface);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--brand, var(--fh-primary)) 30%,
+      var(--fh-border-strong)
+    );
+  border-radius: 12px;
+  box-shadow: var(--fh-shadow-sm);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+.portfolio-hero-select-shell:hover {
+  background: var(--fh-surface-subtle);
+  border-color: color-mix(
+    in srgb,
+    var(--brand, var(--fh-primary)) 52%,
+    var(--fh-border-strong)
+  );
+}
+.portfolio-hero-select-shell:focus-within {
+  border-color: var(--brand, var(--fh-primary));
+  box-shadow: var(--fh-focus);
+}
+.portfolio-hero-select-mark {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--brand, var(--fh-primary-strong));
+  background: color-mix(
+    in srgb,
+    var(--brand, var(--fh-primary)) 12%,
+    var(--fh-surface)
+  );
+  border-radius: 9px;
+  font-size: var(--fh-text-sm);
+  font-weight: var(--fh-weight-heavy);
+}
+.portfolio-hero-control .portfolio-hero-select-shell select {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  cursor: pointer;
+}
+.portfolio-hero-select-chevron {
+  align-self: center;
+  justify-self: end;
+  color: var(--fh-muted);
+  pointer-events: none;
+}
 
 /* Home keeps the operating controls compact so the greeting remains primary. */
 .home-main .hero-actions {
@@ -956,6 +1029,10 @@
   }
   .hero-select {
     flex: 1;
+  }
+  .portfolio-hero-control,
+  .portfolio-hero-select-shell {
+    width: 100%;
   }
   .home-main .hero-actions {
     display: grid;
