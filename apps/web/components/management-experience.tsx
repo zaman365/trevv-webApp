@@ -8,8 +8,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  Clock3,
-  FileQuestion,
   FileText,
   GitBranch,
   Grid2X2,
@@ -25,14 +23,11 @@ import {
   X,
 } from "lucide-react";
 import {
-  changesSinceCheckpoint,
   demoBlueprintInstances,
   demoBlueprints,
   demoBlueprintVersions,
-  demoChangeCheckpoint,
   demoHubSnapshots,
   demoHubs,
-  demoMeaningfulChanges,
   demoPortfolios,
   demoReviewRituals,
   demoWaitingStates,
@@ -44,10 +39,6 @@ import {
 } from "@founderhq/core";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { HealthBar, PageHero, Panel, ProgressRing, StatTile } from "./ui-kit";
-import { ProjectTile } from "./project-tile";
-import { allPortfolioSummaries, summarizePortfolio } from "@/lib/portfolios";
-import { vocabularyFor } from "@/lib/terminology";
 import { WorkspaceFrame } from "./workspace-frame";
 import { useWorkspace } from "@/lib/workspace-context";
 import { type GroupedSignal } from "@/lib/attention";
@@ -57,334 +48,11 @@ import { TeamWorkflow } from "./team-workflow";
 import { AttentionCenter } from "./attention-center";
 import { createCustomHub, useCustomHubs } from "@/lib/custom-hubs";
 import {
-  portfolioVisualFor,
   useCustomPortfolios,
 } from "@/lib/custom-portfolios";
 import { workspaceHref } from "@/lib/workspace-routes";
 
 const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
-
-export function HomeExperience() {
-  return (
-    <WorkspaceFrame active="home">
-      <HomeMain />
-    </WorkspaceFrame>
-  );
-}
-
-function HomeMain() {
-  const { scope, copy, portfolioId, setPortfolioId } = useWorkspace();
-  const vocab = vocabularyFor();
-  const customPortfolioRecords = useCustomPortfolios();
-  const portfolios = [
-    ...allPortfolioSummaries(),
-    ...customPortfolioRecords.map((record) =>
-      summarizePortfolio(record.portfolio),
-    ),
-  ];
-  const customHubs = useCustomHubs();
-  const active = portfolios.find((p) => p.portfolio.id === portfolioId);
-  const activePortfolioVisual = active
-    ? portfolioVisualFor(active.portfolio, customPortfolioRecords)
-    : undefined;
-  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
-  const changes = changesSinceCheckpoint(
-    demoMeaningfulChanges,
-    demoChangeCheckpoint,
-  ).filter((change) => scopedHubIds.has(change.hubId));
-  const topNeedsYou = scope.attention.slice(0, 4);
-  const decisions = scope.items.filter(
-    (item) =>
-      item.type === "decision" &&
-      item.status !== "done" &&
-      item.assignee === "Mohammed Zaman",
-  );
-  const portfolioProjects = [
-    ...(active?.projects ?? []),
-    ...customHubs
-      .filter((record) => record.hub.portfolioId === portfolioId)
-      .map(({ hub }) => ({
-        hub,
-        rollup: {
-          open: 0,
-          overdue: 0,
-          blocked: 0,
-          decisions: 0,
-          approvals: 0,
-          score: 0,
-        },
-        progress: null,
-      })),
-  ];
-  // The handful of projects actually asking for something right now.
-  const needsAttention = portfolioProjects
-    .filter((project) => scopedHubIds.has(project.hub.id))
-    .filter(
-      (project) =>
-        project.hub.health !== "on_track" && project.hub.health !== "parked",
-    )
-    .slice(0, 3);
-  const projectCount = portfolioProjects.length;
-  const portfolioName = active?.portfolio.name ?? "this portfolio";
-
-  return (
-    <main className="trevv-main home-main">
-      <PageHero
-        eyebrow={`Portfolio overview · Monday, 24 August`}
-        title="Good morning, Mohammed"
-        subtitle={`Across all ${projectCount} ${projectCount === 1 ? "project" : "projects"} in ${portfolioName}, ${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you. Everything else can keep moving.`}
-        {...(activePortfolioVisual
-          ? {
-              accent: activePortfolioVisual.accent,
-              monogram: activePortfolioVisual.mark,
-            }
-          : {})}
-        hintId="welcome-to-trevv"
-        badge={
-          <span className="scope-view-badge portfolio-scope-badge">
-            <Grid2X2 size={13} />
-            Portfolio view
-          </span>
-        }
-        stats={
-          <>
-            <StatTile
-              icon={Sparkles}
-              value={scope.attentionCount}
-              label="Needs you"
-              note="Ranked by impact"
-              tone="danger"
-              href="/app/portfolio"
-            />
-            <StatTile
-              icon={FileQuestion}
-              value={decisions.length}
-              label="Decisions"
-              note="Waiting on your call"
-              tone="primary"
-              href="/app/portfolio"
-            />
-            <StatTile
-              icon={Hourglass}
-              value={scope.waiting.length}
-              label="Waiting"
-              note="On someone else"
-              tone="warning"
-              href="/app/portfolio"
-            />
-            <StatTile
-              icon={CalendarClock}
-              value={2}
-              label="Reviews due"
-              note="Weekly and monthly"
-              href="/app/portfolio"
-            />
-          </>
-        }
-      />
-
-      <Panel
-        icon={Grid2X2}
-        title={`${portfolioName} projects`}
-        subtitle={`Portfolio-level health across all ${projectCount} ${projectCount === 1 ? "project" : "projects"}. Select a workspace above or open a project below to enter its focused project view.`}
-        href="/app/portfolio"
-        linkLabel="Open full portfolio"
-      >
-        <div className="project-strip home-project-overview">
-          {portfolioProjects.map((project) => (
-            <ProjectTile
-              key={project.hub.id}
-              {...project}
-              copy={copy}
-              compact
-            />
-          ))}
-        </div>
-      </Panel>
-
-      <Panel
-        icon={Grid2X2}
-        title={`Your ${vocab.groupMany.toLowerCase()}`}
-        subtitle={`Choose which ${vocab.groupOne.toLowerCase()} supplies the project overview, attention totals, Today list, and Change Radar below.`}
-        href="/app/portfolio"
-        linkLabel="Open portfolio report"
-      >
-        <div className="portfolio-cards">
-          {portfolios.map((summary) => {
-            const visual = portfolioVisualFor(
-              summary.portfolio,
-              customPortfolioRecords,
-            );
-            const customCount = customHubs.filter(
-              (record) => record.hub.portfolioId === summary.portfolio.id,
-            ).length;
-            const count = summary.count + customCount;
-            return (
-              <button
-                key={summary.portfolio.id}
-                className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
-                aria-pressed={summary.portfolio.id === portfolioId}
-                onClick={() => setPortfolioId(summary.portfolio.id)}
-              >
-                <header>
-                  <span
-                    className="portfolio-card-logo"
-                    style={{
-                      background: `${visual.accent}18`,
-                      color: visual.accent,
-                    }}
-                    aria-hidden="true"
-                  >
-                    {visual.mark}
-                  </span>
-                  <div>
-                    <strong>{summary.portfolio.name}</strong>
-                    <span>
-                      {count}{" "}
-                      {count === 1
-                        ? vocab.one.toLowerCase()
-                        : vocab.many.toLowerCase()}
-                    </span>
-                  </div>
-                  {summary.progress !== null && (
-                    <ProgressRing
-                      value={summary.progress}
-                      size={44}
-                      label={`${summary.portfolio.name} progress`}
-                    />
-                  )}
-                </header>
-                <HealthBar
-                  slices={summary.health.map((slice) =>
-                    slice.key === "on_track"
-                      ? { ...slice, count: slice.count + customCount }
-                      : slice,
-                  )}
-                />
-                <footer>
-                  <span className={summary.attentionCount ? "is-live" : ""}>
-                    <b>{summary.attentionCount}</b> need you
-                  </span>
-                  <span className={summary.overdue ? "is-live" : ""}>
-                    <b>{summary.overdue}</b> overdue
-                  </span>
-                  <span className={summary.blocked ? "is-live" : ""}>
-                    <b>{summary.blocked}</b> blocked
-                  </span>
-                </footer>
-              </button>
-            );
-          })}
-        </div>
-      </Panel>
-
-      {needsAttention.length > 0 && (
-        <Panel
-          icon={AlertTriangle}
-          title={`${vocab.many} that need you`}
-          subtitle={`In ${active?.portfolio.name ?? "this portfolio"}, worst first.`}
-          href="/app/portfolio"
-        >
-          <div className="project-strip">
-            {needsAttention.map((project) => (
-              <ProjectTile
-                key={project.hub.id}
-                {...project}
-                copy={copy}
-                compact
-              />
-            ))}
-          </div>
-        </Panel>
-      )}
-
-      <div className="home-columns">
-        <Panel
-          icon={Sparkles}
-          title="Needs You"
-          subtitle={`Top ${topNeedsYou.length} of ${scope.attentionCount}, ranked by impact, urgency, and your responsibility.`}
-          href="/app/portfolio"
-        >
-          <div className="attention-list compact">
-            {topNeedsYou.map((group) => (
-              <AttentionRow key={group.id} group={group} />
-            ))}
-          </div>
-        </Panel>
-        <Panel
-          icon={Clock3}
-          title="Today"
-          subtitle="The commitments closest to now."
-        >
-          <div className="today-list">
-            {scope.items
-              .filter((item) => item.status !== "done")
-              .slice(0, 5)
-              .map((item) => (
-                <Link
-                  key={item.id}
-                  href={`${workspaceHref(hubFor(item.hubId)!.slug)}/boards/${item.boardId}`}
-                >
-                  <span className={`priority-dot ${item.priority}`} />
-                  <div>
-                    <strong>{item.title}</strong>
-                    <small>
-                      {hubFor(item.hubId)?.name} · {item.dueDate ?? "No date"}
-                    </small>
-                  </div>
-                  <ArrowRight size={14} />
-                </Link>
-              ))}
-          </div>
-        </Panel>
-      </div>
-
-      <Panel
-        icon={RefreshCw}
-        title="Change Radar"
-        subtitle="Meaningful movement since your last visit — routine activity is filtered out."
-        wide
-      >
-        <div className="change-groups">
-          {[...new Set(changes.map((change) => change.hubId))].map((hubId) => {
-            const hub = hubFor(hubId);
-            const hubChanges = changes.filter(
-              (change) => change.hubId === hubId,
-            );
-            if (!hub) return null;
-            return (
-              <Link
-                className="change-group-card"
-                href={workspaceHref(hub.slug, undefined, "updates")}
-                aria-label={`Open ${hub.name} and review ${hubChanges.length} meaningful ${hubChanges.length === 1 ? "change" : "changes"}`}
-                key={hubId}
-              >
-                <article>
-                  <header>
-                    <HubMark hubId={hubId} />
-                    <div>
-                      <strong>{hub.name}</strong>
-                      <small>
-                        {hubChanges.length} meaningful{" "}
-                        {hubChanges.length === 1 ? "change" : "changes"}
-                      </small>
-                    </div>
-                    <ArrowRight className="change-group-arrow" size={15} />
-                  </header>
-                  <ul>
-                    {hubChanges.map((change) => (
-                      <li key={change.id}>{change.summary}</li>
-                    ))}
-                  </ul>
-                </article>
-              </Link>
-            );
-          })}
-        </div>
-      </Panel>
-    </main>
-  );
-}
 
 export function AttentionExperience({
   workspaceSlug,
@@ -2163,7 +1831,7 @@ function PanelHeading({
   );
 }
 
-function HubMark({
+export function HubMark({
   hubId,
   fallback = "H",
   accent,
@@ -2181,7 +1849,7 @@ function HubMark({
   );
 }
 
-function AttentionRow({ group }: { group: GroupedSignal }) {
+export function AttentionRow({ group }: { group: GroupedSignal }) {
   return (
     <Link
       className="attention-row"

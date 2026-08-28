@@ -7,13 +7,22 @@ import {
   ChevronDown,
   CircleDashed,
   ClipboardCheck,
+  Clock3,
   FileQuestion,
   Grid2X2,
+  RefreshCw,
   Sparkles,
   Users,
   X,
 } from "lucide-react";
-import { demoPortfolios, type HubHealth } from "@founderhq/core";
+import {
+  changesSinceCheckpoint,
+  demoChangeCheckpoint,
+  demoHubs,
+  demoMeaningfulChanges,
+  demoPortfolios,
+  type HubHealth,
+} from "@founderhq/core";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { SIGNAL_TONES, type SignalTone } from "@/lib/attention";
@@ -21,6 +30,7 @@ import { summarizePortfolio } from "@/lib/portfolios";
 import { vocabularyFor } from "@/lib/terminology";
 import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceFrame } from "./workspace-frame";
+import { AttentionRow, HubMark } from "./management-experience";
 import { ProjectTile } from "./project-tile";
 import { HealthBar, PageHero, Panel, StatTile } from "./ui-kit";
 import { useCustomHubs } from "@/lib/custom-hubs";
@@ -29,6 +39,8 @@ import {
   useCustomPortfolios,
 } from "@/lib/custom-portfolios";
 import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
+
+const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
 
 type PortfolioDetailKind =
   | "attention"
@@ -58,6 +70,18 @@ function PortfolioMain() {
   const customHubs = useCustomHubs().filter(
     (record) => record.hub.portfolioId === portfolioId,
   );
+  // Personal roll-ups that used to live on Home. They are inherently
+  // cross-workspace, so the portfolio is where they belong; the scoped
+  // equivalents stay in each workspace's Attention, My Work, and Updates.
+  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
+  const meaningfulChanges = changesSinceCheckpoint(
+    demoMeaningfulChanges,
+    demoChangeCheckpoint,
+  ).filter((change) => scopedHubIds.has(change.hubId));
+  const topNeedsYou = scope.attention.slice(0, 4);
+  const todayItems = scope.items
+    .filter((item) => item.status !== "done")
+    .slice(0, 5);
 
   const portfolios = [
     ...demoPortfolios,
@@ -361,6 +385,89 @@ function PortfolioMain() {
             <span className="live-dot" />
             {copy.portfolio.dataNote}
           </span>
+        </div>
+      </Panel>
+
+      <div className="home-columns">
+        <Panel
+          icon={Sparkles}
+          title="Needs You"
+          subtitle={`Top ${topNeedsYou.length} of ${scope.attentionCount}, ranked by impact, urgency, and your responsibility.`}
+        >
+          <div className="attention-list compact">
+            {topNeedsYou.map((group) => (
+              <AttentionRow key={group.id} group={group} />
+            ))}
+          </div>
+        </Panel>
+        <Panel
+          icon={Clock3}
+          title="Today"
+          subtitle="The commitments closest to now."
+        >
+          <div className="today-list">
+            {todayItems.map((item) => (
+              <Link
+                key={item.id}
+                href={`${workspaceHref(hubFor(item.hubId)!.slug)}/boards/${item.boardId}`}
+              >
+                <span className={`priority-dot ${item.priority}`} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {hubFor(item.hubId)?.name} · {item.dueDate ?? "No date"}
+                  </small>
+                </div>
+                <ArrowRight size={14} />
+              </Link>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel
+        icon={RefreshCw}
+        title="Change Radar"
+        subtitle="Meaningful movement since your last visit — routine activity is filtered out."
+        wide
+      >
+        <div className="change-groups">
+          {[...new Set(meaningfulChanges.map((change) => change.hubId))].map(
+            (hubId) => {
+              const hub = hubFor(hubId);
+              const hubChanges = meaningfulChanges.filter(
+                (change) => change.hubId === hubId,
+              );
+              if (!hub) return null;
+              return (
+                <Link
+                  className="change-group-card"
+                  href={workspaceHref(hub.slug, undefined, "updates")}
+                  aria-label={`Open ${hub.name} and review ${hubChanges.length} meaningful ${hubChanges.length === 1 ? "change" : "changes"}`}
+                  key={hubId}
+                >
+                  <article>
+                    <header>
+                      <HubMark hubId={hubId} />
+                      <div>
+                        <strong>{hub.name}</strong>
+                        <small>
+                          {hubChanges.length} meaningful{" "}
+                          {hubChanges.length === 1 ? "change" : "changes"}
+                        </small>
+                      </div>
+                      <ArrowRight className="change-group-arrow" size={15} />
+                    </header>
+                    <ul>
+                      {hubChanges.map((change) => (
+                        <li key={change.id}>{change.summary}</li>
+                      ))}
+                    </ul>
+                  </article>
+                </Link>
+              );
+            },
+          )}
         </div>
       </Panel>
 
