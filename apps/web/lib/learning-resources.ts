@@ -60,7 +60,9 @@ export const learningResources: LearningResource[] = [
       "Work groups decisions, approvals, ideas, reviews, and dependencies.",
       "People and System contain team, Blueprints, learning, and settings.",
     ],
-    tips: ["Press ⌘K from anywhere to move directly to search."],
+    tips: [
+      "Press / from anywhere outside a text field to move directly to search.",
+    ],
     keywords: ["sidebar", "navigation", "menu", "mobile", "topbar"],
   },
   {
@@ -91,11 +93,11 @@ export const learningResources: LearningResource[] = [
     body: "TREVV keeps shortcuts deliberately small. The visible key hints in the top bar are the authoritative list for the current screen.",
     duration: "1 min",
     steps: [
-      "Use ⌘K for search.",
+      "Use / for search.",
       "Use Q for Quick capture.",
       "Use Escape to close dialogs and side panels.",
     ],
-    tips: ["On Windows, use Ctrl wherever TREVV shows ⌘."],
+    tips: ["Search shortcuts stay inactive while you are typing in a field."],
     keywords: ["keyboard", "shortcut", "command", "search", "escape"],
   },
   {

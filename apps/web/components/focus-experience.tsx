@@ -372,11 +372,13 @@ function SearchView({
         <Search size={19} />
         <input
           autoFocus
+          data-trevv-search-input
+          aria-keyshortcuts="/"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search work, Workspaces, comments and resources…"
         />
-        <kbd>⌘ K</kbd>
+        <kbd title="Press slash to focus search">/</kbd>
       </div>
       <div className="search-chips">
         {chips.map(([value, label]) => (

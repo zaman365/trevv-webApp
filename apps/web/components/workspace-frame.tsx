@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
-  Command,
   FileQuestion,
   FolderKanban,
   Grid2X2,
@@ -268,6 +267,25 @@ function WorkspaceChrome({
       }
       if (
         contextProject &&
+        event.key === "/" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !isTyping
+      ) {
+        event.preventDefault();
+        const searchInput = document.querySelector<HTMLInputElement>(
+          "[data-trevv-search-input]",
+        );
+
+        if (searchInput) {
+          searchInput.focus();
+        } else {
+          router.push(workspaceHref(contextProject.slug, "search"));
+        }
+      }
+      if (
+        contextProject &&
         event.key.toLocaleLowerCase() === "q" &&
         !event.metaKey &&
         !event.ctrlKey &&
@@ -280,7 +298,7 @@ function WorkspaceChrome({
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [captureOpen, contextProject, setCaptureOpen]);
+  }, [captureOpen, contextProject, router, setCaptureOpen]);
 
   useEffect(() => {
     if (!workspaceMenuOpen) return;
@@ -860,12 +878,14 @@ function WorkspaceChrome({
             <Menu size={20} />
           </button>
           {contextProject && (
-            <Link href={scopedHref("search")} className="search-trigger">
+            <Link
+              href={scopedHref("search")}
+              className="search-trigger"
+              aria-keyshortcuts="/"
+            >
               <Search size={17} />
               <span>{copy.shell.search}</span>
-              <kbd>
-                <Command size={11} />K
-              </kbd>
+              <kbd title="Press slash to search">/</kbd>
             </Link>
           )}
           <nav className="topbar-actions" aria-label="Workspace shortcuts">
