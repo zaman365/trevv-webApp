@@ -999,10 +999,18 @@ export function HubsExperience() {
     (hub) => hub.portfolioId === portfolioId,
   );
   useEffect(() => {
+    let frame = 0;
+    const openCreator = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => setCreateOpen(true));
+    };
+    window.addEventListener("trevv:open-workspace-creator", openCreator);
     const params = new URLSearchParams(window.location.search);
-    if (params.get("create") !== "project") return;
-    const frame = window.requestAnimationFrame(() => setCreateOpen(true));
-    return () => window.cancelAnimationFrame(frame);
+    if (params.get("create") === "project") openCreator();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("trevv:open-workspace-creator", openCreator);
+    };
   }, []);
   const closeCreate = () => {
     setCreateOpen(false);

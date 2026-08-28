@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Command,
   FileQuestion,
+  FolderKanban,
   Grid2X2,
   House,
   Hourglass,
@@ -171,12 +172,7 @@ function WorkspaceChrome({
     (workspaceLevel === "project"
       ? projectsInContext.find((project) => project.id === projectId)
       : undefined);
-  const canUsePortfolioView = contextPortfolio
-    ? allowedPortfolioIds.has(contextPortfolio.id)
-    : false;
-  const projectScopeValue =
-    contextProject?.id ??
-    (canUsePortfolioView ? "portfolio" : (projectsInContext[0]?.id ?? ""));
+  const projectScopeValue = contextProject?.id ?? "";
   const favoriteHubs =
     workspaceLevel === "project" && contextProject
       ? [contextProject]
@@ -255,13 +251,11 @@ function WorkspaceChrome({
                     : undefined
                 }
               >
-                {contextProject?.icon ?? <Grid2X2 size={15} />}
+                {contextProject?.icon ?? <FolderKanban size={15} />}
               </span>
               <span className="workspace-context-copy">
-                <small>
-                  {contextProject ? "Project workspace" : "Workspace"}
-                </small>
-                <strong>{contextProject?.name ?? "Portfolio overview"}</strong>
+                <small>Workspace</small>
+                <strong>{contextProject?.name ?? "Choose workspace"}</strong>
               </span>
               <ChevronDown
                 className="workspace-context-chevron"
@@ -270,14 +264,16 @@ function WorkspaceChrome({
               />
               <select
                 className="workspace-context-select"
-                aria-label="Workspace level and project"
+                aria-label="Current workspace"
                 value={projectScopeValue}
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value;
-                  if (nextValue === "portfolio") {
-                    setPortfolioId(contextPortfolio.id);
+                  if (nextValue === "create") {
                     setOpen(false);
-                    if (active === "hub") router.push("/app/home");
+                    window.dispatchEvent(
+                      new Event("trevv:open-workspace-creator"),
+                    );
+                    router.push("/app/hubs?create=project");
                     return;
                   }
                   const project = projectsInContext.find(
@@ -293,16 +289,15 @@ function WorkspaceChrome({
                     router.push(`/app/hubs/${project.slug}`);
                 }}
               >
-                {canUsePortfolioView && (
-                  <option value="portfolio">Portfolio overview</option>
-                )}
-                <optgroup label="Project workspace">
-                  {projectsInContext.map((project) => (
-                    <option value={project.id} key={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </optgroup>
+                <option value="" disabled>
+                  Choose workspace
+                </option>
+                {projectsInContext.map((project) => (
+                  <option value={project.id} key={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+                <option value="create">＋ New workspace…</option>
               </select>
             </label>
           ) : (
