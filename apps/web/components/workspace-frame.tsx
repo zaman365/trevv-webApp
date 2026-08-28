@@ -31,7 +31,14 @@ import {
 import { demoHubs, demoItems, demoPortfolios } from "@founderhq/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
@@ -43,6 +50,13 @@ import {
   UniversalCreateDialog,
 } from "./universal-create";
 import { useCustomHubs } from "@/lib/custom-hubs";
+import {
+  createCustomPortfolio,
+  portfolioAccentOptions,
+  portfolioVisualFor,
+  useCustomPortfolios,
+  type CustomPortfolioRecord,
+} from "@/lib/custom-portfolios";
 
 type ActivePage =
   | "home"
@@ -142,7 +156,11 @@ function WorkspaceChrome({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [workspaceQuery, setWorkspaceQuery] = useState("");
+  const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
+  const [portfolioQuery, setPortfolioQuery] = useState("");
+  const [portfolioCreateOpen, setPortfolioCreateOpen] = useState(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const portfolioMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const {
     copy: messages,
@@ -161,25 +179,38 @@ function WorkspaceChrome({
     dashboardAccess,
   } = useWorkspace();
   const customHubRecords = useCustomHubs();
+  const customPortfolioRecords = useCustomPortfolios();
   const customHubs = customHubRecords
     .filter((record) => record.hub.portfolioId === portfolioId)
     .map((record) => record.hub);
   const allowedPortfolioIds = new Set(dashboardAccess.portfolioIds);
   const allowedProjectIds = new Set(dashboardAccess.projectIds);
+  const customProjectIds = new Set(
+    customHubRecords.map((record) => record.hub.id),
+  );
+  const customPortfolioIds = new Set(
+    customPortfolioRecords.map((record) => record.portfolio.id),
+  );
   const accessibleProjects = [
     ...customHubRecords.map((record) => record.hub),
     ...demoHubs,
   ].filter(
     (project) =>
       allowedProjectIds.has(project.id) ||
-      allowedPortfolioIds.has(project.portfolioId),
+      allowedPortfolioIds.has(project.portfolioId) ||
+      customProjectIds.has(project.id),
   );
   const visiblePortfolioIds = new Set([
     ...allowedPortfolioIds,
     ...accessibleProjects.map((project) => project.portfolioId),
   ]);
-  const accessiblePortfolios = demoPortfolios.filter((portfolio) =>
-    visiblePortfolioIds.has(portfolio.id),
+  const accessiblePortfolios = [
+    ...demoPortfolios,
+    ...customPortfolioRecords.map((record) => record.portfolio),
+  ].filter(
+    (portfolio) =>
+      visiblePortfolioIds.has(portfolio.id) ||
+      customPortfolioIds.has(portfolio.id),
   );
   const activeProject = hubSlug
     ? accessibleProjects.find((project) => project.slug === hubSlug)
@@ -219,6 +250,16 @@ function WorkspaceChrome({
   const contextProjectCounts = contextProject
     ? workspaceWorkCounts(contextProject.id)
     : undefined;
+  const contextPortfolioVisual = contextPortfolio
+    ? portfolioVisualFor(contextPortfolio, customPortfolioRecords)
+    : undefined;
+  const normalizedPortfolioQuery = portfolioQuery.trim().toLocaleLowerCase();
+  const visiblePortfolios = accessiblePortfolios.filter((portfolio) =>
+    [portfolio.name, portfolio.description]
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(normalizedPortfolioQuery),
+  );
   const favoriteHubs =
     workspaceLevel === "project" && contextProject
       ? [contextProject]
@@ -279,6 +320,33 @@ function WorkspaceChrome({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [workspaceMenuOpen]);
+
+  useEffect(() => {
+    if (!portfolioMenuOpen) return;
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (
+        portfolioMenuRef.current &&
+        !portfolioMenuRef.current.contains(event.target as Node)
+      ) {
+        setPortfolioMenuOpen(false);
+        setPortfolioQuery("");
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPortfolioMenuOpen(false);
+        setPortfolioQuery("");
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [portfolioMenuOpen]);
 
   // One number, from one place. See lib/attention.ts.
   const attentionCount = scope.attentionCount;
@@ -677,47 +745,167 @@ function WorkspaceChrome({
             <span>{copy.nav.settings}</span>
           </Link>
           {contextPortfolio && (
-            <label className="workspace-context-switcher sidebar-portfolio-switcher">
-              <span className="workspace-context-icon portfolio">
-                <Grid2X2 size={16} />
-              </span>
-              <span className="workspace-context-copy">
-                <small>Portfolio</small>
-                <strong>{contextPortfolio.name}</strong>
-              </span>
-              <ChevronDown
-                className="workspace-context-chevron"
-                size={15}
-                aria-hidden="true"
-              />
-              <select
-                className="workspace-context-select"
-                aria-label="Current portfolio"
-                value={contextPortfolio.id}
-                onChange={(event) => {
-                  const nextPortfolioId = event.currentTarget.value;
-                  const canViewPortfolio =
-                    allowedPortfolioIds.has(nextPortfolioId);
-                  if (canViewPortfolio) {
-                    setPortfolioId(nextPortfolioId);
-                  } else {
-                    const firstProject = accessibleProjects.find(
-                      (project) => project.portfolioId === nextPortfolioId,
-                    );
-                    if (firstProject)
-                      selectProject(firstProject.id, firstProject.portfolioId);
-                  }
-                  setOpen(false);
-                  if (active === "hub") router.push("/app/home");
-                }}
+            <div className="portfolio-switcher-wrap" ref={portfolioMenuRef}>
+              <button
+                type="button"
+                className="workspace-context-switcher sidebar-portfolio-switcher portfolio-switcher-trigger"
+                aria-haspopup="dialog"
+                aria-expanded={portfolioMenuOpen}
+                onClick={() =>
+                  setPortfolioMenuOpen((currentOpen) => !currentOpen)
+                }
               >
-                {accessiblePortfolios.map((portfolio) => (
-                  <option value={portfolio.id} key={portfolio.id}>
-                    {portfolio.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <span
+                  className="workspace-context-icon portfolio portfolio-logo"
+                  style={{
+                    background: `${contextPortfolioVisual?.accent ?? "#5b56db"}18`,
+                    color: contextPortfolioVisual?.accent ?? "#5b56db",
+                  }}
+                >
+                  {contextPortfolioVisual?.mark ?? "P"}
+                </span>
+                <span className="workspace-context-copy">
+                  <small>Portfolio</small>
+                  <strong>{contextPortfolio.name}</strong>
+                </span>
+                <ChevronDown
+                  className={`workspace-context-chevron ${portfolioMenuOpen ? "open" : ""}`}
+                  size={15}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {portfolioMenuOpen && (
+                <section
+                  className="portfolio-switcher-popover"
+                  role="dialog"
+                  aria-label="Portfolio switcher"
+                >
+                  <header className="portfolio-switcher-header">
+                    <div>
+                      <small>Portfolio level</small>
+                      <h2>Choose portfolio</h2>
+                    </div>
+                    <span>{accessiblePortfolios.length}</span>
+                  </header>
+
+                  <div className="workspace-switcher-search portfolio-switcher-search">
+                    <Search size={15} aria-hidden="true" />
+                    <input
+                      value={portfolioQuery}
+                      onChange={(event) =>
+                        setPortfolioQuery(event.currentTarget.value)
+                      }
+                      placeholder="Find a portfolio"
+                      aria-label="Find a portfolio"
+                    />
+                    {portfolioQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setPortfolioQuery("")}
+                        aria-label="Clear portfolio search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="portfolio-switcher-list">
+                    {visiblePortfolios.map((portfolio) => {
+                      const visual = portfolioVisualFor(
+                        portfolio,
+                        customPortfolioRecords,
+                      );
+                      const portfolioProjectCount = accessibleProjects.filter(
+                        (project) => project.portfolioId === portfolio.id,
+                      ).length;
+                      const isSelected = portfolio.id === contextPortfolio.id;
+
+                      return (
+                        <button
+                          type="button"
+                          className={`portfolio-switcher-option ${isSelected ? "selected" : ""}`}
+                          aria-pressed={isSelected}
+                          key={portfolio.id}
+                          onClick={() => {
+                            const canViewPortfolio =
+                              allowedPortfolioIds.has(portfolio.id) ||
+                              customPortfolioIds.has(portfolio.id);
+                            if (canViewPortfolio) {
+                              setPortfolioId(portfolio.id);
+                            } else {
+                              const firstProject = accessibleProjects.find(
+                                (project) =>
+                                  project.portfolioId === portfolio.id,
+                              );
+                              if (firstProject) {
+                                selectProject(
+                                  firstProject.id,
+                                  firstProject.portfolioId,
+                                );
+                              }
+                            }
+                            setPortfolioMenuOpen(false);
+                            setPortfolioQuery("");
+                            setOpen(false);
+                            if (active === "hub") router.push("/app/home");
+                          }}
+                        >
+                          <span
+                            className="portfolio-option-logo"
+                            style={{
+                              background: `${visual.accent}18`,
+                              color: visual.accent,
+                            }}
+                          >
+                            {visual.mark}
+                          </span>
+                          <span className="portfolio-option-copy">
+                            <strong>{portfolio.name}</strong>
+                            <small>
+                              {portfolioProjectCount}{" "}
+                              {portfolioProjectCount === 1
+                                ? "project"
+                                : "projects"}
+                            </small>
+                          </span>
+                          {isSelected && (
+                            <CheckCircle2
+                              className="workspace-switcher-selected"
+                              size={17}
+                              aria-label="Current portfolio"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                    {visiblePortfolios.length === 0 && (
+                      <p className="workspace-switcher-empty">
+                        No portfolio matches “{portfolioQuery.trim()}”.
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="portfolio-switcher-create"
+                    onClick={() => {
+                      setPortfolioMenuOpen(false);
+                      setPortfolioQuery("");
+                      setPortfolioCreateOpen(true);
+                    }}
+                  >
+                    <span>
+                      <Plus size={16} />
+                    </span>
+                    <span>
+                      <strong>New portfolio</strong>
+                      <small>Create a new project collection</small>
+                    </span>
+                  </button>
+                </section>
+              )}
+            </div>
           )}
         </div>
       </aside>
@@ -938,6 +1126,158 @@ function WorkspaceChrome({
           }}
         />
       )}
+      {portfolioCreateOpen && (
+        <PortfolioCreateDialog
+          onClose={() => setPortfolioCreateOpen(false)}
+          onCreated={(record) => {
+            setPortfolioCreateOpen(false);
+            setPortfolioId(record.portfolio.id);
+            setOpen(false);
+            router.push("/app/home");
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PortfolioCreateDialog({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (record: CustomPortfolioRecord) => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [mark, setMark] = useState("");
+  const [markEdited, setMarkEdited] = useState(false);
+  const [accent, setAccent] = useState<string>(portfolioAccentOptions[0]);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    onCreated(
+      createCustomPortfolio({
+        name,
+        description,
+        mark: mark || name.trim().slice(0, 1),
+        accent,
+      }),
+    );
+  };
+
+  return (
+    <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
+      <form
+        className="capture-dialog create-portfolio-dialog"
+        aria-labelledby="create-portfolio-title"
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={submit}
+        role="dialog"
+      >
+        <header>
+          <span
+            className="portfolio-logo-preview"
+            style={{ background: `${accent}18`, color: accent }}
+            aria-hidden="true"
+          >
+            {mark || name.trim().slice(0, 1).toUpperCase() || "P"}
+          </span>
+          <div>
+            <h2 id="create-portfolio-title">Create a portfolio</h2>
+            <p>
+              Group related projects under one recognizable identity and
+              overview.
+            </p>
+          </div>
+          <button
+            aria-label="Close portfolio creation"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={17} />
+          </button>
+        </header>
+
+        <div className="create-portfolio-fields">
+          <label>
+            Portfolio name
+            <input
+              autoFocus
+              onChange={(event) => {
+                const nextName = event.currentTarget.value;
+                setName(nextName);
+                if (!markEdited)
+                  setMark(nextName.trim().slice(0, 1).toUpperCase());
+              }}
+              placeholder="For example, European Ventures"
+              required
+              value={name}
+            />
+          </label>
+          <div className="portfolio-identity-fields">
+            <label>
+              Logo mark
+              <input
+                aria-describedby="portfolio-mark-help"
+                maxLength={2}
+                onChange={(event) => {
+                  setMarkEdited(true);
+                  setMark(event.currentTarget.value.toUpperCase());
+                }}
+                placeholder="EV"
+                value={mark}
+              />
+              <small id="portfolio-mark-help">One or two characters</small>
+            </label>
+            <fieldset>
+              <legend>Brand colour</legend>
+              <div className="portfolio-accent-options">
+                {portfolioAccentOptions.map((option) => (
+                  <button
+                    type="button"
+                    aria-label={`Use portfolio colour ${option}`}
+                    aria-pressed={accent === option}
+                    className={accent === option ? "selected" : ""}
+                    key={option}
+                    onClick={() => setAccent(option)}
+                    style={{ "--portfolio-accent": option } as CSSProperties}
+                  >
+                    {accent === option && <CheckCircle2 size={13} />}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+          <label>
+            Purpose
+            <textarea
+              onChange={(event) => setDescription(event.currentTarget.value)}
+              placeholder="What related projects and outcomes belong here?"
+              rows={3}
+              value={description}
+            />
+          </label>
+        </div>
+
+        <footer>
+          <span>You can add the first workspace immediately afterwards.</span>
+          <div>
+            <button onClick={onClose} type="button">
+              Cancel
+            </button>
+            <button
+              className="primary-button"
+              disabled={!name.trim()}
+              type="submit"
+            >
+              <Plus size={14} /> Create portfolio
+            </button>
+          </div>
+        </footer>
+      </form>
     </div>
   );
 }

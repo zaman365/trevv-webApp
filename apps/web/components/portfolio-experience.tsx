@@ -23,6 +23,10 @@ import { WorkspaceFrame } from "./workspace-frame";
 import { ProjectTile } from "./project-tile";
 import { HealthBar, PageHero, Panel, StatTile } from "./ui-kit";
 import { useCustomHubs } from "@/lib/custom-hubs";
+import {
+  portfolioVisualFor,
+  useCustomPortfolios,
+} from "@/lib/custom-portfolios";
 
 export function PortfolioExperience() {
   return (
@@ -38,11 +42,19 @@ function PortfolioMain() {
   const [health, setHealth] = useState<HubHealth | "all">("all");
   // §5: "choose optional metrics" — on by default, dismissable.
   const [showMetrics, setShowMetrics] = useState(true);
+  const customPortfolioRecords = useCustomPortfolios();
   const customHubs = useCustomHubs().filter(
     (record) => record.hub.portfolioId === portfolioId,
   );
 
-  const portfolio = demoPortfolios.find((item) => item.id === portfolioId);
+  const portfolios = [
+    ...demoPortfolios,
+    ...customPortfolioRecords.map((record) => record.portfolio),
+  ];
+  const portfolio = portfolios.find((item) => item.id === portfolioId);
+  const portfolioVisual = portfolio
+    ? portfolioVisualFor(portfolio, customPortfolioRecords)
+    : undefined;
   const summary = useMemo(
     () => (portfolio ? summarizePortfolio(portfolio) : undefined),
     [portfolio],
@@ -143,6 +155,12 @@ function PortfolioMain() {
         }
         title={portfolio?.name ?? vocab.groupOne}
         subtitle={portfolio?.description ?? copy.portfolio.subtitle}
+        {...(portfolioVisual
+          ? {
+              accent: portfolioVisual.accent,
+              monogram: portfolioVisual.mark,
+            }
+          : {})}
         hintId="portfolios"
         badge={
           <span className="scope-view-badge portfolio-scope-badge">
@@ -157,7 +175,7 @@ function PortfolioMain() {
               value={portfolioId}
               onChange={(event) => setPortfolioId(event.target.value)}
             >
-              {demoPortfolios.map((item) => (
+              {portfolios.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
                 </option>

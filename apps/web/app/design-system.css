@@ -570,6 +570,17 @@
   min-width: 0;
   flex: 1;
 }
+.portfolio-card .portfolio-card-logo {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  font-size: var(--fh-text-xs);
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
 .portfolio-card strong {
   display: block;
   font-size: var(--fh-text-md);

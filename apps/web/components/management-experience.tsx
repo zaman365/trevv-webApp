@@ -39,13 +39,14 @@ import {
   previewBlueprintUpdate,
   type HubType,
   type ImportPreset,
+  type Portfolio,
   type WaitingState,
 } from "@founderhq/core";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { HealthBar, PageHero, Panel, ProgressRing, StatTile } from "./ui-kit";
 import { ProjectTile } from "./project-tile";
-import { allPortfolioSummaries } from "@/lib/portfolios";
+import { allPortfolioSummaries, summarizePortfolio } from "@/lib/portfolios";
 import { vocabularyFor } from "@/lib/terminology";
 import { WorkspaceFrame } from "./workspace-frame";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -55,6 +56,10 @@ import { IdeasWorkflow } from "./ideas-workflow";
 import { TeamWorkflow } from "./team-workflow";
 import { AttentionCenter } from "./attention-center";
 import { createCustomHub, useCustomHubs } from "@/lib/custom-hubs";
+import {
+  portfolioVisualFor,
+  useCustomPortfolios,
+} from "@/lib/custom-portfolios";
 
 const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
 
@@ -69,9 +74,18 @@ export function HomeExperience() {
 function HomeMain() {
   const { scope, copy, portfolioId, setPortfolioId } = useWorkspace();
   const vocab = vocabularyFor();
-  const portfolios = allPortfolioSummaries();
+  const customPortfolioRecords = useCustomPortfolios();
+  const portfolios = [
+    ...allPortfolioSummaries(),
+    ...customPortfolioRecords.map((record) =>
+      summarizePortfolio(record.portfolio),
+    ),
+  ];
   const customHubs = useCustomHubs();
   const active = portfolios.find((p) => p.portfolio.id === portfolioId);
+  const activePortfolioVisual = active
+    ? portfolioVisualFor(active.portfolio, customPortfolioRecords)
+    : undefined;
   const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
   const changes = changesSinceCheckpoint(
     demoMeaningfulChanges,
@@ -118,6 +132,12 @@ function HomeMain() {
         eyebrow={`Portfolio overview · Monday, 24 August`}
         title="Good morning, Mohammed"
         subtitle={`Across all ${projectCount} ${projectCount === 1 ? "project" : "projects"} in ${portfolioName}, ${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you. Everything else can keep moving.`}
+        {...(activePortfolioVisual
+          ? {
+              accent: activePortfolioVisual.accent,
+              monogram: activePortfolioVisual.mark,
+            }
+          : {})}
         hintId="welcome-to-trevv"
         badge={
           <span className="scope-view-badge portfolio-scope-badge">
@@ -190,6 +210,10 @@ function HomeMain() {
       >
         <div className="portfolio-cards">
           {portfolios.map((summary) => {
+            const visual = portfolioVisualFor(
+              summary.portfolio,
+              customPortfolioRecords,
+            );
             const customCount = customHubs.filter(
               (record) => record.hub.portfolioId === summary.portfolio.id,
             ).length;
@@ -202,6 +226,16 @@ function HomeMain() {
                 onClick={() => setPortfolioId(summary.portfolio.id)}
               >
                 <header>
+                  <span
+                    className="portfolio-card-logo"
+                    style={{
+                      background: `${visual.accent}18`,
+                      color: visual.accent,
+                    }}
+                    aria-hidden="true"
+                  >
+                    {visual.mark}
+                  </span>
                   <div>
                     <strong>{summary.portfolio.name}</strong>
                     <span>
@@ -966,23 +1000,51 @@ export function HubsExperience() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createdSlug, setCreatedSlug] = useState<string | null>(null);
   const customHubs = useCustomHubs();
+  const customPortfolioRecords = useCustomPortfolios();
+  const availablePortfolios = useMemo(
+    () => [
+      ...demoPortfolios,
+      ...customPortfolioRecords.map((record) => record.portfolio),
+    ],
+    [customPortfolioRecords],
+  );
   const hubs = [...customHubs.map((record) => record.hub), ...demoHubs].filter(
     (hub) => hub.portfolioId === portfolioId,
   );
   useEffect(() => {
     let frame = 0;
+    let selectionFrame = 0;
     const openCreator = () => {
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => setCreateOpen(true));
     };
     window.addEventListener("trevv:open-workspace-creator", openCreator);
+    try {
+      const stored = JSON.parse(
+        localStorage.getItem("trevv:workspace-selection") ?? "null",
+      ) as { portfolioId?: unknown } | null;
+      if (
+        typeof stored?.portfolioId === "string" &&
+        availablePortfolios.some(
+          (portfolio) => portfolio.id === stored.portfolioId,
+        )
+      ) {
+        const storedPortfolioId = stored.portfolioId;
+        selectionFrame = window.requestAnimationFrame(() =>
+          setPortfolioId(storedPortfolioId),
+        );
+      }
+    } catch {
+      // The built-in portfolio remains selected when preferences are blocked.
+    }
     const params = new URLSearchParams(window.location.search);
     if (params.get("create") === "project") openCreator();
     return () => {
       window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(selectionFrame);
       window.removeEventListener("trevv:open-workspace-creator", openCreator);
     };
-  }, []);
+  }, [availablePortfolios]);
   const closeCreate = () => {
     setCreateOpen(false);
     if (window.location.search)
@@ -1027,7 +1089,7 @@ export function HubsExperience() {
                 value={portfolioId}
                 onChange={(event) => setPortfolioId(event.target.value)}
               >
-                {demoPortfolios.map((portfolio) => (
+                {availablePortfolios.map((portfolio) => (
                   <option key={portfolio.id} value={portfolio.id}>
                     {portfolio.name}
                   </option>
@@ -1063,6 +1125,7 @@ export function HubsExperience() {
         </main>
         {createOpen && (
           <CreateHubDialog
+            portfolios={availablePortfolios}
             initialPortfolioId={portfolioId}
             onClose={closeCreate}
             onCreated={(slug) => {
@@ -1077,10 +1140,12 @@ export function HubsExperience() {
 }
 
 function CreateHubDialog({
+  portfolios,
   initialPortfolioId,
   onClose,
   onCreated,
 }: {
+  portfolios: readonly Portfolio[];
   initialPortfolioId: string;
   onClose: () => void;
   onCreated: (slug: string) => void;
@@ -1163,7 +1228,7 @@ function CreateHubDialog({
                 value={portfolioId}
                 onChange={(event) => setPortfolioId(event.target.value)}
               >
-                {demoPortfolios.map((portfolio) => (
+                {portfolios.map((portfolio) => (
                   <option key={portfolio.id} value={portfolio.id}>
                     {portfolio.name}
                   </option>
