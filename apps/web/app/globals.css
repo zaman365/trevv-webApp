@@ -345,9 +345,9 @@ a {
 }
 
 .portfolio-main {
-  width: min(1420px, 100%);
-  margin: 0 auto;
-  padding: 34px 40px 70px;
+  /* Width, centring and the side gap come from .trevv-main, so the
+     portfolio lines up with every other workspace page. */
+  padding-block: 34px 70px;
 }
 .page-heading {
   display: flex;

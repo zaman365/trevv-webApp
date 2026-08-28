@@ -5275,8 +5275,7 @@
   }
 }
 .portfolio-main {
-  width: min(1560px, 100%);
-  padding: 40px 44px 84px;
+  padding-block: 40px 84px;
 }
 .workspace-page-header {
   min-height: 120px;
