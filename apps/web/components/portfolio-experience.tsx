@@ -8,7 +8,6 @@ import {
   ClipboardCheck,
   FileQuestion,
   Grid2X2,
-  Plus,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -182,12 +181,6 @@ function PortfolioMain() {
               ))}
             </select>
           </label>
-        }
-        actions={
-          <Link className="primary-button" href="/app/hubs?create=project">
-            <Plus size={17} />
-            <span>New {vocab.one.toLowerCase()}</span>
-          </Link>
         }
         stats={
           <>
