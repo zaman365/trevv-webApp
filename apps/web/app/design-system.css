@@ -46,6 +46,7 @@
 }
 .portfolio-main > .page-hero.has-brand {
   border-top-color: var(--brand);
+  border-left-color: var(--brand);
   border-right-color: var(--brand);
 }
 .portfolio-main > .page-hero.has-brand::before {
