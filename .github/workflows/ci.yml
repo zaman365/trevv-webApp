@@ -100,3 +100,51 @@ jobs:
           name: playwright-report-a11y
           path: playwright-report
           retention-days: 14
+
+  # Production deploys only from main, and only once every gate is green.
+  # Requires the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets on
+  # a protected "production" environment; without them this job cannot run.
+  #
+  # Rollback: pnpm --filter @founderhq/web exec wrangler rollback
+  # or target a specific version:
+  #   pnpm --filter @founderhq/web exec wrangler rollback <version-id>
+  # List candidates with:
+  #   pnpm --filter @founderhq/web exec wrangler deployments list
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [quality, e2e, accessibility]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    environment:
+      name: production
+      url: https://trevv.de
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and deploy the Worker
+        run: pnpm --filter @founderhq/web deploy:cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify production responds
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://trevv.de/app/portfolio)
+          echo "trevv.de/app/portfolio -> $code"
+          test "$code" = "200"
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::error::Production deploy failed. Roll back with:" \
+            "pnpm --filter @founderhq/web exec wrangler rollback"
+          exit 1
