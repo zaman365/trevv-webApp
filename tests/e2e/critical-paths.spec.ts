@@ -14,6 +14,24 @@ test("operator starts in Home and opens a Hub from Portfolio", async ({
 
   await page.goto("/app/portfolio");
   await expect(page.getByRole("heading", { name: "Portfolio" })).toBeVisible();
+  const portfolioSelect = page.getByRole("combobox", {
+    name: "Portfolio",
+    exact: true,
+  });
+  const newProject = page.getByRole("link", { name: "New project" });
+  await expect(portfolioSelect).toBeVisible();
+  await expect(newProject).toBeVisible();
+  const portfolioSelectBox = await portfolioSelect.boundingBox();
+  const newProjectBox = await newProject.boundingBox();
+  expect(portfolioSelectBox).not.toBeNull();
+  expect(newProjectBox).not.toBeNull();
+  expect(
+    Math.abs(
+      (portfolioSelectBox?.y ?? 0) +
+        (portfolioSelectBox?.height ?? 0) -
+        ((newProjectBox?.y ?? 0) + (newProjectBox?.height ?? 0)),
+    ),
+  ).toBeLessThanOrEqual(1);
   if ((page.viewportSize()?.width ?? 0) <= 520) {
     const firstStat = page.locator(".hero-stats .stat-tile").first();
     const labelBox = await firstStat.locator(".stat-body b").boundingBox();

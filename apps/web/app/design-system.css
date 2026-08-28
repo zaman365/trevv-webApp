@@ -101,12 +101,9 @@
 }
 .hero-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   flex-wrap: wrap;
-}
-.dashboard-main .hero-actions {
-  align-items: flex-end;
 }
 .hero-select {
   display: flex;
