@@ -1,14 +1,14 @@
-import type { HubType } from "@founderhq/core";
+import type { WorkspaceType } from "@founderhq/core";
 
 /**
  * What a customer calls the thing they are responsible for.
  *
  * The spec is right that not everything is a project — an operating company
- * is not a project, and calling it one is wrong. But "Hub" is jargon nobody
+ * is not a project, and calling it one is wrong. But "Workspace" is jargon nobody
  * arrives knowing, and asking a new user to learn a word before they learn
  * the product is a real cost.
  *
- * The model stays `hub` for data compatibility, while the product-level label
+ * The model stays `workspace` for data compatibility, while the product-level label
  * is Workspace. Per-item type labels still explain whether a Workspace is a
  * business, brand, client, project, department, or initiative.
  */
@@ -22,7 +22,7 @@ export type VocabularyKey =
 
 export interface Vocabulary {
   key: VocabularyKey;
-  /** The responsibility container, formerly always "Hub". */
+  /** The responsibility container, formerly always "Workspace". */
   one: string;
   many: string;
   /** The collection of them. */
@@ -113,15 +113,15 @@ const TYPE_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-export function labelForType(type: HubType) {
+export function labelForType(type: WorkspaceType) {
   return TYPE_LABELS[type] ?? TYPE_LABELS.other!;
 }
 
 /**
  * A Workspace can describe the kind of responsibility it contains without
- * reintroducing the old "Hub" product jargon in compact labels.
+ * reintroducing the old "Workspace" product jargon in compact labels.
  */
-export function labelForProjectType(type: HubType) {
+export function labelForProjectType(type: WorkspaceType) {
   const typeLabel = labelForType(type);
   return typeLabel === "Project"
     ? "Project workspace"

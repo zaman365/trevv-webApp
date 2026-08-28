@@ -8,7 +8,7 @@ import {
   demoBlueprintVersions,
   demoChangeCheckpoint,
   demoDependencies,
-  demoHubs,
+  demoWorkspaces,
   demoItems,
   demoMeaningfulChanges,
   demoWaitingStates,
@@ -23,13 +23,16 @@ const now = new Date("2026-08-24T12:00:00.000Z");
 describe("TREVV commercial domain", () => {
   it("checks capabilities by entitlement key without plan-name branching", () => {
     expect(
-      checkEntitlement(unrestrictedDevelopmentEntitlements, "hubs.max", 99)
-        .allowed,
+      checkEntitlement(
+        unrestrictedDevelopmentEntitlements,
+        "workspaces.max",
+        99,
+      ).allowed,
     ).toBe(true);
     expect(
       checkEntitlement(
-        { planKey: "custom", values: { "hubs.max": 3 } },
-        "hubs.max",
+        { planKey: "custom", values: { "workspaces.max": 3 } },
+        "workspaces.max",
         3,
       ).allowed,
     ).toBe(false);
@@ -38,7 +41,7 @@ describe("TREVV commercial domain", () => {
   it("derives and ranks explainable signals from operational evidence", () => {
     const signals = generateAttentionSignals(
       "org-demo",
-      demoHubs,
+      demoWorkspaces,
       demoItems,
       demoWaitingStates,
       now,
@@ -54,7 +57,7 @@ describe("TREVV commercial domain", () => {
       signals.some(
         (signal) =>
           signal.signalType === "dependency_threat" &&
-          signal.metadata.crossHub === true,
+          signal.metadata.crossWorkspace === true,
       ),
     ).toBe(true);
     expect(signals.every((signal) => signal.reason.length > 10)).toBe(true);
@@ -97,9 +100,11 @@ describe("TREVV commercial domain", () => {
     expect(diff.preservedOverrides).toEqual(["Client review"]);
   });
 
-  it("surfaces cross-Hub resource pressure without hourly estimates", () => {
-    const pressure = calculateResourcePressure(demoHubs, demoItems, now);
+  it("surfaces cross-Workspace resource pressure without hourly estimates", () => {
+    const pressure = calculateResourcePressure(demoWorkspaces, demoItems, now);
     expect(pressure[0]?.userName).toBeTruthy();
-    expect(pressure.some((person) => person.hubIds.length > 1)).toBe(true);
+    expect(pressure.some((person) => person.workspaceIds.length > 1)).toBe(
+      true,
+    );
   });
 });

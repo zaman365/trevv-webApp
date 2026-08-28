@@ -1,7 +1,6 @@
 export const productCopy = {
   en: {
     nav: {
-      home: "Home",
       portfolio: "Portfolio",
       attention: "Attention",
       myWork: "My Work",
@@ -15,7 +14,7 @@ export const productCopy = {
       reviews: "Reviews",
       templates: "Templates",
       settings: "Settings",
-      hubs: "Workspaces",
+      workspaces: "Workspaces",
     },
     shell: {
       search: "Search work, Workspaces and people…",
@@ -89,7 +88,7 @@ export const productCopy = {
       changesSaved: "Changes saved",
       following: "Following",
     },
-    hub: {
+    workspace: {
       overview: "Overview",
       boards: "Boards",
       updates: "Updates",
@@ -171,7 +170,7 @@ export const productCopy = {
       organization: "Organization name",
       language: "Language",
       timezone: "Time zone",
-      chooseHubs: "Choose starter Workspaces",
+      chooseWorkspaces: "Choose starter Workspaces",
       invite: "Invite your team",
       optional: "Optional",
     },

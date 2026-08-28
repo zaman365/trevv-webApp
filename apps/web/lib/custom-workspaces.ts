@@ -1,35 +1,37 @@
 "use client";
 
-import type { Board, Hub, HubType } from "@founderhq/core";
+import type { Board, Workspace, WorkspaceType } from "@founderhq/core";
 import { useSyncExternalStore } from "react";
 
-export interface CustomHubRecord {
-  hub: Hub;
+export interface CustomWorkspaceRecord {
+  workspace: Workspace;
   board: Board;
   createdAt: string;
 }
 
-export interface CustomHubInput {
+export interface CustomWorkspaceInput {
   name: string;
   portfolioId: string;
-  type: HubType;
+  type: WorkspaceType;
   lead: string;
   priority: string;
   milestone: string;
   milestoneDate: string;
 }
 
-const storageKey = "trevv:custom-hubs";
-const changeEvent = "trevv:custom-hubs-changed";
-const emptySnapshot: CustomHubRecord[] = [];
+const storageKey = "trevv:custom-workspaces";
+const changeEvent = "trevv:custom-workspaces-changed";
+const emptySnapshot: CustomWorkspaceRecord[] = [];
 const accents = ["#5b56db", "#0d8b73", "#d46a50", "#3374c7", "#a36b16"];
-let cachedSnapshot: CustomHubRecord[] | null = null;
+let cachedSnapshot: CustomWorkspaceRecord[] | null = null;
 
-export function useCustomHubs(): CustomHubRecord[] {
+export function useCustomWorkspaces(): CustomWorkspaceRecord[] {
   return useSyncExternalStore(subscribe, getSnapshot, () => emptySnapshot);
 }
 
-export function createCustomHub(input: CustomHubInput): CustomHubRecord {
+export function createCustomWorkspace(
+  input: CustomWorkspaceInput,
+): CustomWorkspaceRecord {
   const timestamp = Date.now();
   const slugBase =
     input.name
@@ -37,11 +39,13 @@ export function createCustomHub(input: CustomHubInput): CustomHubRecord {
       .toLocaleLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "project";
-  const existing = new Set(readStorage().map((record) => record.hub.slug));
+  const existing = new Set(
+    readStorage().map((record) => record.workspace.slug),
+  );
   let slug = slugBase;
   let suffix = 2;
   while (existing.has(slug)) slug = `${slugBase}-${suffix++}`;
-  const id = `custom-hub-${timestamp}`;
+  const id = `custom-workspace-${timestamp}`;
   const boardId = `custom-board-${timestamp}`;
   const lead = input.lead.trim() || "Mohammed Zaman";
   const initials = lead
@@ -50,9 +54,9 @@ export function createCustomHub(input: CustomHubInput): CustomHubRecord {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  const record: CustomHubRecord = {
+  const record: CustomWorkspaceRecord = {
     createdAt: new Date(timestamp).toISOString(),
-    hub: {
+    workspace: {
       id,
       portfolioId: input.portfolioId,
       slug,
@@ -79,7 +83,7 @@ export function createCustomHub(input: CustomHubInput): CustomHubRecord {
     },
     board: {
       id: boardId,
-      hubId: id,
+      workspaceId: id,
       name: `${input.name.trim()} Board`,
       category: "Work",
       description: "The operating board created with this Workspace.",
@@ -105,24 +109,24 @@ function subscribe(notify: () => void): () => void {
   };
 }
 
-function getSnapshot(): CustomHubRecord[] {
+function getSnapshot(): CustomWorkspaceRecord[] {
   if (cachedSnapshot === null) cachedSnapshot = readStorage();
   return cachedSnapshot;
 }
 
-function readStorage(): CustomHubRecord[] {
+function readStorage(): CustomWorkspaceRecord[] {
   try {
     const parsed = JSON.parse(
       localStorage.getItem(storageKey) ?? "[]",
     ) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isCustomHubRecord);
+    return parsed.filter(isCustomWorkspaceRecord);
   } catch {
     return cachedSnapshot ?? emptySnapshot;
   }
 }
 
-function persist(records: CustomHubRecord[]) {
+function persist(records: CustomWorkspaceRecord[]) {
   try {
     localStorage.setItem(storageKey, JSON.stringify(records));
   } catch {
@@ -130,14 +134,16 @@ function persist(records: CustomHubRecord[]) {
   }
 }
 
-function isCustomHubRecord(value: unknown): value is CustomHubRecord {
+function isCustomWorkspaceRecord(
+  value: unknown,
+): value is CustomWorkspaceRecord {
   if (!value || typeof value !== "object") return false;
-  const record = value as Partial<CustomHubRecord>;
+  const record = value as Partial<CustomWorkspaceRecord>;
   return Boolean(
-    record.hub?.id &&
-    record.hub.slug &&
-    record.hub.name &&
+    record.workspace?.id &&
+    record.workspace.slug &&
+    record.workspace.name &&
     record.board?.id &&
-    record.board.hubId === record.hub.id,
+    record.board.workspaceId === record.workspace.id,
   );
 }

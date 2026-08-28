@@ -9,7 +9,7 @@ export interface CapturedWorkItem {
   id: string;
   type: CapturedWorkType;
   title: string;
-  hubId: string;
+  workspaceId: string;
   boardId: string;
   owner: string;
   priority: "urgent" | "high" | "normal" | "low";

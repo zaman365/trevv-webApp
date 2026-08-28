@@ -18,7 +18,11 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { demoDecisionOutcomes, demoHubs, demoInsights } from "@founderhq/core";
+import {
+  demoDecisionOutcomes,
+  demoWorkspaces,
+  demoInsights,
+} from "@founderhq/core";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
@@ -39,7 +43,7 @@ interface IdeaEvidence {
 interface IdeaRecord {
   id: string;
   title: string;
-  hubId: string;
+  workspaceId: string;
   problem: string;
   hypothesis: string;
   impact: number;
@@ -63,7 +67,7 @@ const initialIdeas: IdeaRecord[] = [
   {
     id: "idea-service-first",
     title: "Service-first pilot home",
-    hubId: "hub-mealflow",
+    workspaceId: "workspace-mealflow",
     problem: "Pilot users cannot see live service status quickly enough.",
     hypothesis:
       "A service-first home will shorten time to first useful action.",
@@ -75,7 +79,7 @@ const initialIdeas: IdeaRecord[] = [
     stage: "promoted",
     promotedTo: "decision",
     evidence: demoInsights
-      .filter((insight) => insight.hubId === "hub-mealflow")
+      .filter((insight) => insight.workspaceId === "workspace-mealflow")
       .map((insight) => ({
         id: insight.id,
         title: insight.title,
@@ -86,7 +90,7 @@ const initialIdeas: IdeaRecord[] = [
   {
     id: "idea-proof-portal",
     title: "Self-serve client proof portal",
-    hubId: "hub-localreach",
+    workspaceId: "workspace-localreach",
     problem:
       "Clients ask for delivery evidence across several message threads.",
     hypothesis:
@@ -108,7 +112,7 @@ const initialIdeas: IdeaRecord[] = [
   {
     id: "idea-supplier-evidence",
     title: "Supplier evidence health signal",
-    hubId: "hub-centralops",
+    workspaceId: "workspace-centralops",
     problem:
       "Compliance evidence becomes visible only after a launch is blocked.",
     hypothesis: "A lightweight completeness signal will surface risk earlier.",
@@ -128,7 +132,7 @@ export function IdeasWorkflow() {
   const [ideas, setIdeas] = useState(initialIdeas);
   const [stage, setStage] = useState<IdeaStage | "all">("all");
   const [query, setQuery] = useState("");
-  const [hubId, setHubId] = useState("all");
+  const [workspaceId, setWorkspaceId] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -148,15 +152,20 @@ export function IdeasWorkflow() {
     ],
     [capturedIdeas, ideas],
   );
-  const scopedHubIds = new Set(scope.hubs.map((project) => project.id));
-  const scopedIdeas = allIdeas.filter((idea) => scopedHubIds.has(idea.hubId));
+  const scopedWorkspaceIds = new Set(
+    scope.workspaces.map((project) => project.id),
+  );
+  const scopedIdeas = allIdeas.filter((idea) =>
+    scopedWorkspaceIds.has(idea.workspaceId),
+  );
 
   const selected = scopedIdeas.find((idea) => idea.id === selectedId);
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return scopedIdeas.filter((idea) => {
       if (stage !== "all" && idea.stage !== stage) return false;
-      if (hubId !== "all" && idea.hubId !== hubId) return false;
+      if (workspaceId !== "all" && idea.workspaceId !== workspaceId)
+        return false;
       return (
         !normalized ||
         `${idea.title} ${idea.problem} ${idea.hypothesis}`
@@ -164,7 +173,7 @@ export function IdeasWorkflow() {
           .includes(normalized)
       );
     });
-  }, [hubId, query, scopedIdeas, stage]);
+  }, [workspaceId, query, scopedIdeas, stage]);
 
   const updateIdea = (id: string, update: Partial<IdeaRecord>) => {
     setIdeas((current) => {
@@ -275,18 +284,18 @@ export function IdeasWorkflow() {
             placeholder="Search ideas and evidence…"
           />
         </label>
-        {scope.hubs.length > 1 && (
+        {scope.workspaces.length > 1 && (
           <label className="workflow-filter-select">
             <Filter size={14} />
             <span className="sr-only">Filter by workspace</span>
             <select
-              value={hubId}
-              onChange={(event) => setHubId(event.target.value)}
+              value={workspaceId}
+              onChange={(event) => setWorkspaceId(event.target.value)}
             >
               <option value="all">All workspaces</option>
-              {scope.hubs.map((hub) => (
-                <option value={hub.id} key={hub.id}>
-                  {hub.name}
+              {scope.workspaces.map((workspace) => (
+                <option value={workspace.id} key={workspace.id}>
+                  {workspace.name}
                 </option>
               ))}
             </select>
@@ -323,7 +332,9 @@ export function IdeasWorkflow() {
 
       <section className="idea-card-grid">
         {visible.map((idea) => {
-          const hub = demoHubs.find((candidate) => candidate.id === idea.hubId);
+          const workspace = demoWorkspaces.find(
+            (candidate) => candidate.id === idea.workspaceId,
+          );
           const score = scoreOpportunity(idea);
           return (
             <article className="idea-workflow-card" key={idea.id}>
@@ -333,7 +344,8 @@ export function IdeasWorkflow() {
                 </span>
                 <div>
                   <p>
-                    {hub?.name ?? "No workspace"} · {stageLabels[idea.stage]}
+                    {workspace?.name ?? "No workspace"} ·{" "}
+                    {stageLabels[idea.stage]}
                   </p>
                   <h2>{idea.title}</h2>
                 </div>
@@ -432,7 +444,7 @@ export function IdeasWorkflow() {
 
       {createOpen && (
         <CaptureIdeaDialog
-          projects={scope.hubs}
+          projects={scope.workspaces}
           onClose={() => setCreateOpen(false)}
           onCreate={(idea) => {
             setIdeas((current) => [idea, ...current]);
@@ -472,7 +484,9 @@ function IdeaDetailDialog({
   const [promotionTarget, setPromotionTarget] = useState<
     "decision" | "experiment" | "board"
   >("decision");
-  const hub = demoHubs.find((candidate) => candidate.id === idea.hubId);
+  const workspace = demoWorkspaces.find(
+    (candidate) => candidate.id === idea.workspaceId,
+  );
 
   return (
     <div
@@ -493,7 +507,7 @@ function IdeaDetailDialog({
           </span>
           <div>
             <p>
-              {hub?.name ?? "No workspace"} · {stageLabels[idea.stage]}
+              {workspace?.name ?? "No workspace"} · {stageLabels[idea.stage]}
             </p>
             <h2 id="idea-detail-title">{idea.title}</h2>
           </div>
@@ -708,7 +722,9 @@ function IdeaDetailDialog({
                 <Link
                   className="linked-work-callout"
                   href={workspaceHref(
-                    demoHubs.find((hub) => hub.id === idea.hubId)!.slug,
+                    demoWorkspaces.find(
+                      (workspace) => workspace.id === idea.workspaceId,
+                    )!.slug,
                     "decisions",
                   )}
                 >
@@ -751,12 +767,12 @@ function CaptureIdeaDialog({
 }: {
   onClose: () => void;
   onCreate: (idea: IdeaRecord) => void;
-  projects: typeof demoHubs;
+  projects: typeof demoWorkspaces;
 }) {
   const [title, setTitle] = useState("");
   const [problem, setProblem] = useState("");
   const [hypothesis, setHypothesis] = useState("");
-  const [hubId, setHubId] = useState(projects[0]?.id ?? "");
+  const [workspaceId, setWorkspaceId] = useState(projects[0]?.id ?? "");
   const [reviewDate, setReviewDate] = useState("2026-09-10");
 
   const submit = (event: FormEvent) => {
@@ -765,7 +781,7 @@ function CaptureIdeaDialog({
     onCreate({
       id: `idea-${Date.now()}`,
       title: title.trim(),
-      hubId,
+      workspaceId,
       problem: problem.trim(),
       hypothesis: hypothesis.trim() || "Hypothesis not recorded yet.",
       impact: 3,
@@ -843,12 +859,12 @@ function CaptureIdeaDialog({
             <label className="stacked-field">
               <span>Project</span>
               <select
-                value={hubId}
-                onChange={(event) => setHubId(event.target.value)}
+                value={workspaceId}
+                onChange={(event) => setWorkspaceId(event.target.value)}
               >
-                {projects.map((hub) => (
-                  <option key={hub.id} value={hub.id}>
-                    {hub.name}
+                {projects.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
                   </option>
                 ))}
               </select>
@@ -892,7 +908,7 @@ function capturedIdeaRecord(item: CapturedWorkItem): IdeaRecord {
   return {
     id: item.id,
     title: item.title,
-    hubId: item.hubId,
+    workspaceId: item.workspaceId,
     problem:
       item.details ??
       "Captured from Create. Add the original observation or opportunity.",

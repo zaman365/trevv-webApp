@@ -1,4 +1,4 @@
-export type ConversationKind = "hub" | "team" | "direct" | "external";
+export type ConversationKind = "workspace" | "team" | "direct" | "external";
 export type MessageIntent = "message" | "request" | "decision" | "update";
 export type ResponseState = "open" | "resolved";
 
@@ -19,8 +19,8 @@ export interface Conversation {
   purpose: string;
   kind: ConversationKind;
   participantIds: string[];
-  hubId?: string;
-  hubSlug?: string;
+  workspaceId?: string;
+  workspaceSlug?: string;
   unread: number;
   pinned?: boolean;
   archived?: boolean;
@@ -124,15 +124,15 @@ export const seedConversations: Conversation[] = [
     id: "conversation-northstar-launch",
     title: "Northstar · Launch room",
     purpose: "Move the SS26 launch through decisions, evidence, and approvals.",
-    kind: "hub",
+    kind: "workspace",
     participantIds: [
       currentMessagingUserId,
       "person-nora",
       "person-amira",
       "person-elias",
     ],
-    hubId: "hub-northstar",
-    hubSlug: "northstar-apparel",
+    workspaceId: "workspace-northstar",
+    workspaceSlug: "northstar-apparel",
     unread: 3,
     pinned: true,
     visibility: "organization",
@@ -144,8 +144,8 @@ export const seedConversations: Conversation[] = [
     purpose: "A low-noise room for choices that change priorities or risk.",
     kind: "team",
     participantIds: [currentMessagingUserId, "person-nora", "person-amira"],
-    hubId: "hub-northstar",
-    hubSlug: "northstar-apparel",
+    workspaceId: "workspace-northstar",
+    workspaceSlug: "northstar-apparel",
     unread: 1,
     pinned: true,
     visibility: "private",
@@ -155,10 +155,10 @@ export const seedConversations: Conversation[] = [
     id: "conversation-mealflow",
     title: "MealFlow · Beta",
     purpose: "Coordinate the restaurant beta without losing product context.",
-    kind: "hub",
+    kind: "workspace",
     participantIds: [currentMessagingUserId, "person-nora", "person-tim"],
-    hubId: "hub-mealflow",
-    hubSlug: "mealflow",
+    workspaceId: "workspace-mealflow",
+    workspaceSlug: "mealflow",
     unread: 2,
     visibility: "organization",
     lastActivity: "2026-08-26T16:18:00.000Z",
@@ -169,8 +169,8 @@ export const seedConversations: Conversation[] = [
     purpose: "Share delivery evidence with the client in one scoped room.",
     kind: "external",
     participantIds: [currentMessagingUserId, "person-elias", "person-lena"],
-    hubId: "hub-localreach",
-    hubSlug: "localreach",
+    workspaceId: "workspace-localreach",
+    workspaceSlug: "localreach",
     unread: 0,
     visibility: "guest-scoped",
     lastActivity: "2026-08-26T13:04:00.000Z",
@@ -181,8 +181,8 @@ export const seedConversations: Conversation[] = [
     purpose: "Direct conversation",
     kind: "direct",
     participantIds: [currentMessagingUserId, "person-nora"],
-    hubId: "hub-northstar",
-    hubSlug: "northstar-apparel",
+    workspaceId: "workspace-northstar",
+    workspaceSlug: "northstar-apparel",
     unread: 0,
     visibility: "private",
     lastActivity: "2026-08-25T15:52:00.000Z",
@@ -193,8 +193,8 @@ export const seedConversations: Conversation[] = [
     purpose: "Direct conversation",
     kind: "direct",
     participantIds: [currentMessagingUserId, "person-amira"],
-    hubId: "hub-northstar",
-    hubSlug: "northstar-apparel",
+    workspaceId: "workspace-northstar",
+    workspaceSlug: "northstar-apparel",
     unread: 0,
     visibility: "private",
     lastActivity: "2026-08-24T11:10:00.000Z",

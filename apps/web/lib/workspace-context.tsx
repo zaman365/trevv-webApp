@@ -1,7 +1,7 @@
 "use client";
 
 import { getMessages, type Locale } from "@founderhq/i18n";
-import { demoHubs } from "@founderhq/core";
+import { demoWorkspaces } from "@founderhq/core";
 import {
   createContext,
   useCallback,
@@ -21,7 +21,7 @@ import {
   DEMO_DASHBOARD_ACCESS,
   type DashboardAccess,
 } from "./dashboard-access";
-import { useCustomHubs } from "./custom-hubs";
+import { useCustomWorkspaces } from "./custom-workspaces";
 
 type Theme = "light" | "dark";
 export type WorkspaceLevel = "portfolio" | "project";
@@ -72,10 +72,10 @@ export function WorkspaceProvider({
   );
   const [selectionHydrated, setSelectionHydrated] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
-  const customHubRecords = useCustomHubs();
-  const customHubs = useMemo(
-    () => customHubRecords.map((record) => record.hub),
-    [customHubRecords],
+  const customWorkspaceRecords = useCustomWorkspaces();
+  const customWorkspaces = useMemo(
+    () => customWorkspaceRecords.map((record) => record.workspace),
+    [customWorkspaceRecords],
   );
 
   useEffect(() => {
@@ -102,12 +102,13 @@ export function WorkspaceProvider({
               typeof selection?.projectId === "string"
                 ? selection.projectId
                 : undefined;
-            const storedProject = [...customHubs, ...demoHubs].find(
+            const storedProject = [...customWorkspaces, ...demoWorkspaces].find(
               (project) => project.id === storedProjectId,
             );
-            const fallbackProject = [...customHubs, ...demoHubs].find(
-              (project) => project.portfolioId === storedPortfolioId,
-            );
+            const fallbackProject = [
+              ...customWorkspaces,
+              ...demoWorkspaces,
+            ].find((project) => project.portfolioId === storedPortfolioId);
             const nextProject =
               storedProject?.portfolioId === storedPortfolioId
                 ? storedProject
@@ -126,9 +127,10 @@ export function WorkspaceProvider({
           }
         } catch {
           if (restoreStoredProject) {
-            const fallbackProject = [...customHubs, ...demoHubs].find(
-              (project) => project.portfolioId === initialPortfolioId,
-            );
+            const fallbackProject = [
+              ...customWorkspaces,
+              ...demoWorkspaces,
+            ].find((project) => project.portfolioId === initialPortfolioId);
             if (fallbackProject) {
               setWorkspaceLevel("project");
               setProjectId(fallbackProject.id);
@@ -140,7 +142,7 @@ export function WorkspaceProvider({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [
-    customHubs,
+    customWorkspaces,
     initialPortfolioId,
     initialProjectId,
     restoreStoredProject,
@@ -213,9 +215,9 @@ export function WorkspaceProvider({
         portfolioId,
         NOW,
         workspaceLevel === "project" ? (projectId ?? undefined) : undefined,
-        customHubs,
+        customWorkspaces,
       ),
-    [customHubs, portfolioId, projectId, workspaceLevel],
+    [customWorkspaces, portfolioId, projectId, workspaceLevel],
   );
 
   const value = useMemo<WorkspaceContextValue>(

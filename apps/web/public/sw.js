@@ -34,7 +34,7 @@ self.addEventListener("fetch", (event) => {
     );
   const isApiRead =
     url.pathname.startsWith("/api/v1/") ||
-    ["portfolio", "hubs", "items"].some((part) =>
+    ["portfolio", "workspaces", "items"].some((part) =>
       url.pathname.endsWith(`/api/v1/${part}`),
     );
   if (!isDocument && !isLocalAsset && !isApiRead) return;

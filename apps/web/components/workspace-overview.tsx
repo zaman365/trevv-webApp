@@ -21,11 +21,11 @@ import {
   X,
 } from "lucide-react";
 import {
-  boardForHub,
-  calculateHubProgress,
-  hubBySlug,
-  itemsForHub,
-  rollupHub,
+  boardForWorkspace,
+  calculateWorkspaceProgress,
+  workspaceBySlug,
+  itemsForWorkspace,
+  rollupWorkspace,
 } from "@founderhq/core";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -33,17 +33,17 @@ import { WorkspaceFrame } from "./workspace-frame";
 import { PageHero, StatTile } from "./ui-kit";
 import { productCopy } from "@/lib/product-copy";
 import { labelForType } from "@/lib/terminology";
-import { useCustomHubs } from "@/lib/custom-hubs";
+import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { workspaceHref } from "@/lib/workspace-routes";
 
-const hubHealthCopy: Record<string, string> = {
+const workspaceHealthCopy: Record<string, string> = {
   on_track: "On track",
   watch: "Watch",
   critical: "Critical",
   parked: "Parked",
 };
 
-const hubTabIds = [
+const workspaceTabIds = [
   "overview",
   "work",
   "milestones",
@@ -53,44 +53,52 @@ const hubTabIds = [
   "files",
   "team",
 ] as const;
-type HubTabId = (typeof hubTabIds)[number];
+type WorkspaceTabId = (typeof workspaceTabIds)[number];
 
-export function HubOverview({ slug }: { slug: string }) {
-  const customRecord = useCustomHubs().find(
-    (record) => record.hub.slug === slug,
+export function WorkspaceOverview({ slug }: { slug: string }) {
+  const customRecord = useCustomWorkspaces().find(
+    (record) => record.workspace.slug === slug,
   );
-  const hub = hubBySlug(slug) ?? customRecord?.hub;
-  if (!hub)
+  const workspace = workspaceBySlug(slug) ?? customRecord?.workspace;
+  if (!workspace)
     return (
-      <WorkspaceFrame active="hub" hubSlug={slug}>
-        <main className="hub-main board-not-found">
+      <WorkspaceFrame active="workspace" workspaceSlug={slug}>
+        <main className="workspace-main board-not-found">
           <h1>Workspace not found</h1>
           <Link href="/app/portfolio">Return to Portfolio</Link>
         </main>
       </WorkspaceFrame>
     );
   return (
-    <HubWorkspace boardOverride={customRecord?.board} key={hub.id} hub={hub} />
+    <WorkspaceWorkspace
+      boardOverride={customRecord?.board}
+      key={workspace.id}
+      workspace={workspace}
+    />
   );
 }
 
-function HubWorkspace({
-  hub,
+function WorkspaceWorkspace({
+  workspace,
   boardOverride,
 }: {
-  hub: NonNullable<ReturnType<typeof hubBySlug>>;
-  boardOverride?: ReturnType<typeof boardForHub>;
+  workspace: NonNullable<ReturnType<typeof workspaceBySlug>>;
+  boardOverride?: ReturnType<typeof boardForWorkspace>;
 }) {
-  const [activeTab, setActiveTab] = useState<HubTabId>("overview");
+  const [activeTab, setActiveTab] = useState<WorkspaceTabId>("overview");
   const [summary, setSummary] = useState(
-    `${hub.healthNote} The team is focused on ${hub.priority.toLocaleLowerCase()}, with the next review aligned to ${hub.nextMilestone.title}.`,
+    `${workspace.healthNote} The team is focused on ${workspace.priority.toLocaleLowerCase()}, with the next review aligned to ${workspace.nextMilestone.title}.`,
   );
   const [summaryDraft, setSummaryDraft] = useState(summary);
   const [editingSummary, setEditingSummary] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [updateText, setUpdateText] = useState("");
   const [updates, setUpdates] = useState([
-    { id: "seed", text: hub.latestUpdate.text, date: hub.latestUpdate.date },
+    {
+      id: "seed",
+      text: workspace.latestUpdate.text,
+      date: workspace.latestUpdate.date,
+    },
   ]);
   const [showAllUpdates, setShowAllUpdates] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -98,14 +106,14 @@ function HubWorkspace({
   const [showAllTeam, setShowAllTeam] = useState(false);
   useEffect(() => {
     const syncHash = () => {
-      const hash = window.location.hash.slice(1) as HubTabId;
-      setActiveTab(hubTabIds.includes(hash) ? hash : "overview");
+      const hash = window.location.hash.slice(1) as WorkspaceTabId;
+      setActiveTab(workspaceTabIds.includes(hash) ? hash : "overview");
     };
     syncHash();
     window.addEventListener("hashchange", syncHash);
     return () => window.removeEventListener("hashchange", syncHash);
   }, []);
-  const activateTab = (tab: HubTabId) => {
+  const activateTab = (tab: WorkspaceTabId) => {
     setActiveTab(tab);
     const url = tab === "overview" ? window.location.pathname : `#${tab}`;
     window.history.replaceState(null, "", url);
@@ -113,33 +121,33 @@ function HubWorkspace({
       .getElementById(tab)
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  const hubItems = itemsForHub(hub.id);
-  const rollup = rollupHub(
-    hub,
-    hubItems,
+  const workspaceItems = itemsForWorkspace(workspace.id);
+  const rollup = rollupWorkspace(
+    workspace,
+    workspaceItems,
     new Date("2026-08-24T12:00:00+02:00"),
   );
-  const board = boardForHub(hub.id) ?? boardOverride;
+  const board = boardForWorkspace(workspace.id) ?? boardOverride;
   const boardHref = board
-    ? `${workspaceHref(hub.slug)}/boards/${board.id}`
-    : workspaceHref(hub.slug);
-  const progress = calculateHubProgress(hub);
-  const decisions = hubItems.filter(
+    ? `${workspaceHref(workspace.slug)}/boards/${board.id}`
+    : workspaceHref(workspace.slug);
+  const progress = calculateWorkspaceProgress(workspace);
+  const decisions = workspaceItems.filter(
     (item) =>
       item.status !== "done" &&
       (item.type === "decision" || item.type === "approval"),
   );
-  const ideas = hubItems.filter((item) => item.type === "idea");
-  const completedItems = hubItems.filter(
+  const ideas = workspaceItems.filter((item) => item.type === "idea");
+  const completedItems = workspaceItems.filter(
     (item) => item.status === "done",
   ).length;
-  const datedItems = hubItems.filter((item) => item.dueDate).length;
+  const datedItems = workspaceItems.filter((item) => item.dueDate).length;
   const onTimeItems = Math.max(0, datedItems - rollup.overdue);
   const calculatedMetrics = [
     {
       label: "Scoped progress",
       value: progress === null ? "Manual" : `${progress}%`,
-      trend: `${completedItems}/${hubItems.length} done`,
+      trend: `${completedItems}/${workspaceItems.length} done`,
     },
     {
       label: "On-time work",
@@ -149,15 +157,20 @@ function HubWorkspace({
   ];
   const team = Array.from(
     new Set(
-      [hub.lead.name, ...hubItems.map((item) => item.assignee)].filter(Boolean),
+      [
+        workspace.lead.name,
+        ...workspaceItems.map((item) => item.assignee),
+      ].filter(Boolean),
     ),
   ) as string[];
-  const copy = productCopy.en.hub;
+  const copy = productCopy.en.workspace;
   return (
-    <WorkspaceFrame active="hub" hubSlug={hub.slug}>
+    <WorkspaceFrame active="workspace" workspaceSlug={workspace.slug}>
       <main
-        className="hub-main"
-        style={{ "--hub-accent": hub.accent } as React.CSSProperties}
+        className="workspace-main"
+        style={
+          { "--workspace-accent": workspace.accent } as React.CSSProperties
+        }
       >
         {notice && (
           <div className="workflow-toast success-toast" role="status">
@@ -174,25 +187,26 @@ function HubWorkspace({
         <PageHero
           eyebrow={
             <>
-              {labelForType(hub.type)} · {hub.stage} · Led by {hub.lead.name}
+              {labelForType(workspace.type)} · {workspace.stage} · Led by{" "}
+              {workspace.lead.name}
             </>
           }
-          title={hub.name}
-          hintId="hubs"
+          title={workspace.name}
+          hintId="workspaces"
           badge={
             <>
               <span className="scope-view-badge project-scope-badge">
                 <FolderKanban size={13} />
                 Workspace
               </span>
-              <span className={`health-badge ${hub.health}`}>
-                {hubHealthCopy[hub.health]}
+              <span className={`health-badge ${workspace.health}`}>
+                {workspaceHealthCopy[workspace.health]}
               </span>
             </>
           }
-          subtitle={hub.healthNote}
-          accent={hub.accent}
-          monogram={hub.icon}
+          subtitle={workspace.healthNote}
+          accent={workspace.accent}
+          monogram={workspace.icon}
           actions={
             <>
               <Link className="primary-button" href={boardHref}>
@@ -205,16 +219,16 @@ function HubWorkspace({
               >
                 {copy.postUpdate}
               </button>
-              {hub.slug === "localreach" && (
+              {workspace.slug === "localreach" && (
                 <Link
                   className="quiet-button"
-                  href={`${workspaceHref(hub.slug)}/stakeholder`}
+                  href={`${workspaceHref(workspace.slug)}/stakeholder`}
                 >
                   <ExternalLink size={14} />
                   Stakeholder view
                 </Link>
               )}
-              <div className="hub-more-wrap">
+              <div className="workspace-more-wrap">
                 <button
                   aria-expanded={moreOpen}
                   className="icon-button"
@@ -224,7 +238,7 @@ function HubWorkspace({
                   <MoreHorizontal size={17} />
                 </button>
                 {moreOpen && (
-                  <div className="hub-action-menu" role="menu">
+                  <div className="workspace-action-menu" role="menu">
                     <Link href={boardHref} role="menuitem">
                       Open board
                     </Link>
@@ -241,7 +255,7 @@ function HubWorkspace({
                       <Copy size={13} /> Copy project link
                     </button>
                     <Link
-                      href={workspaceHref(hub.slug, "settings")}
+                      href={workspaceHref(workspace.slug, "settings")}
                       role="menuitem"
                     >
                       Connected tools
@@ -260,7 +274,7 @@ function HubWorkspace({
                 note={
                   progress === null
                     ? "Set manually"
-                    : `${completedItems} of ${hubItems.length} complete · weighted by status`
+                    : `${completedItems} of ${workspaceItems.length} complete · weighted by status`
                 }
                 tone="primary"
                 {...(progress !== null ? { meter: progress } : {})}
@@ -286,12 +300,12 @@ function HubWorkspace({
                 tone={
                   rollup.decisions + rollup.approvals ? "warning" : "neutral"
                 }
-                href={workspaceHref(hub.slug, "decisions")}
+                href={workspaceHref(workspace.slug, "decisions")}
               />
             </>
           }
         />
-        <nav className="hub-tabs">
+        <nav className="workspace-tabs">
           <button
             className={activeTab === "overview" ? "active" : ""}
             onClick={() => activateTab("overview")}
@@ -305,7 +319,7 @@ function HubWorkspace({
             Work
           </button>
           <a href={boardHref}>Board</a>
-          {hubTabIds.slice(2).map((tab) => (
+          {workspaceTabIds.slice(2).map((tab) => (
             <button
               className={activeTab === tab ? "active" : ""}
               key={tab}
@@ -316,8 +330,8 @@ function HubWorkspace({
             </button>
           ))}
         </nav>
-        <div className="hub-content-grid" id="overview">
-          <div className="hub-primary-column">
+        <div className="workspace-content-grid" id="overview">
+          <div className="workspace-primary-column">
             <section className="executive-card">
               <header>
                 <div>
@@ -360,7 +374,7 @@ function HubWorkspace({
               <div className="executive-grid">
                 <div>
                   <span>{copy.currentFocus}</span>
-                  <strong>{hub.priority}</strong>
+                  <strong>{workspace.priority}</strong>
                 </div>
                 <div>
                   <span>Primary blocker</span>
@@ -416,7 +430,7 @@ function HubWorkspace({
               <div className="overview-section-title">
                 <div>
                   <h2>{copy.latestUpdate}</h2>
-                  <p>Published by {hub.lead.name} · 1 day ago</p>
+                  <p>Published by {workspace.lead.name} · 1 day ago</p>
                 </div>
                 <button
                   aria-expanded={showAllUpdates}
@@ -431,9 +445,9 @@ function HubWorkspace({
                     <div className="update-lead">
                       <span
                         className="avatar"
-                        style={{ background: hub.lead.color }}
+                        style={{ background: workspace.lead.color }}
                       >
-                        {hub.lead.initials}
+                        {workspace.lead.initials}
                       </span>
                       <div>
                         <strong>What moved</strong>
@@ -444,7 +458,7 @@ function HubWorkspace({
                     <div className="weekly-update-grid">
                       <div>
                         <span>Current priority</span>
-                        <p>{hub.priority}</p>
+                        <p>{workspace.priority}</p>
                       </div>
                       <div>
                         <span>Help needed</span>
@@ -459,7 +473,8 @@ function HubWorkspace({
                       <div>
                         <span>Next milestone</span>
                         <p>
-                          {hub.nextMilestone.title} · {hub.nextMilestone.date}
+                          {workspace.nextMilestone.title} ·{" "}
+                          {workspace.nextMilestone.date}
                         </p>
                       </div>
                     </div>
@@ -474,14 +489,14 @@ function HubWorkspace({
                   <p>Opportunities captured for this project.</p>
                 </div>
               </div>
-              <div className="hub-activity">
+              <div className="workspace-activity">
                 {ideas.map((item) => (
                   <Activity
                     icon={Lightbulb}
                     tone="primary"
                     title={`${item.title} · ${item.status.replace("_", " ")}`}
                     meta={`${item.assignee ?? "Unassigned"} · ${item.dueDate ?? "No due date"}`}
-                    href={workspaceHref(hub.slug, "ideas")}
+                    href={workspaceHref(workspace.slug, "ideas")}
                     key={item.id}
                   />
                 ))}
@@ -491,14 +506,14 @@ function HubWorkspace({
               </div>
             </section>
           </div>
-          <aside className="hub-secondary-column">
+          <aside className="workspace-secondary-column">
             <section className="side-overview-card" id="milestones">
               <header>
                 <CalendarDays size={15} />
                 <h2>{copy.milestone}</h2>
               </header>
-              <strong>{hub.nextMilestone.title}</strong>
-              <time>{hub.nextMilestone.date}</time>
+              <strong>{workspace.nextMilestone.title}</strong>
+              <time>{workspace.nextMilestone.date}</time>
               {progress !== null ? (
                 <>
                   <div className="milestone-track">
@@ -508,7 +523,7 @@ function HubWorkspace({
                 </>
               ) : (
                 <span>
-                  Ongoing Hub · completion percentage is intentionally off
+                  Ongoing Workspace · completion percentage is intentionally off
                 </span>
               )}
             </section>
@@ -539,8 +554,8 @@ function HubWorkspace({
                 <Link
                   href={
                     item.type === "decision"
-                      ? workspaceHref(hub.slug, "decisions")
-                      : workspaceHref(hub.slug, "approvals")
+                      ? workspaceHref(workspace.slug, "decisions")
+                      : workspaceHref(workspace.slug, "approvals")
                   }
                   key={item.id}
                 >
@@ -568,7 +583,7 @@ function HubWorkspace({
               <a href="https://www.figma.com">
                 <span className="mini-tone dark">F</span>
                 <div>
-                  <strong>{hub.name} designs</strong>
+                  <strong>{workspace.name} designs</strong>
                   <small>Figma</small>
                 </div>
                 <ExternalLink size={12} />
@@ -578,7 +593,7 @@ function HubWorkspace({
                   <GitBranch size={13} />
                 </span>
                 <div>
-                  <strong>{hub.name} repository</strong>
+                  <strong>{workspace.name} repository</strong>
                   <small>GitHub</small>
                 </div>
                 <ExternalLink size={12} />
@@ -586,7 +601,7 @@ function HubWorkspace({
               <a href="https://docs.google.com">
                 <span className="mini-tone blue">D</span>
                 <div>
-                  <strong>{hub.name} evidence</strong>
+                  <strong>{workspace.name} evidence</strong>
                   <small>Google Drive</small>
                 </div>
                 <ExternalLink size={12} />
@@ -626,8 +641,8 @@ function HubWorkspace({
             onMouseDown={() => setUpdateOpen(false)}
           >
             <form
-              className="capture-dialog hub-update-dialog"
-              aria-labelledby="hub-update-title"
+              className="capture-dialog workspace-update-dialog"
+              aria-labelledby="workspace-update-title"
               aria-modal="true"
               onMouseDown={(event) => event.stopPropagation()}
               onSubmit={(event) => {
@@ -652,7 +667,7 @@ function HubWorkspace({
                   <Send size={16} />
                 </span>
                 <div>
-                  <h2 id="hub-update-title">Post a workspace update</h2>
+                  <h2 id="workspace-update-title">Post a workspace update</h2>
                   <p>
                     Record what moved, what is blocked, and what happens next.
                   </p>

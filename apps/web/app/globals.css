@@ -742,7 +742,7 @@ a {
 .filters select {
   appearance: auto;
 }
-/* Health badge — shared by the project tile and the Hub header. */
+/* Health badge — shared by the project tile and the Workspace header. */
 .health-badge {
   height: 22px;
   display: inline-flex;
@@ -871,7 +871,7 @@ a {
   .signal-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .hub-grid {
+  .workspace-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

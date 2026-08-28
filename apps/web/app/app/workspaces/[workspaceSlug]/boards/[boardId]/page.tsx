@@ -6,5 +6,5 @@ export default async function WorkspaceBoardPage({
   params: Promise<{ workspaceSlug: string; boardId: string }>;
 }) {
   const { workspaceSlug, boardId } = await params;
-  return <BoardExperience hubSlug={workspaceSlug} boardId={boardId} />;
+  return <BoardExperience workspaceSlug={workspaceSlug} boardId={boardId} />;
 }

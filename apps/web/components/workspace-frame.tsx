@@ -28,7 +28,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { demoHubs, demoItems, demoPortfolios } from "@founderhq/core";
+import { demoWorkspaces, demoItems, demoPortfolios } from "@founderhq/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -46,7 +46,7 @@ import { LearningCenterProvider, useLearningCenter } from "./learning-center";
 import type { CapturedWorkItem } from "@/lib/captured-work";
 import { UniversalCreateDialog } from "./universal-create";
 import { CreateWorkspaceDialog } from "./create-workspace-dialog";
-import { useCustomHubs } from "@/lib/custom-hubs";
+import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import {
   createCustomPortfolio,
   portfolioAccentOptions,
@@ -79,7 +79,7 @@ type ActivePage =
   | "search"
   | "templates"
   | "settings"
-  | "hub";
+  | "workspace";
 
 const workspaceHealthLabels = {
   on_track: "On track",
@@ -90,7 +90,7 @@ const workspaceHealthLabels = {
 
 function workspaceWorkCounts(projectId: string) {
   const openItems = demoItems.filter(
-    (item) => item.hubId === projectId && item.status !== "done",
+    (item) => item.workspaceId === projectId && item.status !== "done",
   );
 
   return {
@@ -124,15 +124,19 @@ function workspaceViewForCapturedType(
 export function WorkspaceFrame({
   children,
   active,
-  hubSlug,
+  workspaceSlug,
 }: {
   children: ReactNode;
   active: ActivePage;
-  hubSlug?: string | undefined;
+  workspaceSlug?: string | undefined;
 }) {
-  const customHubs = useCustomHubs().map((record) => record.hub);
-  const routeProject = hubSlug
-    ? [...customHubs, ...demoHubs].find((project) => project.slug === hubSlug)
+  const customWorkspaces = useCustomWorkspaces().map(
+    (record) => record.workspace,
+  );
+  const routeProject = workspaceSlug
+    ? [...customWorkspaces, ...demoWorkspaces].find(
+        (project) => project.slug === workspaceSlug,
+      )
     : undefined;
   return (
     <WorkspaceProvider
@@ -145,7 +149,7 @@ export function WorkspaceFrame({
         : {})}
     >
       <LearningCenterProvider>
-        <WorkspaceChrome active={active} hubSlug={hubSlug}>
+        <WorkspaceChrome active={active} workspaceSlug={workspaceSlug}>
           {children}
         </WorkspaceChrome>
       </LearningCenterProvider>
@@ -156,11 +160,11 @@ export function WorkspaceFrame({
 function WorkspaceChrome({
   children,
   active,
-  hubSlug,
+  workspaceSlug,
 }: {
   children: ReactNode;
   active: ActivePage;
-  hubSlug?: string | undefined;
+  workspaceSlug?: string | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const [latestCapture, setLatestCapture] = useState<CapturedWorkItem | null>(
@@ -190,19 +194,19 @@ function WorkspaceChrome({
     selectProject,
     dashboardAccess,
   } = useWorkspace();
-  const customHubRecords = useCustomHubs();
+  const customWorkspaceRecords = useCustomWorkspaces();
   const customPortfolioRecords = useCustomPortfolios();
   const allowedPortfolioIds = new Set(dashboardAccess.portfolioIds);
   const allowedProjectIds = new Set(dashboardAccess.projectIds);
   const customProjectIds = new Set(
-    customHubRecords.map((record) => record.hub.id),
+    customWorkspaceRecords.map((record) => record.workspace.id),
   );
   const customPortfolioIds = new Set(
     customPortfolioRecords.map((record) => record.portfolio.id),
   );
   const accessibleProjects = [
-    ...customHubRecords.map((record) => record.hub),
-    ...demoHubs,
+    ...customWorkspaceRecords.map((record) => record.workspace),
+    ...demoWorkspaces,
   ].filter(
     (project) =>
       allowedProjectIds.has(project.id) ||
@@ -221,8 +225,8 @@ function WorkspaceChrome({
       visiblePortfolioIds.has(portfolio.id) ||
       customPortfolioIds.has(portfolio.id),
   );
-  const activeProject = hubSlug
-    ? accessibleProjects.find((project) => project.slug === hubSlug)
+  const activeProject = workspaceSlug
+    ? accessibleProjects.find((project) => project.slug === workspaceSlug)
     : undefined;
   const contextPortfolio =
     accessiblePortfolios.find((portfolio) => portfolio.id === portfolioId) ??
@@ -357,7 +361,15 @@ function WorkspaceChrome({
 
   const nav = [
     ...(contextProject
-      ? [["hub", "Overview", scopedHref(), FolderKanban, undefined] as const]
+      ? [
+          [
+            "workspace",
+            "Overview",
+            scopedHref(),
+            FolderKanban,
+            undefined,
+          ] as const,
+        ]
       : []),
     ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
     [
@@ -514,7 +526,10 @@ function WorkspaceChrome({
                             selectProject(project.id, project.portfolioId);
                             setWorkspaceMenuOpen(false);
                             setOpen(false);
-                            if (active !== "hub" || project.slug !== hubSlug) {
+                            if (
+                              active !== "workspace" ||
+                              project.slug !== workspaceSlug
+                            ) {
                               router.push(workspaceHref(project.slug));
                             }
                           }}
@@ -1121,9 +1136,11 @@ function WorkspaceChrome({
       )}
       {contextProject && captureOpen && (
         <UniversalCreateDialog
-          availableHubIds={scope.hubs.map((hub) => hub.id)}
+          availableWorkspaceIds={scope.workspaces.map(
+            (workspace) => workspace.id,
+          )}
           {...(workspaceLevel === "project" && projectId
-            ? { defaultHubId: projectId }
+            ? { defaultWorkspaceId: projectId }
             : {})}
           onClose={() => setCaptureOpen(false)}
           onCreated={(item) => {

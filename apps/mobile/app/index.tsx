@@ -79,42 +79,47 @@ export default function PortfolioScreen() {
           </View>
         </View>
         <Text style={styles.sectionTitle}>Projects</Text>
-        {portfolio.data.hubs.map(({ hub, rollup }) => (
+        {portfolio.data.workspaces.map(({ workspace, rollup }) => (
           <Pressable
-            key={hub.id}
-            style={styles.hubCard}
+            key={workspace.id}
+            style={styles.workspaceCard}
             onPress={() =>
               router.push({
-                pathname: "/hubs/[slug]",
-                params: { slug: hub.slug },
+                pathname: "/workspaces/[slug]",
+                params: { slug: workspace.slug },
               })
             }
           >
             <View
-              style={[styles.hubIcon, { backgroundColor: `${hub.accent}1a` }]}
+              style={[
+                styles.workspaceIcon,
+                { backgroundColor: `${workspace.accent}1a` },
+              ]}
             >
-              <Text style={[styles.hubIconText, { color: hub.accent }]}>
-                {hub.icon}
+              <Text
+                style={[styles.workspaceIconText, { color: workspace.accent }]}
+              >
+                {workspace.icon}
               </Text>
             </View>
-            <View style={styles.hubBody}>
-              <View style={styles.hubTitleRow}>
-                <Text style={styles.hubName}>{hub.name}</Text>
+            <View style={styles.workspaceBody}>
+              <View style={styles.workspaceTitleRow}>
+                <Text style={styles.workspaceName}>{workspace.name}</Text>
                 <Text
                   style={[
                     styles.health,
-                    hub.health === "critical"
+                    workspace.health === "critical"
                       ? styles.healthCritical
-                      : hub.health === "watch"
+                      : workspace.health === "watch"
                         ? styles.healthWatch
                         : styles.healthGood,
                   ]}
                 >
-                  {hub.health.replace("_", " ")}
+                  {workspace.health.replace("_", " ")}
                 </Text>
               </View>
-              <Text style={styles.priority}>{hub.priority}</Text>
-              <View style={styles.hubMeta}>
+              <Text style={styles.priority}>{workspace.priority}</Text>
+              <View style={styles.workspaceMeta}>
                 <Text>{rollup.open} open</Text>
                 <Text>{rollup.blocked} blocked</Text>
                 <Text>
@@ -218,7 +223,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
   },
-  hubCard: {
+  workspaceCard: {
     flexDirection: "row",
     gap: 11,
     marginBottom: 9,
@@ -228,21 +233,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e5ec",
   },
-  hubIcon: {
+  workspaceIcon: {
     width: 38,
     height: 38,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 11,
   },
-  hubIconText: { fontWeight: "800" },
-  hubBody: { flex: 1 },
-  hubTitleRow: {
+  workspaceIconText: { fontWeight: "800" },
+  workspaceBody: { flex: 1 },
+  workspaceTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  hubName: { color: nativeTheme.colors.ink, fontSize: 14, fontWeight: "800" },
+  workspaceName: {
+    color: nativeTheme.colors.ink,
+    fontSize: 14,
+    fontWeight: "800",
+  },
   health: {
     overflow: "hidden",
     paddingHorizontal: 7,
@@ -262,7 +271,12 @@ const styles = StyleSheet.create({
   },
   healthGood: { color: nativeTheme.colors.success, backgroundColor: "#e7f5ef" },
   priority: { marginTop: 5, color: nativeTheme.colors.muted, fontSize: 11 },
-  hubMeta: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
+  workspaceMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 10,
+  },
   buildInfo: {
     marginTop: 20,
     color: nativeTheme.colors.muted,

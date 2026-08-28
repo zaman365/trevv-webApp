@@ -16,7 +16,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { demoBoards, demoHubs, type WorkItemType } from "@founderhq/core";
+import { demoBoards, demoWorkspaces, type WorkItemType } from "@founderhq/core";
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { storeCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { validateCapture } from "@/lib/workflow-rules";
@@ -61,7 +61,9 @@ const createTypes = [
   },
 ] as const;
 
-const currentHubs = demoHubs.filter((hub) => !hub.id.startsWith("original-"));
+const currentWorkspaces = demoWorkspaces.filter(
+  (workspace) => !workspace.id.startsWith("original-"),
+);
 const owners = [
   "Mohammed Zaman",
   "Nora Klein",
@@ -74,30 +76,34 @@ const owners = [
 export function UniversalCreateDialog({
   onClose,
   onCreated,
-  availableHubIds,
-  defaultHubId,
+  availableWorkspaceIds,
+  defaultWorkspaceId,
 }: {
   onClose: () => void;
   onCreated: (item: CapturedWorkItem) => void;
-  availableHubIds?: readonly string[];
-  defaultHubId?: string;
+  availableWorkspaceIds?: readonly string[];
+  defaultWorkspaceId?: string;
 }) {
-  const availableHubs = availableHubIds
-    ? currentHubs.filter((hub) => availableHubIds.includes(hub.id))
-    : currentHubs;
+  const availableWorkspaces = availableWorkspaceIds
+    ? currentWorkspaces.filter((workspace) =>
+        availableWorkspaceIds.includes(workspace.id),
+      )
+    : currentWorkspaces;
   const [type, setType] = useState<WorkItemType>("task");
   const [title, setTitle] = useState("");
-  const [hubId, setHubId] = useState(
-    availableHubs.some((hub) => hub.id === defaultHubId)
-      ? (defaultHubId ?? "")
-      : (availableHubs[0]?.id ?? ""),
+  const [workspaceId, setWorkspaceId] = useState(
+    availableWorkspaces.some((workspace) => workspace.id === defaultWorkspaceId)
+      ? (defaultWorkspaceId ?? "")
+      : (availableWorkspaces[0]?.id ?? ""),
   );
   const boards = useMemo(
     () =>
       demoBoards.filter(
-        (board) => board.hubId === hubId && !board.id.startsWith("original-"),
+        (board) =>
+          board.workspaceId === workspaceId &&
+          !board.id.startsWith("original-"),
       ),
-    [hubId],
+    [workspaceId],
   );
   const [boardId, setBoardId] = useState("");
   const [owner, setOwner] = useState("Mohammed Zaman");
@@ -126,7 +132,7 @@ export function UniversalCreateDialog({
       id: `capture-${Date.now()}`,
       type,
       title: title.trim(),
-      hubId,
+      workspaceId,
       boardId: effectiveBoardId,
       owner,
       priority,
@@ -230,18 +236,22 @@ export function UniversalCreateDialog({
               <span>Workspace</span>
               <div>
                 <span>
-                  {availableHubs.find((hub) => hub.id === hubId)?.icon}
+                  {
+                    availableWorkspaces.find(
+                      (workspace) => workspace.id === workspaceId,
+                    )?.icon
+                  }
                 </span>
                 <select
-                  value={hubId}
+                  value={workspaceId}
                   onChange={(event) => {
-                    setHubId(event.target.value);
+                    setWorkspaceId(event.target.value);
                     setBoardId("");
                   }}
                 >
-                  {availableHubs.map((hub) => (
-                    <option key={hub.id} value={hub.id}>
-                      {hub.name}
+                  {availableWorkspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.name}
                     </option>
                   ))}
                 </select>

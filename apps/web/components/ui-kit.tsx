@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { Hint } from "./learning-center";
 
 /**
- * The shared vocabulary for Home, Portfolio and Hub.
+ * The shared vocabulary for Portfolio and Workspace.
  *
  * Each page is built from the same four primitives — hero, stat strip, panel,
  * entity tile — so moving between them feels like moving inside one product

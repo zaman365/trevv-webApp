@@ -1,5 +1,5 @@
 import { createApiClient } from "@founderhq/api-client";
-import { demoHubs } from "@founderhq/core";
+import { demoWorkspaces } from "@founderhq/core";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, Grid2X2, Plus, RefreshCw, Search } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -23,10 +23,10 @@ function DesktopPortfolio() {
     retry: 1,
   });
   const [query, setQuery] = useState("");
-  const hubs =
-    portfolio.data?.hubs ??
-    demoHubs.map((hub) => ({
-      hub,
+  const workspaces =
+    portfolio.data?.workspaces ??
+    demoWorkspaces.map((workspace) => ({
+      workspace,
       rollup: {
         open: 0,
         overdue: 0,
@@ -48,12 +48,17 @@ function DesktopPortfolio() {
           Portfolio
         </button>
         <p>Projects</p>
-        {hubs.slice(0, 7).map(({ hub }) => (
-          <button key={hub.id}>
-            <i style={{ color: hub.accent, background: `${hub.accent}18` }}>
-              {hub.icon}
+        {workspaces.slice(0, 7).map(({ workspace }) => (
+          <button key={workspace.id}>
+            <i
+              style={{
+                color: workspace.accent,
+                background: `${workspace.accent}18`,
+              }}
+            >
+              {workspace.icon}
             </i>
-            {hub.name}
+            {workspace.name}
           </button>
         ))}
         <footer>
@@ -100,32 +105,34 @@ function DesktopPortfolio() {
           {portfolio.isError && (
             <div className="desktop-offline">
               API unavailable — showing a safe local shell. Configure
-              VITE_API_URL to load live Hubs.
+              VITE_API_URL to load live Workspaces.
             </div>
           )}
           <div className="desktop-grid">
-            {hubs
-              .filter(({ hub }) =>
-                hub.name
+            {workspaces
+              .filter(({ workspace }) =>
+                workspace.name
                   .toLocaleLowerCase()
                   .includes(query.toLocaleLowerCase()),
               )
-              .map(({ hub, rollup }) => (
+              .map(({ workspace, rollup }) => (
                 <article
-                  key={hub.id}
-                  style={{ "--accent": hub.accent } as React.CSSProperties}
+                  key={workspace.id}
+                  style={
+                    { "--accent": workspace.accent } as React.CSSProperties
+                  }
                 >
                   <header>
-                    <span>{hub.icon}</span>
+                    <span>{workspace.icon}</span>
                     <div>
-                      <h2>{hub.name}</h2>
-                      <small>{hub.stage}</small>
+                      <h2>{workspace.name}</h2>
+                      <small>{workspace.stage}</small>
                     </div>
-                    <b className={`health-${hub.health}`}>
-                      {hub.health.replace("_", " ")}
+                    <b className={`health-${workspace.health}`}>
+                      {workspace.health.replace("_", " ")}
                     </b>
                   </header>
-                  <p>{hub.priority}</p>
+                  <p>{workspace.priority}</p>
                   <div>
                     <span>
                       <strong>{rollup.open}</strong>open
@@ -139,8 +146,10 @@ function DesktopPortfolio() {
                     </span>
                   </div>
                   <footer>
-                    <span className="desktop-avatar">{hub.lead.initials}</span>
-                    <small>{hub.nextMilestone.title}</small>
+                    <span className="desktop-avatar">
+                      {workspace.lead.initials}
+                    </span>
+                    <small>{workspace.nextMilestone.title}</small>
                     <b>→</b>
                   </footer>
                 </article>

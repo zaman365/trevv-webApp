@@ -397,7 +397,7 @@ function loadStoredSettings(raw: string | null): StoredSettings {
       organization: { ...initialSettings.organization, ...parsed.organization },
       members: Array.isArray(parsed.members)
         ? parsed.members.map((member) =>
-            ["Hub lead", "Project lead"].includes(member.role as string)
+            ["Workspace lead", "Project lead"].includes(member.role as string)
               ? { ...member, role: "Workspace lead" as const }
               : member,
           )
@@ -804,7 +804,7 @@ export function SettingsExperience({
       },
       data: {
         portfolios: 2,
-        hubs: 6,
+        workspaces: 6,
         note: "Demo workspace content is provided by the deterministic TREVV seed.",
       },
     };
@@ -886,7 +886,7 @@ export function SettingsExperience({
     providers.find((provider) => provider.key === providerDialog) ?? null;
 
   return (
-    <WorkspaceFrame active="settings" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="settings" workspaceSlug={workspaceSlug}>
       <main className="focus-main settings-page">
         <header className="focus-header settings-page-header">
           <div>

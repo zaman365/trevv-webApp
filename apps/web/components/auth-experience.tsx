@@ -243,7 +243,7 @@ export function OnboardingExperience() {
           </div>
         )}
         {step === 2 && (
-          <div className="onboarding-form first-hub-form">
+          <div className="onboarding-form first-workspace-form">
             <label>
               Workspace name
               <input
@@ -280,7 +280,7 @@ export function OnboardingExperience() {
             <div>
               <label>
                 Icon / color
-                <div className="hub-identity-input">
+                <div className="workspace-identity-input">
                   <span>N</span>
                   <input
                     type="color"
@@ -378,8 +378,8 @@ export function OnboardingExperience() {
             <h2>Your Portfolio is ready</h2>
             <p>
               TREVV created one Portfolio, your first Workspace, a starter
-              Blueprint, and a calm Home view. Nothing is locked into a customer
-              mode.
+              Blueprint, and a calm Portfolio view. Nothing is locked into a
+              customer mode.
             </p>
             <div>
               <b>Venture Portfolio</b>

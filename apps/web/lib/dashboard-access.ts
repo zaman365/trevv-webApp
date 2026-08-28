@@ -1,4 +1,4 @@
-import { demoHubs, demoPortfolios, type WorkItem } from "@founderhq/core";
+import { demoWorkspaces, demoPortfolios, type WorkItem } from "@founderhq/core";
 
 export type DashboardViewLevel = "portfolio" | "project" | "team" | "personal";
 
@@ -46,7 +46,7 @@ export const DASHBOARD_TEAMS: readonly DashboardTeam[] = [
  */
 export const DEMO_DASHBOARD_ACCESS: DashboardAccess = {
   portfolioIds: demoPortfolios.map((portfolio) => portfolio.id),
-  projectIds: demoHubs.map((project) => project.id),
+  projectIds: demoWorkspaces.map((project) => project.id),
   teamIds: DASHBOARD_TEAMS.map((team) => team.id),
   personal: true,
 };
@@ -86,7 +86,7 @@ export function filterItemsForDashboardView(
 ): WorkItem[] {
   if (level === "portfolio") return [...items];
   if (level === "project")
-    return items.filter((item) => item.hubId === targetId);
+    return items.filter((item) => item.workspaceId === targetId);
   if (level === "team") {
     const members = new Set(
       teams.find((team) => team.id === targetId)?.members ?? [],

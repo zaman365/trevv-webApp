@@ -1,4 +1,4 @@
-import { HubOverview } from "@/components/hub-overview";
+import { WorkspaceOverview } from "@/components/workspace-overview";
 
 export default async function WorkspacePage({
   params,
@@ -6,5 +6,5 @@ export default async function WorkspacePage({
   params: Promise<{ workspaceSlug: string }>;
 }) {
   const { workspaceSlug } = await params;
-  return <HubOverview slug={workspaceSlug} />;
+  return <WorkspaceOverview slug={workspaceSlug} />;
 }

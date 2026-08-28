@@ -2,7 +2,7 @@ import {
   apiErrorSchema,
   attentionActionSchema,
   attentionSignalSchema,
-  hubSchema,
+  workspaceSchema,
   paginatedItemsSchema,
   portfolioResponseSchema,
   portfolioSchema,
@@ -109,7 +109,8 @@ export function createApiClient({
     },
     waiting: async () =>
       waitingStateSchema.array().parse(await request("/waiting")),
-    hubs: async () => hubSchema.array().parse(await request("/hubs")),
+    workspaces: async () =>
+      workspaceSchema.array().parse(await request("/workspaces")),
     items: async (cursor?: string) =>
       paginatedItemsSchema.parse(
         await request(

@@ -10,8 +10,8 @@ const context = (role: AccessContext["role"]): AccessContext => ({
   userId: "user-a",
   organizationId: "org-a",
   role,
-  accessibleHubIds: new Set(["hub-a"]),
-  managedHubIds: new Set(["hub-a"]),
+  accessibleWorkspaceIds: new Set(["workspace-a"]),
+  managedWorkspaceIds: new Set(["workspace-a"]),
 });
 
 describe("tenant authorization", () => {
@@ -19,7 +19,7 @@ describe("tenant authorization", () => {
     for (const role of [
       "owner",
       "admin",
-      "hub_lead",
+      "workspace_lead",
       "member",
       "guest",
       "viewer",
@@ -27,43 +27,43 @@ describe("tenant authorization", () => {
       expect(
         can(context(role), "read", "item", {
           organizationId: "org-b",
-          hubId: "hub-a",
+          workspaceId: "workspace-a",
         }),
       ).toBe(false);
   });
-  it("does not reveal unrelated Hubs to a guest", () => {
+  it("does not reveal unrelated Workspaces to a guest", () => {
     expect(
-      can(context("guest"), "read", "hub", {
+      can(context("guest"), "read", "workspace", {
         organizationId: "org-a",
-        hubId: "hub-unrelated",
+        workspaceId: "workspace-unrelated",
         explicitlyShared: false,
       }),
     ).toBe(false);
     expect(() =>
-      requireAccess(context("guest"), "read", "hub", {
+      requireAccess(context("guest"), "read", "workspace", {
         organizationId: "org-a",
-        hubId: "hub-unrelated",
+        workspaceId: "workspace-unrelated",
       }),
     ).toThrow(PermissionError);
   });
-  it("keeps viewers read-only and allows Hub Leads to manage their Hub", () => {
+  it("keeps viewers read-only and allows Workspace Leads to manage their Workspace", () => {
     expect(
       can(context("viewer"), "update", "item", {
         organizationId: "org-a",
-        hubId: "hub-a",
+        workspaceId: "workspace-a",
         explicitlyShared: true,
       }),
     ).toBe(false);
     expect(
-      can(context("hub_lead"), "manage_members", "hub", {
+      can(context("workspace_lead"), "manage_members", "workspace", {
         organizationId: "org-a",
-        hubId: "hub-a",
+        workspaceId: "workspace-a",
       }),
     ).toBe(true);
     expect(
-      can(context("hub_lead"), "update", "board", {
+      can(context("workspace_lead"), "update", "board", {
         organizationId: "org-a",
-        hubId: "hub-a",
+        workspaceId: "workspace-a",
       }),
     ).toBe(true);
   });

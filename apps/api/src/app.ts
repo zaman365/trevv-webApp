@@ -13,8 +13,8 @@ import {
   demoChangeCheckpoint,
   demoDecisionOutcomes,
   demoDependencies,
-  demoHubSnapshots,
-  demoHubs,
+  demoWorkspaceSnapshots,
+  demoWorkspaces,
   demoInsights,
   demoItems,
   demoMeaningfulChanges,
@@ -23,10 +23,10 @@ import {
   demoStakeholderExposure,
   demoWaitingStates,
   generateAttentionSignals,
-  hubsForPortfolio,
+  workspacesForPortfolio,
   portfolioSignals,
   previewBlueprintUpdate,
-  rollupHub,
+  rollupWorkspace,
   unrestrictedDevelopmentEntitlements,
   type AttentionSignal,
   type WaitingState,
@@ -50,7 +50,7 @@ let trevvAuth: TrevvAuth | null | undefined;
 const attentionStore = new Map<string, AttentionSignal>(
   generateAttentionSignals(
     "org-demo",
-    demoHubs,
+    demoWorkspaces,
     demoItems,
     demoWaitingStates,
     now,
@@ -145,9 +145,9 @@ app.get("/api/v1/portfolios", (context) => {
     organizationId: "org-demo",
   });
   const accessiblePortfolioIds = new Set(
-    demoHubs
-      .filter((hub) => access.accessibleHubIds.has(hub.id))
-      .map((hub) => hub.portfolioId),
+    demoWorkspaces
+      .filter((workspace) => access.accessibleWorkspaceIds.has(workspace.id))
+      .map((workspace) => workspace.portfolioId),
   );
   return context.json(
     demoPortfolios.filter((portfolio) =>
@@ -172,17 +172,22 @@ app.get("/api/v1/portfolio", (context) => {
       "The requested Portfolio is unavailable.",
     );
   const access = context.get("access");
-  const hubs = hubsForPortfolio(portfolio.id).filter((hub) =>
-    access.accessibleHubIds.has(hub.id),
+  const workspaces = workspacesForPortfolio(portfolio.id).filter((workspace) =>
+    access.accessibleWorkspaceIds.has(workspace.id),
   );
-  const hubIds = new Set(hubs.map((hub) => hub.id));
-  const items = currentItems().filter((item) => hubIds.has(item.hubId));
+  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  const items = currentItems().filter((item) =>
+    workspaceIds.has(item.workspaceId),
+  );
   return context.json({
     asOf: now.toISOString(),
     portfolio,
-    signals: portfolioSignals(hubs, items, now),
-    hubs: hubs
-      .map((hub) => ({ hub, rollup: rollupHub(hub, items, now) }))
+    signals: portfolioSignals(workspaces, items, now),
+    workspaces: workspaces
+      .map((workspace) => ({
+        workspace,
+        rollup: rollupWorkspace(workspace, items, now),
+      }))
       .sort((a, b) => b.rollup.score - a.rollup.score),
   });
 });
@@ -193,10 +198,9 @@ app.get("/api/v1/attention", (context) => {
     organizationId: "org-demo",
   });
   const portfolioId = context.req.query("portfolioId");
-  const workspaceId =
-    context.req.query("workspaceId") ?? context.req.query("hubId");
+  const workspaceId = context.req.query("workspaceId");
   if (workspaceId) {
-    const workspace = hubForId(workspaceId);
+    const workspace = workspaceForId(workspaceId);
     if (!workspace)
       return failure(
         context,
@@ -204,9 +208,9 @@ app.get("/api/v1/attention", (context) => {
         "resource_not_found",
         "The requested workspace is unavailable.",
       );
-    requireAccess(access, "read", "hub", {
+    requireAccess(access, "read", "workspace", {
       organizationId: "org-demo",
-      hubId: workspace.id,
+      workspaceId: workspace.id,
     });
     if (portfolioId && workspace.portfolioId !== portfolioId)
       return failure(
@@ -218,9 +222,11 @@ app.get("/api/v1/attention", (context) => {
   }
   const signals = [...attentionStore.values()]
     .filter((signal) => !portfolioId || signal.portfolioId === portfolioId)
-    .filter((signal) => !workspaceId || signal.hubId === workspaceId)
+    .filter((signal) => !workspaceId || signal.workspaceId === workspaceId)
     .filter(
-      (signal) => !signal.hubId || access.accessibleHubIds.has(signal.hubId),
+      (signal) =>
+        !signal.workspaceId ||
+        access.accessibleWorkspaceIds.has(signal.workspaceId),
     )
     .filter((signal) => !signal.resolvedAt && !signal.dismissedAt)
     .filter(
@@ -246,7 +252,7 @@ app.patch("/api/v1/attention/:id", async (context) => {
     );
   requireAccess(context.get("access"), "update", "item", {
     organizationId: signal.organizationId,
-    ...(signal.hubId ? { hubId: signal.hubId } : {}),
+    ...(signal.workspaceId ? { workspaceId: signal.workspaceId } : {}),
   });
   const raw: unknown = await context.req.json();
   const parsed = attentionActionSchema.safeParse(raw);
@@ -277,7 +283,8 @@ app.get("/api/v1/waiting", (context) => {
   return context.json(
     [...waitingStore.values()].filter(
       (waiting) =>
-        !waiting.resolvedAt && access.accessibleHubIds.has(waiting.hubId),
+        !waiting.resolvedAt &&
+        access.accessibleWorkspaceIds.has(waiting.workspaceId),
     ),
   );
 });
@@ -293,7 +300,7 @@ app.patch("/api/v1/waiting/:id", async (context) => {
     );
   requireAccess(context.get("access"), "update", "item", {
     organizationId: waiting.organizationId,
-    hubId: waiting.hubId,
+    workspaceId: waiting.workspaceId,
   });
   const raw: unknown = await context.req.json();
   const parsed = z
@@ -345,7 +352,7 @@ app.get("/api/v1/management-memory", (context) => {
     organizationId: "org-demo",
   });
   return context.json({
-    hubSnapshots: demoHubSnapshots,
+    workspaceSnapshots: demoWorkspaceSnapshots,
     reviewRituals: demoReviewRituals,
     decisionOutcomes: demoDecisionOutcomes,
   });
@@ -355,7 +362,7 @@ app.post("/api/v1/reviews/weekly", async (context) => {
   const raw: unknown = await context.req.json();
   const parsed = z
     .object({
-      hubId: z.string().min(3),
+      workspaceId: z.string().min(3),
       health: z.enum(["on_track", "watch", "critical", "parked"]),
       progress: z.string().trim().min(1),
       blocker: z.string().trim().min(1),
@@ -374,9 +381,9 @@ app.post("/api/v1/reviews/weekly", async (context) => {
         issues: parsed.error.flatten(),
       },
     );
-  requireAccess(context.get("access"), "update", "hub", {
+  requireAccess(context.get("access"), "update", "workspace", {
     organizationId: "org-demo",
-    hubId: parsed.data.hubId,
+    workspaceId: parsed.data.workspaceId,
   });
   return context.json(
     {
@@ -389,8 +396,9 @@ app.post("/api/v1/reviews/weekly", async (context) => {
         id: crypto.randomUUID(),
         organizationId: "org-demo",
         portfolioId:
-          hubForId(parsed.data.hubId)?.portfolioId ?? "portfolio-demo",
-        hubId: parsed.data.hubId,
+          workspaceForId(parsed.data.workspaceId)?.portfolioId ??
+          "portfolio-demo",
+        workspaceId: parsed.data.workspaceId,
         capturedAt: new Date().toISOString(),
         health: parsed.data.health,
         source: "weekly_review",
@@ -405,7 +413,9 @@ app.get("/api/v1/insights", (context) => {
   const access = context.get("access");
   return context.json(
     demoInsights.filter(
-      (insight) => !insight.hubId || access.accessibleHubIds.has(insight.hubId),
+      (insight) =>
+        !insight.workspaceId ||
+        access.accessibleWorkspaceIds.has(insight.workspaceId),
     ),
   );
 });
@@ -431,7 +441,9 @@ app.get("/api/v1/team/pressure", (context) => {
   requireAccess(context.get("access"), "read", "portfolio", {
     organizationId: "org-demo",
   });
-  return context.json(calculateResourcePressure(demoHubs, currentItems(), now));
+  return context.json(
+    calculateResourcePressure(demoWorkspaces, currentItems(), now),
+  );
 });
 
 app.get("/api/v1/entitlements", (context) => {
@@ -481,44 +493,17 @@ app.post("/api/v1/import/preview", async (context) => {
   });
 });
 
-app.get("/api/v1/hubs", (context) => {
-  const access = context.get("access");
-  return context.json(
-    demoHubs.filter((hub) => access.accessibleHubIds.has(hub.id)),
-  );
-});
-
 app.get("/api/v1/workspaces", (context) => {
   const access = context.get("access");
   return context.json(
-    demoHubs.filter((workspace) => access.accessibleHubIds.has(workspace.id)),
+    demoWorkspaces.filter((workspace) =>
+      access.accessibleWorkspaceIds.has(workspace.id),
+    ),
   );
-});
-
-app.get("/api/v1/hubs/:slug", (context) => {
-  const hub = demoHubs.find(
-    (candidate) => candidate.slug === context.req.param("slug"),
-  );
-  if (!hub)
-    return failure(
-      context,
-      404,
-      "resource_not_found",
-      "The requested resource is unavailable.",
-    );
-  requireAccess(context.get("access"), "read", "hub", {
-    organizationId: "org-demo",
-    hubId: hub.id,
-  });
-  return context.json({
-    hub,
-    rollup: rollupHub(hub, currentItems(), now),
-    items: currentItems().filter((item) => item.hubId === hub.id),
-  });
 });
 
 app.get("/api/v1/workspaces/:slug", (context) => {
-  const workspace = demoHubs.find(
+  const workspace = demoWorkspaces.find(
     (candidate) => candidate.slug === context.req.param("slug"),
   );
   if (!workspace)
@@ -528,14 +513,14 @@ app.get("/api/v1/workspaces/:slug", (context) => {
       "resource_not_found",
       "The requested Workspace is unavailable.",
     );
-  requireAccess(context.get("access"), "read", "hub", {
+  requireAccess(context.get("access"), "read", "workspace", {
     organizationId: "org-demo",
-    hubId: workspace.id,
+    workspaceId: workspace.id,
   });
   return context.json({
     workspace,
-    rollup: rollupHub(workspace, currentItems(), now),
-    items: currentItems().filter((item) => item.hubId === workspace.id),
+    rollup: rollupWorkspace(workspace, currentItems(), now),
+    items: currentItems().filter((item) => item.workspaceId === workspace.id),
   });
 });
 
@@ -546,21 +531,18 @@ app.get(
     z.object({
       cursor: z.string().optional(),
       workspaceId: z.string().optional(),
-      hubId: z.string().optional(),
       assignee: z.string().optional(),
       limit: z.coerce.number().int().min(1).max(100).default(50),
     }),
   ),
   (context) => {
-    const { cursor, workspaceId, hubId, assignee, limit } =
-      context.req.valid("query");
+    const { cursor, workspaceId, assignee, limit } = context.req.valid("query");
     const access = context.get("access");
-    const selectedWorkspaceId = workspaceId ?? hubId;
     let items = currentItems().filter((item) =>
-      access.accessibleHubIds.has(item.hubId),
+      access.accessibleWorkspaceIds.has(item.workspaceId),
     );
-    if (selectedWorkspaceId)
-      items = items.filter((item) => item.hubId === selectedWorkspaceId);
+    if (workspaceId)
+      items = items.filter((item) => item.workspaceId === workspaceId);
     if (assignee) items = items.filter((item) => item.assignee === assignee);
     const offset = cursor
       ? Number.parseInt(
@@ -593,7 +575,7 @@ app.post("/api/v1/items", async (context) => {
     );
   requireAccess(context.get("access"), "create", "item", {
     organizationId: "org-demo",
-    hubId: parsed.data.hubId,
+    workspaceId: parsed.data.workspaceId,
   });
   const idempotencyKey = context.req.header("idempotency-key");
   if (idempotencyKey && idempotencyStore.has(idempotencyKey)) {
@@ -604,7 +586,7 @@ app.post("/api/v1/items", async (context) => {
   const input = parsed.data;
   const item: WorkItem & { version: number } = {
     id,
-    hubId: input.hubId,
+    workspaceId: input.workspaceId,
     boardId: input.boardId,
     title: input.title,
     type: input.type,
@@ -632,7 +614,7 @@ app.patch("/api/v1/items/:id", async (context) => {
     );
   requireAccess(context.get("access"), "update", "item", {
     organizationId: "org-demo",
-    hubId: existing.hubId,
+    workspaceId: existing.workspaceId,
   });
   const version = Number.parseInt(context.req.header("if-match") ?? "-1", 10);
   const raw: unknown = await context.req.json();
@@ -676,19 +658,19 @@ app.get(
   (context) => {
     const query = context.req.valid("query").q.toLocaleLowerCase();
     const access = context.get("access");
-    const hubs = demoHubs.filter(
-      (hub) =>
-        access.accessibleHubIds.has(hub.id) &&
-        `${hub.name} ${hub.priority} ${hub.healthNote}`
+    const workspaces = demoWorkspaces.filter(
+      (workspace) =>
+        access.accessibleWorkspaceIds.has(workspace.id) &&
+        `${workspace.name} ${workspace.priority} ${workspace.healthNote}`
           .toLocaleLowerCase()
           .includes(query),
     );
     const items = currentItems().filter(
       (item) =>
-        access.accessibleHubIds.has(item.hubId) &&
+        access.accessibleWorkspaceIds.has(item.workspaceId) &&
         item.title.toLocaleLowerCase().includes(query),
     );
-    return context.json({ workspaces: hubs, hubs, items: items.slice(0, 50) });
+    return context.json({ workspaces: workspaces, items: items.slice(0, 50) });
   },
 );
 
@@ -704,11 +686,12 @@ app.get("/api/v1/export/organization.json", (context) => {
     exportedAt: new Date().toISOString(),
     organization: { id: "org-demo", name: "TREVV Demo" },
     portfolios: demoPortfolios,
-    hubs: demoHubs,
+    workspaces: demoWorkspaces,
     boards: [...new Set(currentItems().map((item) => item.boardId))].map(
       (boardId) => ({
         id: boardId,
-        hubId: currentItems().find((item) => item.boardId === boardId)?.hubId,
+        workspaceId: currentItems().find((item) => item.boardId === boardId)
+          ?.workspaceId,
       }),
     ),
     items: currentItems(),
@@ -717,13 +700,13 @@ app.get("/api/v1/export/organization.json", (context) => {
     decisions: currentItems().filter((item) => item.type === "decision"),
     decisionOutcomes: demoDecisionOutcomes,
     approvals: currentItems().filter((item) => item.type === "approval"),
-    updates: demoHubs.map((hub) => ({
-      hubId: hub.id,
-      text: hub.latestUpdate.text,
-      date: hub.latestUpdate.date,
+    updates: demoWorkspaces.map((workspace) => ({
+      workspaceId: workspace.id,
+      text: workspace.latestUpdate.text,
+      date: workspace.latestUpdate.date,
     })),
     insights: demoInsights,
-    snapshots: demoHubSnapshots,
+    snapshots: demoWorkspaceSnapshots,
     waiting: [...waitingStore.values()],
     attention: [...attentionStore.values()],
     dependencies: demoDependencies,
@@ -753,7 +736,7 @@ app.get("/api/v1/export/board/:boardId.csv", (context) => {
     );
   requireAccess(context.get("access"), "read", "board", {
     organizationId: "org-demo",
-    hubId: first.hubId,
+    workspaceId: first.workspaceId,
   });
   const csv = [
     "id,title,type,status,priority,due_date,assignee",
@@ -809,16 +792,20 @@ app.onError((error, context) => {
 function currentItems(): WorkItem[] {
   return [...itemStore.values()].map(({ version: _version, ...item }) => item);
 }
-function hubForId(id: string) {
-  return demoHubs.find((hub) => hub.id === id);
+function workspaceForId(id: string) {
+  return demoWorkspaces.find((workspace) => workspace.id === id);
 }
 function demoAccess(): AccessContext {
   return {
     userId: "user-owner",
     organizationId: "org-demo",
     role: "owner",
-    accessibleHubIds: new Set(demoHubs.map((hub) => hub.id)),
-    managedHubIds: new Set(demoHubs.map((hub) => hub.id)),
+    accessibleWorkspaceIds: new Set(
+      demoWorkspaces.map((workspace) => workspace.id),
+    ),
+    managedWorkspaceIds: new Set(
+      demoWorkspaces.map((workspace) => workspace.id),
+    ),
   };
 }
 function getAuth(): TrevvAuth | null {

@@ -40,6 +40,8 @@ Use rolling API/Worker deploys. Database changes must be backwards-compatible fo
 
 Use `.env.example` as the catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database or integration credentials to Next.js, Expo, or Vite bundles.
 
+The GitHub Actions deployment stays disabled until the `production` environment exists, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are configured as Actions secrets, and the `PRODUCTION_DEPLOY_ENABLED` repository variable is set to `true`. Protect the environment before enabling that variable. Production uses the `trevv.de` custom domain only; `workers_dev` is explicitly disabled in `apps/web/wrangler.jsonc`.
+
 ## Deep links
 
-Web uses HTTPS application routes on the configured host; `trevv.de` is the primary product domain. Mobile registers `trevv://`; desktop registers the Tauri deep-link capability when packaging is enabled. Auth callbacks must include a one-time state/PKCE verifier and return to a specific safe route. Unknown deep links open Home, never arbitrary external URLs. The legacy scheme may be accepted temporarily for compatibility.
+Web uses HTTPS application routes on the configured host; `trevv.de` is the primary product domain. Mobile registers `trevv://`; desktop registers the Tauri deep-link capability when packaging is enabled. Auth callbacks must include a one-time state/PKCE verifier and return to a specific safe route. Default application entry points open Portfolio; arbitrary external return URLs are never accepted.

@@ -35,7 +35,7 @@ export async function runAttentionSweep(
 ): Promise<JobResult> {
   const started = performance.now();
   // The production adapter regenerates deterministic signals from due work,
-  // dependencies, waiting states, Hub updates, and cross-Hub ownership.
+  // dependencies, waiting states, Workspace updates, and cross-Workspace ownership.
   return {
     job: "attention-sweep",
     processed: 0,

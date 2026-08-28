@@ -22,7 +22,7 @@ import {
   TimerReset,
   X,
 } from "lucide-react";
-import { demoBoards, demoHubs } from "@founderhq/core";
+import { demoBoards, demoWorkspaces } from "@founderhq/core";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
@@ -45,7 +45,7 @@ interface InboxAction {
   title: string;
   summary: string;
   source: string;
-  hubId: string;
+  workspaceId: string;
   receivedAt: string;
   priority: InboxPriority;
   route: string;
@@ -69,7 +69,7 @@ const initialActions: InboxAction[] = [
     summary:
       "Nora added a recommendation and needs your choice before the pilot build continues.",
     source: "Nora Klein",
-    hubId: "hub-mealflow",
+    workspaceId: "workspace-mealflow",
     receivedAt: "8 min ago",
     priority: "urgent",
     route: workspaceHref("mealflow", "decisions"),
@@ -82,7 +82,7 @@ const initialActions: InboxAction[] = [
     summary:
       "Amira mentioned you in the evidence checklist and highlighted one unresolved manufacturer claim.",
     source: "Amira Demir",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     receivedAt: "24 min ago",
     priority: "high",
     route: workspaceHref("northstar-apparel"),
@@ -95,7 +95,7 @@ const initialActions: InboxAction[] = [
     summary:
       "Jana submitted the repaired storefront with before-and-after evidence for final review.",
     source: "Jana Roth",
-    hubId: "hub-localreach",
+    workspaceId: "workspace-localreach",
     receivedAt: "1 hr ago",
     priority: "high",
     route: workspaceHref("localreach", "approvals"),
@@ -108,7 +108,7 @@ const initialActions: InboxAction[] = [
     summary:
       "TREVV brought this back because the promised supplier declaration has not been attached.",
     source: "TREVV",
-    hubId: "hub-centralops",
+    workspaceId: "workspace-centralops",
     receivedAt: "Today, 08:00",
     priority: "urgent",
     route: workspaceHref("centralops", "waiting"),
@@ -121,7 +121,7 @@ const initialActions: InboxAction[] = [
     summary:
       "Elias asked whether the approved launch wording should appear in this week's stakeholder summary.",
     source: "Elias Hart",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     receivedAt: "Yesterday",
     priority: "normal",
     route: workspaceHref("northstar-apparel"),
@@ -147,10 +147,10 @@ export function InboxWorkflow({
     ...emailActions.map((message) => ({
       ...message,
       category: "follow-up" as const,
-      hubId: scope.hubs[0]?.id ?? "hub-centralops",
+      workspaceId: scope.workspaces[0]?.id ?? "workspace-centralops",
       priority: "normal" as const,
-      route: scope.hubs[0]
-        ? workspaceHref(scope.hubs[0].slug, "inbox")
+      route: scope.workspaces[0]
+        ? workspaceHref(scope.workspaces[0].slug, "inbox")
         : "/app/portfolio",
       disposition: "open" as const,
     })),
@@ -170,9 +170,11 @@ export function InboxWorkflow({
     completedDelta: number;
   } | null>(null);
   const [completedToday, setCompletedToday] = useState(0);
-  const scopedHubIds = new Set(scope.hubs.map((project) => project.id));
+  const scopedWorkspaceIds = new Set(
+    scope.workspaces.map((project) => project.id),
+  );
   const scopedActions = actions.filter((action) =>
-    scopedHubIds.has(action.hubId),
+    scopedWorkspaceIds.has(action.workspaceId),
   );
 
   const visible = useMemo(() => {
@@ -267,7 +269,7 @@ export function InboxWorkflow({
       )}
 
       <QuickCapture
-        projects={scope.hubs}
+        projects={scope.workspaces}
         onCaptured={(message) => setNotice(message)}
       />
 
@@ -441,8 +443,8 @@ export function InboxWorkflow({
 
         <div className="inbox-action-rows">
           {visible.map((action) => {
-            const hub = demoHubs.find(
-              (candidate) => candidate.id === action.hubId,
+            const workspace = demoWorkspaces.find(
+              (candidate) => candidate.id === action.workspaceId,
             );
             return (
               <article
@@ -478,7 +480,7 @@ export function InboxWorkflow({
                   </span>
                   <strong>{action.title}</strong>
                   <small>
-                    {action.source} · {hub?.name ?? "No workspace"} ·{" "}
+                    {action.source} · {workspace?.name ?? "No workspace"} ·{" "}
                     {action.receivedAt}
                   </small>
                   {action.disposition === "snoozed" && (
@@ -573,10 +575,11 @@ export function InboxWorkflow({
               id: `inbox-work-${Date.now()}`,
               type: "task",
               title: selectedAction.title,
-              hubId: selectedAction.hubId,
+              workspaceId: selectedAction.workspaceId,
               boardId:
-                demoBoards.find((board) => board.hubId === selectedAction.hubId)
-                  ?.id ?? "inbox",
+                demoBoards.find(
+                  (board) => board.workspaceId === selectedAction.workspaceId,
+                )?.id ?? "inbox",
               owner: "Mohammed Zaman",
               priority: selectedAction.priority,
               createdAt: new Date().toISOString(),
@@ -616,12 +619,12 @@ function QuickCapture({
   projects,
 }: {
   onCaptured: (message: string) => void;
-  projects: typeof demoHubs;
+  projects: typeof demoWorkspaces;
 }) {
   const capturedWork = useCapturedWork();
   const [draft, setDraft] = useState("");
   const [type, setType] = useState<CapturedWorkType>("task");
-  const [hubId, setHubId] = useState("");
+  const [workspaceId, setWorkspaceId] = useState("");
   const [datePreset, setDatePreset] = useState("none");
   const [customDate, setCustomDate] = useState("");
   const recent = capturedWork.slice(0, 4);
@@ -634,14 +637,18 @@ function QuickCapture({
 
   const capture = () => {
     if (!draft.trim()) return;
-    const hub = demoHubs.find((candidate) => candidate.id === hubId);
-    const board = demoBoards.find((candidate) => candidate.hubId === hubId);
+    const workspace = demoWorkspaces.find(
+      (candidate) => candidate.id === workspaceId,
+    );
+    const board = demoBoards.find(
+      (candidate) => candidate.workspaceId === workspaceId,
+    );
     const title = captureTitle(draft.trim(), type);
     const item: CapturedWorkItem = {
       id: `quick-${Date.now()}`,
       type,
       title,
-      hubId: hub?.id ?? "inbox",
+      workspaceId: workspace?.id ?? "inbox",
       boardId: board?.id ?? "inbox",
       owner: "Mohammed Zaman",
       priority: "normal",
@@ -657,7 +664,7 @@ function QuickCapture({
     setDatePreset("none");
     setCustomDate("");
     onCaptured(
-      `${captureTypeLabel(type)} captured${hub ? ` in ${hub.name}` : " for later organization"}.`,
+      `${captureTypeLabel(type)} captured${workspace ? ` in ${workspace.name}` : " for later organization"}.`,
     );
   };
 
@@ -756,13 +763,13 @@ function QuickCapture({
               <span className="sr-only">Capture Workspace</span>
               <Inbox size={13} />
               <select
-                value={hubId}
-                onChange={(event) => setHubId(event.target.value)}
+                value={workspaceId}
+                onChange={(event) => setWorkspaceId(event.target.value)}
               >
                 <option value="">Organize later</option>
-                {projects.map((hub) => (
-                  <option key={hub.id} value={hub.id}>
-                    {hub.name}
+                {projects.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
                   </option>
                 ))}
               </select>
@@ -835,7 +842,9 @@ function InboxDetailDialog({
   onAddToWork: () => void;
 }) {
   const [response, setResponse] = useState("");
-  const hub = demoHubs.find((candidate) => candidate.id === action.hubId);
+  const workspace = demoWorkspaces.find(
+    (candidate) => candidate.id === action.workspaceId,
+  );
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!response.trim()) return;
@@ -879,7 +888,7 @@ function InboxDetailDialog({
             <div>
               <strong>{action.source}</strong>
               <small>
-                {hub?.name ?? "No workspace"} · {action.receivedAt}
+                {workspace?.name ?? "No workspace"} · {action.receivedAt}
               </small>
             </div>
             <span className={`inbox-priority ${action.priority}`}>

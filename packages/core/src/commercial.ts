@@ -16,7 +16,7 @@ export interface Portfolio {
 
 export type EntitlementKey =
   | "portfolios.max"
-  | "hubs.max"
+  | "workspaces.max"
   | "members.max"
   | "guests.max"
   | "storage.bytes"
@@ -67,7 +67,7 @@ export const unrestrictedDevelopmentEntitlements: EntitlementSet = {
   planKey: "development-unrestricted",
   values: {
     "portfolios.max": "unlimited",
-    "hubs.max": "unlimited",
+    "workspaces.max": "unlimited",
     "members.max": "unlimited",
     "guests.max": "unlimited",
     "storage.bytes": "unlimited",
@@ -90,7 +90,7 @@ export type AttentionSignalType =
   | "deadline_progress_risk"
   | "dependency_threat"
   | "missing_owner"
-  | "missing_hub_lead"
+  | "missing_workspace_lead"
   | "resource_pressure"
   | "missing_update"
   | "stale_update"
@@ -102,14 +102,14 @@ export type AttentionSignalType =
   | "approval_overdue"
   | "follow_up_overdue"
   | "waiting_too_long"
-  | "too_many_critical_hubs"
+  | "too_many_critical_workspaces"
   | "milestone_conflict";
 
 export interface AttentionSignal {
   id: string;
   organizationId: string;
   portfolioId: string;
-  hubId?: string;
+  workspaceId?: string;
   entityType: string;
   entityId: string;
   signalType: AttentionSignalType;
@@ -184,7 +184,7 @@ export function rankAttentionSignals(
     );
 }
 
-export interface AttentionEvidenceHub {
+export interface AttentionEvidenceWorkspace {
   id: string;
   portfolioId: string;
   name: string;
@@ -195,7 +195,7 @@ export interface AttentionEvidenceHub {
 
 export interface AttentionEvidenceItem {
   id: string;
-  hubId: string;
+  workspaceId: string;
   title: string;
   type: "task" | "decision" | "approval" | "milestone" | "idea" | "request";
   priority: "urgent" | "high" | "normal" | "low" | "none";
@@ -214,7 +214,7 @@ export interface WorkItemDependency {
 
 export function generateAttentionSignals(
   organizationId: string,
-  hubs: readonly AttentionEvidenceHub[],
+  workspaces: readonly AttentionEvidenceWorkspace[],
   items: readonly AttentionEvidenceItem[],
   waitingStates: readonly WaitingState[] = [],
   now = new Date(),
@@ -232,21 +232,27 @@ export function generateAttentionSignals(
       ...signal,
     });
   };
-  const hubById = new Map(hubs.map((hub) => [hub.id, hub]));
+  const workspaceById = new Map(
+    workspaces.map((workspace) => [workspace.id, workspace]),
+  );
   for (const item of items) {
     if (item.status === "done") continue;
-    const hub = hubById.get(item.hubId);
-    if (!hub) continue;
+    const workspace = workspaceById.get(item.workspaceId);
+    if (!workspace) continue;
     const overdue = Boolean(
       item.dueDate && new Date(`${item.dueDate}T23:59:59Z`) < now,
     );
     const base = {
-      portfolioId: hub.portfolioId,
-      hubId: hub.id,
+      portfolioId: workspace.portfolioId,
+      workspaceId: workspace.id,
       entityType: item.type,
       entityId: item.id,
       responsibility: item.assignee ? 1 : 1.2,
-      metadata: { title: item.title, hubName: hub.name, dueDate: item.dueDate },
+      metadata: {
+        title: item.title,
+        workspaceName: workspace.name,
+        dueDate: item.dueDate,
+      },
     };
     if (item.status === "blocked")
       add({
@@ -299,12 +305,12 @@ export function generateAttentionSignals(
       new Date(`${prerequisite.dueDate}T23:59:59Z`) < now,
     );
     if (prerequisite.status !== "blocked" && !prerequisiteOverdue) continue;
-    const hub = hubById.get(item.hubId);
-    const prerequisiteHub = hubById.get(prerequisite.hubId);
-    if (!hub || !prerequisiteHub) continue;
+    const workspace = workspaceById.get(item.workspaceId);
+    const prerequisiteWorkspace = workspaceById.get(prerequisite.workspaceId);
+    if (!workspace || !prerequisiteWorkspace) continue;
     add({
-      portfolioId: hub.portfolioId,
-      hubId: hub.id,
+      portfolioId: workspace.portfolioId,
+      workspaceId: workspace.id,
       entityType: item.type,
       entityId: item.id,
       signalType: "dependency_threat",
@@ -312,37 +318,37 @@ export function generateAttentionSignals(
       impact: item.priority === "urgent" ? 5 : 4,
       urgency: prerequisiteOverdue ? 5 : 4,
       responsibility: item.assignee ? 1 : 1.2,
-      reason: `${item.title} depends on blocked work in ${prerequisiteHub.name}: ${prerequisite.title}.`,
+      reason: `${item.title} depends on blocked work in ${prerequisiteWorkspace.name}: ${prerequisite.title}.`,
       recommendedAction:
         "Coordinate the owners across both projects and agree the unblock path.",
       metadata: {
         title: item.title,
         dependsOnItemId: prerequisite.id,
-        dependsOnHubId: prerequisiteHub.id,
-        crossHub: prerequisiteHub.id !== hub.id,
+        dependsOnWorkspaceId: prerequisiteWorkspace.id,
+        crossWorkspace: prerequisiteWorkspace.id !== workspace.id,
       },
     });
   }
-  for (const hub of hubs) {
+  for (const workspace of workspaces) {
     const ageDays = Math.floor(
       (now.getTime() -
-        new Date(`${hub.latestUpdate.date}T12:00:00Z`).getTime()) /
+        new Date(`${workspace.latestUpdate.date}T12:00:00Z`).getTime()) /
         86_400_000,
     );
-    if (ageDays > 7 && hub.health !== "parked")
+    if (ageDays > 7 && workspace.health !== "parked")
       add({
-        portfolioId: hub.portfolioId,
-        hubId: hub.id,
-        entityType: "hub",
-        entityId: hub.id,
+        portfolioId: workspace.portfolioId,
+        workspaceId: workspace.id,
+        entityType: "workspace",
+        entityId: workspace.id,
         signalType: "stale_update",
         severity: ageDays > 14 ? "high" : "medium",
-        impact: hub.health === "critical" ? 5 : 3,
+        impact: workspace.health === "critical" ? 5 : 3,
         urgency: Math.min(5, Math.ceil(ageDays / 4)),
         responsibility: 1,
-        reason: `${hub.name} has not published an update for ${ageDays} days.`,
+        reason: `${workspace.name} has not published an update for ${ageDays} days.`,
         recommendedAction: "Ask the project lead for a structured update.",
-        metadata: { hubName: hub.name, ageDays },
+        metadata: { workspaceName: workspace.name, ageDays },
       });
   }
   for (const waiting of waitingStates) {
@@ -350,7 +356,7 @@ export function generateAttentionSignals(
     if (new Date(`${waiting.expectedBy}T23:59:59Z`) >= now) continue;
     add({
       portfolioId: waiting.portfolioId,
-      hubId: waiting.hubId,
+      workspaceId: waiting.workspaceId,
       entityType: waiting.entityType,
       entityId: waiting.entityId,
       signalType: "waiting_too_long",
@@ -386,7 +392,7 @@ export interface WaitingState {
   id: string;
   organizationId: string;
   portfolioId: string;
-  hubId: string;
+  workspaceId: string;
   entityType: "work_item" | "decision" | "approval";
   entityId: string;
   title: string;
@@ -420,7 +426,7 @@ export interface MeaningfulChange {
   id: string;
   organizationId: string;
   portfolioId: string;
-  hubId: string;
+  workspaceId: string;
   entityType: string;
   entityId: string;
   type: MeaningfulChangeType;
@@ -455,11 +461,11 @@ export function changesSinceCheckpoint(
     );
 }
 
-export interface HubSnapshot {
+export interface WorkspaceSnapshot {
   id: string;
   organizationId: string;
   portfolioId: string;
-  hubId: string;
+  workspaceId: string;
   capturedAt: string;
   health: "on_track" | "watch" | "critical" | "parked";
   progress?: number;
@@ -478,8 +484,8 @@ export interface ReviewRitual {
   id: string;
   organizationId: string;
   portfolioId: string;
-  hubId?: string;
-  type: "daily_focus" | "weekly_hub" | "monthly_portfolio";
+  workspaceId?: string;
+  type: "daily_focus" | "weekly_workspace" | "monthly_portfolio";
   cadence: string;
   enabled: boolean;
   nextDueAt?: string;
@@ -520,7 +526,7 @@ export interface Insight {
   id: string;
   organizationId: string;
   portfolioId: string;
-  hubId?: string;
+  workspaceId?: string;
   title: string;
   description: string;
   sourceType: InsightSourceType;
@@ -535,7 +541,7 @@ export interface InsightLink {
   id: string;
   organizationId: string;
   insightId: string;
-  entityType: "idea" | "decision" | "hub" | "board" | "work_item";
+  entityType: "idea" | "decision" | "workspace" | "board" | "work_item";
   entityId: string;
 }
 
@@ -600,7 +606,7 @@ export interface BlueprintInstance {
   organizationId: string;
   blueprintId: string;
   blueprintVersionId: string;
-  hubId: string;
+  workspaceId: string;
   boardId: string;
   detachedAt?: string;
   localOverrides: string[];
@@ -672,14 +678,14 @@ export interface ResourcePressure {
   urgentHighActive: number;
   dueThisWeek: number;
   blockedResponsibilities: number;
-  criticalHubResponsibilities: number;
+  criticalWorkspaceResponsibilities: number;
   milestonesOwned: number;
-  hubIds: string[];
+  workspaceIds: string[];
   pressure: "normal" | "elevated" | "critical";
 }
 
 export function calculateResourcePressure(
-  hubs: readonly Pick<AttentionEvidenceHub, "id" | "health">[],
+  workspaces: readonly Pick<AttentionEvidenceWorkspace, "id" | "health">[],
   items: readonly AttentionEvidenceItem[],
   now = new Date(),
 ): ResourcePressure[] {
@@ -694,7 +700,7 @@ export function calculateResourcePressure(
   return names
     .map((userName) => {
       const owned = active.filter((item) => item.assignee === userName);
-      const hubIds = [...new Set(owned.map((item) => item.hubId))];
+      const workspaceIds = [...new Set(owned.map((item) => item.workspaceId))];
       const urgentHighActive = owned.filter((item) =>
         ["urgent", "high"].includes(item.priority),
       ).length;
@@ -707,8 +713,10 @@ export function calculateResourcePressure(
       const blockedResponsibilities = owned.filter(
         (item) => item.status === "blocked",
       ).length;
-      const criticalHubResponsibilities = hubIds.filter(
-        (hubId) => hubs.find((hub) => hub.id === hubId)?.health === "critical",
+      const criticalWorkspaceResponsibilities = workspaceIds.filter(
+        (workspaceId) =>
+          workspaces.find((workspace) => workspace.id === workspaceId)
+            ?.health === "critical",
       ).length;
       const milestonesOwned = owned.filter(
         (item) => item.type === "milestone",
@@ -717,7 +725,7 @@ export function calculateResourcePressure(
         urgentHighActive +
         dueThisWeek +
         blockedResponsibilities * 2 +
-        criticalHubResponsibilities * 2 +
+        criticalWorkspaceResponsibilities * 2 +
         milestonesOwned;
       return {
         userId: `user-${userName.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
@@ -725,9 +733,9 @@ export function calculateResourcePressure(
         urgentHighActive,
         dueThisWeek,
         blockedResponsibilities,
-        criticalHubResponsibilities,
+        criticalWorkspaceResponsibilities,
         milestonesOwned,
-        hubIds,
+        workspaceIds,
         pressure: score >= 12 ? "critical" : score >= 7 ? "elevated" : "normal",
       } satisfies ResourcePressure;
     })
@@ -740,7 +748,7 @@ export function calculateResourcePressure(
 export interface StakeholderExposure {
   id: string;
   organizationId: string;
-  hubId: string;
+  workspaceId: string;
   principalId: string;
   health: boolean;
   latestUpdate: boolean;

@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import {
   calculateResourcePressure,
-  demoHubs,
+  demoWorkspaces,
   demoItems,
   type ResourcePressure,
 } from "@founderhq/core";
@@ -41,14 +41,16 @@ interface TeamMember extends ResourcePressure {
   focusNote: string;
 }
 
-const currentHubs = demoHubs.filter((hub) => !hub.id.startsWith("original-"));
+const currentWorkspaces = demoWorkspaces.filter(
+  (workspace) => !workspace.id.startsWith("original-"),
+);
 const currentItems = demoItems.filter(
   (item) => !item.id.startsWith("original-"),
 );
 const roleCycle: MemberRole[] = ["Owner", "Admin", "Member", "Member"];
 
 const initialMembers: TeamMember[] = calculateResourcePressure(
-  currentHubs,
+  currentWorkspaces,
   currentItems,
   new Date("2026-08-24T12:00:00.000Z"),
 ).map((person, index) => ({
@@ -75,9 +77,13 @@ export function TeamWorkflow() {
   const [rebalanceId, setRebalanceId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
-  const scopedHubIds = new Set(scope.hubs.map((project) => project.id));
+  const scopedWorkspaceIds = new Set(
+    scope.workspaces.map((project) => project.id),
+  );
   const scopedMembers = members.filter((member) =>
-    member.hubIds.some((hubId) => scopedHubIds.has(hubId)),
+    member.workspaceIds.some((workspaceId) =>
+      scopedWorkspaceIds.has(workspaceId),
+    ),
   );
   const selected = scopedMembers.find((member) => member.userId === selectedId);
   const rebalanceMember = scopedMembers.find(
@@ -283,7 +289,7 @@ export function TeamWorkflow() {
             <b>{member.urgentHighActive}</b>
             <b>{member.dueThisWeek}</b>
             <b>{member.blockedResponsibilities}</b>
-            <b>{member.hubIds.length}</b>
+            <b>{member.workspaceIds.length}</b>
             <span className={`pressure-badge ${member.pressure}`}>
               {member.pressure}
             </span>
@@ -307,7 +313,7 @@ export function TeamWorkflow() {
 
       {inviteOpen && (
         <InviteMemberDialog
-          projects={scope.hubs}
+          projects={scope.workspaces}
           onClose={() => setInviteOpen(false)}
           onInvite={(member) => {
             setMembers((current) => [...current, member]);
@@ -321,8 +327,10 @@ export function TeamWorkflow() {
       {selected && (
         <MemberDetailDialog
           member={selected}
-          projects={scope.hubs}
-          {...(scope.hubs[0] ? { workspaceSlug: scope.hubs[0].slug } : {})}
+          projects={scope.workspaces}
+          {...(scope.workspaces[0]
+            ? { workspaceSlug: scope.workspaces[0].slug }
+            : {})}
           onClose={() => setSelectedId(null)}
           onUpdate={(update, message) => {
             updateMember(selected.userId, update);
@@ -381,7 +389,7 @@ function MemberDetailDialog({
   onRebalance,
 }: {
   member: TeamMember;
-  projects: typeof demoHubs;
+  projects: typeof demoWorkspaces;
   workspaceSlug?: string;
   onClose: () => void;
   onUpdate: (update: Partial<TeamMember>, message: string) => void;
@@ -461,14 +469,14 @@ function MemberDetailDialog({
             </label>
             <div className="member-access-list">
               <b>Workspace access</b>
-              {projects.slice(0, 5).map((hub) => (
-                <label key={hub.id}>
+              {projects.slice(0, 5).map((workspace) => (
+                <label key={workspace.id}>
                   <input
                     type="checkbox"
-                    defaultChecked={member.hubIds.includes(hub.id)}
+                    defaultChecked={member.workspaceIds.includes(workspace.id)}
                   />
                   <span>
-                    {hub.icon} {hub.name}
+                    {workspace.icon} {workspace.name}
                   </span>
                 </label>
               ))}
@@ -507,7 +515,7 @@ function MemberDetailDialog({
                 <small>Blocked</small>
               </span>
               <span>
-                <b>{member.criticalHubResponsibilities}</b>
+                <b>{member.criticalWorkspaceResponsibilities}</b>
                 <small>Critical projects</small>
               </span>
             </div>
@@ -555,12 +563,12 @@ function InviteMemberDialog({
 }: {
   onClose: () => void;
   onInvite: (member: TeamMember) => void;
-  projects: typeof demoHubs;
+  projects: typeof demoWorkspaces;
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<MemberRole>("Member");
-  const [hubIds, setHubIds] = useState<string[]>([]);
+  const [workspaceIds, setWorkspaceIds] = useState<string[]>([]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!email.trim() || !name.trim()) return;
@@ -576,14 +584,14 @@ function InviteMemberDialog({
       urgentHighActive: 0,
       dueThisWeek: 0,
       blockedResponsibilities: 0,
-      criticalHubResponsibilities: 0,
+      criticalWorkspaceResponsibilities: 0,
       milestonesOwned: 0,
-      hubIds,
+      workspaceIds,
       pressure: "normal",
     });
   };
-  const toggleHub = (id: string) =>
-    setHubIds((current) =>
+  const toggleWorkspace = (id: string) =>
+    setWorkspaceIds((current) =>
       current.includes(id)
         ? current.filter((candidate) => candidate !== id)
         : [...current, id],
@@ -656,17 +664,17 @@ function InviteMemberDialog({
               Members can create and update work in projects they can access.
             </small>
           </label>
-          <fieldset className="invite-hub-access">
+          <fieldset className="invite-workspace-access">
             <legend>Initial Workspace access</legend>
-            {projects.slice(0, 6).map((hub) => (
-              <label key={hub.id}>
+            {projects.slice(0, 6).map((workspace) => (
+              <label key={workspace.id}>
                 <input
                   type="checkbox"
-                  checked={hubIds.includes(hub.id)}
-                  onChange={() => toggleHub(hub.id)}
+                  checked={workspaceIds.includes(workspace.id)}
+                  onChange={() => toggleWorkspace(workspace.id)}
                 />
                 <span>
-                  {hub.icon} {hub.name}
+                  {workspace.icon} {workspace.name}
                 </span>
               </label>
             ))}

@@ -8,14 +8,14 @@ Within 30 seconds, TREVV must answer: what is healthy, what changed, what is sli
 
 ## Information hierarchy
 
-The hierarchy is Organization → Portfolio → Hub → Board → Work Item → optional subitem. Groups organize a board without adding a hierarchy level. Work items share one model and use the types task, decision, approval, milestone, idea, and request.
+The hierarchy is Organization → Portfolio → Workspace → Board → Work Item → optional subitem. Groups organize a board without adding a hierarchy level. Work items share one model and use the types task, decision, approval, milestone, idea, and request.
 
 ## V1 surfaces
 
-- Web/PWA: authentication, archetype-neutral onboarding, personalized Home, multi-Portfolio, Attention, Waiting, Change Radar, reviews/snapshots, Hub overview, Table and Kanban boards, My Work, actionable Inbox, Decisions, Approvals, Ideas/Insights, Blueprints, stakeholder sharing, import/export, and EN/DE foundations.
+- Web/PWA: authentication, archetype-neutral onboarding, personalized Portfolio roll-ups, multi-Portfolio, Attention, Waiting, Change Radar, reviews/snapshots, Workspace overview, Table and Kanban boards, My Work, actionable Inbox, Decisions, Approvals, Ideas/Insights, Blueprints, stakeholder sharing, import/export, and EN/DE foundations.
 - API/worker: versioned Hono API, shared schemas and client, authorization, domain calculations, persistence repositories, event outbox, and scheduled-job foundations.
-- Mobile: Expo shell that restores a session and reads Portfolio/Hubs through the shared client.
-- Desktop: Tauri 2/Vite shell that restores a session and reads Portfolio/Hubs through the shared client.
+- Mobile: Expo shell that restores a session and reads Portfolio/Workspaces through the shared client.
+- Desktop: Tauri 2/Vite shell that restores a session and reads Portfolio/Workspaces through the shared client.
 
 ## Product boundaries
 
@@ -23,4 +23,4 @@ V1 does not include accounting, invoicing, payroll, a full CRM, advanced Gantt, 
 
 ## Acceptance focus
 
-The seeded TREVV Demo organization uses fictional names and exercises at least one On Track, Attention, Critical, and Paused Hub; a stale update; unresolved decision; waiting state; blocker; overdue milestone; Attention signal; Decision outcome; and Insight linked to an Idea.
+The seeded TREVV Demo organization uses fictional names and exercises at least one On Track, Attention, Critical, and Paused Workspace; a stale update; unresolved decision; waiting state; blocker; overdue milestone; Attention signal; Decision outcome; and Insight linked to an Idea.

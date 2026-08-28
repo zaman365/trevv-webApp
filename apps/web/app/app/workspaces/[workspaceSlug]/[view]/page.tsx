@@ -34,7 +34,7 @@ export default async function WorkspaceModulePage({
       return <FocusExperience kind="inbox" workspaceSlug={workspaceSlug} />;
     case "messages":
       return (
-        <WorkspaceFrame active="messages" hubSlug={workspaceSlug}>
+        <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
           <MessagingWorkspace />
         </WorkspaceFrame>
       );

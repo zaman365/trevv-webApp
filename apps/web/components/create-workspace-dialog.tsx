@@ -1,9 +1,13 @@
 "use client";
 
 import { Grid2X2, Plus, X } from "lucide-react";
-import { type Hub, type HubType, type Portfolio } from "@founderhq/core";
+import {
+  type Workspace,
+  type WorkspaceType,
+  type Portfolio,
+} from "@founderhq/core";
 import { useState, type FormEvent } from "react";
-import { createCustomHub } from "@/lib/custom-hubs";
+import { createCustomWorkspace } from "@/lib/custom-workspaces";
 
 export function CreateWorkspaceDialog({
   portfolios,
@@ -14,11 +18,11 @@ export function CreateWorkspaceDialog({
   portfolios: readonly Portfolio[];
   initialPortfolioId: string;
   onClose: () => void;
-  onCreated: (workspace: Hub) => void;
+  onCreated: (workspace: Workspace) => void;
 }) {
   const [name, setName] = useState("");
   const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
-  const [type, setType] = useState<HubType>("project");
+  const [type, setType] = useState<WorkspaceType>("project");
   const [lead, setLead] = useState("Mohammed Zaman");
   const [priority, setPriority] = useState("");
   const [milestone, setMilestone] = useState("First operating review");
@@ -27,7 +31,7 @@ export function CreateWorkspaceDialog({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!name.trim() || !milestoneDate) return;
-    const record = createCustomHub({
+    const record = createCustomWorkspace({
       name,
       portfolioId,
       type,
@@ -36,10 +40,10 @@ export function CreateWorkspaceDialog({
       milestone,
       milestoneDate,
     });
-    onCreated(record.hub);
+    onCreated(record.workspace);
   };
 
-  const types: Array<[HubType, string]> = [
+  const types: Array<[WorkspaceType, string]> = [
     ["business", "Business"],
     ["brand", "Brand"],
     ["client", "Client"],
@@ -53,7 +57,7 @@ export function CreateWorkspaceDialog({
   return (
     <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
       <form
-        className="capture-dialog create-hub-dialog"
+        className="capture-dialog create-workspace-dialog"
         aria-labelledby="create-workspace-title"
         aria-modal="true"
         onMouseDown={(event) => event.stopPropagation()}
@@ -80,7 +84,7 @@ export function CreateWorkspaceDialog({
           </button>
         </header>
 
-        <div className="create-hub-fields">
+        <div className="create-workspace-fields">
           <label>
             Workspace name
             <input
@@ -109,7 +113,9 @@ export function CreateWorkspaceDialog({
               Type
               <select
                 value={type}
-                onChange={(event) => setType(event.target.value as HubType)}
+                onChange={(event) =>
+                  setType(event.target.value as WorkspaceType)
+                }
               >
                 {types.map(([value, label]) => (
                   <option key={value} value={value}>

@@ -18,10 +18,10 @@ import {
 import {
   changesSinceCheckpoint,
   demoChangeCheckpoint,
-  demoHubs,
+  demoWorkspaces,
   demoMeaningfulChanges,
   demoPortfolios,
-  type HubHealth,
+  type WorkspaceHealth,
 } from "@founderhq/core";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -30,17 +30,18 @@ import { summarizePortfolio } from "@/lib/portfolios";
 import { vocabularyFor } from "@/lib/terminology";
 import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceFrame } from "./workspace-frame";
-import { AttentionRow, HubMark } from "./management-experience";
+import { AttentionRow, WorkspaceMark } from "./management-experience";
 import { ProjectTile } from "./project-tile";
 import { HealthBar, PageHero, Panel, StatTile } from "./ui-kit";
-import { useCustomHubs } from "@/lib/custom-hubs";
+import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import {
   portfolioVisualFor,
   useCustomPortfolios,
 } from "@/lib/custom-portfolios";
 import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
 
-const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
+const workspaceFor = (workspaceId?: string) =>
+  demoWorkspaces.find((workspace) => workspace.id === workspaceId);
 
 type PortfolioDetailKind =
   | "attention"
@@ -62,22 +63,23 @@ export function PortfolioExperience() {
 function PortfolioMain() {
   const { copy, scope, portfolioId, setPortfolioId } = useWorkspace();
   const vocab = vocabularyFor();
-  const [health, setHealth] = useState<HubHealth | "all">("all");
+  const [health, setHealth] = useState<WorkspaceHealth | "all">("all");
   // §5: "choose optional metrics" — on by default, dismissable.
   const [showMetrics, setShowMetrics] = useState(true);
   const [detail, setDetail] = useState<PortfolioDetailKind | null>(null);
   const customPortfolioRecords = useCustomPortfolios();
-  const customHubs = useCustomHubs().filter(
-    (record) => record.hub.portfolioId === portfolioId,
+  const customWorkspaces = useCustomWorkspaces().filter(
+    (record) => record.workspace.portfolioId === portfolioId,
   );
-  // Personal roll-ups that used to live on Home. They are inherently
-  // cross-workspace, so the portfolio is where they belong; the scoped
-  // equivalents stay in each workspace's Attention, My Work, and Updates.
-  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
+  // Personal roll-ups are inherently cross-workspace; the scoped equivalents
+  // stay in each workspace's Attention, My Work, and Updates.
+  const scopedWorkspaceIds = new Set(
+    scope.workspaces.map((workspace) => workspace.id),
+  );
   const meaningfulChanges = changesSinceCheckpoint(
     demoMeaningfulChanges,
     demoChangeCheckpoint,
-  ).filter((change) => scopedHubIds.has(change.hubId));
+  ).filter((change) => scopedWorkspaceIds.has(change.workspaceId));
   const topNeedsYou = scope.attention.slice(0, 4);
   const todayItems = scope.items
     .filter((item) => item.status !== "done")
@@ -96,8 +98,8 @@ function PortfolioMain() {
     [portfolio],
   );
   const projects = [
-    ...customHubs.map(({ hub }) => ({
-      hub,
+    ...customWorkspaces.map(({ workspace }) => ({
+      workspace,
       rollup: {
         open: 0,
         overdue: 0,
@@ -109,18 +111,20 @@ function PortfolioMain() {
       progress: null,
     })),
     ...(summary?.projects ?? []),
-  ].filter((project) => health === "all" || project.hub.health === health);
-  const projectCount = (summary?.count ?? 0) + customHubs.length;
+  ].filter(
+    (project) => health === "all" || project.workspace.health === health,
+  );
+  const projectCount = (summary?.count ?? 0) + customWorkspaces.length;
   const healthMix = summary
     ? summary.health.map((slice) =>
         slice.key === "on_track"
-          ? { ...slice, count: slice.count + customHubs.length }
+          ? { ...slice, count: slice.count + customWorkspaces.length }
           : slice,
       )
     : [
         { key: "critical", label: "Critical", count: 0 },
         { key: "watch", label: "Watch", count: 0 },
-        { key: "on_track", label: "On track", count: customHubs.length },
+        { key: "on_track", label: "On track", count: customWorkspaces.length },
         { key: "parked", label: "Parked", count: 0 },
       ];
   const signals = scope.breakdown;
@@ -183,21 +187,21 @@ function PortfolioMain() {
   const detailEntries = useMemo(() => {
     if (!detail) return [];
     if (detail === "staleUpdates") {
-      return scope.hubs
-        .filter((hub) =>
+      return scope.workspaces
+        .filter((workspace) =>
           scope.attention.some(
             (group) =>
-              group.hubId === hub.id &&
+              group.workspaceId === workspace.id &&
               group.signals.some((signal) =>
                 ["stale_update", "missing_update"].includes(signal.signalType),
               ),
           ),
         )
-        .map((hub) => ({
-          id: hub.id,
-          title: hub.name,
-          note: hub.healthNote,
-          hub,
+        .map((workspace) => ({
+          id: workspace.id,
+          title: workspace.name,
+          note: workspace.healthNote,
+          workspace,
           view: undefined as WorkspaceView | undefined,
         }));
     }
@@ -218,8 +222,8 @@ function PortfolioMain() {
         );
       })
       .map((item) => {
-        const hub = scope.hubs.find(
-          (candidate) => candidate.id === item.hubId,
+        const workspace = scope.workspaces.find(
+          (candidate) => candidate.id === item.workspaceId,
         )!;
         const view: WorkspaceView =
           detail === "decisions"
@@ -232,12 +236,12 @@ function PortfolioMain() {
         return {
           id: item.id,
           title: item.title,
-          note: `${hub.name} · ${item.status.replaceAll("_", " ")}`,
-          hub,
+          note: `${workspace.name} · ${item.status.replaceAll("_", " ")}`,
+          workspace,
           view,
         };
       });
-  }, [detail, scope.attention, scope.hubs, scope.items]);
+  }, [detail, scope.attention, scope.workspaces, scope.items]);
   const detailTitle =
     detail === "attention"
       ? "Portfolio attention"
@@ -346,10 +350,10 @@ function PortfolioMain() {
             {summary.focus && (
               <p className="health-focus">
                 <b>Most urgent</b>
-                <Link href={workspaceHref(summary.focus.hub.slug)}>
-                  {summary.focus.hub.name}
+                <Link href={workspaceHref(summary.focus.workspace.slug)}>
+                  {summary.focus.workspace.name}
                 </Link>
-                <span>{summary.focus.hub.healthNote}</span>
+                <span>{summary.focus.workspace.healthNote}</span>
               </p>
             )}
           </div>
@@ -388,7 +392,7 @@ function PortfolioMain() {
         </div>
       </Panel>
 
-      <div className="home-columns">
+      <div className="portfolio-columns">
         <Panel
           icon={Sparkles}
           title="Needs You"
@@ -409,13 +413,14 @@ function PortfolioMain() {
             {todayItems.map((item) => (
               <Link
                 key={item.id}
-                href={`${workspaceHref(hubFor(item.hubId)!.slug)}/boards/${item.boardId}`}
+                href={`${workspaceHref(workspaceFor(item.workspaceId)!.slug)}/boards/${item.boardId}`}
               >
                 <span className={`priority-dot ${item.priority}`} />
                 <div>
                   <strong>{item.title}</strong>
                   <small>
-                    {hubFor(item.hubId)?.name} · {item.dueDate ?? "No date"}
+                    {workspaceFor(item.workspaceId)?.name} ·{" "}
+                    {item.dueDate ?? "No date"}
                   </small>
                 </div>
                 <ArrowRight size={14} />
@@ -432,42 +437,42 @@ function PortfolioMain() {
         wide
       >
         <div className="change-groups">
-          {[...new Set(meaningfulChanges.map((change) => change.hubId))].map(
-            (hubId) => {
-              const hub = hubFor(hubId);
-              const hubChanges = meaningfulChanges.filter(
-                (change) => change.hubId === hubId,
-              );
-              if (!hub) return null;
-              return (
-                <Link
-                  className="change-group-card"
-                  href={workspaceHref(hub.slug, undefined, "updates")}
-                  aria-label={`Open ${hub.name} and review ${hubChanges.length} meaningful ${hubChanges.length === 1 ? "change" : "changes"}`}
-                  key={hubId}
-                >
-                  <article>
-                    <header>
-                      <HubMark hubId={hubId} />
-                      <div>
-                        <strong>{hub.name}</strong>
-                        <small>
-                          {hubChanges.length} meaningful{" "}
-                          {hubChanges.length === 1 ? "change" : "changes"}
-                        </small>
-                      </div>
-                      <ArrowRight className="change-group-arrow" size={15} />
-                    </header>
-                    <ul>
-                      {hubChanges.map((change) => (
-                        <li key={change.id}>{change.summary}</li>
-                      ))}
-                    </ul>
-                  </article>
-                </Link>
-              );
-            },
-          )}
+          {[
+            ...new Set(meaningfulChanges.map((change) => change.workspaceId)),
+          ].map((workspaceId) => {
+            const workspace = workspaceFor(workspaceId);
+            const workspaceChanges = meaningfulChanges.filter(
+              (change) => change.workspaceId === workspaceId,
+            );
+            if (!workspace) return null;
+            return (
+              <Link
+                className="change-group-card"
+                href={workspaceHref(workspace.slug, undefined, "updates")}
+                aria-label={`Open ${workspace.name} and review ${workspaceChanges.length} meaningful ${workspaceChanges.length === 1 ? "change" : "changes"}`}
+                key={workspaceId}
+              >
+                <article>
+                  <header>
+                    <WorkspaceMark workspaceId={workspaceId} />
+                    <div>
+                      <strong>{workspace.name}</strong>
+                      <small>
+                        {workspaceChanges.length} meaningful{" "}
+                        {workspaceChanges.length === 1 ? "change" : "changes"}
+                      </small>
+                    </div>
+                    <ArrowRight className="change-group-arrow" size={15} />
+                  </header>
+                  <ul>
+                    {workspaceChanges.map((change) => (
+                      <li key={change.id}>{change.summary}</li>
+                    ))}
+                  </ul>
+                </article>
+              </Link>
+            );
+          })}
         </div>
       </Panel>
 
@@ -481,7 +486,7 @@ function PortfolioMain() {
               aria-label={copy.portfolio.allHealth}
               value={health}
               onChange={(event) =>
-                setHealth(event.target.value as HubHealth | "all")
+                setHealth(event.target.value as WorkspaceHealth | "all")
               }
             >
               <option value="all">{copy.portfolio.allHealth}</option>
@@ -505,7 +510,7 @@ function PortfolioMain() {
         <div className="project-grid">
           {projects.map((project) => (
             <ProjectTile
-              key={project.hub.id}
+              key={project.workspace.id}
               {...project}
               copy={copy}
               showMetrics={showMetrics}
@@ -548,17 +553,17 @@ function PortfolioMain() {
                 <article key={entry.id}>
                   <span
                     style={{
-                      background: `${entry.hub.accent}18`,
-                      color: entry.hub.accent,
+                      background: `${entry.workspace.accent}18`,
+                      color: entry.workspace.accent,
                     }}
                   >
-                    {entry.hub.icon}
+                    {entry.workspace.icon}
                   </span>
                   <div>
                     <strong>{entry.title}</strong>
                     <small>{entry.note}</small>
                   </div>
-                  <Link href={workspaceHref(entry.hub.slug, entry.view)}>
+                  <Link href={workspaceHref(entry.workspace.slug, entry.view)}>
                     Open workspace <ArrowRight size={13} />
                   </Link>
                 </article>

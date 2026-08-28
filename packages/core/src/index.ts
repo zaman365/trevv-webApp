@@ -1,7 +1,7 @@
 import type { ProgressMode } from "./commercial";
 import { demoPortfolios } from "./commercial-demo";
 
-export type HubHealth = "on_track" | "watch" | "critical" | "parked";
+export type WorkspaceHealth = "on_track" | "watch" | "critical" | "parked";
 export type LifecycleStage =
   | "idea"
   | "validate"
@@ -11,7 +11,7 @@ export type LifecycleStage =
   | "operate"
   | "paused"
   | "archived";
-export type HubType =
+export type WorkspaceType =
   | "business"
   | "brand"
   | "client"
@@ -32,34 +32,34 @@ export type WorkItemType =
   "task" | "decision" | "approval" | "milestone" | "idea" | "request";
 export type Priority = "urgent" | "high" | "normal" | "low" | "none";
 
-export interface HubMetric {
+export interface WorkspaceMetric {
   label: string;
   value: string;
   trend?: string | undefined;
 }
 
-export interface Hub {
+export interface Workspace {
   id: string;
   portfolioId: string;
   slug: string;
   name: string;
   icon: string;
   accent: string;
-  type: HubType;
+  type: WorkspaceType;
   stage: LifecycleStage;
-  health: HubHealth;
+  health: WorkspaceHealth;
   healthNote: string;
   priority: string;
   lead: { name: string; initials: string; color: string };
   nextMilestone: { title: string; date: string };
   latestUpdate: { text: string; date: string };
-  metrics: HubMetric[];
+  metrics: WorkspaceMetric[];
   progressMode?: ProgressMode;
 }
 
 export interface WorkItem {
   id: string;
-  hubId: string;
+  workspaceId: string;
   boardId: string;
   title: string;
   type: WorkItemType;
@@ -87,7 +87,7 @@ export interface WorkItemGroup {
 
 export interface Board {
   id: string;
-  hubId: string;
+  workspaceId: string;
   name: string;
   category: string;
   description: string;
@@ -102,7 +102,7 @@ export interface PortfolioSignal {
   unassignedUrgent: number;
 }
 
-export interface HubRollup {
+export interface WorkspaceRollup {
   open: number;
   overdue: number;
   blocked: number;
@@ -113,13 +113,13 @@ export interface HubRollup {
 
 const DAY = 86_400_000;
 
-export function rollupHub(
-  hub: Hub,
+export function rollupWorkspace(
+  workspace: Workspace,
   items: readonly WorkItem[],
   now = new Date(),
-): HubRollup {
+): WorkspaceRollup {
   const scoped = items.filter(
-    (item) => item.hubId === hub.id && item.status !== "done",
+    (item) => item.workspaceId === workspace.id && item.status !== "done",
   );
   const overdue = scoped.filter(
     (item) => item.dueDate && new Date(item.dueDate).getTime() < now.getTime(),
@@ -131,7 +131,7 @@ export function rollupHub(
   const approvals = scoped.filter(
     (item) => item.type === "approval" && item.approvalState === "pending",
   ).length;
-  const healthWeight: Record<HubHealth, number> = {
+  const healthWeight: Record<WorkspaceHealth, number> = {
     critical: 40,
     watch: 22,
     on_track: 4,
@@ -144,7 +144,7 @@ export function rollupHub(
     decisions,
     approvals,
     score:
-      healthWeight[hub.health] +
+      healthWeight[workspace.health] +
       overdue * 6 +
       blocked * 8 +
       decisions * 5 +
@@ -153,7 +153,7 @@ export function rollupHub(
 }
 
 export function portfolioSignals(
-  hubs: readonly Hub[],
+  workspaces: readonly Workspace[],
   items: readonly WorkItem[],
   now = new Date(),
 ): PortfolioSignal {
@@ -178,9 +178,10 @@ export function portfolioSignals(
         item.dueDate &&
         new Date(item.dueDate).getTime() < now.getTime(),
     ).length,
-    staleUpdates: hubs.filter(
-      (hub) =>
-        now.getTime() - new Date(hub.latestUpdate.date).getTime() > 7 * DAY,
+    staleUpdates: workspaces.filter(
+      (workspace) =>
+        now.getTime() - new Date(workspace.latestUpdate.date).getTime() >
+        7 * DAY,
     ).length,
     unassignedUrgent: items.filter(
       (item) =>
@@ -191,9 +192,9 @@ export function portfolioSignals(
   };
 }
 
-const currentDemoHubs: Hub[] = [
+const currentDemoWorkspaces: Workspace[] = [
   {
-    id: "hub-northstar",
+    id: "workspace-northstar",
     portfolioId: "portfolio-demo",
     slug: "northstar-apparel",
     name: "Northstar Apparel",
@@ -218,7 +219,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-mealflow",
+    id: "workspace-mealflow",
     portfolioId: "portfolio-demo",
     slug: "mealflow",
     name: "MealFlow",
@@ -243,7 +244,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-localreach",
+    id: "workspace-localreach",
     portfolioId: "portfolio-demo",
     slug: "localreach",
     name: "LocalReach",
@@ -266,7 +267,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-studioops",
+    id: "workspace-studioops",
     portfolioId: "portfolio-demo",
     slug: "studioops",
     name: "StudioOps",
@@ -289,7 +290,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-clientspark",
+    id: "workspace-clientspark",
     portfolioId: "portfolio-demo",
     slug: "clientspark",
     name: "ClientSpark",
@@ -313,7 +314,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-greentable",
+    id: "workspace-greentable",
     portfolioId: "portfolio-demo",
     slug: "greentable",
     name: "GreenTable",
@@ -337,7 +338,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-centralops",
+    id: "workspace-centralops",
     portfolioId: "portfolio-demo",
     slug: "centralops",
     name: "CentralOps",
@@ -360,7 +361,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-futuregoods",
+    id: "workspace-futuregoods",
     portfolioId: "portfolio-demo",
     slug: "futuregoods",
     name: "FutureGoods",
@@ -384,7 +385,7 @@ const currentDemoHubs: Hub[] = [
     ],
   },
   {
-    id: "hub-personal",
+    id: "workspace-personal",
     portfolioId: "portfolio-personal",
     slug: "personal-projects",
     name: "Personal Projects",
@@ -408,31 +409,48 @@ const currentDemoHubs: Hub[] = [
   },
 ];
 
-const originalHubIdentity = [
-  ["hub-northstar", "hub-zehn", "zehn", "ZEHN", "Z"],
-  ["hub-mealflow", "hub-leckereich", "leckereich", "Leckereich", "L"],
-  ["hub-localreach", "hub-marktfix", "marktfix", "MarktFix", "M"],
-  ["hub-studioops", "hub-lokalfix", "lokalfix", "LokalFix", "L"],
-  ["hub-clientspark", "hub-mikroit", "mikroit", "MikroIT", "μ"],
-  ["hub-greentable", "hub-gastrofix", "gastrofix", "GastroFix", "G"],
+const originalWorkspaceIdentity = [
+  ["workspace-northstar", "workspace-zehn", "zehn", "ZEHN", "Z"],
   [
-    "hub-centralops",
-    "hub-intelligentlab",
+    "workspace-mealflow",
+    "workspace-leckereich",
+    "leckereich",
+    "Leckereich",
+    "L",
+  ],
+  ["workspace-localreach", "workspace-marktfix", "marktfix", "MarktFix", "M"],
+  ["workspace-studioops", "workspace-lokalfix", "lokalfix", "LokalFix", "L"],
+  ["workspace-clientspark", "workspace-mikroit", "mikroit", "MikroIT", "μ"],
+  [
+    "workspace-greentable",
+    "workspace-gastrofix",
+    "gastrofix",
+    "GastroFix",
+    "G",
+  ],
+  [
+    "workspace-centralops",
+    "workspace-intelligentlab",
     "intelligentlab",
     "IntelligentLab",
     "I",
   ],
-  ["hub-futuregoods", "hub-bigboyz", "bigboyz", "BigBoyz", "B"],
+  ["workspace-futuregoods", "workspace-bigboyz", "bigboyz", "BigBoyz", "B"],
 ] as const;
 
-const originalHubIdByCurrentId = new Map<string, string>(
-  originalHubIdentity.map(([currentId, originalId]) => [currentId, originalId]),
+const originalWorkspaceIdByCurrentId = new Map<string, string>(
+  originalWorkspaceIdentity.map(([currentId, originalId]) => [
+    currentId,
+    originalId,
+  ]),
 );
 
-const originalDemoHubs: Hub[] = originalHubIdentity.map(
+const originalDemoWorkspaces: Workspace[] = originalWorkspaceIdentity.map(
   ([currentId, id, slug, name, icon]) => {
-    const source = currentDemoHubs.find((hub) => hub.id === currentId);
-    if (!source) throw new Error(`Missing source Hub ${currentId}`);
+    const source = currentDemoWorkspaces.find(
+      (workspace) => workspace.id === currentId,
+    );
+    if (!source) throw new Error(`Missing source Workspace ${currentId}`);
     return {
       ...source,
       id,
@@ -455,12 +473,15 @@ const originalDemoHubs: Hub[] = originalHubIdentity.map(
   },
 );
 
-export const demoHubs: Hub[] = [...currentDemoHubs, ...originalDemoHubs];
+export const demoWorkspaces: Workspace[] = [
+  ...currentDemoWorkspaces,
+  ...originalDemoWorkspaces,
+];
 
 const currentDemoItems: WorkItem[] = [
   {
     id: "i-1",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     boardId: "b-northstar-launch",
     title: "Approve packaging compliance copy",
     type: "approval",
@@ -473,7 +494,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-2",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     boardId: "b-northstar-launch",
     title: "Choose storefront launch offer",
     type: "decision",
@@ -486,7 +507,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-3",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     boardId: "b-northstar-launch",
     title: "Confirm GPSR manufacturer evidence",
     type: "task",
@@ -498,7 +519,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-4",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     boardId: "b-northstar-launch",
     title: "SS26 storefront launch",
     type: "milestone",
@@ -510,7 +531,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-5",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     boardId: "b-northstar-launch",
     title: "Publish polo fit guide",
     type: "task",
@@ -522,7 +543,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-6",
-    hubId: "hub-mealflow",
+    workspaceId: "workspace-mealflow",
     boardId: "b-mealflow-beta",
     title: "Select onboarding navigation",
     type: "decision",
@@ -535,7 +556,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-7",
-    hubId: "hub-mealflow",
+    workspaceId: "workspace-mealflow",
     boardId: "b-mealflow-beta",
     title: "Restaurant owner dashboard review",
     type: "approval",
@@ -548,7 +569,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-8",
-    hubId: "hub-mealflow",
+    workspaceId: "workspace-mealflow",
     boardId: "b-mealflow-beta",
     title: "Fix onboarding permissions",
     type: "task",
@@ -560,7 +581,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-9",
-    hubId: "hub-localreach",
+    workspaceId: "workspace-localreach",
     boardId: "b-localreach-delivery",
     title: "Create proof pack checklist",
     type: "task",
@@ -572,7 +593,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-10",
-    hubId: "hub-localreach",
+    workspaceId: "workspace-localreach",
     boardId: "b-localreach-delivery",
     title: "Client storefront repair",
     type: "task",
@@ -584,7 +605,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-11",
-    hubId: "hub-studioops",
+    workspaceId: "workspace-studioops",
     boardId: "b-studioops-pilot",
     title: "Name recurring care tiers",
     type: "decision",
@@ -596,7 +617,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-12",
-    hubId: "hub-studioops",
+    workspaceId: "workspace-studioops",
     boardId: "b-studioops-pilot",
     title: "Pilot proposal follow-up",
     type: "task",
@@ -607,7 +628,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-13",
-    hubId: "hub-clientspark",
+    workspaceId: "workspace-clientspark",
     boardId: "b-clientspark-requests",
     title: "Validate secure access checklist",
     type: "task",
@@ -618,7 +639,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-14",
-    hubId: "hub-greentable",
+    workspaceId: "workspace-greentable",
     boardId: "b-greentable-validation",
     title: "Choose single pilot outcome",
     type: "decision",
@@ -631,7 +652,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-15",
-    hubId: "hub-greentable",
+    workspaceId: "workspace-greentable",
     boardId: "b-greentable-validation",
     title: "Pilot scope approved",
     type: "milestone",
@@ -643,7 +664,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-16",
-    hubId: "hub-centralops",
+    workspaceId: "workspace-centralops",
     boardId: "b-centralops-compliance",
     title: "Approve supplier declaration pack",
     type: "approval",
@@ -656,7 +677,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-17",
-    hubId: "hub-centralops",
+    workspaceId: "workspace-centralops",
     boardId: "b-centralops-compliance",
     title: "Collect marketplace evidence",
     type: "task",
@@ -668,7 +689,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-18",
-    hubId: "hub-personal",
+    workspaceId: "workspace-personal",
     boardId: "b-personal-funding",
     title: "Write traction evidence",
     type: "task",
@@ -679,7 +700,7 @@ const currentDemoItems: WorkItem[] = [
   },
   {
     id: "i-19",
-    hubId: "hub-localreach",
+    workspaceId: "workspace-localreach",
     boardId: "b-localreach-delivery",
     title: "Choose pilot packaging model",
     type: "decision",
@@ -693,13 +714,15 @@ const currentDemoItems: WorkItem[] = [
 ];
 
 const originalDemoItems: WorkItem[] = currentDemoItems.flatMap((item) => {
-  const originalHubId = originalHubIdByCurrentId.get(item.hubId);
-  if (!originalHubId) return [];
+  const originalWorkspaceId = originalWorkspaceIdByCurrentId.get(
+    item.workspaceId,
+  );
+  if (!originalWorkspaceId) return [];
   return [
     {
       ...item,
       id: `original-${item.id}`,
-      hubId: originalHubId,
+      workspaceId: originalWorkspaceId,
       boardId: `original-${item.boardId}`,
     },
   ];
@@ -713,79 +736,80 @@ export const demoItems: WorkItem[] = [
 const currentBoardDefinitions: Board[] = [
   {
     id: "b-northstar-launch",
-    hubId: "hub-northstar",
+    workspaceId: "workspace-northstar",
     name: "SS26 launch board",
     category: "Product launch",
     description: "Products, compliance, content and storefront readiness",
   },
   {
     id: "b-mealflow-beta",
-    hubId: "hub-mealflow",
+    workspaceId: "workspace-mealflow",
     name: "Restaurant beta board",
     category: "Product beta",
     description: "Onboarding, owner controls and pilot validation",
   },
   {
     id: "b-localreach-delivery",
-    hubId: "hub-localreach",
+    workspaceId: "workspace-localreach",
     name: "Delivery operations board",
     category: "Client delivery",
     description: "Active fixes, evidence packs and client approvals",
   },
   {
     id: "b-studioops-pilot",
-    hubId: "hub-studioops",
+    workspaceId: "workspace-studioops",
     name: "Care pilot board",
     category: "Business validation",
     description: "Offers, pilot calls and recurring-care evidence",
   },
   {
     id: "b-clientspark-requests",
-    hubId: "hub-clientspark",
+    workspaceId: "workspace-clientspark",
     name: "Service requests board",
     category: "Client operations",
     description: "Intake, triage and service-delivery follow-through",
   },
   {
     id: "b-greentable-validation",
-    hubId: "hub-greentable",
+    workspaceId: "workspace-greentable",
     name: "Pilot validation board",
     category: "Venture validation",
     description: "Scope decisions, interviews and measurable pilot outcomes",
   },
   {
     id: "b-centralops-compliance",
-    hubId: "hub-centralops",
+    workspaceId: "workspace-centralops",
     name: "Compliance operations board",
     category: "Shared operations",
     description: "Evidence, declarations and quarterly compliance review",
   },
   {
     id: "b-futuregoods-research",
-    hubId: "hub-futuregoods",
+    workspaceId: "workspace-futuregoods",
     name: "Concept research board",
     category: "Brand research",
     description: "Customer evidence, sizing research and concept decisions",
   },
   {
     id: "b-personal-funding",
-    hubId: "hub-personal",
+    workspaceId: "workspace-personal",
     name: "Funding application board",
     category: "Personal projects",
     description: "Narrative, evidence and submission milestones",
   },
 ];
 
-const originalBoardDefinitions: Board[] = originalHubIdentity.map(
-  ([currentHubId, originalHubId]) => {
+const originalBoardDefinitions: Board[] = originalWorkspaceIdentity.map(
+  ([currentWorkspaceId, originalWorkspaceId]) => {
     const source = currentBoardDefinitions.find(
-      (board) => board.hubId === currentHubId,
+      (board) => board.workspaceId === currentWorkspaceId,
     );
-    if (!source) throw new Error(`Missing source Board for ${currentHubId}`);
+    if (!source)
+      throw new Error(`Missing source Board for ${currentWorkspaceId}`);
     return {
       ...source,
       id: `original-${source.id}`,
-      hubId: originalHubId,
+      workspaceId: originalWorkspaceId,
     };
   },
 );
@@ -799,24 +823,27 @@ export function portfolioById(portfolioId: string) {
   return demoPortfolios.find((portfolio) => portfolio.id === portfolioId);
 }
 
-export function hubsForPortfolio(portfolioId: string): Hub[] {
-  return demoHubs.filter((hub) => hub.portfolioId === portfolioId);
+export function workspacesForPortfolio(portfolioId: string): Workspace[] {
+  return demoWorkspaces.filter(
+    (workspace) => workspace.portfolioId === portfolioId,
+  );
 }
 
-export function hubBySlug(slug: string): Hub | undefined {
-  return demoHubs.find((hub) => hub.slug === slug);
+export function workspaceBySlug(slug: string): Workspace | undefined {
+  return demoWorkspaces.find((workspace) => workspace.slug === slug);
 }
 
-export function boardsForHub(hubId: string): Board[] {
-  return demoBoards.filter((board) => board.hubId === hubId);
+export function boardsForWorkspace(workspaceId: string): Board[] {
+  return demoBoards.filter((board) => board.workspaceId === workspaceId);
 }
 
-export function boardForHub(
-  hubId: string,
+export function boardForWorkspace(
+  workspaceId: string,
   boardId?: string,
 ): Board | undefined {
   return demoBoards.find(
-    (board) => board.hubId === hubId && (!boardId || board.id === boardId),
+    (board) =>
+      board.workspaceId === workspaceId && (!boardId || board.id === boardId),
   );
 }
 
@@ -889,8 +916,8 @@ export function itemsForBoard(boardId: string): WorkItem[] {
   return demoItems.filter((item) => item.boardId === boardId);
 }
 
-export function itemsForHub(hubId: string): WorkItem[] {
-  return demoItems.filter((item) => item.hubId === hubId);
+export function itemsForWorkspace(workspaceId: string): WorkItem[] {
+  return demoItems.filter((item) => item.workspaceId === workspaceId);
 }
 
 const statusCompletion: Record<WorkItem["status"], number> = {
@@ -934,46 +961,56 @@ export function calculateWorkProgress(
   return Math.round((completed / possible) * 100);
 }
 
-export function calculateHubProgress(hub: Hub): number | null {
+export function calculateWorkspaceProgress(
+  workspace: Workspace,
+): number | null {
   return calculateWorkProgress(
-    itemsForHub(hub.id),
-    hub.progressMode ?? "task_completion",
+    itemsForWorkspace(workspace.id),
+    workspace.progressMode ?? "task_completion",
   );
 }
 
 export function validateDemoRelationships(): string[] {
   const errors: string[] = [];
   const portfolioIds = new Set(demoPortfolios.map((portfolio) => portfolio.id));
-  const hubIds = new Set(demoHubs.map((hub) => hub.id));
+  const workspaceIds = new Set(demoWorkspaces.map((workspace) => workspace.id));
   const boardIds = new Set(demoBoards.map((board) => board.id));
   const itemIds = new Set(demoItems.map((item) => item.id));
   if (portfolioIds.size !== demoPortfolios.length)
     errors.push("Portfolio IDs must be unique");
-  if (hubIds.size !== demoHubs.length) errors.push("Hub IDs must be unique");
-  if (new Set(demoHubs.map((hub) => hub.slug)).size !== demoHubs.length)
-    errors.push("Hub slugs must be unique");
+  if (workspaceIds.size !== demoWorkspaces.length)
+    errors.push("Workspace IDs must be unique");
+  if (
+    new Set(demoWorkspaces.map((workspace) => workspace.slug)).size !==
+    demoWorkspaces.length
+  )
+    errors.push("Workspace slugs must be unique");
   if (boardIds.size !== demoBoards.length)
     errors.push("Board IDs must be unique");
   if (itemIds.size !== demoItems.length) errors.push("Item IDs must be unique");
-  for (const hub of demoHubs)
-    if (!portfolioIds.has(hub.portfolioId))
+  for (const workspace of demoWorkspaces)
+    if (!portfolioIds.has(workspace.portfolioId))
       errors.push(
-        `Hub ${hub.id} references missing Portfolio ${hub.portfolioId}`,
+        `Workspace ${workspace.id} references missing Portfolio ${workspace.portfolioId}`,
       );
-    else if (!demoBoards.some((board) => board.hubId === hub.id))
-      errors.push(`Hub ${hub.id} has no Board`);
+    else if (!demoBoards.some((board) => board.workspaceId === workspace.id))
+      errors.push(`Workspace ${workspace.id} has no Board`);
   for (const board of demoBoards)
-    if (!hubIds.has(board.hubId))
-      errors.push(`Board ${board.id} references missing Hub ${board.hubId}`);
+    if (!workspaceIds.has(board.workspaceId))
+      errors.push(
+        `Board ${board.id} references missing Workspace ${board.workspaceId}`,
+      );
   for (const item of demoItems) {
     const board = demoBoards.find((candidate) => candidate.id === item.boardId);
-    if (!hubIds.has(item.hubId))
-      errors.push(`Item ${item.id} references missing Hub ${item.hubId}`);
+    if (!workspaceIds.has(item.workspaceId))
+      errors.push(
+        `Item ${item.id} references missing Workspace ${item.workspaceId}`,
+      );
     if (!boardIds.has(item.boardId))
       errors.push(`Item ${item.id} references missing Board ${item.boardId}`);
-    else if (board?.hubId !== item.hubId)
+    else if (board?.workspaceId !== item.workspaceId)
       errors.push(
-        `Item ${item.id} does not belong to Board Hub ${board?.hubId}`,
+        `Item ${item.id} does not belong to Board Workspace ${board?.workspaceId}`,
       );
   }
   return errors;

@@ -500,7 +500,7 @@ function LearningResourceDetail({
 }) {
   const CategoryIcon = categoryIcons[resource.category];
   const { scope } = useWorkspace();
-  const workspaceSlug = scope.hubs[0]?.slug;
+  const workspaceSlug = scope.workspaces[0]?.slug;
   const resourceRoute = resolveLearningRoute(resource.route, workspaceSlug);
   return (
     <div className="learning-detail">
@@ -569,4 +569,3 @@ function LearningResourceDetail({
     </div>
   );
 }
-

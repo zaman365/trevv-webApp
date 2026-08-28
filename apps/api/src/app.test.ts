@@ -6,31 +6,33 @@ describe("TREVV API v1", () => {
     const response = await app.request("/api/v1/portfolio");
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
-      hubs: unknown[];
+      workspaces: unknown[];
       signals: { decisions: number; blocked: number };
     };
-    expect(body.hubs).toHaveLength(8);
+    expect(body.workspaces).toHaveLength(8);
     expect(body.signals.decisions).toBeGreaterThan(0);
     expect(body.signals.blocked).toBeGreaterThan(0);
   });
-  it("scopes Portfolio roll-ups without mixing original and current Hubs", async () => {
+  it("scopes Portfolio roll-ups without mixing original and current Workspaces", async () => {
     const response = await app.request(
       "/api/v1/portfolio?portfolioId=portfolio-original",
     );
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       portfolio: { id: string };
-      hubs: Array<{ hub: { name: string } }>;
+      workspaces: Array<{ workspace: { name: string } }>;
     };
     expect(body.portfolio.id).toBe("portfolio-original");
-    expect(body.hubs).toHaveLength(8);
-    expect(body.hubs.map(({ hub }) => hub.name)).toContain("ZEHN");
-    expect(body.hubs.map(({ hub }) => hub.name)).not.toContain(
-      "Northstar Apparel",
+    expect(body.workspaces).toHaveLength(8);
+    expect(body.workspaces.map(({ workspace }) => workspace.name)).toContain(
+      "ZEHN",
     );
+    expect(
+      body.workspaces.map(({ workspace }) => workspace.name),
+    ).not.toContain("Northstar Apparel");
   });
   it("uses a consistent error envelope", async () => {
-    const response = await app.request("/api/v1/hubs/does-not-exist");
+    const response = await app.request("/api/v1/workspaces/does-not-exist");
     expect(response.status).toBe(404);
     const body = (await response.json()) as {
       error: { code: string; requestId: string };
@@ -40,7 +42,7 @@ describe("TREVV API v1", () => {
   });
   it("validates item mutations and respects idempotency", async () => {
     const input = {
-      hubId: "hub-northstar",
+      workspaceId: "workspace-northstar",
       boardId: "b-northstar-launch",
       title: "Verify launch smoke test",
       type: "task",
@@ -98,14 +100,14 @@ describe("TREVV API v1", () => {
 
   it("enforces Workspace scope when listing Attention signals", async () => {
     const response = await app.request(
-      "/api/v1/attention?portfolioId=portfolio-demo&workspaceId=hub-northstar",
+      "/api/v1/attention?portfolioId=portfolio-demo&workspaceId=workspace-northstar",
     );
     expect(response.status).toBe(200);
-    const signals = (await response.json()) as Array<{ hubId?: string }>;
+    const signals = (await response.json()) as Array<{ workspaceId?: string }>;
     expect(signals.length).toBeGreaterThan(0);
-    expect(signals.every((signal) => signal.hubId === "hub-northstar")).toBe(
-      true,
-    );
+    expect(
+      signals.every((signal) => signal.workspaceId === "workspace-northstar"),
+    ).toBe(true);
 
     const missing = await app.request(
       "/api/v1/attention?workspaceId=workspace-does-not-exist",
@@ -122,7 +124,12 @@ describe("TREVV API v1", () => {
     expect(workspace.status).toBe(200);
     expect(
       (await workspace.json()) as { workspace: { id: string } },
-    ).toMatchObject({ workspace: { id: "hub-northstar" } });
+    ).toMatchObject({ workspace: { id: "workspace-northstar" } });
+
+    expect((await app.request("/api/v1/hubs")).status).toBe(404);
+    expect((await app.request("/api/v1/hubs/northstar-apparel")).status).toBe(
+      404,
+    );
   });
 
   it("separates Waiting follow-ups and commercial entitlements", async () => {
@@ -146,7 +153,7 @@ describe("TREVV API v1", () => {
     const body = (await response.json()) as Record<string, unknown>;
     for (const key of [
       "portfolios",
-      "hubs",
+      "workspaces",
       "boards",
       "items",
       "decisions",
@@ -158,5 +165,6 @@ describe("TREVV API v1", () => {
       "smartLinks",
     ])
       expect(body).toHaveProperty(key);
+    expect(body).not.toHaveProperty("hubs");
   });
 });

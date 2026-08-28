@@ -10,8 +10,7 @@ import {
 test("Portfolio carries the personal roll-ups and opens a workspace", async ({
   page,
 }) => {
-  // Home was folded into Portfolio: the personal roll-ups moved here
-  // rather than being dropped.
+  // Personal roll-ups belong on Portfolio rather than a separate route.
   await gotoCanonical(page, "/app/portfolio");
   await expect(page.getByRole("heading", { name: "Needs You" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();

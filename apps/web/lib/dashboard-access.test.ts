@@ -9,7 +9,7 @@ import {
 const items: WorkItem[] = [
   {
     id: "one",
-    hubId: "project-a",
+    workspaceId: "project-a",
     boardId: "board-a",
     title: "Campaign",
     type: "task",
@@ -19,7 +19,7 @@ const items: WorkItem[] = [
   },
   {
     id: "two",
-    hubId: "project-b",
+    workspaceId: "project-b",
     boardId: "board-b",
     title: "Budget",
     type: "task",

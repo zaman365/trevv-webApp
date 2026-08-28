@@ -16,12 +16,12 @@ import {
 export const roleEnum = pgEnum("membership_role", [
   "owner",
   "admin",
-  "hub_lead",
+  "workspace_lead",
   "member",
   "guest",
   "viewer",
 ]);
-export const hubTypeEnum = pgEnum("hub_type", [
+export const workspaceTypeEnum = pgEnum("workspace_type", [
   "business",
   "brand",
   "client",
@@ -39,7 +39,7 @@ export const hubTypeEnum = pgEnum("hub_type", [
   "journey",
   "other",
 ]);
-export const hubHealthEnum = pgEnum("hub_health", [
+export const workspaceHealthEnum = pgEnum("workspace_health", [
   "on_track",
   "watch",
   "critical",
@@ -95,7 +95,7 @@ export const attentionSeverityEnum = pgEnum("attention_severity", [
   "critical",
 ]);
 export const conversationKindEnum = pgEnum("conversation_kind", [
-  "hub",
+  "workspace",
   "team",
   "direct",
   "external",
@@ -236,8 +236,8 @@ export const invitations = pgTable(
   ],
 );
 
-export const hubs = pgTable(
-  "hubs",
+export const workspaces = pgTable(
+  "workspaces",
   {
     id: text("id").primaryKey(),
     organizationId: text("organization_id")
@@ -249,12 +249,12 @@ export const hubs = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description").notNull().default(""),
-    type: hubTypeEnum("type").notNull(),
+    type: workspaceTypeEnum("type").notNull(),
     accentColor: text("accent_color").notNull(),
     icon: text("icon").notNull(),
     visibility: visibilityEnum("visibility").notNull().default("private"),
     lifecycleStage: lifecycleEnum("lifecycle_stage").notNull(),
-    health: hubHealthEnum("health").notNull(),
+    health: workspaceHealthEnum("health").notNull(),
     healthNote: text("health_note").notNull().default(""),
     leadUserId: text("lead_user_id").references(() => users.id),
     currentPriority: text("current_priority").notNull().default(""),
@@ -271,22 +271,28 @@ export const hubs = pgTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("hubs_portfolio_slug_unique").on(table.portfolioId, table.slug),
-    index("hubs_org_portfolio_idx").on(table.organizationId, table.portfolioId),
-    index("hubs_org_health_idx").on(table.organizationId, table.health),
-    index("hubs_org_lead_idx").on(table.organizationId, table.leadUserId),
+    uniqueIndex("workspaces_portfolio_slug_unique").on(
+      table.portfolioId,
+      table.slug,
+    ),
+    index("workspaces_org_portfolio_idx").on(
+      table.organizationId,
+      table.portfolioId,
+    ),
+    index("workspaces_org_health_idx").on(table.organizationId, table.health),
+    index("workspaces_org_lead_idx").on(table.organizationId, table.leadUserId),
   ],
 );
 
-export const hubMembers = pgTable(
-  "hub_members",
+export const workspaceMembers = pgTable(
+  "workspace_members",
   {
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -294,8 +300,8 @@ export const hubMembers = pgTable(
     ...timestamps,
   },
   (table) => [
-    primaryKey({ columns: [table.hubId, table.userId] }),
-    index("hub_members_user_idx").on(table.organizationId, table.userId),
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
+    index("workspace_members_user_idx").on(table.organizationId, table.userId),
   ],
 );
 
@@ -306,9 +312,9 @@ export const boards = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     templateKey: text("template_key"),
@@ -324,7 +330,10 @@ export const boards = pgTable(
     ...timestamps,
   },
   (table) => [
-    index("boards_org_hub_idx").on(table.organizationId, table.hubId),
+    index("boards_org_workspace_idx").on(
+      table.organizationId,
+      table.workspaceId,
+    ),
   ],
 );
 
@@ -376,9 +385,9 @@ export const workItems = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     boardId: text("board_id")
       .notNull()
       .references(() => boards.id, { onDelete: "cascade" }),
@@ -403,7 +412,10 @@ export const workItems = pgTable(
     ...timestamps,
   },
   (table) => [
-    index("items_org_hub_idx").on(table.organizationId, table.hubId),
+    index("items_org_workspace_idx").on(
+      table.organizationId,
+      table.workspaceId,
+    ),
     index("items_org_board_status_idx").on(
       table.organizationId,
       table.boardId,
@@ -563,7 +575,9 @@ export const attachments = pgTable("attachments", {
 export const externalResourceLinks = pgTable("external_resource_links", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
-  hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").references(() => workspaces.id, {
+    onDelete: "cascade",
+  }),
   itemId: text("item_id").references(() => workItems.id, {
     onDelete: "cascade",
   }),
@@ -575,14 +589,14 @@ export const externalResourceLinks = pgTable("external_resource_links", {
   ...timestamps,
 });
 
-export const hubUpdates = pgTable(
-  "hub_updates",
+export const workspaceUpdates = pgTable(
+  "workspace_updates",
   {
     id: text("id").primaryKey(),
     organizationId: text("organization_id").notNull(),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     authorId: text("author_id")
       .notNull()
       .references(() => users.id),
@@ -598,19 +612,19 @@ export const hubUpdates = pgTable(
     ...timestamps,
   },
   (table) => [
-    index("hub_updates_hub_date_idx").on(
+    index("workspace_updates_workspace_date_idx").on(
       table.organizationId,
-      table.hubId,
+      table.workspaceId,
       table.publishedAt,
     ),
   ],
 );
-export const hubMetrics = pgTable("hub_metrics", {
+export const workspaceMetrics = pgTable("workspace_metrics", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
-  hubId: text("hub_id")
+  workspaceId: text("workspace_id")
     .notNull()
-    .references(() => hubs.id, { onDelete: "cascade" }),
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   unit: text("unit").notNull(),
   currentValue: real("current_value"),
@@ -623,7 +637,7 @@ export const metricSnapshots = pgTable("metric_snapshots", {
   organizationId: text("organization_id").notNull(),
   metricId: text("metric_id")
     .notNull()
-    .references(() => hubMetrics.id, { onDelete: "cascade" }),
+    .references(() => workspaceMetrics.id, { onDelete: "cascade" }),
   value: real("value").notNull(),
   capturedAt: timestamp("captured_at", { withTimezone: true })
     .notNull()
@@ -906,7 +920,9 @@ export const attentionSignals = pgTable(
     portfolioId: text("portfolio_id")
       .notNull()
       .references(() => portfolios.id, { onDelete: "cascade" }),
-    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
     signalType: text("signal_type").notNull(),
@@ -953,9 +969,9 @@ export const waitingStates = pgTable(
     portfolioId: text("portfolio_id")
       .notNull()
       .references(() => portfolios.id, { onDelete: "cascade" }),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
     waitingType: text("waiting_type").notNull(),
@@ -1010,8 +1026,8 @@ export const userSeenCheckpoints = pgTable(
   ],
 );
 
-export const hubSnapshots = pgTable(
-  "hub_snapshots",
+export const workspaceSnapshots = pgTable(
+  "workspace_snapshots",
   {
     id: text("id").primaryKey(),
     organizationId: text("organization_id")
@@ -1020,13 +1036,13 @@ export const hubSnapshots = pgTable(
     portfolioId: text("portfolio_id")
       .notNull()
       .references(() => portfolios.id, { onDelete: "cascade" }),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     capturedAt: timestamp("captured_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    health: hubHealthEnum("health").notNull(),
+    health: workspaceHealthEnum("health").notNull(),
     progress: real("progress"),
     openCount: integer("open_count").notNull(),
     overdueCount: integer("overdue_count").notNull(),
@@ -1042,11 +1058,11 @@ export const hubSnapshots = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("hub_snapshots_hub_captured_unique").on(
-      table.hubId,
+    uniqueIndex("workspace_snapshots_workspace_captured_unique").on(
+      table.workspaceId,
       table.capturedAt,
     ),
-    index("hub_snapshots_portfolio_captured_idx").on(
+    index("workspace_snapshots_portfolio_captured_idx").on(
       table.organizationId,
       table.portfolioId,
       table.capturedAt,
@@ -1064,7 +1080,9 @@ export const reviewRituals = pgTable(
     portfolioId: text("portfolio_id")
       .notNull()
       .references(() => portfolios.id, { onDelete: "cascade" }),
-    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
     type: text("type").notNull(),
     cadence: text("cadence").notNull(),
     enabled: boolean("enabled").notNull().default(true),
@@ -1126,7 +1144,9 @@ export const insights = pgTable(
     portfolioId: text("portfolio_id")
       .notNull()
       .references(() => portfolios.id, { onDelete: "cascade" }),
-    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
     title: text("title").notNull(),
     description: text("description").notNull(),
     sourceType: text("source_type").notNull(),
@@ -1234,9 +1254,9 @@ export const blueprintInstances = pgTable(
     blueprintVersionId: text("blueprint_version_id")
       .notNull()
       .references(() => blueprintVersions.id),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     boardId: text("board_id")
       .notNull()
       .references(() => boards.id, { onDelete: "cascade" }),
@@ -1261,9 +1281,9 @@ export const stakeholderExposures = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    hubId: text("hub_id")
+    workspaceId: text("workspace_id")
       .notNull()
-      .references(() => hubs.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     principalId: text("principal_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -1286,8 +1306,8 @@ export const stakeholderExposures = pgTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("stakeholder_exposures_principal_hub_unique").on(
-      table.hubId,
+    uniqueIndex("stakeholder_exposures_principal_workspace_unique").on(
+      table.workspaceId,
       table.principalId,
     ),
   ],
@@ -1303,7 +1323,9 @@ export const importRuns = pgTable(
     portfolioId: text("portfolio_id")
       .notNull()
       .references(() => portfolios.id, { onDelete: "cascade" }),
-    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
     preset: text("preset").notNull(),
     status: text("status").notNull(),
     dryRun: boolean("dry_run").notNull().default(true),
@@ -1367,7 +1389,9 @@ export const conversations = pgTable(
     portfolioId: text("portfolio_id").references(() => portfolios.id, {
       onDelete: "cascade",
     }),
-    hubId: text("hub_id").references(() => hubs.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
     title: text("title").notNull(),
     purpose: text("purpose").notNull().default(""),
     kind: conversationKindEnum("kind").notNull(),
@@ -1385,9 +1409,9 @@ export const conversations = pgTable(
       table.organizationId,
       table.lastMessageAt,
     ),
-    index("conversations_hub_activity_idx").on(
+    index("conversations_workspace_activity_idx").on(
       table.organizationId,
-      table.hubId,
+      table.workspaceId,
       table.lastMessageAt,
     ),
   ],

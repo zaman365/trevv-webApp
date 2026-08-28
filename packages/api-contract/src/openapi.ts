@@ -17,7 +17,6 @@ export const openApiDocument = {
     { name: "Blueprints" },
     { name: "Commercial" },
     { name: "Workspaces" },
-    { name: "Hubs", description: "Legacy Workspace route aliases" },
     { name: "Items" },
     { name: "Search" },
     { name: "Exports" },
@@ -151,7 +150,9 @@ export const openApiDocument = {
       get: {
         tags: ["Attention"],
         operationId: "getTeamPressure",
-        responses: { "200": { description: "Cross-Hub capacity evidence" } },
+        responses: {
+          "200": { description: "Cross-Workspace capacity evidence" },
+        },
       },
     },
     "/api/v1/entitlements": {
@@ -172,26 +173,6 @@ export const openApiDocument = {
         },
       },
     },
-    "/api/v1/hubs": {
-      get: {
-        tags: ["Hubs"],
-        operationId: "listHubs",
-        deprecated: true,
-        responses: { "200": { description: "Accessible Hubs" } },
-      },
-    },
-    "/api/v1/hubs/{slug}": {
-      get: {
-        tags: ["Hubs"],
-        operationId: "getHub",
-        deprecated: true,
-        parameters: [{ $ref: "#/components/parameters/HubSlug" }],
-        responses: {
-          "200": { description: "Hub overview and accessible work" },
-          "404": { $ref: "#/components/responses/NotFound" },
-        },
-      },
-    },
     "/api/v1/workspaces": {
       get: {
         tags: ["Workspaces"],
@@ -203,7 +184,7 @@ export const openApiDocument = {
       get: {
         tags: ["Workspaces"],
         operationId: "getWorkspace",
-        parameters: [{ $ref: "#/components/parameters/HubSlug" }],
+        parameters: [{ $ref: "#/components/parameters/WorkspaceSlug" }],
         responses: {
           "200": { description: "Workspace overview and accessible work" },
           "404": { $ref: "#/components/responses/NotFound" },
@@ -216,7 +197,6 @@ export const openApiDocument = {
         operationId: "listItems",
         parameters: [
           { name: "cursor", in: "query", schema: { type: "string" } },
-          { name: "hubId", in: "query", schema: { type: "string" } },
           {
             name: "workspaceId",
             in: "query",
@@ -294,7 +274,9 @@ export const openApiDocument = {
           },
         ],
         responses: {
-          "200": { description: "Permission-filtered Hub and item results" },
+          "200": {
+            description: "Permission-filtered Workspace and item results",
+          },
         },
       },
     },
@@ -344,7 +326,7 @@ export const openApiDocument = {
   },
   components: {
     parameters: {
-      HubSlug: {
+      WorkspaceSlug: {
         name: "slug",
         in: "path",
         required: true,
@@ -366,10 +348,17 @@ export const openApiDocument = {
     schemas: {
       WorkItemInput: {
         type: "object",
-        required: ["hubId", "boardId", "title", "type", "priority", "status"],
+        required: [
+          "workspaceId",
+          "boardId",
+          "title",
+          "type",
+          "priority",
+          "status",
+        ],
         additionalProperties: false,
         properties: {
-          hubId: { type: "string" },
+          workspaceId: { type: "string" },
           boardId: { type: "string" },
           title: { type: "string", minLength: 1, maxLength: 500 },
           type: {
@@ -395,7 +384,7 @@ export const openApiDocument = {
           assignee: { type: "string" },
         },
       },
-      HubInput: {
+      WorkspaceInput: {
         type: "object",
         required: ["portfolioId", "name", "type"],
         properties: {

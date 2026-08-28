@@ -1,5 +1,5 @@
 /* =========================================================================
-   Shared design language for Home, Portfolio and Hub.
+   Shared design language for Portfolio and Workspace.
 
    Every page is built from the same four primitives — hero, stat strip,
    panel, project tile — so the altitudes feel like one product. Pages add
@@ -36,7 +36,7 @@
   background: var(--brand);
   content: "";
 }
-.hub-main > .page-hero {
+.workspace-main > .page-hero {
   border-inline: 0;
   border-radius: 0;
   box-shadow: none;
@@ -212,23 +212,6 @@
   pointer-events: none;
 }
 
-/* Home keeps the operating controls compact so the greeting remains primary. */
-.home-main .hero-actions {
-  align-items: stretch;
-  gap: 7px;
-}
-.home-main .hero-title-row {
-  align-items: flex-start;
-  flex-wrap: nowrap;
-  gap: 6px;
-}
-.home-main .hero-title-row h1 {
-  min-width: 0;
-}
-.home-main .hero-title-row > .trevv-hint {
-  flex: 0 0 auto;
-  margin-top: 3px;
-}
 .scope-view-badge {
   min-height: 24px;
   display: inline-flex;
@@ -250,89 +233,17 @@
   border-color: color-mix(in srgb, var(--fh-primary) 18%, transparent);
 }
 .project-scope-badge {
-  color: var(--brand, var(--hub-accent, var(--fh-primary-strong)));
+  color: var(--brand, var(--workspace-accent, var(--fh-primary-strong)));
   background: color-mix(
     in srgb,
-    var(--brand, var(--hub-accent, var(--fh-primary))) 10%,
+    var(--brand, var(--workspace-accent, var(--fh-primary))) 10%,
     var(--fh-surface)
   );
   border-color: color-mix(
     in srgb,
-    var(--brand, var(--hub-accent, var(--fh-primary))) 24%,
+    var(--brand, var(--workspace-accent, var(--fh-primary))) 24%,
     transparent
   );
-}
-.home-portfolio-switcher {
-  position: relative;
-  width: 224px;
-  min-height: 44px;
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) 18px;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  color: var(--fh-ink);
-  background: var(--fh-surface-subtle);
-  border: 1px solid var(--fh-border);
-  border-radius: 11px;
-  cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    background 140ms ease;
-}
-.home-portfolio-switcher:hover,
-.home-portfolio-switcher:focus-within {
-  background: var(--fh-surface);
-  border-color: color-mix(in srgb, var(--fh-primary) 34%, var(--fh-border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fh-primary) 8%, transparent);
-}
-.home-switcher-icon {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  color: var(--fh-primary);
-  background: var(--fh-primary-soft);
-  border-radius: 8px;
-}
-.home-switcher-copy {
-  min-width: 0;
-  display: block;
-}
-.home-switcher-copy small,
-.home-switcher-copy strong {
-  display: block;
-}
-.home-switcher-copy small {
-  color: var(--fh-muted);
-  font-size: 9px;
-  font-weight: var(--fh-weight-strong);
-  letter-spacing: 0.06em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-.home-switcher-copy strong {
-  overflow: hidden;
-  margin-top: 4px;
-  color: var(--fh-ink);
-  font-size: var(--fh-text-xs);
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-portfolio-switcher > svg {
-  color: var(--fh-muted);
-  pointer-events: none;
-}
-.home-portfolio-switcher select {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
 }
 /* ------------------------------------------------------------ stat strip */
 
@@ -737,9 +648,6 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
-.home-project-overview {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-}
 .project-tile {
   position: relative;
   overflow: hidden;
@@ -1045,13 +953,6 @@
   .portfolio-hero-select-shell {
     width: 100%;
   }
-  .home-main .hero-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .home-portfolio-switcher {
-    width: 100%;
-  }
   .project-grid,
   .project-strip,
   .portfolio-cards {
@@ -1062,9 +963,6 @@
   }
 }
 @media (max-width: 520px) {
-  .home-main .hero-actions {
-    grid-template-columns: 1fr;
-  }
   .hero-stats {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -1130,8 +1028,8 @@
 /* Grid and flex children default to min-width:auto, so a wide min-content
    child stretches its track past the viewport. These are the containers
    that carry panels, so they all need the explicit floor. */
-.home-columns > *,
-.hub-content-grid > *,
+.portfolio-columns > *,
+.workspace-content-grid > *,
 .review-grid > *,
 .ideas-layout > * {
   min-width: 0;

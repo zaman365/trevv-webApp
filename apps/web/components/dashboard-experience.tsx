@@ -26,10 +26,10 @@ import {
   Users,
 } from "lucide-react";
 import {
-  demoHubs,
+  demoWorkspaces,
   demoItems,
   demoPortfolios,
-  type Hub,
+  type Workspace,
   type Portfolio,
   type WorkItem,
 } from "@founderhq/core";
@@ -60,8 +60,8 @@ type DashboardLensKind =
   | "status"
   | "priority"
   | "owner"
-  | "hub"
-  | "hub_overdue"
+  | "workspace"
+  | "workspace_overdue"
   | "overdue"
   | "due_soon"
   | "handoffs"
@@ -109,7 +109,7 @@ export function DashboardExperience({
   workspaceSlug?: string;
 }) {
   return (
-    <WorkspaceFrame active="dashboard" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="dashboard" workspaceSlug={workspaceSlug}>
       <DashboardMain />
     </WorkspaceFrame>
   );
@@ -141,7 +141,7 @@ function DashboardMain() {
     accessiblePortfolioIds.has(item.id),
   );
   const accessibleProjectIds = new Set(dashboardAccess.projectIds);
-  const accessibleProjects = scope.hubs.filter((project) =>
+  const accessibleProjects = scope.workspaces.filter((project) =>
     accessibleProjectIds.has(project.id),
   );
   const [viewLevel, setViewLevel] = useState<DashboardViewLevel>(
@@ -173,13 +173,15 @@ function DashboardMain() {
           : portfolioId;
 
   const capturedItems = useMemo<WorkItem[]>(() => {
-    const projectIds = new Set(scope.hubs.map((project) => project.id));
+    const projectIds = new Set(scope.workspaces.map((project) => project.id));
     const existingIds = new Set(scope.items.map((item) => item.id));
     return capturedWork
-      .filter((item) => projectIds.has(item.hubId) && !existingIds.has(item.id))
+      .filter(
+        (item) => projectIds.has(item.workspaceId) && !existingIds.has(item.id),
+      )
       .map<WorkItem>((item) => ({
         id: item.id,
-        hubId: item.hubId,
+        workspaceId: item.workspaceId,
         boardId: item.boardId,
         title: item.title,
         type: dashboardWorkType(item.type),
@@ -190,7 +192,7 @@ function DashboardMain() {
           ? { assignee: item.owner }
           : {}),
       }));
-  }, [capturedWork, scope.hubs, scope.items]);
+  }, [capturedWork, scope.workspaces, scope.items]);
 
   const workspaceItems = useMemo(
     () => [...scope.items, ...capturedItems],
@@ -215,15 +217,21 @@ function DashboardMain() {
     () => scope.attention.filter((group) => viewItemIds.has(group.entityId)),
     [scope.attention, viewItemIds],
   );
-  const viewHubs = useMemo(() => {
-    if (activeViewLevel === "portfolio") return scope.hubs;
+  const viewWorkspaces = useMemo(() => {
+    if (activeViewLevel === "portfolio") return scope.workspaces;
     if (activeViewLevel === "project")
       return selectedProject ? [selectedProject] : [];
-    const projectIds = new Set(allItems.map((item) => item.hubId));
-    return scope.hubs.filter((project) => projectIds.has(project.id));
-  }, [activeViewLevel, allItems, scope.hubs, selectedProject]);
-  const viewHealth = useMemo(() => dashboardHealth(viewHubs), [viewHubs]);
-  const viewFocusHub = useMemo(() => dashboardFocusHub(viewHubs), [viewHubs]);
+    const projectIds = new Set(allItems.map((item) => item.workspaceId));
+    return scope.workspaces.filter((project) => projectIds.has(project.id));
+  }, [activeViewLevel, allItems, scope.workspaces, selectedProject]);
+  const viewHealth = useMemo(
+    () => dashboardHealth(viewWorkspaces),
+    [viewWorkspaces],
+  );
+  const viewFocusWorkspace = useMemo(
+    () => dashboardFocusWorkspace(viewWorkspaces),
+    [viewWorkspaces],
+  );
   const viewDescriptor = dashboardViewDescriptor(
     activeViewLevel,
     portfolio?.name,
@@ -359,48 +367,51 @@ function DashboardMain() {
 
   const projectBars: Bar[] = useMemo(
     () =>
-      viewHubs
-        .map((hub) => ({
-          key: hub.id,
-          label: hub.name,
-          value: items.filter((item) => item.hubId === hub.id).length,
-          color: hub.accent,
+      viewWorkspaces
+        .map((workspace) => ({
+          key: workspace.id,
+          label: workspace.name,
+          value: items.filter((item) => item.workspaceId === workspace.id)
+            .length,
+          color: workspace.accent,
           badge: (
             <span
               className="bar-avatar"
               style={{
-                background: `color-mix(in srgb, ${hub.accent} 16%, var(--fh-surface))`,
+                background: `color-mix(in srgb, ${workspace.accent} 16%, var(--fh-surface))`,
               }}
               aria-hidden="true"
             >
-              {hub.icon}
+              {workspace.icon}
             </span>
           ),
         }))
         .filter((bar) => bar.value > 0)
         .sort((a, b) => b.value - a.value)
         .slice(0, 8),
-    [items, viewHubs],
+    [items, viewWorkspaces],
   );
 
   const overdueBars: Bar[] = useMemo(
     () =>
-      viewHubs
-        .map((hub) => ({
-          key: hub.id,
-          label: hub.name,
-          value: overdueItems.filter((item) => item.hubId === hub.id).length,
+      viewWorkspaces
+        .map((workspace) => ({
+          key: workspace.id,
+          label: workspace.name,
+          value: overdueItems.filter(
+            (item) => item.workspaceId === workspace.id,
+          ).length,
           color: "var(--fh-danger)",
         }))
         .filter((bar) => bar.value > 0)
         .sort((a, b) => b.value - a.value),
-    [overdueItems, viewHubs],
+    [overdueItems, viewWorkspaces],
   );
 
   const pressureIndex = useMemo(() => {
     if (!openItems.length) return 0;
-    const criticalHubs = viewHubs.filter(
-      (hub) => hub.health === "critical",
+    const criticalWorkspaces = viewWorkspaces.filter(
+      (workspace) => workspace.health === "critical",
     ).length;
     const riskShare =
       (openItems.filter((item) => riskItemIds.has(item.id)).length /
@@ -411,14 +422,14 @@ function DashboardMain() {
       Math.round(
         riskShare +
           counts.blocked * 4 +
-          criticalHubs * 7 +
+          criticalWorkspaces * 7 +
           unassignedItems.filter((item) =>
             ["urgent", "high"].includes(item.priority),
           ).length *
             5,
       ),
     );
-  }, [counts.blocked, openItems, riskItemIds, unassignedItems, viewHubs]);
+  }, [counts.blocked, openItems, riskItemIds, unassignedItems, viewWorkspaces]);
 
   const pressure =
     pressureIndex >= 68
@@ -443,8 +454,16 @@ function DashboardMain() {
       )
       .filter((item) => {
         if (!normalized) return true;
-        const hub = demoHubs.find((candidate) => candidate.id === item.hubId);
-        return [item.title, item.assignee, hub?.name, item.type, item.priority]
+        const workspace = demoWorkspaces.find(
+          (candidate) => candidate.id === item.workspaceId,
+        );
+        return [
+          item.title,
+          item.assignee,
+          workspace?.name,
+          item.type,
+          item.priority,
+        ]
           .filter(Boolean)
           .some((value) =>
             String(value).toLocaleLowerCase().includes(normalized),
@@ -870,8 +889,8 @@ function DashboardMain() {
         {visibleItems.length > 0 ? (
           <div className="dashboard-work-list">
             {visibleItems.map((item) => {
-              const hub = demoHubs.find(
-                (candidate) => candidate.id === item.hubId,
+              const workspace = demoWorkspaces.find(
+                (candidate) => candidate.id === item.workspaceId,
               );
               return (
                 <Link
@@ -888,7 +907,7 @@ function DashboardMain() {
                   <span className="dashboard-work-copy">
                     <strong>{item.title}</strong>
                     <small>
-                      {hub?.name ?? "Unknown workspace"} ·{" "}
+                      {workspace?.name ?? "Unknown workspace"} ·{" "}
                       {typeLabel(item.type)}
                     </small>
                   </span>
@@ -1027,13 +1046,13 @@ function DashboardMain() {
             emptyNote={`No work in this ${viewDescriptor.levelNoun}.`}
             onSelect={(bar) =>
               focusLens({
-                kind: "hub",
+                kind: "workspace",
                 key: bar.key,
                 label: bar.label,
                 note: `Source work currently attached to ${bar.label}.`,
               })
             }
-            {...(lens.kind === "hub" && lens.key
+            {...(lens.kind === "workspace" && lens.key
               ? { selectedKey: lens.key }
               : {})}
           />
@@ -1086,13 +1105,13 @@ function DashboardMain() {
             emptyNote="Nothing is overdue."
             onSelect={(bar) =>
               focusLens({
-                kind: "hub_overdue",
+                kind: "workspace_overdue",
                 key: bar.key,
                 label: `${bar.label} · overdue`,
                 note: `Late commitments currently attached to ${bar.label}.`,
               })
             }
-            {...(lens.kind === "hub_overdue" && lens.key
+            {...(lens.kind === "workspace_overdue" && lens.key
               ? { selectedKey: lens.key }
               : {})}
           />
@@ -1101,25 +1120,25 @@ function DashboardMain() {
         <Widget
           icon={CheckCircle2}
           title={`${vocab.one} health`}
-          note={`${viewHubs.length} ${viewHubs.length === 1 ? vocab.one.toLowerCase() : vocab.many.toLowerCase()} · live health evidence`}
+          note={`${viewWorkspaces.length} ${viewWorkspaces.length === 1 ? vocab.one.toLowerCase() : vocab.many.toLowerCase()} · live health evidence`}
           span={6}
           hintId="portfolios"
           exportData={{
             health: viewHealth,
-            focus: viewFocusHub ?? null,
+            focus: viewFocusWorkspace ?? null,
           }}
           scopeFilter={scopeFilter}
           onScopeFilter={setScopeFilter}
         >
           <div className="widget-health">
             <HealthBar slices={viewHealth} />
-            {viewFocusHub && (
+            {viewFocusWorkspace && (
               <p className="widget-focus">
                 <b>Most urgent</b>
-                <Link href={workspaceHref(viewFocusHub.slug)}>
-                  {viewFocusHub.name}
+                <Link href={workspaceHref(viewFocusWorkspace.slug)}>
+                  {viewFocusWorkspace.name}
                 </Link>
-                <small>{viewFocusHub.healthNote}</small>
+                <small>{viewFocusWorkspace.healthNote}</small>
               </p>
             )}
           </div>
@@ -1231,7 +1250,7 @@ function DashboardTargetSelector({
   projectId: string;
   teamId: string;
   portfolios: readonly Portfolio[];
-  projects: readonly Hub[];
+  projects: readonly Workspace[];
   teams: readonly DashboardTeam[];
   onPortfolio: (id: string) => void;
   onProject: (id: string) => void;
@@ -1303,7 +1322,7 @@ function DashboardTargetSelector({
 function dashboardViewDescriptor(
   level: DashboardViewLevel,
   portfolioName?: string,
-  project?: Hub,
+  project?: Workspace,
   team?: DashboardTeam,
 ) {
   if (level === "portfolio")
@@ -1343,7 +1362,7 @@ const DASHBOARD_HEALTH_ORDER = [
   { key: "parked", label: "Parked" },
 ] as const;
 
-function dashboardHealth(projects: readonly Hub[]) {
+function dashboardHealth(projects: readonly Workspace[]) {
   return DASHBOARD_HEALTH_ORDER.map(({ key, label }) => ({
     key,
     label,
@@ -1351,7 +1370,7 @@ function dashboardHealth(projects: readonly Hub[]) {
   }));
 }
 
-function dashboardFocusHub(projects: readonly Hub[]) {
+function dashboardFocusWorkspace(projects: readonly Workspace[]) {
   for (const { key } of DASHBOARD_HEALTH_ORDER) {
     const project = projects.find((candidate) => candidate.health === key);
     if (project) return project;
@@ -1525,9 +1544,9 @@ function matchesLens(
   if (lens.kind === "priority") return item.priority === lens.key;
   if (lens.kind === "owner")
     return (item.assignee ?? "Unassigned") === lens.key;
-  if (lens.kind === "hub") return item.hubId === lens.key;
-  if (lens.kind === "hub_overdue")
-    return item.hubId === lens.key && isOverdue(item);
+  if (lens.kind === "workspace") return item.workspaceId === lens.key;
+  if (lens.kind === "workspace_overdue")
+    return item.workspaceId === lens.key && isOverdue(item);
   if (lens.kind === "overdue") return isOverdue(item);
   if (lens.kind === "due_soon") return isDueSoon(item);
   if (lens.kind === "handoffs")
@@ -1609,27 +1628,34 @@ function workActionLabel(item: WorkItem) {
 }
 
 function workItemHref(item: WorkItem) {
-  const hub = demoHubs.find((candidate) => candidate.id === item.hubId);
-  if (item.type === "decision" && hub)
-    return workspaceHref(hub.slug, "decisions");
-  if (item.type === "approval" && hub)
-    return workspaceHref(hub.slug, "approvals");
-  return hub
-    ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
+  const workspace = demoWorkspaces.find(
+    (candidate) => candidate.id === item.workspaceId,
+  );
+  if (item.type === "decision" && workspace)
+    return workspaceHref(workspace.slug, "decisions");
+  if (item.type === "approval" && workspace)
+    return workspaceHref(workspace.slug, "approvals");
+  return workspace
+    ? `${workspaceHref(workspace.slug)}/boards/${item.boardId}`
     : "/app/portfolio";
 }
 
 function signalHref(group: GroupedSignal) {
   const item = demoItems.find((candidate) => candidate.id === group.entityId);
-  const hub = demoHubs.find((candidate) => candidate.id === group.hubId);
+  const workspace = demoWorkspaces.find(
+    (candidate) => candidate.id === group.workspaceId,
+  );
   if (group.signals.some((signal) => signal.signalType === "waiting_too_long"))
-    return hub ? workspaceHref(hub.slug, "waiting") : "/app/portfolio";
-  if (item?.type === "decision" && hub)
-    return workspaceHref(hub.slug, "decisions");
-  if (item?.type === "approval" && hub)
-    return workspaceHref(hub.slug, "approvals");
-  if (item && hub) return `${workspaceHref(hub.slug)}/boards/${item.boardId}`;
-  return hub ? workspaceHref(hub.slug) : "/app/portfolio";
+    return workspace
+      ? workspaceHref(workspace.slug, "waiting")
+      : "/app/portfolio";
+  if (item?.type === "decision" && workspace)
+    return workspaceHref(workspace.slug, "decisions");
+  if (item?.type === "approval" && workspace)
+    return workspaceHref(workspace.slug, "approvals");
+  if (item && workspace)
+    return `${workspaceHref(workspace.slug)}/boards/${item.boardId}`;
+  return workspace ? workspaceHref(workspace.slug) : "/app/portfolio";
 }
 
 function signalActionLabel(group: GroupedSignal) {
@@ -1653,7 +1679,7 @@ function exportDashboard(items: WorkItem[], scopeName?: string) {
       PRIORITY_META[item.priority]?.label ?? item.priority,
       item.assignee ?? "Unassigned",
       item.dueDate ?? "",
-      hubForDashboard(item.hubId),
+      workspaceForDashboard(item.workspaceId),
     ]
       .map(csvValue)
       .join(","),
@@ -1680,6 +1706,9 @@ function csvValue(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-function hubForDashboard(hubId: string): string {
-  return demoHubs.find((hub) => hub.id === hubId)?.name ?? "Unknown workspace";
+function workspaceForDashboard(workspaceId: string): string {
+  return (
+    demoWorkspaces.find((workspace) => workspace.id === workspaceId)?.name ??
+    "Unknown workspace"
+  );
 }

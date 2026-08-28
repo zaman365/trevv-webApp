@@ -5,8 +5,8 @@ import {
   demoChangeCheckpoint,
   demoDecisionOutcomes,
   demoDependencies,
-  demoHubSnapshots,
-  demoHubs,
+  demoWorkspaceSnapshots,
+  demoWorkspaces,
   demoInsightLinks,
   demoInsights,
   demoItems,
@@ -26,8 +26,8 @@ import {
   boards,
   decisionOutcomes,
   entitlements,
-  hubs,
-  hubSnapshots,
+  workspaces,
+  workspaceSnapshots,
   insightLinks,
   insights,
   itemDependencies,
@@ -64,7 +64,7 @@ for (const [index, portfolio] of demoPortfolios.entries())
 const demoUsers = [
   ["user-owner", "owner@trevv.local", "Mohammed Zaman", "owner"],
   ["user-admin", "admin@trevv.local", "Amira Demir", "admin"],
-  ["user-lead", "lead@trevv.local", "Nora Klein", "hub_lead"],
+  ["user-lead", "lead@trevv.local", "Nora Klein", "workspace_lead"],
   ["user-member", "member@trevv.local", "Tim Bauer", "member"],
   ["user-guest", "guest@trevv.local", "Guest Reviewer", "guest"],
   ["user-viewer", "viewer@trevv.local", "Demo Viewer", "viewer"],
@@ -85,29 +85,30 @@ for (const [id, email, name, role] of demoUsers) {
     })
     .onConflictDoNothing();
 }
-for (const [index, hub] of demoHubs.entries()) {
+for (const [index, workspace] of demoWorkspaces.entries()) {
   await db
-    .insert(hubs)
+    .insert(workspaces)
     .values({
-      id: hub.id,
+      id: workspace.id,
       organizationId: "org-demo",
-      portfolioId: hub.portfolioId,
-      name: hub.name,
-      slug: hub.slug,
-      type: hub.type,
-      accentColor: hub.accent,
-      icon: hub.icon,
-      visibility: hub.slug === "personal-projects" ? "private" : "organization",
-      lifecycleStage: hub.stage,
-      health: hub.health,
-      healthNote: hub.healthNote,
+      portfolioId: workspace.portfolioId,
+      name: workspace.name,
+      slug: workspace.slug,
+      type: workspace.type,
+      accentColor: workspace.accent,
+      icon: workspace.icon,
+      visibility:
+        workspace.slug === "personal-projects" ? "private" : "organization",
+      lifecycleStage: workspace.stage,
+      health: workspace.health,
+      healthNote: workspace.healthNote,
       leadUserId: "user-owner",
-      currentPriority: hub.priority,
-      nextMilestoneSummary: hub.nextMilestone.title,
-      nextMilestoneDate: hub.nextMilestone.date,
-      lastUpdateAt: new Date(`${hub.latestUpdate.date}T12:00:00Z`),
+      currentPriority: workspace.priority,
+      nextMilestoneSummary: workspace.nextMilestone.title,
+      nextMilestoneDate: workspace.nextMilestone.date,
+      lastUpdateAt: new Date(`${workspace.latestUpdate.date}T12:00:00Z`),
       ordering: index,
-      progressMode: hub.progressMode ?? "none",
+      progressMode: workspace.progressMode ?? "none",
     })
     .onConflictDoNothing();
 }
@@ -120,7 +121,7 @@ for (const [index, boardId] of boardIds.entries()) {
     .values({
       id: boardId,
       organizationId: "org-demo",
-      hubId: item.hubId,
+      workspaceId: item.workspaceId,
       name: boardId.replace(/^b-/, "").replace(/-/g, " "),
       ordering: index,
     })
@@ -132,7 +133,7 @@ for (const [index, item] of demoItems.entries()) {
     .values({
       id: item.id,
       organizationId: "org-demo",
-      hubId: item.hubId,
+      workspaceId: item.workspaceId,
       boardId: item.boardId,
       title: item.title,
       itemType: item.type,
@@ -195,7 +196,7 @@ for (const waiting of demoWaitingStates)
       id: waiting.id,
       organizationId: waiting.organizationId,
       portfolioId: waiting.portfolioId,
-      hubId: waiting.hubId,
+      workspaceId: waiting.workspaceId,
       entityType: waiting.entityType,
       entityId: waiting.entityId,
       waitingType: waiting.waitingType,
@@ -212,7 +213,7 @@ for (const waiting of demoWaitingStates)
 
 const generatedSignals = generateAttentionSignals(
   "org-demo",
-  demoHubs,
+  demoWorkspaces,
   demoItems,
   demoWaitingStates,
   new Date("2026-08-24T12:00:00.000Z"),
@@ -225,7 +226,7 @@ for (const signal of generatedSignals)
       id: signal.id,
       organizationId: signal.organizationId,
       portfolioId: signal.portfolioId,
-      hubId: signal.hubId,
+      workspaceId: signal.workspaceId,
       entityType: signal.entityType,
       entityId: signal.entityId,
       signalType: signal.signalType,
@@ -250,9 +251,9 @@ await db
   })
   .onConflictDoNothing();
 
-for (const snapshot of demoHubSnapshots)
+for (const snapshot of demoWorkspaceSnapshots)
   await db
-    .insert(hubSnapshots)
+    .insert(workspaceSnapshots)
     .values({
       ...snapshot,
       capturedAt: new Date(snapshot.capturedAt),
@@ -318,7 +319,7 @@ await db
   .values({
     id: demoStakeholderExposure.id,
     organizationId: demoStakeholderExposure.organizationId,
-    hubId: demoStakeholderExposure.hubId,
+    workspaceId: demoStakeholderExposure.workspaceId,
     principalId: demoStakeholderExposure.principalId,
     showHealth: demoStakeholderExposure.health,
     showLatestUpdate: demoStakeholderExposure.latestUpdate,

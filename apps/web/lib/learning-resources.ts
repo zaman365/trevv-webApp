@@ -131,7 +131,7 @@ export const learningResources: LearningResource[] = [
     featured: true,
   },
   {
-    id: "hubs",
+    id: "workspaces",
     category: "Structure & work",
     type: "Tutorial",
     title: "Understand workspaces",
@@ -146,7 +146,7 @@ export const learningResources: LearningResource[] = [
       "Add a small number of boards for distinct workflows.",
       "Keep the latest update and next milestone current.",
     ],
-    keywords: ["hub", "project", "business", "client", "product"],
+    keywords: ["workspace", "project", "business", "client", "product"],
   },
   {
     id: "boards",
@@ -385,7 +385,7 @@ export const learningResources: LearningResource[] = [
       "Find where commitments are concentrated before load becomes a blocker.",
     body: "Owner bars show the number of visible items assigned to each person. Workspace-area bars show where open work sits. Read both together before deciding whether to move ownership or reduce scope.",
     duration: "2 min",
-    keywords: ["dashboard", "owner", "hub", "load", "capacity"],
+    keywords: ["dashboard", "owner", "workspace", "load", "capacity"],
   },
   {
     id: "reviews",

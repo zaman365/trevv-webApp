@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import {
   demoBoards,
-  demoHubs,
+  demoWorkspaces,
   demoItems,
   type Priority,
   type WorkItem,
@@ -56,7 +56,7 @@ interface MyWorkRecord {
   status: WorkStatus;
   dueDate: string | undefined;
   assignee: string;
-  hubId: string;
+  workspaceId: string;
   boardId: string;
   following: boolean;
   createdByMe: boolean;
@@ -90,7 +90,7 @@ const workspaceRecords: MyWorkRecord[] = demoItems.map((item, index) => ({
   status: item.status,
   dueDate: item.dueDate,
   assignee: item.assignee ?? "Unassigned",
-  hubId: item.hubId,
+  workspaceId: item.workspaceId,
   boardId: item.boardId,
   following: index % 3 === 0 || item.assignee === currentUser,
   createdByMe:
@@ -157,8 +157,8 @@ export function MyWorkWorkflow() {
   const [toast, setToast] = useState<WorkToast | null>(null);
 
   const records = useMemo(() => {
-    const allowedHubIds = new Set(
-      workspaceScope.hubs.map((project) => project.id),
+    const allowedWorkspaceIds = new Set(
+      workspaceScope.workspaces.map((project) => project.id),
     );
     const captures: MyWorkRecord[] = capturedWork
       .filter((item) => ["task", "milestone", "request"].includes(item.type))
@@ -170,7 +170,7 @@ export function MyWorkWorkflow() {
         status: "not_started",
         dueDate: item.dueDate,
         assignee: item.owner,
-        hubId: item.hubId,
+        workspaceId: item.workspaceId,
         boardId: item.boardId,
         following: item.owner === currentUser,
         createdByMe: true,
@@ -178,12 +178,12 @@ export function MyWorkWorkflow() {
         notes: item.details ?? "Captured from Inbox. Add the next useful step.",
       }));
     return [...workspaceRecords, ...captures]
-      .filter((item) => allowedHubIds.has(item.hubId))
+      .filter((item) => allowedWorkspaceIds.has(item.workspaceId))
       .map((item) => ({
         ...item,
         ...edits[item.id],
       }));
-  }, [capturedWork, edits, workspaceScope.hubs]);
+  }, [capturedWork, edits, workspaceScope.workspaces]);
 
   const counts = useMemo(
     () => ({
@@ -236,7 +236,7 @@ export function MyWorkWorkflow() {
         if (!normalizedQuery) return true;
         return [
           item.title,
-          hubFor(item)?.name,
+          workspaceFor(item)?.name,
           typeLabels[item.type],
           item.assignee,
         ]
@@ -497,7 +497,7 @@ export function MyWorkWorkflow() {
                   <button onClick={() => setSelectedId(item.id)}>
                     <strong>{item.title}</strong>
                     <small>
-                      {hubFor(item)?.name ?? "Inbox"} · {dueLabel(item)}
+                      {workspaceFor(item)?.name ?? "Inbox"} · {dueLabel(item)}
                     </small>
                   </button>
                   <button
@@ -835,7 +835,7 @@ function WorkRow({
   onToggleDone: () => void;
   onToggleFocus: () => void;
 }) {
-  const hub = hubFor(item);
+  const workspace = workspaceFor(item);
   const board = demoBoards.find((candidate) => candidate.id === item.boardId);
   return (
     <article
@@ -860,7 +860,8 @@ function WorkRow({
         <span>
           <strong>{item.title}</strong>
           <small>
-            {hub?.name ?? "Inbox"} · {board?.name ?? typeLabels[item.type]}
+            {workspace?.name ?? "Inbox"} ·{" "}
+            {board?.name ?? typeLabels[item.type]}
           </small>
         </span>
       </button>
@@ -957,7 +958,7 @@ function WorkDetailDialog({
             </span>
             <div>
               <p>
-                {typeLabels[item.type]} · {hubFor(item)?.name ?? "Inbox"}
+                {typeLabels[item.type]} · {workspaceFor(item)?.name ?? "Inbox"}
               </p>
               <h2 id="my-work-detail-title">Work details</h2>
             </div>
@@ -1121,14 +1122,14 @@ function workScore(item: MyWorkRecord) {
   return score;
 }
 
-function hubFor(item: MyWorkRecord) {
-  return demoHubs.find((hub) => hub.id === item.hubId);
+function workspaceFor(item: MyWorkRecord) {
+  return demoWorkspaces.find((workspace) => workspace.id === item.workspaceId);
 }
 
 function boardHref(item: MyWorkRecord) {
-  const hub = hubFor(item);
-  return hub
-    ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
+  const workspace = workspaceFor(item);
+  return workspace
+    ? `${workspaceHref(workspace.slug)}/boards/${item.boardId}`
     : "/app/portfolio";
 }
 

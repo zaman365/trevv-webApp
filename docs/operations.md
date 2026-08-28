@@ -18,7 +18,7 @@ Structured events include service, request ID, organization-safe identifier, act
 
 ## Restore drill
 
-Quarterly, restore the latest snapshot into an isolated EU-region database, run migrations, compare organization/Hub/item counts, verify one attachment, authenticate a test identity, load Portfolio, and export the restored organization. Record recovery point and recovery time. Delete the drill environment securely.
+Quarterly, restore the latest snapshot into an isolated EU-region database, run migrations, compare organization/Workspace/item counts, verify one attachment, authenticate a test identity, load Portfolio, and export the restored organization. Record recovery point and recovery time. Delete the drill environment securely.
 
 Example operator flow:
 

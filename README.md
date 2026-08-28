@@ -4,14 +4,14 @@ TREVV is a commercial, portfolio-first operating system for people responsible f
 
 ## What ships
 
-- Organization → Portfolio → Hub tenancy with automatic default-Portfolio migration
-- deterministic Attention Engine, Waiting Center, personalized Home, and Change Radar
+- Organization → Portfolio → Workspace tenancy with automatic default-Portfolio migration
+- deterministic Attention Engine, Waiting Center, personalized Portfolio roll-ups, and Change Radar
 - review rituals, lightweight historical snapshots, and Decision consequence reviews
 - Insights and opportunity discovery with promotion provenance
 - managed Blueprints with safe diffs, selected application, local overrides, and detach
-- stakeholder-safe Hub views, import presets/dry runs, cross-Hub dependencies, and workload evidence
+- stakeholder-safe Workspace views, import presets/dry runs, cross-Workspace dependencies, and workload evidence
 - pricing-agnostic subscription and entitlement architecture with unrestricted development mode
-- polished Hub Overview, board table/Kanban, inline editing, and item side panel
+- polished Workspace Overview, board table/Kanban, inline editing, and item side panel
 - My Work, actionable Inbox, informational Notifications, Decision Center, Approval Center, search, integrations, commercial onboarding, sign-in, and sign-up
 - English/German UI foundations, responsive mobile-browser layouts, dark mode, and installable PWA behavior
 - versioned Hono API, Better Auth, PostgreSQL/Drizzle schema, background worker, typed client, permission policy, events/outbox, CSV/JSON export, and safe integration mocks

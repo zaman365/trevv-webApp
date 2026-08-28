@@ -5,12 +5,12 @@ export const cursorSchema = z.string().max(512).optional();
 export const roleSchema = z.enum([
   "owner",
   "admin",
-  "hub_lead",
+  "workspace_lead",
   "member",
   "guest",
   "viewer",
 ]);
-export const hubHealthSchema = z.enum([
+export const workspaceHealthSchema = z.enum([
   "on_track",
   "watch",
   "critical",
@@ -26,7 +26,7 @@ export const lifecycleStageSchema = z.enum([
   "paused",
   "archived",
 ]);
-export const hubTypeSchema = z.enum([
+export const workspaceTypeSchema = z.enum([
   "business",
   "brand",
   "client",
@@ -80,16 +80,16 @@ export const sessionSchema = z.object({
   expiresAt: z.iso.datetime(),
 });
 
-export const hubSchema = z.object({
+export const workspaceSchema = z.object({
   id: idSchema,
   portfolioId: idSchema,
   slug: z.string().min(1).max(120),
   name: z.string().min(1).max(160),
   icon: z.string().min(1).max(12),
   accent: z.string().regex(/^#[0-9a-f]{6}$/i),
-  type: hubTypeSchema,
+  type: workspaceTypeSchema,
   stage: lifecycleStageSchema,
-  health: hubHealthSchema,
+  health: workspaceHealthSchema,
   healthNote: z.string().max(1_000),
   priority: z.string().max(500),
   lead: z.object({ name: z.string(), initials: z.string(), color: z.string() }),
@@ -108,7 +108,7 @@ export const hubSchema = z.object({
 
 export const workItemSchema = z.object({
   id: idSchema,
-  hubId: idSchema,
+  workspaceId: idSchema,
   boardId: idSchema,
   title: z.string().min(1).max(500),
   type: itemTypeSchema,
@@ -124,7 +124,7 @@ export const workItemSchema = z.object({
     .optional(),
 });
 
-export const hubRollupSchema = z.object({
+export const workspaceRollupSchema = z.object({
   open: z.number().int().nonnegative(),
   overdue: z.number().int().nonnegative(),
   blocked: z.number().int().nonnegative(),
@@ -155,14 +155,16 @@ export const portfolioResponseSchema = z.object({
   asOf: z.iso.datetime(),
   portfolio: portfolioSchema,
   signals: portfolioSignalSchema,
-  hubs: z.array(z.object({ hub: hubSchema, rollup: hubRollupSchema })),
+  workspaces: z.array(
+    z.object({ workspace: workspaceSchema, rollup: workspaceRollupSchema }),
+  ),
 });
 
 export const attentionSignalSchema = z.object({
   id: idSchema,
   organizationId: idSchema,
   portfolioId: idSchema,
-  hubId: idSchema.optional(),
+  workspaceId: idSchema.optional(),
   entityType: z.string().min(1).max(80),
   entityId: idSchema,
   signalType: z.string().min(1).max(120),
@@ -205,7 +207,7 @@ export const waitingStateSchema = z.object({
   id: idSchema,
   organizationId: idSchema,
   portfolioId: idSchema,
-  hubId: idSchema,
+  workspaceId: idSchema,
   entityType: z.enum(["work_item", "decision", "approval"]),
   entityId: idSchema,
   title: z.string().min(1).max(500),
@@ -232,7 +234,7 @@ export const waitingStateSchema = z.object({
 });
 
 export const conversationKindSchema = z.enum([
-  "hub",
+  "workspace",
   "team",
   "direct",
   "external",
@@ -254,7 +256,7 @@ export const conversationSchema = z.object({
   id: idSchema,
   organizationId: idSchema,
   portfolioId: idSchema,
-  hubId: idSchema,
+  workspaceId: idSchema,
   title: z.string().trim().min(1).max(160),
   purpose: z.string().trim().max(1_000),
   kind: conversationKindSchema,
@@ -359,7 +361,7 @@ export const apiErrorSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 export type Session = z.infer<typeof sessionSchema>;
-export type HubDto = z.infer<typeof hubSchema>;
+export type WorkspaceDto = z.infer<typeof workspaceSchema>;
 export type WorkItemDto = z.infer<typeof workItemSchema>;
 export type PortfolioResponse = z.infer<typeof portfolioResponseSchema>;
 export type PortfolioDto = z.infer<typeof portfolioSchema>;
@@ -371,7 +373,7 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 
 export const eventSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("hub.health.changed"),
+    type: z.literal("workspace.health.changed"),
     organizationId: idSchema,
     aggregateId: idSchema,
     occurredAt: z.iso.datetime(),

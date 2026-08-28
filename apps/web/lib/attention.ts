@@ -1,16 +1,16 @@
 import {
   attentionScore,
   demoDependencies,
-  demoHubs,
+  demoWorkspaces,
   demoItems,
   demoWaitingStates,
   generateAttentionSignals,
-  hubsForPortfolio,
+  workspacesForPortfolio,
   portfolioSignals,
   rankAttentionSignals,
   type AttentionSignal,
   type AttentionSeverity,
-  type Hub,
+  type Workspace,
 } from "@founderhq/core";
 
 export const DEFAULT_PORTFOLIO_ID = "portfolio-demo";
@@ -34,7 +34,7 @@ export interface GroupedSignal {
   id: string;
   entityId: string;
   entityType: string;
-  hubId?: string | undefined;
+  workspaceId?: string | undefined;
   title: string;
   severity: AttentionSeverity;
   score: number;
@@ -97,7 +97,7 @@ export function groupSignalsByEntity(
           id: `group-${entityId}`,
           entityId,
           entityType: primary.entityType,
-          hubId: primary.hubId,
+          workspaceId: primary.workspaceId,
           title: String(primary.metadata.title ?? entityId),
           severity: highestSeverity(group),
           score: attentionScore(primary, now),
@@ -122,7 +122,7 @@ export function groupSignalsByEntity(
 export interface WorkspaceScope {
   portfolioId: string;
   projectId: string | null;
-  hubs: ReturnType<typeof hubsForPortfolio>;
+  workspaces: ReturnType<typeof workspacesForPortfolio>;
   items: typeof demoItems;
   waiting: typeof demoWaitingStates;
   /** Signals grouped one-per-item and ranked. */
@@ -141,24 +141,28 @@ export function scopeWorkspace(
   portfolioId: string = DEFAULT_PORTFOLIO_ID,
   now = NOW,
   projectId?: string,
-  additionalHubs: readonly Hub[] = [],
+  additionalWorkspaces: readonly Workspace[] = [],
 ): WorkspaceScope {
-  const coreHubs = hubsForPortfolio(portfolioId);
-  const coreHubIds = new Set(coreHubs.map((hub) => hub.id));
-  const portfolioHubs = [
-    ...coreHubs,
-    ...additionalHubs.filter(
-      (hub) => hub.portfolioId === portfolioId && !coreHubIds.has(hub.id),
+  const coreWorkspaces = workspacesForPortfolio(portfolioId);
+  const coreWorkspaceIds = new Set(
+    coreWorkspaces.map((workspace) => workspace.id),
+  );
+  const portfolioWorkspaces = [
+    ...coreWorkspaces,
+    ...additionalWorkspaces.filter(
+      (workspace) =>
+        workspace.portfolioId === portfolioId &&
+        !coreWorkspaceIds.has(workspace.id),
     ),
   ];
-  const hubs = projectId
-    ? portfolioHubs.filter((hub) => hub.id === projectId)
-    : portfolioHubs;
-  const hubIds = new Set(hubs.map((hub) => hub.id));
-  const items = demoItems.filter((item) => hubIds.has(item.hubId));
+  const workspaces = projectId
+    ? portfolioWorkspaces.filter((workspace) => workspace.id === projectId)
+    : portfolioWorkspaces;
+  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  const items = demoItems.filter((item) => workspaceIds.has(item.workspaceId));
   const itemIds = new Set(items.map((item) => item.id));
   const waiting = demoWaitingStates.filter((state) =>
-    hubIds.has(state.hubId ?? ""),
+    workspaceIds.has(state.workspaceId ?? ""),
   );
   const dependencies = demoDependencies.filter(
     (dependency) =>
@@ -167,7 +171,7 @@ export function scopeWorkspace(
   const ranked = rankAttentionSignals(
     generateAttentionSignals(
       "org-demo",
-      hubs,
+      workspaces,
       items,
       waiting,
       now,
@@ -179,12 +183,12 @@ export function scopeWorkspace(
   return {
     portfolioId,
     projectId: projectId ?? null,
-    hubs,
+    workspaces,
     items,
     waiting,
     attention,
     attentionCount: attention.length,
-    breakdown: portfolioSignals(hubs, items, now),
+    breakdown: portfolioSignals(workspaces, items, now),
   };
 }
 
@@ -207,7 +211,7 @@ export const SIGNAL_TONES = {
 /** Fall back to the seeded portfolio when an unknown id is requested. */
 export function resolvePortfolioId(candidate?: string) {
   if (!candidate) return DEFAULT_PORTFOLIO_ID;
-  return demoHubs.some((hub) => hub.portfolioId === candidate)
+  return demoWorkspaces.some((workspace) => workspace.portfolioId === candidate)
     ? candidate
     : DEFAULT_PORTFOLIO_ID;
 }

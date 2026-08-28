@@ -4,11 +4,11 @@
 
 TREVV is implemented as a pnpm/Turborepo TypeScript monorepo. The Next.js Web/PWA is the complete product surface, supported by a versioned Hono API, Better Auth, PostgreSQL/Drizzle persistence, a typed cross-platform client, a permission policy, an outbox/attention/review worker, an Expo mobile companion, and a Tauri desktop shell.
 
-The deterministic fictional demo exercises multi-Portfolio roll-ups, explainable Attention actions, Waiting follow-ups, Change Radar filtering, review snapshots, Decision outcomes, Insights, opportunity provenance, Blueprint diffs, stakeholder exposure, import dry runs, cross-Hub pressure, Hub navigation, boards, My Work, Inbox, decisions, approvals, search, integrations, authentication, and commercial onboarding.
+The deterministic fictional demo exercises multi-Portfolio roll-ups, explainable Attention actions, Waiting follow-ups, Change Radar filtering, review snapshots, Decision outcomes, Insights, opportunity provenance, Blueprint diffs, stakeholder exposure, import dry runs, cross-Workspace pressure, Workspace navigation, boards, My Work, Inbox, decisions, approvals, search, integrations, authentication, and commercial onboarding.
 
 ## Notable decisions
 
-- Portfolio and Hub aggregates are calculated in the domain package and exposed once through the shared API contract so every client receives identical semantics.
+- Portfolio and Workspace aggregates are calculated in the domain package and exposed once through the shared API contract so every client receives identical semantics.
 - Web, Expo, and Tauri consume `@founderhq/api-client`; the Web falls back to deterministic seed data when demo mode is enabled and the API is unavailable.
 - Permissions are centralized in a tested policy instead of duplicated in UI code.
 - Write routes include idempotency and optimistic-version conflict behavior; side effects are represented through the events/outbox foundation.
@@ -22,8 +22,8 @@ The deterministic fictional demo exercises multi-Portfolio roll-ups, explainable
 - TypeScript type-check across 18 workspaces
 - unit and package tests across domain, permissions, database, integrations, API, Web, and worker packages
 - production build across all 18 workspaces
-- 22 Playwright critical-path checks across desktop and mobile viewports
-- 24 axe accessibility checks with no serious or critical findings across onboarding, Home, Portfolio, Attention, Waiting, Hub, Board, stakeholder view, Decisions, Blueprints, and the item panel
+- 32 Playwright critical-path checks across desktop and mobile viewports
+- 26 axe accessibility checks with no serious or critical findings across onboarding, Portfolio, Attention, Waiting, Workspace, Board, stakeholder view, Decisions, Blueprints, and the item panel
 - API contract coverage for health, Portfolio, Attention, Waiting, commercial memory, and the 23-path OpenAPI document
 - dependency audit with no reported advisory
 

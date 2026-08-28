@@ -2,13 +2,13 @@
 
 ## Trust boundaries
 
-The API is the authorization boundary. Clients never import database code and never calculate domain permissions. Every protected query must include `organization_id` and, for scoped roles, an accessible Hub identifier. Public identifiers are opaque strings; possession of an identifier is never sufficient authorization.
+The API is the authorization boundary. Clients never import database code and never calculate domain permissions. Every protected query must include `organization_id` and, for scoped roles, an accessible Workspace identifier. Public identifiers are opaque strings; possession of an identifier is never sufficient authorization.
 
 Better Auth owns credential hashing, HTTP-only session cookies, CSRF/origin checks, session expiry, and email/password flows. Production disables `DEMO_MODE`, requires a strong secret, uses HTTPS and secure cookies, and only trusts the configured Web origin. Mobile and desktop store session material through platform-secure storage adapters and use deep links only to complete an already initiated authentication flow.
 
 ## Controls
 
-- centralized role/action/resource policy with explicit Owner, Admin, Hub Lead, Member, Guest, and Viewer tests
+- centralized role/action/resource policy with explicit Owner, Admin, Workspace Lead, Member, Guest, and Viewer tests
 - request validation with Zod; consistent non-leaking error envelopes and request IDs
 - optimistic concurrency through `If-Match` versions and idempotency keys for retryable creates
 - signed/private object-storage design; MIME, size, tenant, and authorization checks are required before an upload is accepted

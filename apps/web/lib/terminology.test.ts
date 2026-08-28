@@ -14,7 +14,7 @@ describe("customer-facing Workspace terminology", () => {
     });
   });
 
-  it("describes a Workspace type without bringing back Hub jargon", () => {
+  it("describes a Workspace type without bringing back Workspace jargon", () => {
     expect(labelForProjectType("brand")).toBe("Brand workspace");
     expect(labelForProjectType("project")).toBe("Project workspace");
   });

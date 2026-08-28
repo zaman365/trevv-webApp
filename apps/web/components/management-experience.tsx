@@ -26,13 +26,13 @@ import {
   demoBlueprintInstances,
   demoBlueprints,
   demoBlueprintVersions,
-  demoHubSnapshots,
-  demoHubs,
+  demoWorkspaceSnapshots,
+  demoWorkspaces,
   demoPortfolios,
   demoReviewRituals,
   demoWaitingStates,
   previewBlueprintUpdate,
-  type HubType,
+  type WorkspaceType,
   type ImportPreset,
   type Portfolio,
   type WaitingState,
@@ -46,13 +46,15 @@ import { Hint } from "./learning-center";
 import { IdeasWorkflow } from "./ideas-workflow";
 import { TeamWorkflow } from "./team-workflow";
 import { AttentionCenter } from "./attention-center";
-import { createCustomHub, useCustomHubs } from "@/lib/custom-hubs";
 import {
-  useCustomPortfolios,
-} from "@/lib/custom-portfolios";
+  createCustomWorkspace,
+  useCustomWorkspaces,
+} from "@/lib/custom-workspaces";
+import { useCustomPortfolios } from "@/lib/custom-portfolios";
 import { workspaceHref } from "@/lib/workspace-routes";
 
-const hubFor = (hubId?: string) => demoHubs.find((hub) => hub.id === hubId);
+const workspaceFor = (workspaceId?: string) =>
+  demoWorkspaces.find((workspace) => workspace.id === workspaceId);
 
 export function AttentionExperience({
   workspaceSlug,
@@ -60,7 +62,7 @@ export function AttentionExperience({
   workspaceSlug?: string;
 }) {
   return (
-    <WorkspaceFrame active="attention" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="attention" workspaceSlug={workspaceSlug}>
       <AttentionCenter />
     </WorkspaceFrame>
   );
@@ -94,7 +96,7 @@ export function WaitingExperience({
   workspaceSlug?: string;
 }) {
   return (
-    <WorkspaceFrame active="waiting" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="waiting" workspaceSlug={workspaceSlug}>
       <WaitingMain />
     </WorkspaceFrame>
   );
@@ -108,8 +110,12 @@ function WaitingMain() {
   const [nudgeItem, setNudgeItem] = useState<WaitingState | null>(null);
   const [resolveItem, setResolveItem] = useState<WaitingState | null>(null);
   const [lastResolved, setLastResolved] = useState<WaitingState | null>(null);
-  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
-  const scopedWaiting = waiting.filter((item) => scopedHubIds.has(item.hubId));
+  const scopedWorkspaceIds = new Set(
+    scope.workspaces.map((workspace) => workspace.id),
+  );
+  const scopedWaiting = waiting.filter((item) =>
+    scopedWorkspaceIds.has(item.workspaceId),
+  );
   const visible = scopedWaiting.filter((item) =>
     inWaitingSection(item, section),
   );
@@ -167,7 +173,8 @@ function WaitingMain() {
             </div>
             <div>
               <p>
-                {hubFor(item.hubId)?.name} · {item.entityType.replace("_", " ")}
+                {workspaceFor(item.workspaceId)?.name} ·{" "}
+                {item.entityType.replace("_", " ")}
               </p>
               <h2>{item.title}</h2>
               <span>
@@ -432,7 +439,7 @@ export function ReviewsExperience({
   workspaceSlug?: string;
 }) {
   return (
-    <WorkspaceFrame active="reviews" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="reviews" workspaceSlug={workspaceSlug}>
       <ReviewsMain />
     </WorkspaceFrame>
   );
@@ -456,7 +463,7 @@ function ReviewsMain() {
       else next.add(id);
       return next;
     });
-  const activeProject = scope.hubs[0];
+  const activeProject = scope.workspaces[0];
   const reviewLabel = activeProject?.name ?? "Selected workspace";
   const decisionCount = scope.items.filter(
     (item) => item.type === "decision" && item.status !== "done",
@@ -467,13 +474,15 @@ function ReviewsMain() {
       (item.status === "blocked" ||
         Boolean(item.dueDate && item.dueDate < "2026-08-27")),
   ).length;
-  const snapshots = demoHubSnapshots.filter(
-    (snapshot) => !activeProject || snapshot.hubId === activeProject.id,
+  const snapshots = demoWorkspaceSnapshots.filter(
+    (snapshot) => !activeProject || snapshot.workspaceId === activeProject.id,
   );
   const rituals = demoReviewRituals.filter(
     (ritual) =>
       ritual.portfolioId === scope.portfolioId &&
-      (!activeProject || !ritual.hubId || ritual.hubId === activeProject.id),
+      (!activeProject ||
+        !ritual.workspaceId ||
+        ritual.workspaceId === activeProject.id),
   );
   return (
     <main className="trevv-main review-page">
@@ -657,7 +666,7 @@ function ReviewsMain() {
 
 export function IdeasExperience({ workspaceSlug }: { workspaceSlug?: string }) {
   return (
-    <WorkspaceFrame active="ideas" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="ideas" workspaceSlug={workspaceSlug}>
       <main className="trevv-main ideas-page">
         <IdeasWorkflow />
       </main>
@@ -667,7 +676,7 @@ export function IdeasExperience({ workspaceSlug }: { workspaceSlug?: string }) {
 
 export function TeamExperience({ workspaceSlug }: { workspaceSlug?: string }) {
   return (
-    <WorkspaceFrame active="team" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="team" workspaceSlug={workspaceSlug}>
       <main className="trevv-main team-page">
         <TeamWorkflow />
       </main>
@@ -679,7 +688,7 @@ export function WorkspacesExperience() {
   const [portfolioId, setPortfolioId] = useState("portfolio-demo");
   const [createOpen, setCreateOpen] = useState(false);
   const [createdSlug, setCreatedSlug] = useState<string | null>(null);
-  const customHubs = useCustomHubs();
+  const customWorkspaces = useCustomWorkspaces();
   const customPortfolioRecords = useCustomPortfolios();
   const availablePortfolios = useMemo(
     () => [
@@ -689,9 +698,9 @@ export function WorkspacesExperience() {
     [customPortfolioRecords],
   );
   const workspaces = [
-    ...customHubs.map((record) => record.hub),
-    ...demoHubs,
-  ].filter((hub) => hub.portfolioId === portfolioId);
+    ...customWorkspaces.map((record) => record.workspace),
+    ...demoWorkspaces,
+  ].filter((workspace) => workspace.portfolioId === portfolioId);
   useEffect(() => {
     let frame = 0;
     let selectionFrame = 0;
@@ -733,9 +742,9 @@ export function WorkspacesExperience() {
       window.history.replaceState(null, "", window.location.pathname);
   };
   return (
-    <WorkspaceFrame active="hub">
+    <WorkspaceFrame active="workspace">
       <>
-        <main className="trevv-main hubs-page">
+        <main className="trevv-main workspaces-page">
           {createdSlug && (
             <div className="workflow-toast success-toast" role="status">
               <CheckCircle2 size={15} />
@@ -753,7 +762,7 @@ export function WorkspacesExperience() {
             eyebrow="Portfolio workspaces"
             title="All workspaces"
             subtitle="Choose the responsibility container where work, decisions, updates, evidence, and ownership belong."
-            hintId="hubs"
+            hintId="workspaces"
             action={
               <button
                 className="primary-button"
@@ -764,7 +773,7 @@ export function WorkspacesExperience() {
               </button>
             }
           />
-          <div className="hub-directory-filter">
+          <div className="workspace-directory-filter">
             <label>
               Portfolio
               <select
@@ -783,23 +792,23 @@ export function WorkspacesExperience() {
               {workspaces.length === 1 ? "workspace" : "workspaces"}
             </span>
           </div>
-          <div className="hub-directory">
-            {workspaces.map((hub) => (
-              <Link href={workspaceHref(hub.slug)} key={hub.id}>
-                <HubMark
-                  hubId={hub.id}
-                  fallback={hub.icon}
-                  accent={hub.accent}
+          <div className="workspace-directory">
+            {workspaces.map((workspace) => (
+              <Link href={workspaceHref(workspace.slug)} key={workspace.id}>
+                <WorkspaceMark
+                  workspaceId={workspace.id}
+                  fallback={workspace.icon}
+                  accent={workspace.accent}
                 />
                 <div>
                   <p>
-                    {hub.type.replaceAll("_", " ")} · {hub.stage}
+                    {workspace.type.replaceAll("_", " ")} · {workspace.stage}
                   </p>
-                  <h2>{hub.name}</h2>
-                  <span>{hub.priority}</span>
+                  <h2>{workspace.name}</h2>
+                  <span>{workspace.priority}</span>
                 </div>
-                <b className={`health-badge ${hub.health}`}>
-                  {hub.health.replace("_", " ")}
+                <b className={`health-badge ${workspace.health}`}>
+                  {workspace.health.replace("_", " ")}
                 </b>
                 <ArrowRight size={15} />
               </Link>
@@ -807,7 +816,7 @@ export function WorkspacesExperience() {
           </div>
         </main>
         {createOpen && (
-          <CreateHubDialog
+          <CreateWorkspaceDialog
             portfolios={availablePortfolios}
             initialPortfolioId={portfolioId}
             onClose={closeCreate}
@@ -822,7 +831,7 @@ export function WorkspacesExperience() {
   );
 }
 
-function CreateHubDialog({
+function CreateWorkspaceDialog({
   portfolios,
   initialPortfolioId,
   onClose,
@@ -835,7 +844,7 @@ function CreateHubDialog({
 }) {
   const [name, setName] = useState("");
   const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
-  const [type, setType] = useState<HubType>("project");
+  const [type, setType] = useState<WorkspaceType>("project");
   const [lead, setLead] = useState("Mohammed Zaman");
   const [priority, setPriority] = useState("");
   const [milestone, setMilestone] = useState("First operating review");
@@ -843,7 +852,7 @@ function CreateHubDialog({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!name.trim() || !milestoneDate) return;
-    const record = createCustomHub({
+    const record = createCustomWorkspace({
       name,
       portfolioId,
       type,
@@ -852,9 +861,9 @@ function CreateHubDialog({
       milestone,
       milestoneDate,
     });
-    onCreated(record.hub.slug);
+    onCreated(record.workspace.slug);
   };
-  const types: Array<[HubType, string]> = [
+  const types: Array<[WorkspaceType, string]> = [
     ["business", "Business"],
     ["brand", "Brand"],
     ["client", "Client"],
@@ -867,8 +876,8 @@ function CreateHubDialog({
   return (
     <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
       <form
-        className="capture-dialog create-hub-dialog"
-        aria-labelledby="create-hub-title"
+        className="capture-dialog create-workspace-dialog"
+        aria-labelledby="create-workspace-title"
         aria-modal="true"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={submit}
@@ -879,7 +888,7 @@ function CreateHubDialog({
             <Grid2X2 size={17} />
           </span>
           <div>
-            <h2 id="create-hub-title">Create a workspace</h2>
+            <h2 id="create-workspace-title">Create a workspace</h2>
             <p>
               A workspace keeps work, decisions, updates, evidence, and
               ownership together.
@@ -893,7 +902,7 @@ function CreateHubDialog({
             <X size={17} />
           </button>
         </header>
-        <div className="create-hub-fields">
+        <div className="create-workspace-fields">
           <label>
             Workspace name
             <input
@@ -922,7 +931,9 @@ function CreateHubDialog({
               Type
               <select
                 value={type}
-                onChange={(event) => setType(event.target.value as HubType)}
+                onChange={(event) =>
+                  setType(event.target.value as WorkspaceType)
+                }
               >
                 {types.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -1032,7 +1043,7 @@ export function BlueprintsExperience({
       return nextSet;
     });
   return (
-    <WorkspaceFrame active="templates" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="templates" workspaceSlug={workspaceSlug}>
       <main className="trevv-main blueprint-page">
         <PageHeader
           eyebrow="Managed standards"
@@ -1523,7 +1534,7 @@ export function ImportExperience({
     URL.revokeObjectURL(url);
   };
   return (
-    <WorkspaceFrame active="settings" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="settings" workspaceSlug={workspaceSlug}>
       <main className="trevv-main import-page">
         <PageHeader
           eyebrow="Migration"
@@ -1681,7 +1692,7 @@ export function NotificationsExperience({
   workspaceSlug?: string;
 }) {
   return (
-    <WorkspaceFrame active="notifications" hubSlug={workspaceSlug}>
+    <WorkspaceFrame active="notifications" workspaceSlug={workspaceSlug}>
       <NotificationsMain />
     </WorkspaceFrame>
   );
@@ -1692,25 +1703,29 @@ function NotificationsMain() {
   const [events, setEvents] = useState([
     {
       id: "notification-1",
-      hubId: "hub-localreach",
+      workspaceId: "workspace-localreach",
       title: "LocalReach weekly update published",
       detail: "Delivery remains On Track · 18 minutes ago",
     },
     {
       id: "notification-2",
-      hubId: "hub-mealflow",
+      workspaceId: "workspace-mealflow",
       title: "MealFlow blocker resolved",
       detail: "Pilot access checklist can continue · 1 hour ago",
     },
     {
       id: "notification-3",
-      hubId: "hub-northstar",
+      workspaceId: "workspace-northstar",
       title: "Northstar Apparel milestone changed",
       detail: "Storefront launch moved by 3 days · Today",
     },
   ]);
-  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
-  const visibleEvents = events.filter((event) => scopedHubIds.has(event.hubId));
+  const scopedWorkspaceIds = new Set(
+    scope.workspaces.map((workspace) => workspace.id),
+  );
+  const visibleEvents = events.filter((event) =>
+    scopedWorkspaceIds.has(event.workspaceId),
+  );
   return (
     <main className="trevv-main notifications-page">
       <PageHeader
@@ -1722,8 +1737,8 @@ function NotificationsMain() {
           <Link
             className="primary-button"
             href={
-              scope.hubs[0]
-                ? workspaceHref(scope.hubs[0].slug, "inbox")
+              scope.workspaces[0]
+                ? workspaceHref(scope.workspaces[0].slug, "inbox")
                 : "/app/portfolio"
             }
           >
@@ -1831,20 +1846,23 @@ function PanelHeading({
   );
 }
 
-export function HubMark({
-  hubId,
+export function WorkspaceMark({
+  workspaceId,
   fallback = "H",
   accent,
 }: {
-  hubId: string;
+  workspaceId: string;
   fallback?: string;
   accent?: string;
 }) {
-  const hub = hubFor(hubId);
-  const color = hub?.accent ?? accent ?? "var(--fh-primary)";
+  const workspace = workspaceFor(workspaceId);
+  const color = workspace?.accent ?? accent ?? "var(--fh-primary)";
   return (
-    <span className="hub-mark" style={{ background: `${color}18`, color }}>
-      {hub?.icon ?? fallback}
+    <span
+      className="workspace-mark"
+      style={{ background: `${color}18`, color }}
+    >
+      {workspace?.icon ?? fallback}
     </span>
   );
 }
@@ -1854,15 +1872,20 @@ export function AttentionRow({ group }: { group: GroupedSignal }) {
     <Link
       className="attention-row"
       href={
-        hubFor(group.hubId)
-          ? workspaceHref(hubFor(group.hubId)!.slug, "attention", group.id)
+        workspaceFor(group.workspaceId)
+          ? workspaceHref(
+              workspaceFor(group.workspaceId)!.slug,
+              "attention",
+              group.id,
+            )
           : "/app/portfolio"
       }
     >
       <span className={`signal-pip ${group.severity}`} />
       <div>
         <p>
-          {hubFor(group.hubId)?.name ?? "Portfolio"} · {group.severity}
+          {workspaceFor(group.workspaceId)?.name ?? "Portfolio"} ·{" "}
+          {group.severity}
         </p>
         <strong>{group.title}</strong>
         <small>

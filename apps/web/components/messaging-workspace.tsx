@@ -29,7 +29,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { demoBoards, demoHubs, demoItems } from "@founderhq/core";
+import { demoBoards, demoWorkspaces, demoItems } from "@founderhq/core";
 import Link from "next/link";
 import {
   useEffect,
@@ -90,7 +90,7 @@ const intentDetails: Record<
 
 export function MessagingWorkspace() {
   const { scope } = useWorkspace();
-  const workspace = scope.hubs[0];
+  const workspace = scope.workspaces[0];
   const [conversations, setConversations] = useState(seedConversations);
   const [messages, setMessages] = useState(seedMessages);
   const [selectedId, setSelectedId] = useState(seedConversations[0]!.id);
@@ -165,7 +165,7 @@ export function MessagingWorkspace() {
       person.external &&
       !seedConversations.some(
         (conversation) =>
-          conversation.hubId === workspace.id &&
+          conversation.workspaceId === workspace.id &&
           conversation.participantIds.includes(person.id),
       )
     )
@@ -176,7 +176,7 @@ export function MessagingWorkspace() {
       const existing = conversations.find(
         (conversation) =>
           conversation.kind === "direct" &&
-          conversation.hubId === workspace.id &&
+          conversation.workspaceId === workspace.id &&
           conversation.participantIds.includes(person.id),
       );
 
@@ -189,8 +189,8 @@ export function MessagingWorkspace() {
           purpose: "Direct conversation",
           kind: "direct",
           participantIds: [currentMessagingUserId, person.id],
-          hubId: workspace.id,
-          hubSlug: workspace.slug,
+          workspaceId: workspace.id,
+          workspaceSlug: workspace.slug,
           unread: 0,
           visibility: person.external ? "guest-scoped" : "private",
           lastActivity: new Date().toISOString(),
@@ -207,14 +207,15 @@ export function MessagingWorkspace() {
     return () => window.cancelAnimationFrame(frame);
   }, [conversations, hydrated, workspace]);
 
-  const scopedHubIds = useMemo(
-    () => new Set(scope.hubs.map((hub) => hub.id)),
-    [scope.hubs],
+  const scopedWorkspaceIds = useMemo(
+    () => new Set(scope.workspaces.map((workspace) => workspace.id)),
+    [scope.workspaces],
   );
   const scopedConversations = useMemo(() => {
     const matching = conversations.filter(
       (conversation) =>
-        Boolean(conversation.hubId) && scopedHubIds.has(conversation.hubId!),
+        Boolean(conversation.workspaceId) &&
+        scopedWorkspaceIds.has(conversation.workspaceId!),
     );
     if (matching.length || !workspace) return matching;
     return [
@@ -222,16 +223,16 @@ export function MessagingWorkspace() {
         id: `conversation-${workspace.id}-general`,
         title: `${workspace.name} · General`,
         purpose: "Workspace-wide coordination and context.",
-        kind: "hub" as const,
+        kind: "workspace" as const,
         participantIds: [currentMessagingUserId],
-        hubId: workspace.id,
-        hubSlug: workspace.slug,
+        workspaceId: workspace.id,
+        workspaceSlug: workspace.slug,
         unread: 0,
         visibility: "organization" as const,
         lastActivity: new Date(0).toISOString(),
       },
     ];
-  }, [conversations, scopedHubIds, workspace]);
+  }, [conversations, scopedWorkspaceIds, workspace]);
   const scopedConversationIds = useMemo(
     () => new Set(scopedConversations.map((conversation) => conversation.id)),
     [scopedConversations],
@@ -305,9 +306,12 @@ export function MessagingWorkspace() {
   )
     ? responseOwnerId
     : defaultResponseOwnerId;
-  const selectedHub = demoHubs.find((hub) => hub.id === selected.hubId);
-  const selectedHubItems = demoItems.filter(
-    (item) => item.hubId === selected.hubId && item.status !== "done",
+  const selectedWorkspace = demoWorkspaces.find(
+    (workspace) => workspace.id === selected.workspaceId,
+  );
+  const selectedWorkspaceItems = demoItems.filter(
+    (item) =>
+      item.workspaceId === selected.workspaceId && item.status !== "done",
   );
   const roomOpenLoops = messages.filter(
     (message) =>
@@ -445,9 +449,10 @@ export function MessagingWorkspace() {
   };
 
   const convertToWork = (message: ConversationMessage) => {
-    const hubId = selected.hubId ?? "hub-centralops";
+    const workspaceId = selected.workspaceId ?? "workspace-centralops";
     const boardId =
-      demoBoards.find((board) => board.hubId === hubId)?.id ?? "inbox";
+      demoBoards.find((board) => board.workspaceId === workspaceId)?.id ??
+      "inbox";
     const type: CapturedWorkItem["type"] =
       message.intent === "decision"
         ? "decision"
@@ -461,7 +466,7 @@ export function MessagingWorkspace() {
         message.body.length > 90
           ? `${message.body.slice(0, 87).trim()}…`
           : message.body,
-      hubId,
+      workspaceId,
       boardId,
       owner:
         message.responseOwnerId === currentMessagingUserId
@@ -673,10 +678,10 @@ export function MessagingWorkspace() {
               <div>
                 <strong>{selected.title}</strong>
                 <p>{selected.purpose}</p>
-                {selectedHub && (
-                  <Link href={workspaceHref(selectedHub.slug)}>
-                    {selectedHub.icon} Open {selectedHub.name} Workspace{" "}
-                    <ArrowRight size={12} />
+                {selectedWorkspace && (
+                  <Link href={workspaceHref(selectedWorkspace.slug)}>
+                    {selectedWorkspace.icon} Open {selectedWorkspace.name}{" "}
+                    Workspace <ArrowRight size={12} />
                   </Link>
                 )}
               </div>
@@ -701,9 +706,10 @@ export function MessagingWorkspace() {
                   onResolve={() => resolveResponse(message.id)}
                   onConvert={() => convertToWork(message)}
                   onReact={(emoji) => toggleReaction(message.id, emoji)}
-                  {...((selectedHub?.slug ?? workspace?.slug)
+                  {...((selectedWorkspace?.slug ?? workspace?.slug)
                     ? {
-                        workspaceSlug: selectedHub?.slug ?? workspace!.slug,
+                        workspaceSlug:
+                          selectedWorkspace?.slug ?? workspace!.slug,
                       }
                     : {})}
                 />
@@ -793,8 +799,8 @@ export function MessagingWorkspace() {
             <RoomContext
               conversation={selected}
               participants={participants.map((person) => person.id)}
-              hub={selectedHub}
-              openItems={selectedHubItems}
+              workspace={selectedWorkspace}
+              openItems={selectedWorkspaceItems}
               openLoops={roomOpenLoops}
               onOpenThread={(messageId) => setThreadId(messageId)}
               onClose={() => setContextOpen(false)}
@@ -806,7 +812,7 @@ export function MessagingWorkspace() {
       {newConversationMode && (
         <NewConversationDialog
           mode={newConversationMode}
-          projects={scope.hubs}
+          projects={scope.workspaces}
           onClose={() => setNewConversationMode(null)}
           onCreate={(conversation) => {
             setConversations((current) => [conversation, ...current]);
@@ -1002,7 +1008,7 @@ function MessageEntry({
 function RoomContext({
   conversation,
   participants,
-  hub,
+  workspace,
   openItems,
   openLoops,
   onOpenThread,
@@ -1010,7 +1016,7 @@ function RoomContext({
 }: {
   conversation: Conversation;
   participants: string[];
-  hub: (typeof demoHubs)[number] | undefined;
+  workspace: (typeof demoWorkspaces)[number] | undefined;
   openItems: typeof demoItems;
   openLoops: ConversationMessage[];
   onOpenThread: (messageId: string) => void;
@@ -1032,22 +1038,22 @@ function RoomContext({
         </button>
       </header>
       <div className="context-scroll">
-        {hub ? (
+        {workspace ? (
           <section
-            className="context-hub-card"
-            style={{ "--room-accent": hub.accent } as React.CSSProperties}
+            className="context-workspace-card"
+            style={{ "--room-accent": workspace.accent } as React.CSSProperties}
           >
             <header>
-              <span>{hub.icon}</span>
+              <span>{workspace.icon}</span>
               <div>
-                <small>{labelForProjectType(hub.type)}</small>
-                <strong>{hub.name}</strong>
+                <small>{labelForProjectType(workspace.type)}</small>
+                <strong>{workspace.name}</strong>
               </div>
-              <span className={`health-label ${hub.health}`}>
-                {hub.health.replace("_", " ")}
+              <span className={`health-label ${workspace.health}`}>
+                {workspace.health.replace("_", " ")}
               </span>
             </header>
-            <p>{hub.priority}</p>
+            <p>{workspace.priority}</p>
             <div>
               <span>
                 <b>{openItems.length}</b> open work items
@@ -1059,7 +1065,7 @@ function RoomContext({
                 blocked
               </span>
             </div>
-            <Link href={workspaceHref(hub.slug)}>
+            <Link href={workspaceHref(workspace.slug)}>
               Open workspace <ArrowRight size={12} />
             </Link>
           </section>
@@ -1230,18 +1236,18 @@ function NewConversationDialog({
   onCreate,
 }: {
   mode: Exclude<NewConversationMode, null>;
-  projects: typeof demoHubs;
+  projects: typeof demoWorkspaces;
   onClose: () => void;
   onCreate: (conversation: Conversation) => void;
 }) {
-  const currentHubs = projects;
+  const currentWorkspaces = projects;
   const availablePeople = messagingPeople.filter(
     (person) => person.id !== currentMessagingUserId,
   );
   const [title, setTitle] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [kind, setKind] = useState<ConversationKind>("hub");
-  const hubId = currentHubs[0]?.id ?? "";
+  const [kind, setKind] = useState<ConversationKind>("workspace");
+  const workspaceId = currentWorkspaces[0]?.id ?? "";
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [directPersonId, setDirectPersonId] = useState(
     availablePeople.find((person) => !person.external)?.id ?? "",
@@ -1257,8 +1263,11 @@ function NewConversationDialog({
         purpose: "Direct conversation",
         kind: "direct",
         participantIds: [currentMessagingUserId, person.id],
-        ...(currentHubs[0]
-          ? { hubId: currentHubs[0].id, hubSlug: currentHubs[0].slug }
+        ...(currentWorkspaces[0]
+          ? {
+              workspaceId: currentWorkspaces[0].id,
+              workspaceSlug: currentWorkspaces[0].slug,
+            }
           : {}),
         unread: 0,
         visibility: "private",
@@ -1266,14 +1275,18 @@ function NewConversationDialog({
       });
       return;
     }
-    const hub = currentHubs.find((candidate) => candidate.id === hubId);
+    const workspace = currentWorkspaces.find(
+      (candidate) => candidate.id === workspaceId,
+    );
     onCreate({
       id: createLocalId("conversation"),
       title: title.trim(),
       purpose: purpose.trim(),
       kind,
       participantIds: [currentMessagingUserId, ...participantIds],
-      ...(hub ? { hubId: hub.id, hubSlug: hub.slug } : {}),
+      ...(workspace
+        ? { workspaceId: workspace.id, workspaceSlug: workspace.slug }
+        : {}),
       unread: 0,
       visibility: kind === "external" ? "guest-scoped" : "organization",
       lastActivity: new Date().toISOString(),
@@ -1371,7 +1384,7 @@ function NewConversationDialog({
                       setKind(event.target.value as ConversationKind)
                     }
                   >
-                    <option value="hub">Workspace room</option>
+                    <option value="workspace">Workspace room</option>
                     <option value="team">Internal team room</option>
                     <option value="external">Guest-scoped room</option>
                   </select>
@@ -1387,11 +1400,11 @@ function NewConversationDialog({
                   rows={3}
                 />
               </label>
-              {kind === "hub" && currentHubs[0] && (
+              {kind === "workspace" && currentWorkspaces[0] && (
                 <div className="stacked-field messaging-workspace-binding">
                   <span>Linked workspace</span>
                   <strong>
-                    {currentHubs[0].icon} {currentHubs[0].name}
+                    {currentWorkspaces[0].icon} {currentWorkspaces[0].name}
                   </strong>
                 </div>
               )}
@@ -1421,7 +1434,7 @@ function NewConversationDialog({
                 <span>
                   {kind === "external"
                     ? "External people receive access only to this room and explicitly shared work."
-                    : kind === "hub"
+                    : kind === "workspace"
                       ? "Membership stays aligned with the active Workspace."
                       : "Only workspace members added here can participate."}
                 </span>

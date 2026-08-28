@@ -1,35 +1,36 @@
 import {
-  calculateHubProgress,
+  calculateWorkspaceProgress,
   demoItems,
   demoPortfolios,
-  hubsForPortfolio,
-  rollupHub,
-  type Hub,
-  type HubHealth,
-  type HubRollup,
+  workspacesForPortfolio,
+  rollupWorkspace,
+  type Workspace,
+  type WorkspaceHealth,
+  type WorkspaceRollup,
   type Portfolio,
   type WorkItem,
 } from "@founderhq/core";
 import { NOW, scopeWorkspace } from "./attention";
 
 export interface ProjectSummary {
-  hub: Hub;
-  rollup: HubRollup;
+  workspace: Workspace;
+  rollup: WorkspaceRollup;
   progress: number | null;
   blocker: WorkItem | undefined;
 }
 
 /** Every project in a portfolio, ranked by how much it needs you. */
 export function projectsIn(portfolioId: string, now = NOW): ProjectSummary[] {
-  const hubs = hubsForPortfolio(portfolioId);
-  return hubs
-    .map((hub) => ({
-      hub,
-      rollup: rollupHub(hub, demoItems, now),
-      progress: calculateHubProgress(hub),
+  const workspaces = workspacesForPortfolio(portfolioId);
+  return workspaces
+    .map((workspace) => ({
+      workspace,
+      rollup: rollupWorkspace(workspace, demoItems, now),
+      progress: calculateWorkspaceProgress(workspace),
       // The actual thing that is stuck, not just how many are.
       blocker: demoItems.find(
-        (item) => item.hubId === hub.id && item.status === "blocked",
+        (item) =>
+          item.workspaceId === workspace.id && item.status === "blocked",
       ),
     }))
     .sort((left, right) => right.rollup.score - left.rollup.score);
@@ -40,7 +41,7 @@ export interface PortfolioSummary {
   projects: ProjectSummary[];
   count: number;
   /** Health mix, in severity order, for the stacked bar. */
-  health: { key: HubHealth; label: string; count: number }[];
+  health: { key: WorkspaceHealth; label: string; count: number }[];
   attentionCount: number;
   overdue: number;
   blocked: number;
@@ -50,7 +51,7 @@ export interface PortfolioSummary {
   focus: ProjectSummary | undefined;
 }
 
-const HEALTH_ORDER: { key: HubHealth; label: string }[] = [
+const HEALTH_ORDER: { key: WorkspaceHealth; label: string }[] = [
   { key: "critical", label: "Critical" },
   { key: "watch", label: "Watch" },
   { key: "on_track", label: "On track" },
@@ -72,7 +73,8 @@ export function summarizePortfolio(
     health: HEALTH_ORDER.map(({ key, label }) => ({
       key,
       label,
-      count: projects.filter((project) => project.hub.health === key).length,
+      count: projects.filter((project) => project.workspace.health === key)
+        .length,
     })),
     attentionCount: scopeWorkspace(portfolio.id, now).attentionCount,
     overdue: projects.reduce((sum, p) => sum + p.rollup.overdue, 0),
@@ -84,7 +86,7 @@ export function summarizePortfolio(
   };
 }
 
-/** Every portfolio the user can see, summarised — the Home overview. */
+/** Every portfolio the user can see, summarized for the Portfolio overview. */
 export function allPortfolioSummaries(now = NOW): PortfolioSummary[] {
   return demoPortfolios
     .map((portfolio) => summarizePortfolio(portfolio, now))

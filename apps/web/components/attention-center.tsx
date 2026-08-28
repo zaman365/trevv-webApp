@@ -32,7 +32,7 @@ import {
 import {
   demoBoards,
   demoDependencies,
-  demoHubs,
+  demoWorkspaces,
   demoItems,
   demoWaitingStates,
   type AttentionSignal,
@@ -135,11 +135,11 @@ export function AttentionCenter() {
     };
   }, [scopedGroupIds]);
 
-  const workspace = scope.hubs[0];
+  const workspace = scope.workspaces[0];
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return scopedGroups.filter((group) => {
-      const hub = hubFor(group);
+      const workspace = workspaceFor(group);
       const item = itemFor(group);
       if (!groupMatchesTab(group, tab)) return false;
       if (severityFilter !== "all" && group.severity !== severityFilter)
@@ -147,7 +147,7 @@ export function AttentionCenter() {
       if (!normalized) return true;
       return [
         group.title,
-        hub?.name,
+        workspace?.name,
         item?.assignee,
         item?.type,
         ...group.reasons,
@@ -222,11 +222,11 @@ export function AttentionCenter() {
   }
 
   function requestUpdate(group: GroupedSignal) {
-    const hub = hubFor(group);
+    const workspace = workspaceFor(group);
     logActivity(
       group,
       "Structured update requested",
-      `Sent to ${itemFor(group)?.assignee ?? hub?.lead.name ?? "the Workspace lead"}.`,
+      `Sent to ${itemFor(group)?.assignee ?? workspace?.lead.name ?? "the Workspace lead"}.`,
     );
     setToast({
       message: `Update request sent for “${group.title}”. The signal stays visible until evidence changes.`,
@@ -551,7 +551,7 @@ function AttentionCard({
   onAct: (action: AttentionAction) => void;
   onRequestUpdate: () => void;
 }) {
-  const hub = hubFor(group);
+  const workspace = workspaceFor(group);
   const item = itemFor(group);
   const board =
     item && demoBoards.find((candidate) => candidate.id === item.boardId);
@@ -571,18 +571,18 @@ function AttentionCard({
       </div>
       <div className="attention-card-main">
         <header className="attention-project-path">
-          {hub ? (
+          {workspace ? (
             <>
-              <Link href={workspaceHref(hub.slug)}>
+              <Link href={workspaceHref(workspace.slug)}>
                 <span
                   style={{
-                    background: `${hub.accent}18`,
-                    color: hub.accent,
+                    background: `${workspace.accent}18`,
+                    color: workspace.accent,
                   }}
                 >
-                  {hub.icon}
+                  {workspace.icon}
                 </span>
-                {hub.name}
+                {workspace.name}
               </Link>
               {board && (
                 <>
@@ -610,13 +610,13 @@ function AttentionCard({
         <div className="attention-context-strip">
           <span>
             <UserRound size={12} />{" "}
-            {owner ?? item?.assignee ?? hub?.lead.name ?? "Needs owner"}
+            {owner ?? item?.assignee ?? workspace?.lead.name ?? "Needs owner"}
           </span>
           <span>
             <Flag size={12} />{" "}
             {item
               ? `${capitalize(item.priority)} priority`
-              : `${capitalize(hub?.health ?? "watch")} health`}
+              : `${capitalize(workspace?.health ?? "watch")} health`}
           </span>
           <span>
             <CalendarClock size={12} />{" "}
@@ -624,8 +624,8 @@ function AttentionCard({
               ? formatDate(dueDate)
               : item?.dueDate
                 ? formatDate(item.dueDate)
-                : hub?.nextMilestone.date
-                  ? `Milestone ${formatDate(hub.nextMilestone.date)}`
+                : workspace?.nextMilestone.date
+                  ? `Milestone ${formatDate(workspace.nextMilestone.date)}`
                   : "No date"}
           </span>
           {item && (
@@ -689,15 +689,15 @@ function AttentionDetailPanel({
   onLog: (text: string, detail: string) => void;
 }) {
   const item = itemFor(group);
-  const hub = hubFor(group);
+  const workspace = workspaceFor(group);
   const waiting = demoWaitingStates.find(
     (state) => state.entityId === group.entityId,
   );
   const [selectedOwner, setSelectedOwner] = useState(
-    owner ?? item?.assignee ?? hub?.lead.name ?? "Unassigned",
+    owner ?? item?.assignee ?? workspace?.lead.name ?? "Unassigned",
   );
   const [selectedDate, setSelectedDate] = useState(
-    dueDate ?? item?.dueDate ?? hub?.nextMilestone.date ?? "",
+    dueDate ?? item?.dueDate ?? workspace?.nextMilestone.date ?? "",
   );
   const [note, setNote] = useState("");
   const ownerOptions = owners.includes(selectedOwner)
@@ -709,9 +709,11 @@ function AttentionDetailPanel({
   const dependencyItem =
     dependency &&
     demoItems.find((candidate) => candidate.id === dependency.dependsOnItemId);
-  const dependencyHub =
+  const dependencyWorkspace =
     dependencyItem &&
-    demoHubs.find((candidate) => candidate.id === dependencyItem.hubId);
+    demoWorkspaces.find(
+      (candidate) => candidate.id === dependencyItem.workspaceId,
+    );
   return (
     <div
       className="attention-panel-layer"
@@ -732,7 +734,7 @@ function AttentionDetailPanel({
           </div>
           <div>
             <p>
-              {hub?.name ?? "Workspace"} · {group.severity} attention
+              {workspace?.name ?? "Workspace"} · {group.severity} attention
             </p>
             <h2 id="attention-detail-title">{group.title}</h2>
           </div>
@@ -762,8 +764,8 @@ function AttentionDetailPanel({
             className="attention-source-links"
             aria-label="Signal source navigation"
           >
-            {hub && (
-              <Link href={workspaceHref(hub.slug)}>
+            {workspace && (
+              <Link href={workspaceHref(workspace.slug)}>
                 <Grid2X2 size={13} /> Workspace overview{" "}
                 <ExternalLink size={10} />
               </Link>
@@ -818,47 +820,48 @@ function AttentionDetailPanel({
                 <strong>Workspace relevance</strong>
               </div>
             </header>
-            {hub ? (
+            {workspace ? (
               <div className="attention-project-context">
                 <div className="attention-project-identity">
                   <span
                     style={{
-                      background: `${hub.accent}18`,
-                      color: hub.accent,
+                      background: `${workspace.accent}18`,
+                      color: workspace.accent,
                     }}
                   >
-                    {hub.icon}
+                    {workspace.icon}
                   </span>
                   <div>
-                    <strong>{hub.name}</strong>
+                    <strong>{workspace.name}</strong>
                     <small>
-                      {capitalize(hub.type)} · {capitalize(hub.stage)}
+                      {capitalize(workspace.type)} ·{" "}
+                      {capitalize(workspace.stage)}
                     </small>
                   </div>
-                  <b className={`health-${hub.health}`}>
-                    {humanize(hub.health)}
+                  <b className={`health-${workspace.health}`}>
+                    {humanize(workspace.health)}
                   </b>
                 </div>
-                <p>{hub.healthNote}</p>
+                <p>{workspace.healthNote}</p>
                 <dl>
                   <div>
                     <dt>Workspace priority</dt>
-                    <dd>{hub.priority}</dd>
+                    <dd>{workspace.priority}</dd>
                   </div>
                   <div>
                     <dt>Lead</dt>
-                    <dd>{hub.lead.name}</dd>
+                    <dd>{workspace.lead.name}</dd>
                   </div>
                   <div>
                     <dt>Next milestone</dt>
                     <dd>
-                      {hub.nextMilestone.title} ·{" "}
-                      {formatDate(hub.nextMilestone.date)}
+                      {workspace.nextMilestone.title} ·{" "}
+                      {formatDate(workspace.nextMilestone.date)}
                     </dd>
                   </div>
                   <div>
                     <dt>Latest evidence</dt>
-                    <dd>{hub.latestUpdate.text}</dd>
+                    <dd>{workspace.latestUpdate.text}</dd>
                   </div>
                 </dl>
               </div>
@@ -901,8 +904,8 @@ function AttentionDetailPanel({
                   <div>
                     <strong>Blocked by {dependencyItem.title}</strong>
                     <span>
-                      {dependencyHub?.name} · {humanize(dependencyItem.status)}{" "}
-                      ·{" "}
+                      {dependencyWorkspace?.name} ·{" "}
+                      {humanize(dependencyItem.status)} ·{" "}
                       {dependencyItem.dueDate
                         ? formatDate(dependencyItem.dueDate)
                         : "No date"}
@@ -910,8 +913,8 @@ function AttentionDetailPanel({
                   </div>
                   <Link
                     href={
-                      dependencyHub
-                        ? `${workspaceHref(dependencyHub.slug)}/boards/${dependencyItem.boardId}`
+                      dependencyWorkspace
+                        ? `${workspaceHref(dependencyWorkspace.slug)}/boards/${dependencyItem.boardId}`
                         : "/app/portfolio"
                     }
                   >
@@ -936,8 +939,8 @@ function AttentionDetailPanel({
                   </div>
                   <Link
                     href={
-                      hub
-                        ? workspaceHref(hub.slug, "waiting")
+                      workspace
+                        ? workspaceHref(workspace.slug, "waiting")
                         : "/app/portfolio"
                     }
                   >
@@ -1154,7 +1157,7 @@ function AttentionActionDialog({
             <p>
               <strong>{group.title}</strong>
               <span>
-                {hubFor(group)?.name ?? "Workspace"} ·{" "}
+                {workspaceFor(group)?.name ?? "Workspace"} ·{" "}
                 {capitalize(group.severity)}
               </span>
             </p>
@@ -1246,8 +1249,8 @@ function isBlockedSignal(signal: AttentionSignal) {
   ].includes(signal.signalType);
 }
 
-function hubFor(group: GroupedSignal) {
-  return demoHubs.find((hub) => hub.id === group.hubId);
+function workspaceFor(group: GroupedSignal) {
+  return demoWorkspaces.find((workspace) => workspace.id === group.workspaceId);
 }
 
 function itemFor(group: GroupedSignal) {
@@ -1255,25 +1258,25 @@ function itemFor(group: GroupedSignal) {
 }
 
 function boardHref(group: GroupedSignal) {
-  const hub = hubFor(group);
+  const workspace = workspaceFor(group);
   const item = itemFor(group);
-  return hub && item
-    ? `${workspaceHref(hub.slug)}/boards/${item.boardId}`
-    : hub
-      ? workspaceHref(hub.slug)
+  return workspace && item
+    ? `${workspaceHref(workspace.slug)}/boards/${item.boardId}`
+    : workspace
+      ? workspaceHref(workspace.slug)
       : "/app/portfolio";
 }
 
 function workflowHref(group: GroupedSignal) {
   const item = itemFor(group);
   if (group.signals.some((signal) => signal.signalType === "waiting_too_long"))
-    return hubFor(group)
-      ? workspaceHref(hubFor(group)!.slug, "waiting")
+    return workspaceFor(group)
+      ? workspaceHref(workspaceFor(group)!.slug, "waiting")
       : "/app/portfolio";
-  if (item?.type === "decision" && hubFor(group))
-    return workspaceHref(hubFor(group)!.slug, "decisions");
-  if (item?.type === "approval" && hubFor(group))
-    return workspaceHref(hubFor(group)!.slug, "approvals");
+  if (item?.type === "decision" && workspaceFor(group))
+    return workspaceHref(workspaceFor(group)!.slug, "decisions");
+  if (item?.type === "approval" && workspaceFor(group))
+    return workspaceHref(workspaceFor(group)!.slug, "approvals");
   return boardHref(group);
 }
 

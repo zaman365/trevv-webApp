@@ -1,5 +1,5 @@
 export type Role =
-  "owner" | "admin" | "hub_lead" | "member" | "guest" | "viewer";
+  "owner" | "admin" | "workspace_lead" | "member" | "guest" | "viewer";
 export type Action =
   | "read"
   | "create"
@@ -11,7 +11,7 @@ export type Action =
   | "delete";
 export type Resource =
   | "portfolio"
-  | "hub"
+  | "workspace"
   | "board"
   | "item"
   | "comment"
@@ -24,13 +24,13 @@ export interface AccessContext {
   userId: string;
   organizationId: string;
   role: Role;
-  accessibleHubIds: ReadonlySet<string>;
-  managedHubIds: ReadonlySet<string>;
+  accessibleWorkspaceIds: ReadonlySet<string>;
+  managedWorkspaceIds: ReadonlySet<string>;
 }
 
 export interface ResourceScope {
   organizationId: string;
-  hubId?: string;
+  workspaceId?: string;
   explicitlyShared?: boolean;
 }
 
@@ -51,19 +51,19 @@ export function can(
   if (context.role === "owner") return true;
   if (context.role === "admin") return action !== "delete";
   if (
-    context.role === "hub_lead" &&
-    scope.hubId &&
-    context.managedHubIds.has(scope.hubId) &&
+    context.role === "workspace_lead" &&
+    scope.workspaceId &&
+    context.managedWorkspaceIds.has(scope.workspaceId) &&
     action === "manage_members" &&
-    resource === "hub"
+    resource === "workspace"
   )
     return true;
   if (orgManagement.has(action)) return false;
   if (context.role === "guest" || context.role === "viewer") {
     if (
       !scope.explicitlyShared ||
-      !scope.hubId ||
-      !context.accessibleHubIds.has(scope.hubId)
+      !scope.workspaceId ||
+      !context.accessibleWorkspaceIds.has(scope.workspaceId)
     )
       return false;
     return context.role === "guest"
@@ -76,8 +76,15 @@ export function can(
     resource === "notification"
   )
     return action === "read";
-  if (!scope.hubId || !context.accessibleHubIds.has(scope.hubId)) return false;
-  if (context.role === "hub_lead" && context.managedHubIds.has(scope.hubId))
+  if (
+    !scope.workspaceId ||
+    !context.accessibleWorkspaceIds.has(scope.workspaceId)
+  )
+    return false;
+  if (
+    context.role === "workspace_lead" &&
+    context.managedWorkspaceIds.has(scope.workspaceId)
+  )
     return true;
   return ["read", "create", "update", "comment"].includes(action);
 }

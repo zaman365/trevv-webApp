@@ -8,10 +8,10 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import {
-  boardForHub,
-  type Hub,
-  type HubHealth,
-  type HubRollup,
+  boardForWorkspace,
+  type Workspace,
+  type WorkspaceHealth,
+  type WorkspaceRollup,
   type WorkItem,
 } from "@founderhq/core";
 import { getMessages } from "@founderhq/i18n";
@@ -21,7 +21,7 @@ import { labelForType } from "@/lib/terminology";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { useState } from "react";
 
-const healthIcon: Record<HubHealth, typeof CheckCircle2> = {
+const healthIcon: Record<WorkspaceHealth, typeof CheckCircle2> = {
   on_track: CheckCircle2,
   watch: CircleDashed,
   critical: AlertTriangle,
@@ -29,21 +29,21 @@ const healthIcon: Record<HubHealth, typeof CheckCircle2> = {
 };
 
 export interface ProjectTileData {
-  hub: Hub;
-  rollup: HubRollup;
+  workspace: Workspace;
+  rollup: WorkspaceRollup;
   blocker?: WorkItem | undefined;
   progress: number | null;
 }
 
 /**
- * The card that appears wherever a responsibility is listed — Home, Portfolio,
+ * The card that appears wherever a responsibility is listed — Portfolio,
  * search. The brand colour and monogram carry recognition, so a reader picks
  * their thing out of a grid by colour before they read a word.
  *
  * Four bands: identity, situation, what is committed, and the evidence.
  */
 export function ProjectTile({
-  hub,
+  workspace,
   rollup,
   blocker,
   progress,
@@ -56,44 +56,44 @@ export function ProjectTile({
   compact?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const HealthIcon = healthIcon[hub.health];
-  const board = boardForHub(hub.id);
+  const HealthIcon = healthIcon[workspace.health];
+  const board = boardForWorkspace(workspace.id);
   const staleDays = Math.floor(
     (new Date("2026-08-24").getTime() -
-      new Date(hub.latestUpdate.date).getTime()) /
+      new Date(workspace.latestUpdate.date).getTime()) /
       86_400_000,
   );
-  const showBlocker = Boolean(blocker) && hub.health !== "on_track";
+  const showBlocker = Boolean(blocker) && workspace.health !== "on_track";
   const attention = rollup.decisions + rollup.approvals;
 
   return (
     <div
-      className={`project-tile health-${hub.health} ${compact ? "is-compact" : ""}`}
-      style={{ "--brand": hub.accent } as React.CSSProperties}
+      className={`project-tile health-${workspace.health} ${compact ? "is-compact" : ""}`}
+      style={{ "--brand": workspace.accent } as React.CSSProperties}
     >
       <div className="tile-brand" aria-hidden="true" />
 
       <div className="tile-head">
         <span className="tile-mark" aria-hidden="true">
-          {hub.icon}
+          {workspace.icon}
         </span>
         <div className="tile-title">
           <h3>
-            <Link className="tile-link" href={workspaceHref(hub.slug)}>
-              {hub.name}
+            <Link className="tile-link" href={workspaceHref(workspace.slug)}>
+              {workspace.name}
             </Link>
           </h3>
           <div className="tile-meta">
-            <span className="tile-type">{labelForType(hub.type)}</span>
+            <span className="tile-type">{labelForType(workspace.type)}</span>
             <span className="tile-dot" aria-hidden="true" />
-            <span>{copy.stage[hub.stage]}</span>
+            <span>{copy.stage[workspace.stage]}</span>
           </div>
         </div>
         {progress !== null && (
           <ProgressRing
             value={progress}
-            accent={hub.accent}
-            label={`${hub.name} progress`}
+            accent={workspace.accent}
+            label={`${workspace.name} progress`}
           />
         )}
         {!compact && (
@@ -101,26 +101,26 @@ export function ProjectTile({
             <button
               aria-expanded={menuOpen}
               className="tile-more"
-              aria-label={`Actions for ${hub.name}`}
+              aria-label={`Actions for ${workspace.name}`}
               onClick={() => setMenuOpen((current) => !current)}
             >
               <MoreHorizontal size={18} />
             </button>
             {menuOpen && (
               <div className="tile-action-menu" role="menu">
-                <Link href={workspaceHref(hub.slug)} role="menuitem">
+                <Link href={workspaceHref(workspace.slug)} role="menuitem">
                   Open workspace
                 </Link>
                 {board && (
                   <Link
-                    href={`${workspaceHref(hub.slug)}/boards/${board.id}`}
+                    href={`${workspaceHref(workspace.slug)}/boards/${board.id}`}
                     role="menuitem"
                   >
                     Open board
                   </Link>
                 )}
                 <Link
-                  href={workspaceHref(hub.slug, "attention")}
+                  href={workspaceHref(workspace.slug, "attention")}
                   role="menuitem"
                 >
                   Review Workspace Attention
@@ -132,11 +132,11 @@ export function ProjectTile({
       </div>
 
       <div className="tile-status">
-        <span className={`health-badge ${hub.health}`}>
+        <span className={`health-badge ${workspace.health}`}>
           <HealthIcon size={13} aria-hidden="true" />
-          {copy.health[hub.health]}
+          {copy.health[workspace.health]}
         </span>
-        <p>{hub.healthNote}</p>
+        <p>{workspace.healthNote}</p>
       </div>
 
       {!compact && (
@@ -146,16 +146,18 @@ export function ProjectTile({
               <span className="ui-label">
                 {showBlocker ? "Main blocker" : copy.common.priority}
               </span>
-              <strong>{showBlocker ? blocker!.title : hub.priority}</strong>
+              <strong>
+                {showBlocker ? blocker!.title : workspace.priority}
+              </strong>
             </div>
             <div className="tile-commit">
               <span className="ui-label">{copy.common.milestone}</span>
-              <strong>{hub.nextMilestone.title}</strong>
-              <time dateTime={hub.nextMilestone.date}>
+              <strong>{workspace.nextMilestone.title}</strong>
+              <time dateTime={workspace.nextMilestone.date}>
                 {new Intl.DateTimeFormat("en", {
                   month: "short",
                   day: "numeric",
-                }).format(new Date(hub.nextMilestone.date))}
+                }).format(new Date(workspace.nextMilestone.date))}
               </time>
             </div>
           </div>
@@ -179,9 +181,9 @@ export function ProjectTile({
             </span>
           </div>
 
-          {showMetrics && hub.metrics.length > 0 && (
+          {showMetrics && workspace.metrics.length > 0 && (
             <div className="tile-metrics">
-              {hub.metrics.map((metric) => (
+              {workspace.metrics.map((metric) => (
                 <div key={metric.label}>
                   <span className="ui-label">{metric.label}</span>
                   <strong>{metric.value}</strong>
@@ -202,8 +204,11 @@ export function ProjectTile({
           )}
 
           <div className="tile-update">
-            <span className="avatar" style={{ background: hub.lead.color }}>
-              {hub.lead.initials}
+            <span
+              className="avatar"
+              style={{ background: workspace.lead.color }}
+            >
+              {workspace.lead.initials}
             </span>
             <div>
               <span className="ui-label">
@@ -212,7 +217,7 @@ export function ProjectTile({
                   ? copy.common.today
                   : `${staleDays} ${staleDays === 1 ? copy.common.dayAgo : copy.common.daysAgo}`}
               </span>
-              <p>{hub.latestUpdate.text}</p>
+              <p>{workspace.latestUpdate.text}</p>
             </div>
           </div>
         </>

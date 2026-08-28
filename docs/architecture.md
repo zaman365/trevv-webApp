@@ -26,4 +26,4 @@ Clients cache safe reads, apply optimistic board mutations, and surface retry/fa
 
 ## Deployment
 
-Web, API, and worker are independently deployable. API and worker share PostgreSQL and private object storage. Mobile and desktop point to the hosted HTTPS API. Preferred production data regions are in the EU. New deep links use `trevv://` plus verified `https://trevv.de` links; the legacy scheme remains a compatibility alias during migration.
+Web, API, and worker are independently deployable. API and worker share PostgreSQL and private object storage. Mobile and desktop point to the hosted HTTPS API. Preferred production data regions are in the EU. Deep links use `trevv://` plus verified `https://trevv.de` links.

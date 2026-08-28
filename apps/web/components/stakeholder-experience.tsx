@@ -9,7 +9,11 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { demoHubs, demoItems, demoStakeholderExposure } from "@founderhq/core";
+import {
+  demoWorkspaces,
+  demoItems,
+  demoStakeholderExposure,
+} from "@founderhq/core";
 import { trevvBrand } from "@/lib/branding";
 import { useState } from "react";
 
@@ -19,8 +23,8 @@ export function StakeholderExperience({ slug }: { slug: string }) {
   const [outcomes, setOutcomes] = useState<
     Record<string, "approved" | "changes">
   >({});
-  const hub = demoHubs.find((candidate) => candidate.slug === slug);
-  if (!hub || hub.id !== demoStakeholderExposure.hubId)
+  const workspace = demoWorkspaces.find((candidate) => candidate.slug === slug);
+  if (!workspace || workspace.id !== demoStakeholderExposure.workspaceId)
     return (
       <main className="stakeholder-page stakeholder-unavailable">
         <ShieldCheck size={28} />
@@ -50,23 +54,28 @@ export function StakeholderExperience({ slug }: { slug: string }) {
       </header>
       <section
         className="stakeholder-hero"
-        style={{ "--hub-accent": hub.accent } as React.CSSProperties}
+        style={
+          { "--workspace-accent": workspace.accent } as React.CSSProperties
+        }
       >
         <span
-          className="hub-mark"
-          style={{ background: `${hub.accent}18`, color: hub.accent }}
+          className="workspace-mark"
+          style={{
+            background: `${workspace.accent}18`,
+            color: workspace.accent,
+          }}
         >
-          {hub.icon}
+          {workspace.icon}
         </span>
         <div>
-          <p>{hub.type.replaceAll("_", " ")}</p>
-          <h1>{hub.name}</h1>
-          <span>{hub.priority}</span>
+          <p>{workspace.type.replaceAll("_", " ")}</p>
+          <h1>{workspace.name}</h1>
+          <span>{workspace.priority}</span>
         </div>
         {demoStakeholderExposure.health && (
-          <b className={`health-badge ${hub.health}`}>
+          <b className={`health-badge ${workspace.health}`}>
             <CheckCircle2 size={13} />
-            {hub.health.replace("_", " ")}
+            {workspace.health.replace("_", " ")}
           </b>
         )}
       </section>
@@ -76,9 +85,9 @@ export function StakeholderExperience({ slug }: { slug: string }) {
             <header>
               <Clock3 size={16} />
               <h2>Latest Update</h2>
-              <time>{hub.latestUpdate.date}</time>
+              <time>{workspace.latestUpdate.date}</time>
             </header>
-            <p>{hub.latestUpdate.text}</p>
+            <p>{workspace.latestUpdate.text}</p>
             <small>Shared by the Workspace lead</small>
           </section>
         )}
@@ -88,8 +97,8 @@ export function StakeholderExperience({ slug }: { slug: string }) {
               <CheckCircle2 size={16} />
               <h2>Next milestone</h2>
             </header>
-            <strong>{hub.nextMilestone.title}</strong>
-            <p>Target {hub.nextMilestone.date}</p>
+            <strong>{workspace.nextMilestone.title}</strong>
+            <p>Target {workspace.nextMilestone.date}</p>
           </section>
         )}
         <section className="stakeholder-card stakeholder-work">

@@ -14,14 +14,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const api = createApiClient({
   baseUrl: process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8787/api/v1",
 });
-export default function HubScreen() {
+export default function WorkspaceScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const hubs = useQuery({ queryKey: ["hubs"], queryFn: () => api.hubs() });
-  const hub = hubs.data?.find((candidate) => candidate.slug === slug);
-  if (!hub)
+  const workspaces = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: () => api.workspaces(),
+  });
+  const workspace = workspaces.data?.find(
+    (candidate) => candidate.slug === slug,
+  );
+  if (!workspace)
     return (
       <SafeAreaView style={styles.center}>
-        {hubs.isLoading ? (
+        {workspaces.isLoading ? (
           <ActivityIndicator color={nativeTheme.colors.primary} />
         ) : (
           <Text>Project unavailable.</Text>
@@ -31,28 +36,32 @@ export default function HubScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.icon, { backgroundColor: `${hub.accent}1a` }]}>
-          <Text style={{ color: hub.accent, fontWeight: "800", fontSize: 18 }}>
-            {hub.icon}
+        <View
+          style={[styles.icon, { backgroundColor: `${workspace.accent}1a` }]}
+        >
+          <Text
+            style={{ color: workspace.accent, fontWeight: "800", fontSize: 18 }}
+          >
+            {workspace.icon}
           </Text>
         </View>
-        <Text style={styles.title}>{hub.name}</Text>
+        <Text style={styles.title}>{workspace.name}</Text>
         <Text style={styles.stage}>
-          {hub.stage} · {hub.health.replace("_", " ")}
+          {workspace.stage} · {workspace.health.replace("_", " ")}
         </Text>
         <View style={styles.card}>
           <Text style={styles.label}>CURRENT PRIORITY</Text>
-          <Text style={styles.value}>{hub.priority}</Text>
-          <Text style={styles.note}>{hub.healthNote}</Text>
+          <Text style={styles.value}>{workspace.priority}</Text>
+          <Text style={styles.note}>{workspace.healthNote}</Text>
         </View>
         <View style={styles.card}>
           <Text style={styles.label}>NEXT MILESTONE</Text>
-          <Text style={styles.value}>{hub.nextMilestone.title}</Text>
-          <Text style={styles.note}>{hub.nextMilestone.date}</Text>
+          <Text style={styles.value}>{workspace.nextMilestone.title}</Text>
+          <Text style={styles.note}>{workspace.nextMilestone.date}</Text>
         </View>
         <View style={styles.card}>
           <Text style={styles.label}>LATEST UPDATE</Text>
-          <Text style={styles.note}>{hub.latestUpdate.text}</Text>
+          <Text style={styles.note}>{workspace.latestUpdate.text}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

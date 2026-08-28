@@ -40,10 +40,6 @@
       "name": "Workspaces"
     },
     {
-      "name": "Hubs",
-      "description": "Legacy Workspace route aliases"
-    },
-    {
       "name": "Items"
     },
     {
@@ -257,7 +253,7 @@
         "operationId": "getTeamPressure",
         "responses": {
           "200": {
-            "description": "Cross-Hub capacity evidence"
+            "description": "Cross-Workspace capacity evidence"
           }
         }
       }
@@ -288,42 +284,6 @@
         }
       }
     },
-    "/api/v1/hubs": {
-      "get": {
-        "tags": [
-          "Hubs"
-        ],
-        "operationId": "listHubs",
-        "deprecated": true,
-        "responses": {
-          "200": {
-            "description": "Accessible Hubs"
-          }
-        }
-      }
-    },
-    "/api/v1/hubs/{slug}": {
-      "get": {
-        "tags": [
-          "Hubs"
-        ],
-        "operationId": "getHub",
-        "deprecated": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/HubSlug"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Hub overview and accessible work"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        }
-      }
-    },
     "/api/v1/workspaces": {
       "get": {
         "tags": [
@@ -345,7 +305,7 @@
         "operationId": "getWorkspace",
         "parameters": [
           {
-            "$ref": "#/components/parameters/HubSlug"
+            "$ref": "#/components/parameters/WorkspaceSlug"
           }
         ],
         "responses": {
@@ -367,13 +327,6 @@
         "parameters": [
           {
             "name": "cursor",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "hubId",
             "in": "query",
             "schema": {
               "type": "string"
@@ -504,7 +457,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Permission-filtered Hub and item results"
+            "description": "Permission-filtered Workspace and item results"
           }
         }
       }
@@ -573,7 +526,7 @@
   },
   "components": {
     "parameters": {
-      "HubSlug": {
+      "WorkspaceSlug": {
         "name": "slug",
         "in": "path",
         "required": true,
@@ -603,7 +556,7 @@
       "WorkItemInput": {
         "type": "object",
         "required": [
-          "hubId",
+          "workspaceId",
           "boardId",
           "title",
           "type",
@@ -612,7 +565,7 @@
         ],
         "additionalProperties": false,
         "properties": {
-          "hubId": {
+          "workspaceId": {
             "type": "string"
           },
           "boardId": {
@@ -663,7 +616,7 @@
           }
         }
       },
-      "HubInput": {
+      "WorkspaceInput": {
         "type": "object",
         "required": [
           "portfolioId",

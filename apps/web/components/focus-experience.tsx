@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { demoHubs, demoItems } from "@founderhq/core";
+import { demoWorkspaces, demoItems } from "@founderhq/core";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
@@ -72,7 +72,7 @@ export function FocusExperience({
 }) {
   const active = kind === "settings" ? "settings" : kind;
   return (
-    <WorkspaceFrame active={active} hubSlug={workspaceSlug}>
+    <WorkspaceFrame active={active} workspaceSlug={workspaceSlug}>
       <FocusMain kind={kind} />
     </WorkspaceFrame>
   );
@@ -95,7 +95,7 @@ function FocusMain({ kind }: { kind: FocusKind }) {
     kind === "search"
       ? "Search"
       : productCopy.en.nav[kind === "settings" ? "settings" : kind];
-  const workspaceName = scope.hubs[0]?.name ?? "Selected workspace";
+  const workspaceName = scope.workspaces[0]?.name ?? "Selected workspace";
   return (
     <main className="focus-main">
       <header className="focus-header">
@@ -116,7 +116,7 @@ function FocusMain({ kind }: { kind: FocusKind }) {
       {kind === "approvals" && (
         <ApprovalView
           capturedWork={capturedWork}
-          allowedHubIds={scope.hubs.map((project) => project.id)}
+          allowedWorkspaceIds={scope.workspaces.map((project) => project.id)}
         />
       )}
       {kind === "search" && (
@@ -124,8 +124,10 @@ function FocusMain({ kind }: { kind: FocusKind }) {
           query={query}
           setQuery={setQuery}
           results={searchResults}
-          allowedHubIds={scope.hubs.map((project) => project.id)}
-          {...(scope.hubs[0] ? { workspaceSlug: scope.hubs[0].slug } : {})}
+          allowedWorkspaceIds={scope.workspaces.map((project) => project.id)}
+          {...(scope.workspaces[0]
+            ? { workspaceSlug: scope.workspaces[0].slug }
+            : {})}
         />
       )}
       {kind === "templates" && <TemplatesView />}
@@ -136,21 +138,21 @@ function FocusMain({ kind }: { kind: FocusKind }) {
 
 function ApprovalView({
   capturedWork,
-  allowedHubIds,
+  allowedWorkspaceIds,
 }: {
   capturedWork: CapturedWorkItem[];
-  allowedHubIds: readonly string[];
+  allowedWorkspaceIds: readonly string[];
 }) {
   const [resolved, setResolved] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
-  const allowedHubIdSet = new Set(allowedHubIds);
+  const allowedWorkspaceIdSet = new Set(allowedWorkspaceIds);
   const allApprovals = [
     ...demoItems
       .filter((item) => item.type === "approval")
       .map((item) => ({
         id: item.id,
-        hubId: item.hubId,
+        workspaceId: item.workspaceId,
         title: item.title,
         dueDate: item.dueDate,
         requestedBy: "Amira Demir",
@@ -160,17 +162,19 @@ function ApprovalView({
       .filter((item) => item.type === "approval")
       .map((item) => ({
         id: item.id,
-        hubId: item.hubId,
+        workspaceId: item.workspaceId,
         title: item.title,
         dueDate: item.dueDate,
         requestedBy: item.owner,
         evidenceUrl: item.evidenceUrl,
       })),
   ].filter(
-    (item) => allowedHubIdSet.has(item.hubId) && !resolved.includes(item.id),
+    (item) =>
+      allowedWorkspaceIdSet.has(item.workspaceId) &&
+      !resolved.includes(item.id),
   );
   const approvals = allApprovals.filter(
-    (item) => projectFilter === "all" || item.hubId === projectFilter,
+    (item) => projectFilter === "all" || item.workspaceId === projectFilter,
   );
   return (
     <div className="approval-layout">
@@ -218,7 +222,7 @@ function ApprovalView({
       <section className="approval-list">
         <header>
           <h2>Pending approvals</h2>
-          {allowedHubIds.length > 1 && (
+          {allowedWorkspaceIds.length > 1 && (
             <label className="approval-project-filter">
               <Filter size={14} />
               <select
@@ -227,13 +231,15 @@ function ApprovalView({
                 value={projectFilter}
               >
                 <option value="all">All workspaces</option>
-                {demoHubs
-                  .filter((hub) =>
-                    allApprovals.some((item) => item.hubId === hub.id),
+                {demoWorkspaces
+                  .filter((workspace) =>
+                    allApprovals.some(
+                      (item) => item.workspaceId === workspace.id,
+                    ),
                   )
-                  .map((hub) => (
-                    <option key={hub.id} value={hub.id}>
-                      {hub.name}
+                  .map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.name}
                     </option>
                   ))}
               </select>
@@ -247,8 +253,12 @@ function ApprovalView({
             </span>
             <div className="approval-copy">
               <p>
-                {demoHubs.find((hub) => hub.id === item.hubId)?.name} · Version{" "}
-                {index + 7}
+                {
+                  demoWorkspaces.find(
+                    (workspace) => workspace.id === item.workspaceId,
+                  )?.name
+                }{" "}
+                · Version {index + 7}
               </p>
               <h3>{item.title}</h3>
               <span>
@@ -303,26 +313,27 @@ function SearchView({
   query,
   setQuery,
   results,
-  allowedHubIds,
+  allowedWorkspaceIds,
   workspaceSlug,
 }: {
   query: string;
   setQuery: (value: string) => void;
   results: typeof demoItems;
-  allowedHubIds: readonly string[];
+  allowedWorkspaceIds: readonly string[];
   workspaceSlug?: string;
 }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState<
-    "everything" | "work" | "people" | "hubs" | "updates" | "resources"
+    "everything" | "work" | "people" | "workspaces" | "updates" | "resources"
   >("everything");
   const normalized = query.trim().toLocaleLowerCase();
-  const allowedHubIdSet = new Set(allowedHubIds);
+  const allowedWorkspaceIdSet = new Set(allowedWorkspaceIds);
   const accessibleExternalPersonIds = new Set(
     seedConversations
       .filter(
         (conversation) =>
-          conversation.hubId && allowedHubIdSet.has(conversation.hubId),
+          conversation.workspaceId &&
+          allowedWorkspaceIdSet.has(conversation.workspaceId),
       )
       .flatMap((conversation) => conversation.participantIds),
   );
@@ -337,13 +348,13 @@ function SearchView({
               .toLocaleLowerCase()
               .includes(normalized),
         );
-  const hubResults =
+  const workspaceResults =
     normalized.length < 2
       ? []
-      : demoHubs.filter(
-          (hub) =>
-            allowedHubIdSet.has(hub.id) &&
-            [hub.name, hub.priority, hub.healthNote]
+      : demoWorkspaces.filter(
+          (workspace) =>
+            allowedWorkspaceIdSet.has(workspace.id) &&
+            [workspace.name, workspace.priority, workspace.healthNote]
               .join(" ")
               .toLocaleLowerCase()
               .includes(normalized),
@@ -351,33 +362,35 @@ function SearchView({
   const updateResults =
     normalized.length < 2
       ? []
-      : demoHubs.filter(
-          (hub) =>
-            allowedHubIdSet.has(hub.id) &&
-            hub.latestUpdate.text.toLocaleLowerCase().includes(normalized),
+      : demoWorkspaces.filter(
+          (workspace) =>
+            allowedWorkspaceIdSet.has(workspace.id) &&
+            workspace.latestUpdate.text
+              .toLocaleLowerCase()
+              .includes(normalized),
         );
   const resources = [
     {
-      hubId: "hub-northstar",
+      workspaceId: "workspace-northstar",
       name: "Northstar storefront designs",
       provider: "Figma",
       href: "https://www.figma.com",
     },
     {
-      hubId: "hub-mealflow",
+      workspaceId: "workspace-mealflow",
       name: "MealFlow product repository",
       provider: "GitHub",
       href: "https://github.com",
     },
     {
-      hubId: "hub-localreach",
+      workspaceId: "workspace-localreach",
       name: "LocalReach proof pack",
       provider: "Google Drive",
       href: "https://docs.google.com",
     },
   ].filter(
     (resource) =>
-      allowedHubIdSet.has(resource.hubId) &&
+      allowedWorkspaceIdSet.has(resource.workspaceId) &&
       `${resource.name} ${resource.provider}`
         .toLocaleLowerCase()
         .includes(normalized),
@@ -387,7 +400,9 @@ function SearchView({
     (filter === "everything" || filter === "people"
       ? peopleResults.length
       : 0) +
-    (filter === "everything" || filter === "hubs" ? hubResults.length : 0) +
+    (filter === "everything" || filter === "workspaces"
+      ? workspaceResults.length
+      : 0) +
     (filter === "everything" || filter === "updates"
       ? updateResults.length
       : 0) +
@@ -396,7 +411,7 @@ function SearchView({
     ["everything", "Everything"],
     ["work", "Work items"],
     ["people", "People"],
-    ["hubs", "Workspaces"],
+    ["workspaces", "Workspaces"],
     ["updates", "Updates"],
     ["resources", "Resources"],
   ] as const;
@@ -461,7 +476,7 @@ function SearchView({
           {(filter === "everything" || filter === "work") &&
             results.map((item) => (
               <Link
-                href={`${workspaceHref(demoHubs.find((hub) => hub.id === item.hubId)!.slug)}/boards/${item.boardId}#${item.id}`}
+                href={`${workspaceHref(demoWorkspaces.find((workspace) => workspace.id === item.workspaceId)!.slug)}/boards/${item.boardId}#${item.id}`}
                 key={item.id}
               >
                 <span className={`result-icon ${item.type}`}>
@@ -470,8 +485,12 @@ function SearchView({
                 <div>
                   <strong>{item.title}</strong>
                   <span>
-                    {demoHubs.find((hub) => hub.id === item.hubId)?.name} · Work
-                    item · {item.status}
+                    {
+                      demoWorkspaces.find(
+                        (workspace) => workspace.id === item.workspaceId,
+                      )?.name
+                    }{" "}
+                    · Work item · {item.status}
                   </span>
                 </div>
                 <ArrowRight size={14} />
@@ -517,32 +536,36 @@ function SearchView({
                 </div>
               </article>
             ))}
-          {(filter === "everything" || filter === "hubs") &&
-            hubResults.map((hub) => (
-              <Link href={workspaceHref(hub.slug)} key={`hub-${hub.id}`}>
-                <span className="result-icon hub">{hub.icon}</span>
+          {(filter === "everything" || filter === "workspaces") &&
+            workspaceResults.map((workspace) => (
+              <Link
+                href={workspaceHref(workspace.slug)}
+                key={`workspace-${workspace.id}`}
+              >
+                <span className="result-icon workspace">{workspace.icon}</span>
                 <div>
-                  <strong>{hub.name}</strong>
+                  <strong>{workspace.name}</strong>
                   <span>
-                    Workspace · {hub.stage} · {hub.health.replace("_", " ")}
+                    Workspace · {workspace.stage} ·{" "}
+                    {workspace.health.replace("_", " ")}
                   </span>
                 </div>
                 <ArrowRight size={14} />
               </Link>
             ))}
           {(filter === "everything" || filter === "updates") &&
-            updateResults.map((hub) => (
+            updateResults.map((workspace) => (
               <Link
-                href={workspaceHref(hub.slug, undefined, "updates")}
-                key={`update-${hub.id}`}
+                href={workspaceHref(workspace.slug, undefined, "updates")}
+                key={`update-${workspace.id}`}
               >
                 <span className="result-icon update">
                   <Clock3 size={15} />
                 </span>
                 <div>
-                  <strong>{hub.latestUpdate.text}</strong>
+                  <strong>{workspace.latestUpdate.text}</strong>
                   <span>
-                    {hub.name} · Update · {hub.latestUpdate.date}
+                    {workspace.name} · Update · {workspace.latestUpdate.date}
                   </span>
                 </div>
                 <ArrowRight size={14} />
@@ -620,7 +643,7 @@ function TemplatesView() {
 
 function SettingsView() {
   const { scope } = useWorkspace();
-  const workspaceSlug = scope.hubs[0]?.slug;
+  const workspaceSlug = scope.workspaces[0]?.slug;
   const settingsHref = workspaceSlug
     ? workspaceHref(workspaceSlug, "settings")
     : "/app/settings/integrations";

@@ -18,7 +18,7 @@ import {
   UserRoundCog,
   X,
 } from "lucide-react";
-import { demoHubs, demoItems } from "@founderhq/core";
+import { demoWorkspaces, demoItems } from "@founderhq/core";
 import { useMemo, useState, type FormEvent } from "react";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -29,7 +29,7 @@ type DecisionState =
 
 interface DecisionRecord {
   id: string;
-  hubId: string;
+  workspaceId: string;
   boardId: string;
   title: string;
   question: string;
@@ -80,7 +80,7 @@ const seededDecisions: DecisionRecord[] = demoItems
 
     return {
       id: item.id,
-      hubId: item.hubId,
+      workspaceId: item.workspaceId,
       boardId: item.boardId,
       title: item.title,
       question: `Which path should we choose for ${item.title.toLowerCase()}?`,
@@ -115,7 +115,7 @@ export function DecisionCenter() {
   const [decisions, setDecisions] = useState(seededDecisions);
   const [activeState, setActiveState] = useState<DecisionState>("needed");
   const [query, setQuery] = useState("");
-  const [hubId, setHubId] = useState("all");
+  const [workspaceId, setWorkspaceId] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [notice, setNotice] = useState("");
@@ -136,16 +136,19 @@ export function DecisionCenter() {
     ],
     [capturedDecisions, decisions],
   );
-  const scopedDecisionIds = new Set(scope.hubs.map((project) => project.id));
+  const scopedDecisionIds = new Set(
+    scope.workspaces.map((project) => project.id),
+  );
   const scopedDecisions = allDecisions.filter((decision) =>
-    scopedDecisionIds.has(decision.hubId),
+    scopedDecisionIds.has(decision.workspaceId),
   );
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return scopedDecisions.filter((decision) => {
       if (decision.state !== activeState) return false;
-      if (hubId !== "all" && decision.hubId !== hubId) return false;
+      if (workspaceId !== "all" && decision.workspaceId !== workspaceId)
+        return false;
       return (
         !normalized ||
         `${decision.title} ${decision.question} ${decision.owner}`
@@ -153,7 +156,7 @@ export function DecisionCenter() {
           .includes(normalized)
       );
     });
-  }, [activeState, hubId, query, scopedDecisions]);
+  }, [activeState, workspaceId, query, scopedDecisions]);
 
   const selected = scopedDecisions.find(
     (decision) => decision.id === selectedId,
@@ -195,18 +198,18 @@ export function DecisionCenter() {
             placeholder="Search decisions…"
           />
         </label>
-        {scope.hubs.length > 1 && (
+        {scope.workspaces.length > 1 && (
           <label className="workflow-filter-select">
             <Filter size={14} />
             <span className="sr-only">Filter by workspace</span>
             <select
-              value={hubId}
-              onChange={(event) => setHubId(event.target.value)}
+              value={workspaceId}
+              onChange={(event) => setWorkspaceId(event.target.value)}
             >
               <option value="all">All workspaces</option>
-              {scope.hubs.map((hub) => (
-                <option key={hub.id} value={hub.id}>
-                  {hub.name}
+              {scope.workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
                 </option>
               ))}
             </select>
@@ -238,8 +241,8 @@ export function DecisionCenter() {
 
       <div className="center-grid">
         {visible.map((decision) => {
-          const hub = demoHubs.find(
-            (candidate) => candidate.id === decision.hubId,
+          const workspace = demoWorkspaces.find(
+            (candidate) => candidate.id === decision.workspaceId,
           );
           return (
             <article className="decision-card" key={decision.id}>
@@ -254,7 +257,7 @@ export function DecisionCenter() {
                 </span>
               </header>
               <p>
-                {hub?.name ?? "No workspace"} /{" "}
+                {workspace?.name ?? "No workspace"} /{" "}
                 {decision.boardId.replaceAll("-", " ")}
               </p>
               <h2>{decision.title}</h2>
@@ -321,7 +324,7 @@ export function DecisionCenter() {
       )}
       {createOpen && (
         <CreateDecisionDialog
-          projects={scope.hubs}
+          projects={scope.workspaces}
           onClose={() => setCreateOpen(false)}
           onCreate={(decision) => {
             setDecisions((current) => [decision, ...current]);
@@ -350,7 +353,9 @@ function DecisionDialog({
   const [deferDate, setDeferDate] = useState("2026-09-08");
   const [evidence, setEvidence] = useState("");
   const [note, setNote] = useState("");
-  const hub = demoHubs.find((candidate) => candidate.id === decision.hubId);
+  const workspace = demoWorkspaces.find(
+    (candidate) => candidate.id === decision.workspaceId,
+  );
 
   return (
     <div
@@ -371,7 +376,8 @@ function DecisionDialog({
           </span>
           <div>
             <p>
-              {hub?.name ?? "No workspace"} · {stateLabels[decision.state]}
+              {workspace?.name ?? "No workspace"} ·{" "}
+              {stateLabels[decision.state]}
             </p>
             <h2 id="decision-dialog-title">{decision.title}</h2>
           </div>
@@ -589,11 +595,11 @@ function CreateDecisionDialog({
 }: {
   onClose: () => void;
   onCreate: (decision: DecisionRecord) => void;
-  projects: typeof demoHubs;
+  projects: typeof demoWorkspaces;
 }) {
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
-  const [hubId, setHubId] = useState(projects[0]?.id ?? "");
+  const [workspaceId, setWorkspaceId] = useState(projects[0]?.id ?? "");
   const [dueDate, setDueDate] = useState("2026-09-04");
   const [recommendation, setRecommendation] = useState("");
 
@@ -602,7 +608,7 @@ function CreateDecisionDialog({
     if (!title.trim() || !question.trim()) return;
     onCreate({
       id: `decision-${Date.now()}`,
-      hubId,
+      workspaceId,
       boardId: "new-decision",
       title: title.trim(),
       question: question.trim(),
@@ -675,12 +681,12 @@ function CreateDecisionDialog({
             <label className="stacked-field">
               <span>Project</span>
               <select
-                value={hubId}
-                onChange={(event) => setHubId(event.target.value)}
+                value={workspaceId}
+                onChange={(event) => setWorkspaceId(event.target.value)}
               >
-                {projects.map((hub) => (
-                  <option key={hub.id} value={hub.id}>
-                    {hub.name}
+                {projects.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
                   </option>
                 ))}
               </select>
@@ -733,7 +739,7 @@ function CreateDecisionDialog({
 function capturedDecisionRecord(item: CapturedWorkItem): DecisionRecord {
   return {
     id: item.id,
-    hubId: item.hubId,
+    workspaceId: item.workspaceId,
     boardId: item.boardId,
     title: item.title,
     question: item.title.endsWith("?") ? item.title : `${item.title}?`,

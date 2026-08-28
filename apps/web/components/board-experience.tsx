@@ -51,14 +51,14 @@ import {
   X,
 } from "lucide-react";
 import {
-  boardForHub,
+  boardForWorkspace,
   calculateWorkProgress,
   demoWorkItemGroups,
   groupsForBoard,
-  hubBySlug,
+  workspaceBySlug,
   itemsForBoard,
   type Board,
-  type Hub,
+  type Workspace,
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
@@ -66,7 +66,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { Hint } from "./learning-center";
-import { useCustomHubs } from "@/lib/custom-hubs";
+import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { workspaceHref } from "@/lib/workspace-routes";
 
 type Status = "planned" | "working" | "blocked" | "review" | "done";
@@ -168,36 +168,38 @@ const statusLabel: Record<Status, string> = {
 };
 
 export function BoardExperience({
-  hubSlug,
+  workspaceSlug,
   boardId,
 }: {
-  hubSlug: string;
+  workspaceSlug: string;
   boardId: string;
 }) {
-  const customRecord = useCustomHubs().find(
-    (record) => record.hub.slug === hubSlug,
+  const customRecord = useCustomWorkspaces().find(
+    (record) => record.workspace.slug === workspaceSlug,
   );
-  const hub = hubBySlug(hubSlug) ?? customRecord?.hub;
-  const board = hub
-    ? (boardForHub(hub.id, boardId) ??
+  const workspace = workspaceBySlug(workspaceSlug) ?? customRecord?.workspace;
+  const board = workspace
+    ? (boardForWorkspace(workspace.id, boardId) ??
       (customRecord?.board.id === boardId ? customRecord.board : undefined))
     : undefined;
-  if (!hub || !board)
+  if (!workspace || !board)
     return (
-      <WorkspaceFrame active="hub" hubSlug={hubSlug}>
+      <WorkspaceFrame active="workspace" workspaceSlug={workspaceSlug}>
         <main className="board-main board-not-found">
           <h1>Board not found</h1>
           <p>This board does not belong to the requested workspace.</p>
-          <Link href={hub ? workspaceHref(hub.slug) : "/app/portfolio"}>
-            Return to {hub?.name ?? "Portfolio"}
+          <Link
+            href={workspace ? workspaceHref(workspace.slug) : "/app/portfolio"}
+          >
+            Return to {workspace?.name ?? "Portfolio"}
           </Link>
         </main>
       </WorkspaceFrame>
     );
   return (
     <BoardWorkspace
-      key={`${hub.id}:${board.id}`}
-      hub={hub}
+      key={`${workspace.id}:${board.id}`}
+      workspace={workspace}
       board={board}
       sourceItems={itemsForBoard(board.id)}
     />
@@ -205,11 +207,11 @@ export function BoardExperience({
 }
 
 function BoardWorkspace({
-  hub,
+  workspace,
   board,
   sourceItems,
 }: {
-  hub: Hub;
+  workspace: Workspace;
   board: Board;
   sourceItems: WorkItem[];
 }) {
@@ -311,8 +313,8 @@ function BoardWorkspace({
     const item: BoardItem = {
       id: `board-item-${Date.now()}`,
       title: "Untitled work item",
-      owner: hub.lead.name.split(" ")[0] ?? hub.lead.name,
-      initials: hub.lead.initials,
+      owner: workspace.lead.name.split(" ")[0] ?? workspace.lead.name,
+      initials: workspace.lead.initials,
       status,
       priority: "Normal",
       due: "No date",
@@ -528,7 +530,7 @@ function BoardWorkspace({
   const progress =
     calculateWorkProgress(
       progressItems,
-      hub.progressMode ?? "task_completion",
+      workspace.progressMode ?? "task_completion",
     ) ?? 0;
   const dependencyTitle =
     items.find((item) =>
@@ -566,7 +568,7 @@ function BoardWorkspace({
   };
 
   return (
-    <WorkspaceFrame active="hub" hubSlug={hub.slug}>
+    <WorkspaceFrame active="workspace" workspaceSlug={workspace.slug}>
       <main className="board-main">
         {notice && (
           <div
@@ -585,9 +587,9 @@ function BoardWorkspace({
         )}
         <header className="board-header">
           <div className="board-title-wrap">
-            <p>{`${hub.name} / ${board.category}`}</p>
+            <p>{`${workspace.name} / ${board.category}`}</p>
             <div>
-              <span className="board-mark">{hub.icon}</span>
+              <span className="board-mark">{workspace.icon}</span>
               <h1>{board.name}</h1>
               <Hint resourceId="boards" />
               <span className="board-menu-wrap">
@@ -612,7 +614,7 @@ function BoardWorkspace({
                     >
                       <Copy size={13} /> Copy board link
                     </button>
-                    <Link href={workspaceHref(hub.slug)} role="menuitem">
+                    <Link href={workspaceHref(workspace.slug)} role="menuitem">
                       Open workspace overview
                     </Link>
                   </span>
@@ -646,7 +648,12 @@ function BoardWorkspace({
         {teamOpen && (
           <section className="board-people-popover" aria-label="Board members">
             <strong>Board members</strong>
-            {[hub.lead.name, "Mohammed Zaman", "Nora Klein", "Amira Demir"]
+            {[
+              workspace.lead.name,
+              "Mohammed Zaman",
+              "Nora Klein",
+              "Amira Demir",
+            ]
               .filter((name, index, all) => all.indexOf(name) === index)
               .map((name) => (
                 <span key={name}>
@@ -654,7 +661,9 @@ function BoardWorkspace({
                   {name}
                 </span>
               ))}
-            <Link href={workspaceHref(hub.slug, "team")}>Manage team</Link>
+            <Link href={workspaceHref(workspace.slug, "team")}>
+              Manage team
+            </Link>
           </section>
         )}
         <div className="view-toolbar">
@@ -814,7 +823,7 @@ function BoardWorkspace({
                   Choose owner…
                 </option>
                 {[
-                  hub.lead.name,
+                  workspace.lead.name,
                   "Mohammed Zaman",
                   "Nora Klein",
                   "Amira Demir",
@@ -1011,7 +1020,7 @@ function BoardWorkspace({
           item={items.find((item) => item.id === selected.id) ?? selected}
           onClose={() => setSelected(null)}
           updateItem={updateItem}
-          hubName={hub.name}
+          workspaceName={workspace.name}
           boardName={board.name}
           dependencyTitle={dependencyTitle}
           onNotice={setNotice}
@@ -1246,7 +1255,7 @@ function ItemPanel({
   item,
   onClose,
   updateItem,
-  hubName,
+  workspaceName,
   boardName,
   dependencyTitle,
   onNotice,
@@ -1254,7 +1263,7 @@ function ItemPanel({
   item: BoardItem;
   onClose: () => void;
   updateItem: (id: string, patch: Partial<BoardItem>) => void;
-  hubName: string;
+  workspaceName: string;
   boardName: string;
   dependencyTitle: string;
   onNotice: (message: string) => void;
@@ -1546,7 +1555,7 @@ function ItemPanel({
             <span className="resource-icon">F</span>
             <div>
               <strong>{item.title} — working file</strong>
-              <span>{hubName} · Design resource</span>
+              <span>{workspaceName} · Design resource</span>
             </div>
             <ExternalLink size={14} />
           </a>

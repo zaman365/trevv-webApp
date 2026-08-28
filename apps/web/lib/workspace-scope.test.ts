@@ -1,4 +1,4 @@
-import { demoHubs } from "@founderhq/core";
+import { demoWorkspaces } from "@founderhq/core";
 import { describe, expect, it } from "vitest";
 import { NOW, scopeWorkspace } from "./attention";
 
@@ -7,30 +7,36 @@ describe("workspace scope", () => {
     const scope = scopeWorkspace("portfolio-demo", NOW);
 
     expect(scope.projectId).toBeNull();
-    expect(scope.hubs.length).toBeGreaterThan(1);
+    expect(scope.workspaces.length).toBeGreaterThan(1);
   });
 
   it("narrows every derived collection to the selected project", () => {
-    const project = demoHubs.find((hub) => hub.id === "hub-northstar")!;
+    const project = demoWorkspaces.find(
+      (workspace) => workspace.id === "workspace-northstar",
+    )!;
     const scope = scopeWorkspace(project.portfolioId, NOW, project.id);
 
     expect(scope.projectId).toBe(project.id);
-    expect(scope.hubs.map((hub) => hub.id)).toEqual([project.id]);
-    expect(scope.items.every((item) => item.hubId === project.id)).toBe(true);
-    expect(scope.waiting.every((item) => item.hubId === project.id)).toBe(
+    expect(scope.workspaces.map((workspace) => workspace.id)).toEqual([
+      project.id,
+    ]);
+    expect(scope.items.every((item) => item.workspaceId === project.id)).toBe(
       true,
     );
-    expect(scope.attention.every((item) => item.hubId === project.id)).toBe(
+    expect(scope.waiting.every((item) => item.workspaceId === project.id)).toBe(
       true,
     );
+    expect(
+      scope.attention.every((item) => item.workspaceId === project.id),
+    ).toBe(true);
   });
 
   it("keeps a newly created project available as an empty project workspace", () => {
-    const source = demoHubs[0]!;
+    const source = demoWorkspaces[0]!;
     const customProject = {
       ...source,
-      id: "custom-hub-test",
-      slug: "custom-hub-test",
+      id: "custom-workspace-test",
+      slug: "custom-workspace-test",
       name: "Custom project",
     };
     const scope = scopeWorkspace(
@@ -40,7 +46,7 @@ describe("workspace scope", () => {
       [customProject],
     );
 
-    expect(scope.hubs).toEqual([customProject]);
+    expect(scope.workspaces).toEqual([customProject]);
     expect(scope.items).toEqual([]);
     expect(scope.attentionCount).toBe(0);
   });
