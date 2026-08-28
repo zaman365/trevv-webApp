@@ -4621,9 +4621,12 @@
   gap: 3px;
 }
 .topbar-create-button {
-  min-width: 86px;
+  min-width: 120px;
   height: 38px;
+  justify-content: flex-start;
+  gap: 7px;
   margin-right: 4px;
+  padding: 0 7px 0 11px;
   color: white;
   background: var(--fh-primary);
   border-color: var(--fh-primary);
@@ -4634,7 +4637,19 @@
   background: var(--fh-primary-strong);
 }
 .topbar-create-button kbd {
-  color: color-mix(in srgb, white 78%, transparent);
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  padding: 0;
+  color: white;
+  background: color-mix(in srgb, white 14%, transparent);
+  border: 1px solid color-mix(in srgb, white 24%, transparent);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1;
 }
 .topbar-tool {
   position: relative;
