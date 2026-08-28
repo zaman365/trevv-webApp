@@ -4465,15 +4465,18 @@
 }
 .sidebar {
   width: 248px;
-  padding: 20px 16px 16px;
+  padding: 0 16px 16px;
 }
 .app-column {
   margin-left: 248px;
 }
 .brand-row {
-  min-height: 58px;
-  height: auto;
-  padding: 0 0 12px;
+  width: calc(100% + 32px);
+  min-height: 68px;
+  height: 68px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  box-sizing: border-box;
 }
 .workspace-context-row {
   align-items: center;
@@ -4611,6 +4614,8 @@
 .topbar {
   height: 68px;
   padding-inline: 28px;
+  background: var(--fh-surface);
+  backdrop-filter: none;
 }
 .topbar-actions {
   gap: 3px;
