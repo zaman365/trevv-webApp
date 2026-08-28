@@ -11,7 +11,6 @@ import {
   FileQuestion,
   FolderKanban,
   Grid2X2,
-  House,
   Hourglass,
   Inbox,
   Languages,
@@ -285,16 +284,18 @@ function WorkspaceChrome({
   const attentionCount = scope.attentionCount;
 
   const nav = [
-    ["home", "Portfolio home", "/app/home", House, undefined],
-    [
-      workspaceLevel === "project" ? "hub" : "portfolio",
-      workspaceLevel === "project" ? "Project" : copy.nav.portfolio,
-      workspaceLevel === "project" && contextProject
-        ? `/app/hubs/${contextProject.slug}`
-        : "/app/portfolio",
-      Grid2X2,
-      undefined,
-    ],
+    ["portfolio", copy.nav.portfolio, "/app/home", Grid2X2, undefined],
+    ...(workspaceLevel === "project" && contextProject
+      ? [
+          [
+            "hub",
+            "Project",
+            `/app/hubs/${contextProject.slug}`,
+            FolderKanban,
+            undefined,
+          ] as const,
+        ]
+      : []),
     ["dashboard", "Dashboard", "/app/dashboard", ChartColumn, undefined],
     [
       "attention",
@@ -557,22 +558,29 @@ function WorkspaceChrome({
         </div>
         <nav aria-label="Primary navigation">
           <p className="nav-label">Workspace</p>
-          {nav.map(([key, label, href, Icon, badge]) => (
-            <Link
-              key={key}
-              className={`nav-item ${active === key ? "active" : ""}`}
-              href={href}
-              aria-current={active === key ? "page" : undefined}
-              onClick={() => setOpen(false)}
-            >
-              <Icon size={17} />
-              <span>{label}</span>
-              {key === "inbox" && <span className="nav-dot" />}
-              {badge !== undefined && badge > 0 && (
-                <span className="nav-badge">{badge}</span>
-              )}
-            </Link>
-          ))}
+          {nav.map(([key, label, href, Icon, badge]) => {
+            const isActive =
+              key === "portfolio"
+                ? active === "home" || active === "portfolio"
+                : active === key;
+
+            return (
+              <Link
+                key={key}
+                className={`nav-item ${isActive ? "active" : ""}`}
+                href={href}
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => setOpen(false)}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+                {key === "inbox" && <span className="nav-dot" />}
+                {badge !== undefined && badge > 0 && (
+                  <span className="nav-badge">{badge}</span>
+                )}
+              </Link>
+            );
+          })}
           <p className="nav-label spaced">
             {workspaceLevel === "project"
               ? "Project workspace"
