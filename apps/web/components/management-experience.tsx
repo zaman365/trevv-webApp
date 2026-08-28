@@ -125,15 +125,6 @@ function HomeMain() {
             Portfolio view
           </span>
         }
-        actions={
-          <Link className="home-capture-action" href="/app/inbox">
-            <span>
-              <Plus size={15} />
-            </span>
-            <strong>Quick capture</strong>
-            <kbd>Q</kbd>
-          </Link>
-        }
         stats={
           <>
             <StatTile

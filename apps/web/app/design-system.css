@@ -250,52 +250,6 @@
   opacity: 0;
   cursor: pointer;
 }
-.home-capture-action {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 8px 5px 6px;
-  color: white;
-  background: var(--fh-primary);
-  border: 1px solid var(--fh-primary);
-  border-radius: 11px;
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--fh-primary) 18%, transparent);
-  transition:
-    transform 140ms ease,
-    box-shadow 140ms ease;
-}
-.home-capture-action:hover {
-  color: white;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--fh-primary) 24%, transparent);
-}
-.home-capture-action > span {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  background: rgb(255 255 255 / 14%);
-  border-radius: 8px;
-}
-.home-capture-action strong {
-  font-size: var(--fh-text-xs);
-  white-space: nowrap;
-}
-.home-capture-action kbd {
-  min-width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  margin-left: 2px;
-  color: rgb(255 255 255 / 78%);
-  background: rgb(255 255 255 / 12%);
-  border: 1px solid rgb(255 255 255 / 16%);
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 9px;
-}
-
 /* ------------------------------------------------------------ stat strip */
 
 .hero-stats {
@@ -1011,12 +965,6 @@
 @media (max-width: 520px) {
   .home-main .hero-actions {
     grid-template-columns: 1fr;
-  }
-  .home-capture-action {
-    justify-content: center;
-  }
-  .home-capture-action kbd {
-    margin-left: auto;
   }
   .hero-stats {
     grid-template-columns: 1fr;
