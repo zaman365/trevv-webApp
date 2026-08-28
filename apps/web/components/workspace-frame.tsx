@@ -5,6 +5,7 @@ import {
   BookOpenText,
   ChartColumn,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Command,
   FileQuestion,
@@ -27,7 +28,9 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { demoHubs, demoPortfolios } from "@founderhq/core";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
@@ -100,6 +103,7 @@ function WorkspaceChrome({
     null,
   );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const router = useRouter();
   const {
     copy: messages,
     scope,
@@ -110,10 +114,41 @@ function WorkspaceChrome({
     captureOpen,
     setCaptureOpen,
     portfolioId,
+    setPortfolioId,
+    dashboardAccess,
   } = useWorkspace();
-  const customHubs = useCustomHubs()
+  const customHubRecords = useCustomHubs();
+  const customHubs = customHubRecords
     .filter((record) => record.hub.portfolioId === portfolioId)
     .map((record) => record.hub);
+  const allowedPortfolioIds = new Set(dashboardAccess.portfolioIds);
+  const allowedProjectIds = new Set(dashboardAccess.projectIds);
+  const accessiblePortfolios = demoPortfolios.filter((portfolio) =>
+    allowedPortfolioIds.has(portfolio.id),
+  );
+  const accessibleProjects = [
+    ...customHubRecords.map((record) => record.hub),
+    ...demoHubs,
+  ].filter(
+    (project) =>
+      allowedProjectIds.has(project.id) ||
+      allowedPortfolioIds.has(project.portfolioId),
+  );
+  const activeProject = hubSlug
+    ? accessibleProjects.find((project) => project.slug === hubSlug)
+    : undefined;
+  const contextLevel =
+    activeProject || accessiblePortfolios.length === 0
+      ? "project"
+      : "portfolio";
+  const contextPortfolio =
+    accessiblePortfolios.find((portfolio) => portfolio.id === portfolioId) ??
+    accessiblePortfolios[0];
+  const contextProject = activeProject ?? accessibleProjects[0];
+  const contextName =
+    contextLevel === "project" ? contextProject?.name : contextPortfolio?.name;
+  const contextValue =
+    contextLevel === "project" ? contextProject?.id : contextPortfolio?.id;
   const copy = productCopy.en;
   const vocab = vocabularyFor();
   const { openLearningCenter } = useLearningCenter();
@@ -166,14 +201,79 @@ function WorkspaceChrome({
   return (
     <div className="product-shell workspace-product">
       <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
-        <div className="brand-row">
-          <span className="brand-mark">
-            <span>T</span>
-          </span>
-          <div>
-            <strong>{trevvBrand.name}</strong>
-            <span>{trevvBrand.organization}</span>
-          </div>
+        <div className="brand-row workspace-context-row">
+          {contextName && contextValue ? (
+            <label className="workspace-context-switcher">
+              <span
+                className={`workspace-context-icon ${contextLevel}`}
+                style={
+                  contextLevel === "project" && contextProject
+                    ? {
+                        background: `${contextProject.accent}18`,
+                        color: contextProject.accent,
+                      }
+                    : undefined
+                }
+              >
+                {contextLevel === "project" ? (
+                  contextProject?.icon
+                ) : (
+                  <Grid2X2 size={16} />
+                )}
+              </span>
+              <span className="workspace-context-copy">
+                <small>{contextLevel}</small>
+                <strong>{contextName}</strong>
+              </span>
+              <ChevronDown
+                className="workspace-context-chevron"
+                size={15}
+                aria-hidden="true"
+              />
+              <select
+                className="workspace-context-select"
+                aria-label={`Current ${contextLevel}`}
+                value={contextValue}
+                onChange={(event) => {
+                  if (contextLevel === "portfolio") {
+                    setPortfolioId(event.currentTarget.value);
+                    return;
+                  }
+                  const project = accessibleProjects.find(
+                    (candidate) => candidate.id === event.currentTarget.value,
+                  );
+                  if (!project) return;
+                  setPortfolioId(project.portfolioId);
+                  setOpen(false);
+                  if (project.slug !== hubSlug) {
+                    router.push(`/app/hubs/${project.slug}`);
+                  }
+                }}
+              >
+                {contextLevel === "portfolio"
+                  ? accessiblePortfolios.map((portfolio) => (
+                      <option value={portfolio.id} key={portfolio.id}>
+                        {portfolio.name}
+                      </option>
+                    ))
+                  : accessibleProjects.map((project) => (
+                      <option value={project.id} key={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+              </select>
+            </label>
+          ) : (
+            <div className="workspace-context-switcher is-static">
+              <span className="workspace-context-icon portfolio">
+                <Grid2X2 size={16} />
+              </span>
+              <span className="workspace-context-copy">
+                <small>Workspace</small>
+                <strong>{trevvBrand.organization}</strong>
+              </span>
+            </div>
+          )}
           <button
             className="icon-button mobile-only"
             onClick={() => setOpen(false)}
@@ -299,7 +399,7 @@ function WorkspaceChrome({
             <span className="avatar avatar-mz">MZ</span>
             <div>
               <strong>Mohammed</strong>
-              <span>Owner</span>
+              <span>Owner · {trevvBrand.name}</span>
             </div>
             <MoreHorizontal size={18} />
           </button>
@@ -383,7 +483,7 @@ function WorkspaceChrome({
                     <span className="avatar avatar-mz">MZ</span>
                     <div>
                       <strong>Mohammed</strong>
-                      <small>Owner · TREVV Demo</small>
+                      <small>Owner · {trevvBrand.organization}</small>
                     </div>
                   </header>
                   <Link
