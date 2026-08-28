@@ -34,7 +34,12 @@ import {
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { type GroupedSignal, NOW } from "@/lib/attention";
 import { useCapturedWork } from "@/lib/captured-work";
 import {
@@ -117,6 +122,8 @@ function DashboardMain() {
     setPortfolioId,
     setCaptureOpen,
     dashboardAccess,
+    workspaceLevel,
+    projectId: workspaceProjectId,
   } = useWorkspace();
   const capturedWork = useCapturedWork();
   const vocab = vocabularyFor();
@@ -124,7 +131,11 @@ function DashboardMain() {
   const [lens, setLens] = useState<DashboardLens>(DEFAULT_LENS);
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const availableLevels = dashboardLevelsForAccess(dashboardAccess);
+  const allAvailableLevels = dashboardLevelsForAccess(dashboardAccess);
+  const availableLevels =
+    workspaceLevel === "project"
+      ? allAvailableLevels.filter((level) => level === "project")
+      : allAvailableLevels;
   const accessibleTeams = dashboardTeamsForAccess(dashboardAccess);
   const accessiblePortfolioIds = new Set(dashboardAccess.portfolioIds);
   const accessiblePortfolios = demoPortfolios.filter((item) =>
@@ -137,23 +148,29 @@ function DashboardMain() {
   const [viewLevel, setViewLevel] = useState<DashboardViewLevel>(
     availableLevels[0] ?? "personal",
   );
-  const [projectId, setProjectId] = useState(
-    () => accessibleProjects[0]?.id ?? "",
+  const [dashboardProjectId, setDashboardProjectId] = useState(
+    () => workspaceProjectId ?? accessibleProjects[0]?.id ?? "",
   );
   const [teamId, setTeamId] = useState(() => accessibleTeams[0]?.id ?? "");
+  const activeViewLevel =
+    workspaceLevel === "project" ? "project" : viewLevel;
+  const activeProjectId =
+    workspaceLevel === "project" && workspaceProjectId
+      ? workspaceProjectId
+      : dashboardProjectId;
 
   const portfolio = demoPortfolios.find((item) => item.id === portfolioId);
   const selectedProject =
-    accessibleProjects.find((project) => project.id === projectId) ??
+    accessibleProjects.find((project) => project.id === activeProjectId) ??
     accessibleProjects[0];
   const selectedTeam =
     accessibleTeams.find((team) => team.id === teamId) ?? accessibleTeams[0];
   const viewTargetId =
-    viewLevel === "project"
+    activeViewLevel === "project"
       ? (selectedProject?.id ?? "")
-      : viewLevel === "team"
+      : activeViewLevel === "team"
         ? (selectedTeam?.id ?? "")
-        : viewLevel === "personal"
+        : activeViewLevel === "personal"
           ? CURRENT_DASHBOARD_USER
           : portfolioId;
 
@@ -183,8 +200,13 @@ function DashboardMain() {
   );
 
   const allItems = useMemo(
-    () => filterItemsForDashboardView(portfolioItems, viewLevel, viewTargetId),
-    [portfolioItems, viewLevel, viewTargetId],
+    () =>
+      filterItemsForDashboardView(
+        portfolioItems,
+        activeViewLevel,
+        viewTargetId,
+      ),
+    [activeViewLevel, portfolioItems, viewTargetId],
   );
 
   const viewItemIds = useMemo(
@@ -196,16 +218,16 @@ function DashboardMain() {
     [scope.attention, viewItemIds],
   );
   const viewHubs = useMemo(() => {
-    if (viewLevel === "portfolio") return scope.hubs;
-    if (viewLevel === "project")
+    if (activeViewLevel === "portfolio") return scope.hubs;
+    if (activeViewLevel === "project")
       return selectedProject ? [selectedProject] : [];
     const projectIds = new Set(allItems.map((item) => item.hubId));
     return scope.hubs.filter((project) => projectIds.has(project.id));
-  }, [allItems, scope.hubs, selectedProject, viewLevel]);
+  }, [activeViewLevel, allItems, scope.hubs, selectedProject]);
   const viewHealth = useMemo(() => dashboardHealth(viewHubs), [viewHubs]);
   const viewFocusHub = useMemo(() => dashboardFocusHub(viewHubs), [viewHubs]);
   const viewDescriptor = dashboardViewDescriptor(
-    viewLevel,
+    activeViewLevel,
     portfolio?.name,
     selectedProject,
     selectedTeam,
@@ -465,7 +487,7 @@ function DashboardMain() {
         hintId="dashboard"
         selector={
           <DashboardTargetSelector
-            level={viewLevel}
+            level={activeViewLevel}
             portfolioId={portfolioId}
             portfolios={accessiblePortfolios}
             projectId={selectedProject?.id ?? ""}
@@ -477,7 +499,7 @@ function DashboardMain() {
               resetDashboardFocus();
             }}
             onProject={(id) => {
-              setProjectId(id);
+              setDashboardProjectId(id);
               resetDashboardFocus();
             }}
             onTeam={(id) => {
@@ -582,7 +604,7 @@ function DashboardMain() {
       >
         <DashboardHierarchy
           availableLevels={availableLevels}
-          activeLevel={viewLevel}
+          activeLevel={activeViewLevel}
           onSelect={selectViewLevel}
         />
       </PageHero>

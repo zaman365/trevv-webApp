@@ -31,6 +31,7 @@ import {
   type CapturedWorkItem,
   type CapturedWorkType,
 } from "@/lib/captured-work";
+import { useWorkspace } from "@/lib/workspace-context";
 import { Hint } from "./learning-center";
 
 type InboxCategory = "decision" | "mention" | "approval" | "follow-up";
@@ -140,6 +141,7 @@ export function InboxWorkflow({
 }: {
   emailActions?: EmailInboxAction[];
 }) {
+  const { scope } = useWorkspace();
   const [actions, setActions] = useState<InboxAction[]>(() => [
     ...emailActions.map((message) => ({
       ...message,
@@ -166,11 +168,15 @@ export function InboxWorkflow({
     completedDelta: number;
   } | null>(null);
   const [completedToday, setCompletedToday] = useState(0);
+  const scopedHubIds = new Set(scope.hubs.map((project) => project.id));
+  const scopedActions = actions.filter((action) =>
+    scopedHubIds.has(action.hubId),
+  );
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     const priorityWeight = { urgent: 0, high: 1, normal: 2 };
-    return actions
+    return scopedActions
       .filter((action) => {
         if (action.disposition !== view) return false;
         if (category !== "all" && action.category !== category) return false;
@@ -187,10 +193,12 @@ export function InboxWorkflow({
         (left, right) =>
           priorityWeight[left.priority] - priorityWeight[right.priority],
       );
-  }, [actions, category, hubId, priority, query, view]);
+  }, [category, hubId, priority, query, scopedActions, view]);
 
-  const selectedAction = actions.find((action) => action.id === detailId);
-  const openActions = actions.filter((action) => action.disposition === "open");
+  const selectedAction = scopedActions.find((action) => action.id === detailId);
+  const openActions = scopedActions.filter(
+    (action) => action.disposition === "open",
+  );
   const activeFilterCount = [category, hubId, priority].filter(
     (value) => value !== "all",
   ).length;
@@ -257,7 +265,10 @@ export function InboxWorkflow({
         </div>
       )}
 
-      <QuickCapture onCaptured={(message) => setNotice(message)} />
+      <QuickCapture
+        projects={scope.hubs}
+        onCaptured={(message) => setNotice(message)}
+      />
 
       <section className="inbox-zero-guide">
         <div>
@@ -321,8 +332,9 @@ export function InboxWorkflow({
                     : state[0]!.toUpperCase() + state.slice(1)}
                   <b>
                     {
-                      actions.filter((action) => action.disposition === state)
-                        .length
+                      scopedActions.filter(
+                        (action) => action.disposition === state,
+                      ).length
                     }
                   </b>
                 </button>
@@ -365,9 +377,7 @@ export function InboxWorkflow({
                 onChange={(event) => setHubId(event.target.value)}
               >
                 <option value="all">All projects</option>
-                {demoHubs
-                  .filter((hub) => !hub.id.startsWith("original-"))
-                  .map((hub) => (
+                {scope.hubs.map((hub) => (
                     <option key={hub.id} value={hub.id}>
                       {hub.name}
                     </option>
@@ -617,8 +627,10 @@ export function InboxWorkflow({
 
 function QuickCapture({
   onCaptured,
+  projects,
 }: {
   onCaptured: (message: string) => void;
+  projects: typeof demoHubs;
 }) {
   const capturedWork = useCapturedWork();
   const [draft, setDraft] = useState("");
@@ -762,9 +774,7 @@ function QuickCapture({
                 onChange={(event) => setHubId(event.target.value)}
               >
                 <option value="">Organize later</option>
-                {demoHubs
-                  .filter((hub) => !hub.id.startsWith("original-"))
-                  .map((hub) => (
+                {projects.map((hub) => (
                     <option key={hub.id} value={hub.id}>
                       {hub.name}
                     </option>

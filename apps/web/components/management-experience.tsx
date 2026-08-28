@@ -32,7 +32,6 @@ import {
   demoChangeCheckpoint,
   demoHubSnapshots,
   demoHubs,
-  demoItems,
   demoMeaningfulChanges,
   demoPortfolios,
   demoReviewRituals,
@@ -68,17 +67,25 @@ export function HomeExperience() {
 }
 
 function HomeMain() {
-  const { scope, copy, portfolioId, setPortfolioId } = useWorkspace();
+  const {
+    scope,
+    copy,
+    portfolioId,
+    setPortfolioId,
+    workspaceLevel,
+    projectId,
+  } = useWorkspace();
   const vocab = vocabularyFor();
   const portfolios = allPortfolioSummaries();
   const customHubs = useCustomHubs();
   const active = portfolios.find((p) => p.portfolio.id === portfolioId);
+  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
   const changes = changesSinceCheckpoint(
     demoMeaningfulChanges,
     demoChangeCheckpoint,
-  );
+  ).filter((change) => scopedHubIds.has(change.hubId));
   const topNeedsYou = scope.attention.slice(0, 4);
-  const decisions = demoItems.filter(
+  const decisions = scope.items.filter(
     (item) =>
       item.type === "decision" &&
       item.status !== "done" &&
@@ -86,20 +93,27 @@ function HomeMain() {
   );
   // The handful of projects actually asking for something right now.
   const needsAttention = (active?.projects ?? [])
+    .filter((project) => scopedHubIds.has(project.hub.id))
     .filter(
       (project) =>
         project.hub.health !== "on_track" && project.hub.health !== "parked",
     )
     .slice(0, 3);
-  const totalProjects =
-    portfolios.reduce((sum, p) => sum + p.count, 0) + customHubs.length;
+  const activeProject = scope.hubs.find((hub) => hub.id === projectId);
+  const activeProjectSummary = active?.projects.find(
+    (project) => project.hub.id === projectId,
+  );
+  const scopeLabel =
+    workspaceLevel === "project" && activeProject
+      ? activeProject.name
+      : (active?.portfolio.name ?? "this portfolio");
 
   return (
     <main className="trevv-main home-main">
       <PageHero
         eyebrow="Monday, 24 August"
         title="Good morning, Mohammed"
-        subtitle={`${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you across ${totalProjects} ${vocab.many.toLowerCase()}. Everything else can keep moving.`}
+        subtitle={`${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you in ${scopeLabel}. Everything else can keep moving.`}
         hintId="welcome-to-trevv"
         selector={
           <label className="home-portfolio-switcher">
@@ -153,7 +167,7 @@ function HomeMain() {
             />
             <StatTile
               icon={Hourglass}
-              value={demoWaitingStates.length}
+              value={scope.waiting.length}
               label="Waiting"
               note="On someone else"
               tone="warning"
@@ -170,67 +184,83 @@ function HomeMain() {
         }
       />
 
-      <Panel
-        icon={Grid2X2}
-        title={`Your ${vocab.groupMany.toLowerCase()}`}
-        subtitle={`Health across every ${vocab.one.toLowerCase()} you are responsible for.`}
-        href="/app/portfolio"
-        linkLabel="Open portfolio"
-      >
-        <div className="portfolio-cards">
-          {portfolios.map((summary) => {
-            const customCount = customHubs.filter(
-              (record) => record.hub.portfolioId === summary.portfolio.id,
-            ).length;
-            const count = summary.count + customCount;
-            return (
-              <button
-                key={summary.portfolio.id}
-                className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
-                aria-pressed={summary.portfolio.id === portfolioId}
-                onClick={() => setPortfolioId(summary.portfolio.id)}
-              >
-                <header>
-                  <div>
-                    <strong>{summary.portfolio.name}</strong>
-                    <span>
-                      {count}{" "}
-                      {count === 1
-                        ? vocab.one.toLowerCase()
-                        : vocab.many.toLowerCase()}
+      {workspaceLevel === "project" && activeProjectSummary ? (
+        <Panel
+          icon={Grid2X2}
+          title={`${activeProjectSummary.hub.name} workspace`}
+          subtitle="Health, current movement, and the next useful project action."
+          href={`/app/hubs/${activeProjectSummary.hub.slug}`}
+          linkLabel="Open project"
+        >
+          <div className="project-strip project-workspace-strip">
+            <ProjectTile {...activeProjectSummary} copy={copy} />
+          </div>
+        </Panel>
+      ) : (
+        <Panel
+          icon={Grid2X2}
+          title={`Your ${vocab.groupMany.toLowerCase()}`}
+          subtitle={`Health across every ${vocab.one.toLowerCase()} you are responsible for.`}
+          href="/app/portfolio"
+          linkLabel="Open portfolio"
+        >
+          <div className="portfolio-cards">
+            {portfolios.map((summary) => {
+              const customCount = customHubs.filter(
+                (record) => record.hub.portfolioId === summary.portfolio.id,
+              ).length;
+              const count = summary.count + customCount;
+              return (
+                <button
+                  key={summary.portfolio.id}
+                  className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
+                  aria-pressed={summary.portfolio.id === portfolioId}
+                  onClick={() => setPortfolioId(summary.portfolio.id)}
+                >
+                  <header>
+                    <div>
+                      <strong>{summary.portfolio.name}</strong>
+                      <span>
+                        {count}{" "}
+                        {count === 1
+                          ? vocab.one.toLowerCase()
+                          : vocab.many.toLowerCase()}
+                      </span>
+                    </div>
+                    {summary.progress !== null && (
+                      <ProgressRing
+                        value={summary.progress}
+                        size={44}
+                        label={`${summary.portfolio.name} progress`}
+                      />
+                    )}
+                  </header>
+                  <HealthBar
+                    slices={summary.health.map((slice) =>
+                      slice.key === "on_track"
+                        ? { ...slice, count: slice.count + customCount }
+                        : slice,
+                    )}
+                  />
+                  <footer>
+                    <span
+                      className={summary.attentionCount ? "is-live" : ""}
+                    >
+                      <b>{summary.attentionCount}</b> need you
                     </span>
-                  </div>
-                  {summary.progress !== null && (
-                    <ProgressRing
-                      value={summary.progress}
-                      size={44}
-                      label={`${summary.portfolio.name} progress`}
-                    />
-                  )}
-                </header>
-                <HealthBar
-                  slices={summary.health.map((slice) =>
-                    slice.key === "on_track"
-                      ? { ...slice, count: slice.count + customCount }
-                      : slice,
-                  )}
-                />
-                <footer>
-                  <span className={summary.attentionCount ? "is-live" : ""}>
-                    <b>{summary.attentionCount}</b> need you
-                  </span>
-                  <span className={summary.overdue ? "is-live" : ""}>
-                    <b>{summary.overdue}</b> overdue
-                  </span>
-                  <span className={summary.blocked ? "is-live" : ""}>
-                    <b>{summary.blocked}</b> blocked
-                  </span>
-                </footer>
-              </button>
-            );
-          })}
-        </div>
-      </Panel>
+                    <span className={summary.overdue ? "is-live" : ""}>
+                      <b>{summary.overdue}</b> overdue
+                    </span>
+                    <span className={summary.blocked ? "is-live" : ""}>
+                      <b>{summary.blocked}</b> blocked
+                    </span>
+                  </footer>
+                </button>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
 
       {needsAttention.length > 0 && (
         <Panel
@@ -271,7 +301,7 @@ function HomeMain() {
           subtitle="The commitments closest to now."
         >
           <div className="today-list">
-            {demoItems
+            {scope.items
               .filter((item) => item.status !== "done")
               .slice(0, 5)
               .map((item) => (
@@ -371,16 +401,30 @@ function inWaitingSection(waiting: WaitingState, section: WaitingSection) {
 }
 
 export function WaitingExperience() {
+  return (
+    <WorkspaceFrame active="waiting">
+      <WaitingMain />
+    </WorkspaceFrame>
+  );
+}
+
+function WaitingMain() {
+  const { scope } = useWorkspace();
   const [waiting, setWaiting] = useState(demoWaitingStates);
   const [section, setSection] = useState<WaitingSection>("Waiting on Me");
   const [notice, setNotice] = useState<string | null>(null);
   const [nudgeItem, setNudgeItem] = useState<WaitingState | null>(null);
   const [resolveItem, setResolveItem] = useState<WaitingState | null>(null);
   const [lastResolved, setLastResolved] = useState<WaitingState | null>(null);
-  const visible = waiting.filter((item) => inWaitingSection(item, section));
+  const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
+  const scopedWaiting = waiting.filter((item) =>
+    scopedHubIds.has(item.hubId),
+  );
+  const visible = scopedWaiting.filter((item) =>
+    inWaitingSection(item, section),
+  );
   return (
-    <WorkspaceFrame active="waiting">
-      <main className="trevv-main waiting-center">
+    <main className="trevv-main waiting-center">
         <PageHeader
           eyebrow="Follow-ups"
           title="Waiting Center"
@@ -417,7 +461,11 @@ export function WaitingExperience() {
             >
               {name}
               <b>
-                {waiting.filter((item) => inWaitingSection(item, name)).length}
+                {
+                  scopedWaiting.filter((item) =>
+                    inWaitingSection(item, name),
+                  ).length
+                }
               </b>
             </button>
           ))}
@@ -522,8 +570,7 @@ export function WaitingExperience() {
             }}
           />
         )}
-      </main>
-    </WorkspaceFrame>
+    </main>
   );
 }
 
@@ -695,6 +742,15 @@ function WaitingResolveDialog({
 }
 
 export function ReviewsExperience() {
+  return (
+    <WorkspaceFrame active="reviews">
+      <ReviewsMain />
+    </WorkspaceFrame>
+  );
+}
+
+function ReviewsMain() {
+  const { scope, workspaceLevel, projectId } = useWorkspace();
   const [posted, setPosted] = useState(false);
   const [enabled, setEnabled] = useState(
     () =>
@@ -711,9 +767,30 @@ export function ReviewsExperience() {
       else next.add(id);
       return next;
     });
+  const activeProject =
+    workspaceLevel === "project"
+      ? scope.hubs.find((hub) => hub.id === projectId)
+      : undefined;
+  const reviewLabel = activeProject?.name ?? "Portfolio";
+  const decisionCount = scope.items.filter(
+    (item) => item.type === "decision" && item.status !== "done",
+  ).length;
+  const milestoneRiskCount = scope.items.filter(
+    (item) =>
+      item.type === "milestone" &&
+      (item.status === "blocked" ||
+        Boolean(item.dueDate && item.dueDate < "2026-08-27")),
+  ).length;
+  const snapshots = demoHubSnapshots.filter(
+    (snapshot) => !activeProject || snapshot.hubId === activeProject.id,
+  );
+  const rituals = demoReviewRituals.filter(
+    (ritual) =>
+      ritual.portfolioId === scope.portfolioId &&
+      (!activeProject || !ritual.hubId || ritual.hubId === activeProject.id),
+  );
   return (
-    <WorkspaceFrame active="reviews">
-      <main className="trevv-main review-page">
+    <main className="trevv-main review-page">
         <PageHeader
           eyebrow="Management memory"
           title="Review Rituals"
@@ -729,35 +806,35 @@ export function ReviewsExperience() {
             />
             <ul>
               <li>
-                <b>4</b> top Attention items
+                <b>{Math.min(scope.attentionCount, 4)}</b> top Attention items
               </li>
               <li>
-                <b>2</b> decisions due
+                <b>{decisionCount}</b> decisions due
               </li>
               <li>
-                <b>3</b> waiting follow-ups
+                <b>{scope.waiting.length}</b> waiting follow-ups
               </li>
               <li>
-                <b>1</b> milestone at risk
+                <b>{milestoneRiskCount}</b> milestones at risk
               </li>
             </ul>
           </section>
           <section className="trevv-panel weekly-review">
             <PanelHeading
               icon={MessageSquareText}
-              title="Weekly project review"
-              subtitle="Northstar Apparel · due today"
+              title={`Weekly ${activeProject ? "project" : "portfolio"} review`}
+              subtitle={`${reviewLabel} · due today`}
             />
             {posted ? (
               <div className="review-posted">
                 <CheckCircle2 size={24} />
                 <h2>Review published</h2>
                 <p>
-                  Structured update posted, a Hub snapshot captured, and
-                  Attention signals refreshed.
+                  Structured update posted, a project snapshot captured, and
+                  Attention signals refreshed for {reviewLabel}.
                 </p>
                 <a href="/app/portfolio">
-                  See refreshed Portfolio <ArrowRight size={13} />
+                  See refreshed workspace <ArrowRight size={13} />
                 </a>
               </div>
             ) : (
@@ -769,33 +846,59 @@ export function ReviewsExperience() {
               >
                 <label>
                   Health
-                  <select defaultValue="critical">
+                  <select defaultValue={activeProject?.health ?? "watch"}>
                     <option value="on_track">On Track</option>
                     <option value="watch">Attention</option>
                     <option value="critical">Critical</option>
+                    <option value="parked">Parked</option>
                   </select>
                 </label>
                 <label>
                   Biggest progress
-                  <textarea defaultValue="Photography landed and 14 of 22 products are ready." />
+                  <textarea
+                    defaultValue={
+                      activeProject?.latestUpdate.text ??
+                      "Summarize the most meaningful progress since the last review."
+                    }
+                  />
                 </label>
                 <label>
                   Biggest blocker
-                  <textarea defaultValue="Signed packaging evidence is still outstanding." />
+                  <textarea
+                    defaultValue={
+                      activeProject?.healthNote ??
+                      "Describe the strongest blocker or emerging risk."
+                    }
+                  />
                 </label>
                 <div>
                   <label>
                     Next milestone
-                    <input defaultValue="SS26 storefront launch" />
+                    <input
+                      defaultValue={
+                        activeProject?.nextMilestone.title ?? "Next milestone"
+                      }
+                    />
                   </label>
                   <label>
                     Priority next week
-                    <input defaultValue="Release compliant print files" />
+                    <input
+                      defaultValue={
+                        activeProject?.priority ?? "Set the next priority"
+                      }
+                    />
                   </label>
                 </div>
                 <label>
                   Decision needed
-                  <input defaultValue="Approve launch offer by Tuesday" />
+                  <input
+                    defaultValue={
+                      scope.items.find(
+                        (item) =>
+                          item.type === "decision" && item.status !== "done",
+                      )?.title ?? "No open decision recorded"
+                    }
+                  />
                 </label>
                 <button className="primary-button" type="submit">
                   Publish review & snapshot
@@ -807,17 +910,17 @@ export function ReviewsExperience() {
         <section className="trevv-panel time-machine">
           <PanelHeading
             icon={History}
-            title="Portfolio Time Machine"
+            title={`${reviewLabel} Time Machine`}
             subtitle="Lightweight rollups captured by reviews — not copies of the full board."
           />
           <div
             className="trend-line"
-            aria-label="Northstar Apparel health trend"
+            aria-label={`${reviewLabel} health trend`}
           >
-            {demoHubSnapshots.map((snapshot, index) => (
+            {snapshots.map((snapshot, index) => (
               <div key={snapshot.id}>
                 <span className={`trend-dot ${snapshot.health}`} />
-                {index < demoHubSnapshots.length - 1 && <i />}
+                {index < snapshots.length - 1 && <i />}
                 <strong>
                   {new Intl.DateTimeFormat("en", {
                     month: "short",
@@ -828,6 +931,13 @@ export function ReviewsExperience() {
                 <b>{snapshot.attentionCount} signals</b>
               </div>
             ))}
+            {!snapshots.length && (
+              <EmptyState
+                icon={History}
+                title="No review history yet"
+                note={`Publish the first ${reviewLabel} review to start a durable health timeline.`}
+              />
+            )}
           </div>
         </section>
         <section className="trevv-panel ritual-settings">
@@ -836,7 +946,7 @@ export function ReviewsExperience() {
             title="Cadence settings"
             subtitle="Each ritual can be configured or disabled completely."
           />
-          {demoReviewRituals.map((ritual) => (
+          {rituals.map((ritual) => (
             <article key={ritual.id}>
               <div>
                 <strong>{ritual.type.replaceAll("_", " ")}</strong>
@@ -856,8 +966,7 @@ export function ReviewsExperience() {
             </article>
           ))}
         </section>
-      </main>
-    </WorkspaceFrame>
+    </main>
   );
 }
 

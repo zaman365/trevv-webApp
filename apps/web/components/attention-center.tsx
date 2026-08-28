@@ -39,7 +39,7 @@ import {
   type AttentionSignal,
 } from "@founderhq/core";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type GroupedSignal } from "@/lib/attention";
 import { useWorkspace } from "@/lib/workspace-context";
 import { Hint } from "./learning-center";
@@ -105,8 +105,13 @@ export function AttentionCenter() {
   const [activities, setActivities] = useState<
     Record<string, AttentionActivity[]>
   >({});
-  const attentionIds = useRef(
-    new Set(scope.attention.map((group) => group.id)),
+  const scopedGroupIds = useMemo(
+    () => new Set(scope.attention.map((group) => group.id)),
+    [scope.attention],
+  );
+  const scopedGroups = useMemo(
+    () => groups.filter((group) => scopedGroupIds.has(group.id)),
+    [groups, scopedGroupIds],
   );
 
   useEffect(() => {
@@ -120,7 +125,7 @@ export function AttentionCenter() {
         setSelectedId(null);
         return;
       }
-      if (!attentionIds.current.has(hash)) return;
+      if (!scopedGroupIds.has(hash)) return;
       frame = window.requestAnimationFrame(() => setSelectedId(hash));
     };
     openFromHash();
@@ -129,14 +134,14 @@ export function AttentionCenter() {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("hashchange", openFromHash);
     };
-  }, []);
+  }, [scopedGroupIds]);
 
   const portfolio = demoPortfolios.find(
     (candidate) => candidate.id === scope.portfolioId,
   );
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    return groups.filter((group) => {
+    return scopedGroups.filter((group) => {
       const hub = hubFor(group);
       const item = itemFor(group);
       if (!groupMatchesTab(group, tab)) return false;
@@ -157,18 +162,19 @@ export function AttentionCenter() {
           String(value).toLocaleLowerCase().includes(normalized),
         );
     });
-  }, [groups, projectFilter, query, severityFilter, tab]);
+  }, [projectFilter, query, scopedGroups, severityFilter, tab]);
 
   const summary = useMemo(
     () => ({
-      critical: groups.filter((group) => group.severity === "critical").length,
-      blocked: groups.filter((group) =>
+      critical: scopedGroups.filter((group) => group.severity === "critical")
+        .length,
+      blocked: scopedGroups.filter((group) =>
         group.signals.some((signal) => isBlockedSignal(signal)),
       ).length,
-      overdue: groups.filter((group) =>
+      overdue: scopedGroups.filter((group) =>
         group.signals.some((signal) => signal.signalType.includes("overdue")),
       ).length,
-      waiting: groups.filter((group) =>
+      waiting: scopedGroups.filter((group) =>
         group.signals.some(
           (signal) =>
             signal.signalType === "waiting_too_long" ||
@@ -176,9 +182,10 @@ export function AttentionCenter() {
         ),
       ).length,
     }),
-    [groups],
+    [scopedGroups],
   );
-  const selected = groups.find((group) => group.id === selectedId) ?? null;
+  const selected =
+    scopedGroups.find((group) => group.id === selectedId) ?? null;
   const hasFilters =
     query.length > 0 || projectFilter !== "all" || severityFilter !== "all";
 
@@ -391,7 +398,7 @@ export function AttentionCenter() {
         aria-label="Attention filters"
       >
         {attentionTabs.map((name) => {
-          const count = groups.filter((group) =>
+          const count = scopedGroups.filter((group) =>
             groupMatchesTab(group, name),
           ).length;
           return (
@@ -478,12 +485,12 @@ export function AttentionCenter() {
               <CheckCircle2 size={24} />
             </span>
             <h2>
-              {groups.length
+              {scopedGroups.length
                 ? "No signals match this view"
                 : "Your Attention Center is clear"}
             </h2>
             <p>
-              {groups.length
+              {scopedGroups.length
                 ? "Broaden the project, severity, or search filters."
                 : "Resolved, snoozed, and dismissed signals no longer compete for attention."}
             </p>

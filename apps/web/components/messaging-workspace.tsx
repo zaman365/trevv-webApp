@@ -41,6 +41,7 @@ import {
 } from "react";
 import { storeCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { labelForProjectType } from "@/lib/terminology";
+import { useWorkspace } from "@/lib/workspace-context";
 import {
   currentMessagingUserId,
   messagingPeople,
@@ -87,6 +88,7 @@ const intentDetails: Record<
 };
 
 export function MessagingWorkspace() {
+  const { scope } = useWorkspace();
   const [conversations, setConversations] = useState(seedConversations);
   const [messages, setMessages] = useState(seedMessages);
   const [selectedId, setSelectedId] = useState(seedConversations[0]!.id);
@@ -138,9 +140,26 @@ export function MessagingWorkspace() {
     }
   }, [conversations, hydrated, messages]);
 
+  const scopedHubIds = useMemo(
+    () => new Set(scope.hubs.map((hub) => hub.id)),
+    [scope.hubs],
+  );
+  const scopedConversations = useMemo(
+    () =>
+      conversations.filter(
+        (conversation) =>
+          !conversation.hubId || scopedHubIds.has(conversation.hubId),
+      ),
+    [conversations, scopedHubIds],
+  );
+  const scopedConversationIds = useMemo(
+    () => new Set(scopedConversations.map((conversation) => conversation.id)),
+    [scopedConversations],
+  );
   const selected =
-    conversations.find((conversation) => conversation.id === selectedId) ??
-    conversations[0]!;
+    scopedConversations.find(
+      (conversation) => conversation.id === selectedId,
+    ) ?? scopedConversations[0]!;
   const selectedMessages = useMemo(
     () =>
       messages
@@ -156,17 +175,18 @@ export function MessagingWorkspace() {
   );
   const openResponses = messages.filter(
     (message) =>
+      scopedConversationIds.has(message.conversationId) &&
       message.responseOwnerId === currentMessagingUserId &&
       message.responseState === "open",
   );
   const roomsNeedingResponse = new Set(
     openResponses.map((message) => message.conversationId),
   );
-  const totalUnread = conversations.reduce(
+  const totalUnread = scopedConversations.reduce(
     (total, conversation) => total + conversation.unread,
     0,
   );
-  const visibleConversations = conversations
+  const visibleConversations = scopedConversations
     .filter((conversation) => !conversation.archived)
     .filter((conversation) => {
       if (focus === "unread" && conversation.unread === 0) return false;
@@ -700,6 +720,7 @@ export function MessagingWorkspace() {
       {newConversationMode && (
         <NewConversationDialog
           mode={newConversationMode}
+          projects={scope.hubs}
           onClose={() => setNewConversationMode(null)}
           onCreate={(conversation) => {
             setConversations((current) => [conversation, ...current]);
@@ -1113,16 +1134,16 @@ function ThreadMessage({
 
 function NewConversationDialog({
   mode,
+  projects,
   onClose,
   onCreate,
 }: {
   mode: Exclude<NewConversationMode, null>;
+  projects: typeof demoHubs;
   onClose: () => void;
   onCreate: (conversation: Conversation) => void;
 }) {
-  const currentHubs = demoHubs.filter(
-    (hub) => hub.portfolioId === "portfolio-demo",
-  );
+  const currentHubs = projects;
   const availablePeople = messagingPeople.filter(
     (person) => person.id !== currentMessagingUserId,
   );

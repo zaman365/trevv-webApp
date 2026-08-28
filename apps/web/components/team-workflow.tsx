@@ -25,6 +25,7 @@ import {
 } from "@founderhq/core";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
+import { useWorkspace } from "@/lib/workspace-context";
 import { Hint } from "./learning-center";
 
 type MemberStatus = "active" | "away" | "invited";
@@ -63,6 +64,7 @@ const initialMembers: TeamMember[] = calculateResourcePressure(
 }));
 
 export function TeamWorkflow() {
+  const { scope, workspaceLevel } = useWorkspace();
   const [members, setMembers] = useState(initialMembers);
   const [query, setQuery] = useState("");
   const [pressureFilter, setPressureFilter] = useState("all");
@@ -72,13 +74,17 @@ export function TeamWorkflow() {
   const [rebalanceId, setRebalanceId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
-  const selected = members.find((member) => member.userId === selectedId);
-  const rebalanceMember = members.find(
+  const scopedHubIds = new Set(scope.hubs.map((project) => project.id));
+  const scopedMembers = members.filter((member) =>
+    member.hubIds.some((hubId) => scopedHubIds.has(hubId)),
+  );
+  const selected = scopedMembers.find((member) => member.userId === selectedId);
+  const rebalanceMember = scopedMembers.find(
     (member) => member.userId === rebalanceId,
   );
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    return members.filter((member) => {
+    return scopedMembers.filter((member) => {
       if (pressureFilter !== "all" && member.pressure !== pressureFilter)
         return false;
       if (statusFilter !== "all" && member.status !== statusFilter)
@@ -90,7 +96,7 @@ export function TeamWorkflow() {
           .includes(normalized)
       );
     });
-  }, [members, pressureFilter, query, statusFilter]);
+  }, [pressureFilter, query, scopedMembers, statusFilter]);
 
   const updateMember = (id: string, update: Partial<TeamMember>) => {
     setMembers((current) =>
@@ -100,11 +106,13 @@ export function TeamWorkflow() {
     );
   };
 
-  const active = members.filter((member) => member.status === "active").length;
-  const elevated = members.filter(
+  const active = scopedMembers.filter(
+    (member) => member.status === "active",
+  ).length;
+  const elevated = scopedMembers.filter(
     (member) => member.pressure !== "normal",
   ).length;
-  const unassigned = currentItems.filter(
+  const unassigned = scope.items.filter(
     (item) => !item.assignee && item.status !== "done",
   ).length;
 
@@ -112,7 +120,7 @@ export function TeamWorkflow() {
     <>
       <header className="trevv-page-header">
         <div>
-          <p>Across projects</p>
+          <p>{workspaceLevel === "project" ? "Project team" : "Portfolio team"}</p>
           <h1 className="page-title-with-hint">
             Team workspace <Hint resourceId="team-pressure" />
           </h1>
@@ -145,7 +153,7 @@ export function TeamWorkflow() {
             <Users size={17} />
           </span>
           <div>
-            <b>{members.length}</b>
+            <b>{scopedMembers.length}</b>
             <small>Total members</small>
           </div>
         </article>
@@ -192,7 +200,7 @@ export function TeamWorkflow() {
           <button
             onClick={() =>
               setRebalanceId(
-                members.find((member) => member.pressure !== "normal")
+                scopedMembers.find((member) => member.pressure !== "normal")
                   ?.userId ?? null,
               )
             }
@@ -298,6 +306,7 @@ export function TeamWorkflow() {
 
       {inviteOpen && (
         <InviteMemberDialog
+          projects={scope.hubs}
           onClose={() => setInviteOpen(false)}
           onInvite={(member) => {
             setMembers((current) => [...current, member]);
@@ -311,6 +320,7 @@ export function TeamWorkflow() {
       {selected && (
         <MemberDetailDialog
           member={selected}
+          projects={scope.hubs}
           onClose={() => setSelectedId(null)}
           onUpdate={(update, message) => {
             updateMember(selected.userId, update);
@@ -325,7 +335,8 @@ export function TeamWorkflow() {
       {rebalanceMember && (
         <RebalanceDialog
           member={rebalanceMember}
-          members={members.filter(
+          items={scope.items}
+          members={scopedMembers.filter(
             (member) =>
               member.userId !== rebalanceMember.userId &&
               member.status === "active",
@@ -361,11 +372,13 @@ export function TeamWorkflow() {
 
 function MemberDetailDialog({
   member,
+  projects,
   onClose,
   onUpdate,
   onRebalance,
 }: {
   member: TeamMember;
+  projects: typeof demoHubs;
   onClose: () => void;
   onUpdate: (update: Partial<TeamMember>, message: string) => void;
   onRebalance: () => void;
@@ -444,7 +457,7 @@ function MemberDetailDialog({
             </label>
             <div className="member-access-list">
               <b>Project access</b>
-              {currentHubs.slice(0, 5).map((hub) => (
+              {projects.slice(0, 5).map((hub) => (
                 <label key={hub.id}>
                   <input
                     type="checkbox"
@@ -530,9 +543,11 @@ function MemberDetailDialog({
 function InviteMemberDialog({
   onClose,
   onInvite,
+  projects,
 }: {
   onClose: () => void;
   onInvite: (member: TeamMember) => void;
+  projects: typeof demoHubs;
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -635,7 +650,7 @@ function InviteMemberDialog({
           </label>
           <fieldset className="invite-hub-access">
             <legend>Initial project access</legend>
-            {currentHubs.slice(0, 6).map((hub) => (
+            {projects.slice(0, 6).map((hub) => (
               <label key={hub.id}>
                 <input
                   type="checkbox"
@@ -676,15 +691,17 @@ function InviteMemberDialog({
 function RebalanceDialog({
   member,
   members,
+  items,
   onClose,
   onMove,
 }: {
   member: TeamMember;
   members: TeamMember[];
+  items: typeof demoItems;
   onClose: () => void;
   onMove: (targetName: string) => void;
 }) {
-  const owned = currentItems.filter(
+  const owned = items.filter(
     (item) => item.assignee === member.userName && item.status !== "done",
   );
   const [itemId, setItemId] = useState(owned[0]?.id ?? "");

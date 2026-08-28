@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
+import { useWorkspace } from "@/lib/workspace-context";
 import { Hint } from "./learning-center";
 import { DecisionCenter } from "./decision-center";
 import { InboxExperience } from "./email-inbox-workflow";
@@ -55,25 +56,33 @@ const focusHintIds: Record<FocusKind, string> = {
 };
 
 export function FocusExperience({ kind }: { kind: FocusKind }) {
+  const active = kind === "settings" ? "settings" : kind;
+  return (
+    <WorkspaceFrame active={active}>
+      <FocusMain kind={kind} />
+    </WorkspaceFrame>
+  );
+}
+
+function FocusMain({ kind }: { kind: FocusKind }) {
   const capturedWork = useCapturedWork();
+  const { scope } = useWorkspace();
   const copy = productCopy.en.focus;
   const [query, setQuery] = useState("");
   const [titleKey, subtitleKey] = titleKeys[kind];
   const searchResults = useMemo(() => {
     const normalized = query.toLocaleLowerCase();
     if (normalized.length < 2) return [];
-    return demoItems
+    return scope.items
       .filter((item) => item.title.toLocaleLowerCase().includes(normalized))
       .slice(0, 8);
-  }, [query]);
-  const active = kind === "settings" ? "settings" : kind;
+  }, [query, scope.items]);
   const crumb =
     kind === "search"
       ? "Search"
       : productCopy.en.nav[kind === "settings" ? "settings" : kind];
   return (
-    <WorkspaceFrame active={active}>
-      <main className="focus-main">
+    <main className="focus-main">
         <header className="focus-header">
           <div>
             <p>TREVV / {crumb}</p>
@@ -87,25 +96,37 @@ export function FocusExperience({ kind }: { kind: FocusKind }) {
         {kind === "myWork" && <MyWorkWorkflow />}
         {kind === "inbox" && <InboxExperience />}
         {kind === "decisions" && <DecisionCenter />}
-        {kind === "approvals" && <ApprovalView capturedWork={capturedWork} />}
+        {kind === "approvals" && (
+          <ApprovalView
+            capturedWork={capturedWork}
+            allowedHubIds={scope.hubs.map((project) => project.id)}
+          />
+        )}
         {kind === "search" && (
           <SearchView
             query={query}
             setQuery={setQuery}
             results={searchResults}
+            allowedHubIds={scope.hubs.map((project) => project.id)}
           />
         )}
         {kind === "templates" && <TemplatesView />}
         {kind === "settings" && <SettingsView />}
-      </main>
-    </WorkspaceFrame>
+    </main>
   );
 }
 
-function ApprovalView({ capturedWork }: { capturedWork: CapturedWorkItem[] }) {
+function ApprovalView({
+  capturedWork,
+  allowedHubIds,
+}: {
+  capturedWork: CapturedWorkItem[];
+  allowedHubIds: readonly string[];
+}) {
   const [resolved, setResolved] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
+  const allowedHubIdSet = new Set(allowedHubIds);
   const allApprovals = [
     ...demoItems
       .filter((item) => item.type === "approval")
@@ -127,7 +148,10 @@ function ApprovalView({ capturedWork }: { capturedWork: CapturedWorkItem[] }) {
         requestedBy: item.owner,
         evidenceUrl: item.evidenceUrl,
       })),
-  ].filter((item) => !resolved.includes(item.id));
+  ].filter(
+    (item) =>
+      allowedHubIdSet.has(item.hubId) && !resolved.includes(item.id),
+  );
   const approvals = allApprovals.filter(
     (item) => projectFilter === "all" || item.hubId === projectFilter,
   );
@@ -260,50 +284,62 @@ function SearchView({
   query,
   setQuery,
   results,
+  allowedHubIds,
 }: {
   query: string;
   setQuery: (value: string) => void;
   results: typeof demoItems;
+  allowedHubIds: readonly string[];
 }) {
   const [filter, setFilter] = useState<
     "everything" | "work" | "hubs" | "updates" | "resources"
   >("everything");
   const normalized = query.trim().toLocaleLowerCase();
+  const allowedHubIdSet = new Set(allowedHubIds);
   const hubResults =
     normalized.length < 2
       ? []
-      : demoHubs.filter((hub) =>
-          [hub.name, hub.priority, hub.healthNote]
-            .join(" ")
-            .toLocaleLowerCase()
-            .includes(normalized),
+      : demoHubs.filter(
+          (hub) =>
+            allowedHubIdSet.has(hub.id) &&
+            [hub.name, hub.priority, hub.healthNote]
+              .join(" ")
+              .toLocaleLowerCase()
+              .includes(normalized),
         );
   const updateResults =
     normalized.length < 2
       ? []
-      : demoHubs.filter((hub) =>
-          hub.latestUpdate.text.toLocaleLowerCase().includes(normalized),
+      : demoHubs.filter(
+          (hub) =>
+            allowedHubIdSet.has(hub.id) &&
+            hub.latestUpdate.text.toLocaleLowerCase().includes(normalized),
         );
   const resources = [
     {
+      hubId: "hub-northstar",
       name: "Northstar storefront designs",
       provider: "Figma",
       href: "https://www.figma.com",
     },
     {
+      hubId: "hub-mealflow",
       name: "MealFlow product repository",
       provider: "GitHub",
       href: "https://github.com",
     },
     {
+      hubId: "hub-localreach",
       name: "LocalReach proof pack",
       provider: "Google Drive",
       href: "https://docs.google.com",
     },
-  ].filter((resource) =>
-    `${resource.name} ${resource.provider}`
-      .toLocaleLowerCase()
-      .includes(normalized),
+  ].filter(
+    (resource) =>
+      allowedHubIdSet.has(resource.hubId) &&
+      `${resource.name} ${resource.provider}`
+        .toLocaleLowerCase()
+        .includes(normalized),
   );
   const total =
     (filter === "everything" || filter === "work" ? results.length : 0) +

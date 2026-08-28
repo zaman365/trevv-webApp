@@ -34,6 +34,7 @@ import {
 } from "@founderhq/core";
 import { useMemo, useState } from "react";
 import { useCapturedWork } from "@/lib/captured-work";
+import { useWorkspace } from "@/lib/workspace-context";
 import { Hint, useLearningCenter } from "./learning-center";
 
 const currentUser = "Mohammed Zaman";
@@ -80,9 +81,7 @@ interface WorkToast {
   };
 }
 
-const workspaceRecords: MyWorkRecord[] = demoItems
-  .filter((item) => !item.id.startsWith("original-"))
-  .map((item, index) => ({
+const workspaceRecords: MyWorkRecord[] = demoItems.map((item, index) => ({
     id: item.id,
     title: item.title,
     type: item.type,
@@ -142,6 +141,7 @@ const modeLabels: Array<{ id: WorkMode; label: string; icon: typeof Focus }> = [
 
 export function MyWorkWorkflow() {
   const capturedWork = useCapturedWork();
+  const { scope: workspaceScope } = useWorkspace();
   const { openLearningCenter } = useLearningCenter();
   const [edits, setEdits] = useState<Record<string, WorkEdit>>({});
   const [scope, setScope] = useState<WorkScope>("assigned");
@@ -156,6 +156,9 @@ export function MyWorkWorkflow() {
   const [toast, setToast] = useState<WorkToast | null>(null);
 
   const records = useMemo(() => {
+    const allowedHubIds = new Set(
+      workspaceScope.hubs.map((project) => project.id),
+    );
     const captures: MyWorkRecord[] = capturedWork
       .filter((item) => ["task", "milestone", "request"].includes(item.type))
       .map((item) => ({
@@ -173,11 +176,13 @@ export function MyWorkWorkflow() {
         source: "capture",
         notes: item.details ?? "Captured from Inbox. Add the next useful step.",
       }));
-    return [...workspaceRecords, ...captures].map((item) => ({
-      ...item,
-      ...edits[item.id],
-    }));
-  }, [capturedWork, edits]);
+    return [...workspaceRecords, ...captures]
+      .filter((item) => allowedHubIds.has(item.hubId))
+      .map((item) => ({
+        ...item,
+        ...edits[item.id],
+      }));
+  }, [capturedWork, edits, workspaceScope.hubs]);
 
   const counts = useMemo(
     () => ({

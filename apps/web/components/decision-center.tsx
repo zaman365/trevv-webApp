@@ -21,6 +21,7 @@ import {
 import { demoHubs, demoItems } from "@founderhq/core";
 import { useMemo, useState, type FormEvent } from "react";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
+import { useWorkspace } from "@/lib/workspace-context";
 import { Hint } from "./learning-center";
 
 type DecisionState =
@@ -110,6 +111,7 @@ const seededDecisions: DecisionRecord[] = demoItems
 
 export function DecisionCenter() {
   const capturedWork = useCapturedWork();
+  const { scope } = useWorkspace();
   const [decisions, setDecisions] = useState(seededDecisions);
   const [activeState, setActiveState] = useState<DecisionState>("needed");
   const [query, setQuery] = useState("");
@@ -134,10 +136,14 @@ export function DecisionCenter() {
     ],
     [capturedDecisions, decisions],
   );
+  const scopedDecisionIds = new Set(scope.hubs.map((project) => project.id));
+  const scopedDecisions = allDecisions.filter((decision) =>
+    scopedDecisionIds.has(decision.hubId),
+  );
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    return allDecisions.filter((decision) => {
+    return scopedDecisions.filter((decision) => {
       if (decision.state !== activeState) return false;
       if (hubId !== "all" && decision.hubId !== hubId) return false;
       return (
@@ -147,9 +153,11 @@ export function DecisionCenter() {
           .includes(normalized)
       );
     });
-  }, [activeState, allDecisions, hubId, query]);
+  }, [activeState, hubId, query, scopedDecisions]);
 
-  const selected = allDecisions.find((decision) => decision.id === selectedId);
+  const selected = scopedDecisions.find(
+    (decision) => decision.id === selectedId,
+  );
   const updateDecision = (id: string, update: Partial<DecisionRecord>) => {
     setDecisions((current) => {
       if (current.some((decision) => decision.id === id)) {
@@ -157,7 +165,7 @@ export function DecisionCenter() {
           decision.id === id ? { ...decision, ...update } : decision,
         );
       }
-      const source = allDecisions.find((decision) => decision.id === id);
+      const source = scopedDecisions.find((decision) => decision.id === id);
       return source ? [{ ...source, ...update }, ...current] : current;
     });
   };
@@ -195,9 +203,7 @@ export function DecisionCenter() {
             onChange={(event) => setHubId(event.target.value)}
           >
             <option value="all">All projects</option>
-            {demoHubs
-              .filter((hub) => !hub.id.startsWith("original-"))
-              .map((hub) => (
+            {scope.hubs.map((hub) => (
                 <option key={hub.id} value={hub.id}>
                   {hub.name}
                 </option>
@@ -211,7 +217,7 @@ export function DecisionCenter() {
 
       <div className="center-tabs" role="tablist" aria-label="Decision states">
         {decisionStates.map((state) => {
-          const count = allDecisions.filter(
+          const count = scopedDecisions.filter(
             (decision) => decision.state === state,
           ).length;
           return (
@@ -313,6 +319,7 @@ export function DecisionCenter() {
       )}
       {createOpen && (
         <CreateDecisionDialog
+          projects={scope.hubs}
           onClose={() => setCreateOpen(false)}
           onCreate={(decision) => {
             setDecisions((current) => [decision, ...current]);
@@ -576,14 +583,16 @@ function DecisionDialog({
 function CreateDecisionDialog({
   onClose,
   onCreate,
+  projects,
 }: {
   onClose: () => void;
   onCreate: (decision: DecisionRecord) => void;
+  projects: typeof demoHubs;
 }) {
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
   const [hubId, setHubId] = useState(
-    demoHubs.find((hub) => !hub.id.startsWith("original-"))?.id ?? "",
+    projects[0]?.id ?? "",
   );
   const [dueDate, setDueDate] = useState("2026-09-04");
   const [recommendation, setRecommendation] = useState("");
@@ -669,9 +678,7 @@ function CreateDecisionDialog({
                 value={hubId}
                 onChange={(event) => setHubId(event.target.value)}
               >
-                {demoHubs
-                  .filter((hub) => !hub.id.startsWith("original-"))
-                  .map((hub) => (
+                {projects.map((hub) => (
                     <option key={hub.id} value={hub.id}>
                       {hub.name}
                     </option>

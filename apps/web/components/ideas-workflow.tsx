@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { scoreOpportunity } from "@/lib/workflow-rules";
+import { useWorkspace } from "@/lib/workspace-context";
 import { Hint } from "./learning-center";
 
 type IdeaStage = "captured" | "evaluating" | "promoted" | "archived";
@@ -122,6 +123,7 @@ const initialIdeas: IdeaRecord[] = [
 
 export function IdeasWorkflow() {
   const capturedWork = useCapturedWork();
+  const { scope } = useWorkspace();
   const [ideas, setIdeas] = useState(initialIdeas);
   const [stage, setStage] = useState<IdeaStage | "all">("all");
   const [query, setQuery] = useState("");
@@ -145,11 +147,13 @@ export function IdeasWorkflow() {
     ],
     [capturedIdeas, ideas],
   );
+  const scopedHubIds = new Set(scope.hubs.map((project) => project.id));
+  const scopedIdeas = allIdeas.filter((idea) => scopedHubIds.has(idea.hubId));
 
-  const selected = allIdeas.find((idea) => idea.id === selectedId);
+  const selected = scopedIdeas.find((idea) => idea.id === selectedId);
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    return allIdeas.filter((idea) => {
+    return scopedIdeas.filter((idea) => {
       if (stage !== "all" && idea.stage !== stage) return false;
       if (hubId !== "all" && idea.hubId !== hubId) return false;
       return (
@@ -159,7 +163,7 @@ export function IdeasWorkflow() {
           .includes(normalized)
       );
     });
-  }, [allIdeas, hubId, query, stage]);
+  }, [hubId, query, scopedIdeas, stage]);
 
   const updateIdea = (id: string, update: Partial<IdeaRecord>) => {
     setIdeas((current) => {
@@ -168,7 +172,7 @@ export function IdeasWorkflow() {
           idea.id === id ? { ...idea, ...update } : idea,
         );
       }
-      const source = allIdeas.find((idea) => idea.id === id);
+      const source = scopedIdeas.find((idea) => idea.id === id);
       return source ? [{ ...source, ...update }, ...current] : current;
     });
   };
@@ -213,7 +217,9 @@ export function IdeasWorkflow() {
             <Lightbulb size={16} />
           </span>
           <div>
-            <b>{allIdeas.filter((idea) => idea.stage !== "archived").length}</b>
+            <b>
+              {scopedIdeas.filter((idea) => idea.stage !== "archived").length}
+            </b>
             <small>Active ideas</small>
           </div>
         </article>
@@ -223,7 +229,7 @@ export function IdeasWorkflow() {
           </span>
           <div>
             <b>
-              {allIdeas.reduce((sum, idea) => sum + idea.evidence.length, 0)}
+              {scopedIdeas.reduce((sum, idea) => sum + idea.evidence.length, 0)}
             </b>
             <small>Evidence links</small>
           </div>
@@ -233,7 +239,9 @@ export function IdeasWorkflow() {
             <GitBranch size={16} />
           </span>
           <div>
-            <b>{allIdeas.filter((idea) => idea.stage === "promoted").length}</b>
+            <b>
+              {scopedIdeas.filter((idea) => idea.stage === "promoted").length}
+            </b>
             <small>Promoted</small>
           </div>
         </article>
@@ -244,7 +252,7 @@ export function IdeasWorkflow() {
           <div>
             <b>
               {
-                allIdeas.filter(
+                scopedIdeas.filter(
                   (idea) =>
                     idea.reviewDate <= "2026-09-07" &&
                     idea.stage !== "archived",
@@ -274,9 +282,7 @@ export function IdeasWorkflow() {
             onChange={(event) => setHubId(event.target.value)}
           >
             <option value="all">All projects</option>
-            {demoHubs
-              .filter((hub) => !hub.id.startsWith("original-"))
-              .map((hub) => (
+            {scope.hubs.map((hub) => (
                 <option value={hub.id} key={hub.id}>
                   {hub.name}
                 </option>
@@ -296,7 +302,7 @@ export function IdeasWorkflow() {
           role="tab"
           onClick={() => setStage("all")}
         >
-          All <b>{allIdeas.length}</b>
+          All <b>{scopedIdeas.length}</b>
         </button>
         {(Object.keys(stageLabels) as IdeaStage[]).map((key) => (
           <button
@@ -307,7 +313,7 @@ export function IdeasWorkflow() {
             onClick={() => setStage(key)}
           >
             {stageLabels[key]}{" "}
-            <b>{allIdeas.filter((idea) => idea.stage === key).length}</b>
+            <b>{scopedIdeas.filter((idea) => idea.stage === key).length}</b>
           </button>
         ))}
       </div>
@@ -423,6 +429,7 @@ export function IdeasWorkflow() {
 
       {createOpen && (
         <CaptureIdeaDialog
+          projects={scope.hubs}
           onClose={() => setCreateOpen(false)}
           onCreate={(idea) => {
             setIdeas((current) => [idea, ...current]);
@@ -731,14 +738,16 @@ function IdeaDetailDialog({
 function CaptureIdeaDialog({
   onClose,
   onCreate,
+  projects,
 }: {
   onClose: () => void;
   onCreate: (idea: IdeaRecord) => void;
+  projects: typeof demoHubs;
 }) {
   const [title, setTitle] = useState("");
   const [problem, setProblem] = useState("");
   const [hypothesis, setHypothesis] = useState("");
-  const [hubId, setHubId] = useState("hub-mealflow");
+  const [hubId, setHubId] = useState(projects[0]?.id ?? "");
   const [reviewDate, setReviewDate] = useState("2026-09-10");
 
   const submit = (event: FormEvent) => {
@@ -828,9 +837,7 @@ function CaptureIdeaDialog({
                 value={hubId}
                 onChange={(event) => setHubId(event.target.value)}
               >
-                {demoHubs
-                  .filter((hub) => !hub.id.startsWith("original-"))
-                  .map((hub) => (
+                {projects.map((hub) => (
                     <option key={hub.id} value={hub.id}>
                       {hub.name}
                     </option>

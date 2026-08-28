@@ -4471,12 +4471,19 @@
   margin-left: 248px;
 }
 .brand-row {
-  min-height: 58px;
+  min-height: 104px;
   height: auto;
   padding: 0 0 12px;
 }
 .workspace-context-row {
+  align-items: flex-start;
   gap: 6px;
+}
+.workspace-context-stack {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 3px;
 }
 .workspace-context-switcher {
   position: relative;
@@ -4493,6 +4500,13 @@
   transition:
     color 140ms ease,
     background 140ms ease;
+}
+.workspace-context-stack .workspace-context-switcher {
+  width: 100%;
+  min-height: 42px;
+}
+.workspace-context-project {
+  background: var(--fh-surface-subtle);
 }
 .workspace-context-switcher:hover {
   background: var(--fh-surface-subtle);

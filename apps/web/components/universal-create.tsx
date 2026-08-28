@@ -74,13 +74,24 @@ const owners = [
 export function UniversalCreateDialog({
   onClose,
   onCreated,
+  availableHubIds,
+  defaultHubId,
 }: {
   onClose: () => void;
   onCreated: (item: CapturedWorkItem) => void;
+  availableHubIds?: readonly string[];
+  defaultHubId?: string;
 }) {
+  const availableHubs = availableHubIds
+    ? currentHubs.filter((hub) => availableHubIds.includes(hub.id))
+    : currentHubs;
   const [type, setType] = useState<WorkItemType>("task");
   const [title, setTitle] = useState("");
-  const [hubId, setHubId] = useState(currentHubs[0]?.id ?? "");
+  const [hubId, setHubId] = useState(
+    availableHubs.some((hub) => hub.id === defaultHubId)
+      ? (defaultHubId ?? "")
+      : (availableHubs[0]?.id ?? ""),
+  );
   const boards = useMemo(
     () =>
       demoBoards.filter(
@@ -218,7 +229,7 @@ export function UniversalCreateDialog({
             <label>
               <span>Project</span>
               <div>
-                <span>{currentHubs.find((hub) => hub.id === hubId)?.icon}</span>
+                <span>{availableHubs.find((hub) => hub.id === hubId)?.icon}</span>
                 <select
                   value={hubId}
                   onChange={(event) => {
@@ -226,7 +237,7 @@ export function UniversalCreateDialog({
                     setBoardId("");
                   }}
                 >
-                  {currentHubs.map((hub) => (
+                  {availableHubs.map((hub) => (
                     <option key={hub.id} value={hub.id}>
                       {hub.name}
                     </option>

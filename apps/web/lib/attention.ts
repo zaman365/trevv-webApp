@@ -10,6 +10,7 @@ import {
   rankAttentionSignals,
   type AttentionSignal,
   type AttentionSeverity,
+  type Hub,
 } from "@founderhq/core";
 
 export const DEFAULT_PORTFOLIO_ID = "portfolio-demo";
@@ -120,6 +121,7 @@ export function groupSignalsByEntity(
 
 export interface WorkspaceScope {
   portfolioId: string;
+  projectId: string | null;
   hubs: ReturnType<typeof hubsForPortfolio>;
   items: typeof demoItems;
   waiting: typeof demoWaitingStates;
@@ -140,8 +142,20 @@ export interface WorkspaceScope {
 export function scopeWorkspace(
   portfolioId: string = DEFAULT_PORTFOLIO_ID,
   now = NOW,
+  projectId?: string,
+  additionalHubs: readonly Hub[] = [],
 ): WorkspaceScope {
-  const hubs = hubsForPortfolio(portfolioId);
+  const coreHubs = hubsForPortfolio(portfolioId);
+  const coreHubIds = new Set(coreHubs.map((hub) => hub.id));
+  const portfolioHubs = [
+    ...coreHubs,
+    ...additionalHubs.filter(
+      (hub) => hub.portfolioId === portfolioId && !coreHubIds.has(hub.id),
+    ),
+  ];
+  const hubs = projectId
+    ? portfolioHubs.filter((hub) => hub.id === projectId)
+    : portfolioHubs;
   const hubIds = new Set(hubs.map((hub) => hub.id));
   const items = demoItems.filter((item) => hubIds.has(item.hubId));
   const itemIds = new Set(items.map((item) => item.id));
@@ -166,6 +180,7 @@ export function scopeWorkspace(
   const attention = groupSignalsByEntity(ranked, now);
   return {
     portfolioId,
+    projectId: projectId ?? null,
     hubs,
     items,
     waiting,

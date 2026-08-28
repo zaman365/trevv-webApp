@@ -78,8 +78,21 @@ export function WorkspaceFrame({
   active: ActivePage;
   hubSlug?: string | undefined;
 }) {
+  const customHubs = useCustomHubs().map((record) => record.hub);
+  const routeProject = hubSlug
+    ? [...customHubs, ...demoHubs].find(
+        (project) => project.slug === hubSlug,
+      )
+    : undefined;
   return (
-    <WorkspaceProvider>
+    <WorkspaceProvider
+      {...(routeProject
+        ? {
+            initialPortfolioId: routeProject.portfolioId,
+            initialProjectId: routeProject.id,
+          }
+        : {})}
+    >
       <LearningCenterProvider>
         <WorkspaceChrome active={active} hubSlug={hubSlug}>
           {children}
@@ -115,6 +128,9 @@ function WorkspaceChrome({
     setCaptureOpen,
     portfolioId,
     setPortfolioId,
+    workspaceLevel,
+    projectId,
+    selectProject,
     dashboardAccess,
   } = useWorkspace();
   const customHubRecords = useCustomHubs();
@@ -123,9 +139,6 @@ function WorkspaceChrome({
     .map((record) => record.hub);
   const allowedPortfolioIds = new Set(dashboardAccess.portfolioIds);
   const allowedProjectIds = new Set(dashboardAccess.projectIds);
-  const accessiblePortfolios = demoPortfolios.filter((portfolio) =>
-    allowedPortfolioIds.has(portfolio.id),
-  );
   const accessibleProjects = [
     ...customHubRecords.map((record) => record.hub),
     ...demoHubs,
@@ -134,21 +147,40 @@ function WorkspaceChrome({
       allowedProjectIds.has(project.id) ||
       allowedPortfolioIds.has(project.portfolioId),
   );
+  const visiblePortfolioIds = new Set([
+    ...allowedPortfolioIds,
+    ...accessibleProjects.map((project) => project.portfolioId),
+  ]);
+  const accessiblePortfolios = demoPortfolios.filter((portfolio) =>
+    visiblePortfolioIds.has(portfolio.id),
+  );
   const activeProject = hubSlug
     ? accessibleProjects.find((project) => project.slug === hubSlug)
     : undefined;
-  const contextLevel =
-    activeProject || accessiblePortfolios.length === 0
-      ? "project"
-      : "portfolio";
   const contextPortfolio =
     accessiblePortfolios.find((portfolio) => portfolio.id === portfolioId) ??
+    accessiblePortfolios.find(
+      (portfolio) => portfolio.id === activeProject?.portfolioId,
+    ) ??
     accessiblePortfolios[0];
-  const contextProject = activeProject ?? accessibleProjects[0];
-  const contextName =
-    contextLevel === "project" ? contextProject?.name : contextPortfolio?.name;
-  const contextValue =
-    contextLevel === "project" ? contextProject?.id : contextPortfolio?.id;
+  const projectsInContext = accessibleProjects.filter(
+    (project) => project.portfolioId === contextPortfolio?.id,
+  );
+  const contextProject =
+    activeProject ??
+    (workspaceLevel === "project"
+      ? projectsInContext.find((project) => project.id === projectId)
+      : undefined);
+  const canUsePortfolioView = contextPortfolio
+    ? allowedPortfolioIds.has(contextPortfolio.id)
+    : false;
+  const projectScopeValue =
+    contextProject?.id ??
+    (canUsePortfolioView ? "portfolio" : (projectsInContext[0]?.id ?? ""));
+  const favoriteHubs =
+    workspaceLevel === "project" && contextProject
+      ? [contextProject]
+      : [...customHubs, ...scope.hubs];
   const copy = productCopy.en;
   const vocab = vocabularyFor();
   const { openLearningCenter } = useLearningCenter();
@@ -184,7 +216,15 @@ function WorkspaceChrome({
 
   const nav = [
     ["home", copy.nav.home, "/app/home", House, undefined],
-    ["portfolio", copy.nav.portfolio, "/app/portfolio", Grid2X2, undefined],
+    [
+      workspaceLevel === "project" ? "hub" : "portfolio",
+      workspaceLevel === "project" ? "Project" : copy.nav.portfolio,
+      workspaceLevel === "project" && contextProject
+        ? `/app/hubs/${contextProject.slug}`
+        : "/app/portfolio",
+      Grid2X2,
+      undefined,
+    ],
     ["dashboard", "Dashboard", "/app/dashboard", ChartColumn, undefined],
     [
       "attention",
@@ -202,67 +242,110 @@ function WorkspaceChrome({
     <div className="product-shell workspace-product">
       <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
         <div className="brand-row workspace-context-row">
-          {contextName && contextValue ? (
-            <label className="workspace-context-switcher">
-              <span
-                className={`workspace-context-icon ${contextLevel}`}
-                style={
-                  contextLevel === "project" && contextProject
-                    ? {
-                        background: `${contextProject.accent}18`,
-                        color: contextProject.accent,
-                      }
-                    : undefined
-                }
-              >
-                {contextLevel === "project" ? (
-                  contextProject?.icon
-                ) : (
+          {contextPortfolio ? (
+            <div className="workspace-context-stack">
+              <label className="workspace-context-switcher">
+                <span className="workspace-context-icon portfolio">
                   <Grid2X2 size={16} />
-                )}
-              </span>
-              <span className="workspace-context-copy">
-                <small>{contextLevel}</small>
-                <strong>{contextName}</strong>
-              </span>
-              <ChevronDown
-                className="workspace-context-chevron"
-                size={15}
-                aria-hidden="true"
-              />
-              <select
-                className="workspace-context-select"
-                aria-label={`Current ${contextLevel}`}
-                value={contextValue}
-                onChange={(event) => {
-                  if (contextLevel === "portfolio") {
-                    setPortfolioId(event.currentTarget.value);
-                    return;
+                </span>
+                <span className="workspace-context-copy">
+                  <small>Portfolio</small>
+                  <strong>{contextPortfolio.name}</strong>
+                </span>
+                <ChevronDown
+                  className="workspace-context-chevron"
+                  size={15}
+                  aria-hidden="true"
+                />
+                <select
+                  className="workspace-context-select"
+                  aria-label="Current portfolio"
+                  value={contextPortfolio.id}
+                  onChange={(event) => {
+                    const nextPortfolioId = event.currentTarget.value;
+                    const canViewPortfolio = allowedPortfolioIds.has(
+                      nextPortfolioId,
+                    );
+                    if (canViewPortfolio) {
+                      setPortfolioId(nextPortfolioId);
+                    } else {
+                      const firstProject = accessibleProjects.find(
+                        (project) => project.portfolioId === nextPortfolioId,
+                      );
+                      if (firstProject)
+                        selectProject(firstProject.id, firstProject.portfolioId);
+                    }
+                    if (active === "hub") router.push("/app/home");
+                  }}
+                >
+                  {accessiblePortfolios.map((portfolio) => (
+                    <option value={portfolio.id} key={portfolio.id}>
+                      {portfolio.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="workspace-context-switcher workspace-context-project">
+                <span
+                  className="workspace-context-icon project"
+                  style={
+                    contextProject
+                      ? {
+                          background: `${contextProject.accent}18`,
+                          color: contextProject.accent,
+                        }
+                      : undefined
                   }
-                  const project = accessibleProjects.find(
-                    (candidate) => candidate.id === event.currentTarget.value,
-                  );
-                  if (!project) return;
-                  setPortfolioId(project.portfolioId);
-                  setOpen(false);
-                  if (project.slug !== hubSlug) {
-                    router.push(`/app/hubs/${project.slug}`);
-                  }
-                }}
-              >
-                {contextLevel === "portfolio"
-                  ? accessiblePortfolios.map((portfolio) => (
-                      <option value={portfolio.id} key={portfolio.id}>
-                        {portfolio.name}
-                      </option>
-                    ))
-                  : accessibleProjects.map((project) => (
+                >
+                  {contextProject?.icon ?? <Grid2X2 size={15} />}
+                </span>
+                <span className="workspace-context-copy">
+                  <small>Workspace level</small>
+                  <strong>{contextProject?.name ?? "Portfolio view"}</strong>
+                </span>
+                <ChevronDown
+                  className="workspace-context-chevron"
+                  size={15}
+                  aria-hidden="true"
+                />
+                <select
+                  className="workspace-context-select"
+                  aria-label="Workspace level and project"
+                  value={projectScopeValue}
+                  onChange={(event) => {
+                    const nextValue = event.currentTarget.value;
+                    if (nextValue === "portfolio") {
+                      setPortfolioId(contextPortfolio.id);
+                      setOpen(false);
+                      if (active === "hub") router.push("/app/home");
+                      return;
+                    }
+                    const project = projectsInContext.find(
+                      (candidate) => candidate.id === nextValue,
+                    );
+                    if (!project) return;
+                    selectProject(project.id, project.portfolioId);
+                    setOpen(false);
+                    if (
+                      (active === "hub" || active === "portfolio") &&
+                      project.slug !== hubSlug
+                    )
+                      router.push(`/app/hubs/${project.slug}`);
+                  }}
+                >
+                  {canUsePortfolioView && (
+                    <option value="portfolio">Portfolio view</option>
+                  )}
+                  <optgroup label="Project workspace">
+                    {projectsInContext.map((project) => (
                       <option value={project.id} key={project.id}>
                         {project.name}
                       </option>
                     ))}
-              </select>
-            </label>
+                  </optgroup>
+                </select>
+              </label>
+            </div>
           ) : (
             <div className="workspace-context-switcher is-static">
               <span className="workspace-context-icon portfolio">
@@ -300,8 +383,12 @@ function WorkspaceChrome({
               )}
             </Link>
           ))}
-          <p className="nav-label spaced">{vocab.many} · Favorites</p>
-          {[...customHubs, ...scope.hubs].slice(0, 4).map((hub) => (
+          <p className="nav-label spaced">
+            {workspaceLevel === "project"
+              ? "Project workspace"
+              : `${vocab.many} · Favorites`}
+          </p>
+          {favoriteHubs.slice(0, 4).map((hub) => (
             <Link
               className={`nav-item hub-nav ${active === "hub" && hubSlug === hub.slug ? "active" : ""}`}
               href={`/app/hubs/${hub.slug}`}
@@ -605,6 +692,10 @@ function WorkspaceChrome({
       )}
       {captureOpen && (
         <UniversalCreateDialog
+          availableHubIds={scope.hubs.map((hub) => hub.id)}
+          {...(workspaceLevel === "project" && projectId
+            ? { defaultHubId: projectId }
+            : {})}
           onClose={() => setCaptureOpen(false)}
           onCreated={(item) => {
             setLatestCapture(item);
