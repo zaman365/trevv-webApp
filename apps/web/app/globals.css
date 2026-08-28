@@ -171,35 +171,18 @@ a {
   color: var(--fh-ink-soft);
   background: var(--fh-canvas-deep);
 }
-.nav-dot,
-.health-pip {
+.nav-dot {
   width: 6px;
   height: 6px;
   margin-left: auto;
   border-radius: 50%;
   background: var(--fh-primary);
 }
-.health-pip.critical {
-  background: var(--fh-danger);
-}
 .nav-item kbd {
   margin-left: auto;
   color: var(--fh-muted);
   font-size: var(--fh-text-sm);
   font-family: inherit;
-}
-.hub-nav {
-  height: 36px;
-}
-.hub-nav-icon {
-  width: 21px;
-  height: 21px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 7px;
-  font-size: var(--fh-text-base);
-  font-weight: 780;
 }
 .nav-button {
   color: var(--fh-muted);

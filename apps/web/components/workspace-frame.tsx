@@ -42,7 +42,6 @@ import {
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
-import { vocabularyFor } from "@/lib/terminology";
 import { LearningCenterProvider, useLearningCenter } from "./learning-center";
 import type { CapturedWorkItem } from "@/lib/captured-work";
 import {
@@ -179,9 +178,6 @@ function WorkspaceChrome({
   } = useWorkspace();
   const customHubRecords = useCustomHubs();
   const customPortfolioRecords = useCustomPortfolios();
-  const customHubs = customHubRecords
-    .filter((record) => record.hub.portfolioId === portfolioId)
-    .map((record) => record.hub);
   const allowedPortfolioIds = new Set(dashboardAccess.portfolioIds);
   const allowedProjectIds = new Set(dashboardAccess.projectIds);
   const customProjectIds = new Set(
@@ -248,12 +244,7 @@ function WorkspaceChrome({
       .toLocaleLowerCase()
       .includes(normalizedPortfolioQuery),
   );
-  const favoriteHubs =
-    workspaceLevel === "project" && contextProject
-      ? [contextProject]
-      : [...customHubs, ...scope.hubs];
   const copy = productCopy.en;
-  const vocab = vocabularyFor();
   const { openLearningCenter } = useLearningCenter();
 
   useEffect(() => {
@@ -773,36 +764,6 @@ function WorkspaceChrome({
               </Link>
             );
           })}
-          <p className="nav-label spaced">
-            {workspaceLevel === "project"
-              ? "Project workspace"
-              : `${vocab.many} · Favorites`}
-          </p>
-          {favoriteHubs.slice(0, 4).map((hub) => (
-            <Link
-              className={`nav-item hub-nav ${active === "hub" && hubSlug === hub.slug ? "active" : ""}`}
-              href={`/app/hubs/${hub.slug}`}
-              key={hub.id}
-              onClick={() => setOpen(false)}
-            >
-              <span
-                className="hub-nav-icon"
-                style={{ background: `${hub.accent}18`, color: hub.accent }}
-              >
-                {hub.icon}
-              </span>
-              <span>{hub.name}</span>
-              {hub.health === "critical" && (
-                <span className="health-pip critical">
-                  <span className="sr-only">Critical</span>
-                </span>
-              )}
-            </Link>
-          ))}
-          <Link className="nav-item" href="/app/hubs">
-            <Grid2X2 size={16} />
-            <span>All {vocab.many.toLowerCase()}</span>
-          </Link>
           <p className="nav-label spaced">Workflows</p>
           <Link
             className={`nav-item ${active === "decisions" ? "active" : ""}`}

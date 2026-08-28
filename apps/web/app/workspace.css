@@ -5184,16 +5184,8 @@
   font-size: var(--fh-text-base);
 }
 .nav-badge,
-.nav-item kbd,
-.hub-nav-icon {
+.nav-item kbd {
   font-size: var(--fh-text-xs);
-}
-.hub-nav {
-  height: 40px;
-}
-.hub-nav-icon {
-  width: 24px;
-  height: 24px;
 }
 .user-card {
   padding-block: 11px 5px;
