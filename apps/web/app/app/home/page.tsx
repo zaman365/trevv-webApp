@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { HomeExperience } from "@/components/management-experience";
 
 export const metadata: Metadata = {
-  title: "Portfolio",
+  title: "Home",
   description:
-    "Cumulative health, work, decisions, milestones, and updates across every workspace in a portfolio.",
+    "Personalized focus, meaningful changes, decisions, and waiting follow-ups.",
 };
 
 export default function HomePage() {
-  redirect("/app/portfolio");
+  return <HomeExperience />;
 }

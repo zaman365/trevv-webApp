@@ -34,7 +34,7 @@ export const learningResources: LearningResource[] = [
     summary: "A five-minute tour of the operating system and its core rhythm.",
     body: "TREVV keeps the work you run, the signals that need you, and the decisions that move things forward in one calm workspace. Start with Home, respond to Attention, and keep every project current.",
     duration: "5 min",
-    route: "/app/portfolio",
+    route: "/app/home",
     steps: [
       "Open Home to see the portfolio-level picture.",
       "Review Attention for the few signals that need your judgment.",

@@ -1,7 +1,7 @@
 const CACHE = "trevv-v3";
 const SHELL = [
   "/",
-  "/app/portfolio",
+  "/app/home",
   "/app/portfolio",
   "/app/my-work",
   "/app/inbox",

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { PortfolioExperience } from "@/components/portfolio-experience";
 
 export const metadata: Metadata = {
-  title: "Portfolio overview",
+  title: "Portfolio",
   description:
-    "One cumulative view of every workspace, risk, decision, approval, milestone, update, and workload in a portfolio.",
+    "See every project, risk, decision, approval, and next milestone in one live portfolio.",
 };
 
 export default function PortfolioPage() {
