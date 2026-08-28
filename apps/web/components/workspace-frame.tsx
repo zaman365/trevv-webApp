@@ -155,7 +155,6 @@ function WorkspaceChrome({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
-  const [portfolioQuery, setPortfolioQuery] = useState("");
   const [portfolioCreateOpen, setPortfolioCreateOpen] = useState(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const portfolioMenuRef = useRef<HTMLDivElement>(null);
@@ -237,13 +236,6 @@ function WorkspaceChrome({
   const contextPortfolioVisual = contextPortfolio
     ? portfolioVisualFor(contextPortfolio, customPortfolioRecords)
     : undefined;
-  const normalizedPortfolioQuery = portfolioQuery.trim().toLocaleLowerCase();
-  const visiblePortfolios = accessiblePortfolios.filter((portfolio) =>
-    [portfolio.name, portfolio.description]
-      .join(" ")
-      .toLocaleLowerCase()
-      .includes(normalizedPortfolioQuery),
-  );
   const copy = productCopy.en;
   const { openLearningCenter } = useLearningCenter();
 
@@ -307,13 +299,11 @@ function WorkspaceChrome({
         !portfolioMenuRef.current.contains(event.target as Node)
       ) {
         setPortfolioMenuOpen(false);
-        setPortfolioQuery("");
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setPortfolioMenuOpen(false);
-        setPortfolioQuery("");
       }
     };
 
@@ -329,7 +319,6 @@ function WorkspaceChrome({
   const attentionCount = scope.attentionCount;
 
   const nav = [
-    ["portfolio", copy.nav.portfolio, "/app/home", Grid2X2, undefined],
     ...(workspaceLevel === "project" && contextProject
       ? [
           [
@@ -566,12 +555,17 @@ function WorkspaceChrome({
           </button>
         </div>
         <nav aria-label="Primary navigation">
-          <p className="nav-label">Workspace</p>
+          <Link
+            className={`nav-label nav-section-link ${active === "portfolio" ? "active" : ""}`}
+            href="/app/portfolio"
+            aria-current={active === "portfolio" ? "page" : undefined}
+            onClick={() => setOpen(false)}
+          >
+            Portfolio
+          </Link>
+          <p className="nav-label spaced">Workspace</p>
           {nav.map(([key, label, href, Icon, badge]) => {
-            const isActive =
-              key === "portfolio"
-                ? active === "home" || active === "portfolio"
-                : active === key;
+            const isActive = active === key;
 
             return (
               <Link
@@ -700,29 +694,8 @@ function WorkspaceChrome({
                     <span>{accessiblePortfolios.length}</span>
                   </header>
 
-                  <div className="workspace-switcher-search portfolio-switcher-search">
-                    <Search size={15} aria-hidden="true" />
-                    <input
-                      value={portfolioQuery}
-                      onChange={(event) =>
-                        setPortfolioQuery(event.currentTarget.value)
-                      }
-                      placeholder="Find a portfolio"
-                      aria-label="Find a portfolio"
-                    />
-                    {portfolioQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setPortfolioQuery("")}
-                        aria-label="Clear portfolio search"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-
                   <div className="portfolio-switcher-list">
-                    {visiblePortfolios.map((portfolio) => {
+                    {accessiblePortfolios.map((portfolio) => {
                       const visual = portfolioVisualFor(
                         portfolio,
                         customPortfolioRecords,
@@ -757,7 +730,6 @@ function WorkspaceChrome({
                               }
                             }
                             setPortfolioMenuOpen(false);
-                            setPortfolioQuery("");
                             setOpen(false);
                             if (active === "hub") router.push("/app/home");
                           }}
@@ -790,11 +762,6 @@ function WorkspaceChrome({
                         </button>
                       );
                     })}
-                    {visiblePortfolios.length === 0 && (
-                      <p className="workspace-switcher-empty">
-                        No portfolio matches “{portfolioQuery.trim()}”.
-                      </p>
-                    )}
                   </div>
 
                   <button
@@ -802,7 +769,6 @@ function WorkspaceChrome({
                     className="portfolio-switcher-create"
                     onClick={() => {
                       setPortfolioMenuOpen(false);
-                      setPortfolioQuery("");
                       setPortfolioCreateOpen(true);
                     }}
                   >
@@ -1044,7 +1010,7 @@ function WorkspaceChrome({
             setPortfolioCreateOpen(false);
             setPortfolioId(record.portfolio.id);
             setOpen(false);
-            router.push("/app/home");
+            router.push("/app/portfolio");
           }}
         />
       )}

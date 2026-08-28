@@ -4720,56 +4720,6 @@
 .workspace-switcher-actions a:hover {
   background: var(--fh-canvas-deep);
 }
-.workspace-switcher-search {
-  position: relative;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  margin: 0 12px 8px;
-  padding: 0 9px;
-  color: var(--fh-muted);
-  background: var(--fh-surface);
-  border: 1px solid var(--fh-border);
-  border-radius: 9px;
-}
-.workspace-switcher-search:focus-within {
-  border-color: var(--fh-primary);
-  box-shadow: var(--fh-focus);
-}
-.workspace-switcher-search input {
-  min-width: 0;
-  height: 100%;
-  flex: 1;
-  padding: 0;
-  color: var(--fh-ink);
-  background: transparent;
-  border: 0;
-  outline: 0;
-  font: inherit;
-  font-size: var(--fh-text-sm);
-}
-.workspace-switcher-search input::placeholder {
-  color: var(--fh-muted);
-}
-.workspace-switcher-search button {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  padding: 0;
-  color: var(--fh-muted);
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.workspace-switcher-search button:hover {
-  color: var(--fh-ink);
-  background: var(--fh-canvas-deep);
-}
 .workspace-switcher-list {
   min-height: 0;
   padding: 0 7px 7px;
@@ -4874,13 +4824,6 @@
 }
 .workspace-switcher-selected {
   color: var(--fh-primary);
-}
-.workspace-switcher-empty {
-  margin: 0;
-  padding: 20px 12px 24px;
-  color: var(--fh-muted);
-  font-size: var(--fh-text-sm);
-  text-align: center;
 }
 .workspace-switcher-create {
   min-height: 58px;
@@ -5002,9 +4945,6 @@
   font-size: 10px;
   font-weight: 750;
   text-align: center;
-}
-.portfolio-switcher-search {
-  margin: 0 12px 8px;
 }
 .portfolio-switcher-list {
   min-height: 0;
