@@ -67,14 +67,7 @@ export function HomeExperience() {
 }
 
 function HomeMain() {
-  const {
-    scope,
-    copy,
-    portfolioId,
-    setPortfolioId,
-    workspaceLevel,
-    projectId,
-  } = useWorkspace();
+  const { scope, copy, portfolioId, setPortfolioId } = useWorkspace();
   const vocab = vocabularyFor();
   const portfolios = allPortfolioSummaries();
   const customHubs = useCustomHubs();
@@ -91,52 +84,46 @@ function HomeMain() {
       item.status !== "done" &&
       item.assignee === "Mohammed Zaman",
   );
+  const portfolioProjects = [
+    ...(active?.projects ?? []),
+    ...customHubs
+      .filter((record) => record.hub.portfolioId === portfolioId)
+      .map(({ hub }) => ({
+        hub,
+        rollup: {
+          open: 0,
+          overdue: 0,
+          blocked: 0,
+          decisions: 0,
+          approvals: 0,
+          score: 0,
+        },
+        progress: null,
+      })),
+  ];
   // The handful of projects actually asking for something right now.
-  const needsAttention = (active?.projects ?? [])
+  const needsAttention = portfolioProjects
     .filter((project) => scopedHubIds.has(project.hub.id))
     .filter(
       (project) =>
         project.hub.health !== "on_track" && project.hub.health !== "parked",
     )
     .slice(0, 3);
-  const activeProject = scope.hubs.find((hub) => hub.id === projectId);
-  const activeProjectSummary = active?.projects.find(
-    (project) => project.hub.id === projectId,
-  );
-  const scopeLabel =
-    workspaceLevel === "project" && activeProject
-      ? activeProject.name
-      : (active?.portfolio.name ?? "this portfolio");
+  const projectCount = portfolioProjects.length;
+  const portfolioName = active?.portfolio.name ?? "this portfolio";
 
   return (
     <main className="trevv-main home-main">
       <PageHero
-        eyebrow="Monday, 24 August"
+        eyebrow={`Portfolio overview · Monday, 24 August`}
         title="Good morning, Mohammed"
-        subtitle={`${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you in ${scopeLabel}. Everything else can keep moving.`}
+        subtitle={`Across all ${projectCount} ${projectCount === 1 ? "project" : "projects"} in ${portfolioName}, ${scope.attentionCount} ${scope.attentionCount === 1 ? "thing needs" : "things need"} you. Everything else can keep moving.`}
         hintId="welcome-to-trevv"
-        selector={
-          <label className="home-portfolio-switcher">
-            <span className="home-switcher-icon">
-              <Grid2X2 size={15} />
-            </span>
-            <span className="home-switcher-copy">
-              <small>{vocab.groupOne}</small>
-              <strong>{active?.portfolio.name ?? "Choose portfolio"}</strong>
-            </span>
-            <ChevronDown size={15} />
-            <select
-              aria-label={`Switch ${vocab.groupOne.toLowerCase()}`}
-              value={portfolioId}
-              onChange={(event) => setPortfolioId(event.target.value)}
-            >
-              {portfolios.map(({ portfolio }) => (
-                <option key={portfolio.id} value={portfolio.id}>
-                  {portfolio.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        badge={
+          <span className="scope-view-badge portfolio-scope-badge">
+            <Grid2X2 size={13} />
+            Portfolio view
+          </span>
         }
         actions={
           <Link className="home-capture-action" href="/app/inbox">
@@ -184,83 +171,86 @@ function HomeMain() {
         }
       />
 
-      {workspaceLevel === "project" && activeProjectSummary ? (
-        <Panel
-          icon={Grid2X2}
-          title={`${activeProjectSummary.hub.name} workspace`}
-          subtitle="Health, current movement, and the next useful project action."
-          href={`/app/hubs/${activeProjectSummary.hub.slug}`}
-          linkLabel="Open project"
-        >
-          <div className="project-strip project-workspace-strip">
-            <ProjectTile {...activeProjectSummary} copy={copy} />
-          </div>
-        </Panel>
-      ) : (
-        <Panel
-          icon={Grid2X2}
-          title={`Your ${vocab.groupMany.toLowerCase()}`}
-          subtitle={`Health across every ${vocab.one.toLowerCase()} you are responsible for.`}
-          href="/app/portfolio"
-          linkLabel="Open portfolio"
-        >
-          <div className="portfolio-cards">
-            {portfolios.map((summary) => {
-              const customCount = customHubs.filter(
-                (record) => record.hub.portfolioId === summary.portfolio.id,
-              ).length;
-              const count = summary.count + customCount;
-              return (
-                <button
-                  key={summary.portfolio.id}
-                  className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
-                  aria-pressed={summary.portfolio.id === portfolioId}
-                  onClick={() => setPortfolioId(summary.portfolio.id)}
-                >
-                  <header>
-                    <div>
-                      <strong>{summary.portfolio.name}</strong>
-                      <span>
-                        {count}{" "}
-                        {count === 1
-                          ? vocab.one.toLowerCase()
-                          : vocab.many.toLowerCase()}
-                      </span>
-                    </div>
-                    {summary.progress !== null && (
-                      <ProgressRing
-                        value={summary.progress}
-                        size={44}
-                        label={`${summary.portfolio.name} progress`}
-                      />
-                    )}
-                  </header>
-                  <HealthBar
-                    slices={summary.health.map((slice) =>
-                      slice.key === "on_track"
-                        ? { ...slice, count: slice.count + customCount }
-                        : slice,
-                    )}
-                  />
-                  <footer>
-                    <span
-                      className={summary.attentionCount ? "is-live" : ""}
-                    >
-                      <b>{summary.attentionCount}</b> need you
+      <Panel
+        icon={Grid2X2}
+        title={`${portfolioName} projects`}
+        subtitle={`Portfolio-level health across all ${projectCount} ${projectCount === 1 ? "project" : "projects"}. Select a workspace above or open a project below to enter its focused project view.`}
+        href="/app/portfolio"
+        linkLabel="Open full portfolio"
+      >
+        <div className="project-strip home-project-overview">
+          {portfolioProjects.map((project) => (
+            <ProjectTile
+              key={project.hub.id}
+              {...project}
+              copy={copy}
+              compact
+            />
+          ))}
+        </div>
+      </Panel>
+
+      <Panel
+        icon={Grid2X2}
+        title={`Your ${vocab.groupMany.toLowerCase()}`}
+        subtitle={`Choose which ${vocab.groupOne.toLowerCase()} supplies the project overview, attention totals, Today list, and Change Radar below.`}
+        href="/app/portfolio"
+        linkLabel="Open portfolio report"
+      >
+        <div className="portfolio-cards">
+          {portfolios.map((summary) => {
+            const customCount = customHubs.filter(
+              (record) => record.hub.portfolioId === summary.portfolio.id,
+            ).length;
+            const count = summary.count + customCount;
+            return (
+              <button
+                key={summary.portfolio.id}
+                className={`portfolio-card ${summary.portfolio.id === portfolioId ? "is-active" : ""}`}
+                aria-pressed={summary.portfolio.id === portfolioId}
+                onClick={() => setPortfolioId(summary.portfolio.id)}
+              >
+                <header>
+                  <div>
+                    <strong>{summary.portfolio.name}</strong>
+                    <span>
+                      {count}{" "}
+                      {count === 1
+                        ? vocab.one.toLowerCase()
+                        : vocab.many.toLowerCase()}
                     </span>
-                    <span className={summary.overdue ? "is-live" : ""}>
-                      <b>{summary.overdue}</b> overdue
-                    </span>
-                    <span className={summary.blocked ? "is-live" : ""}>
-                      <b>{summary.blocked}</b> blocked
-                    </span>
-                  </footer>
-                </button>
-              );
-            })}
-          </div>
-        </Panel>
-      )}
+                  </div>
+                  {summary.progress !== null && (
+                    <ProgressRing
+                      value={summary.progress}
+                      size={44}
+                      label={`${summary.portfolio.name} progress`}
+                    />
+                  )}
+                </header>
+                <HealthBar
+                  slices={summary.health.map((slice) =>
+                    slice.key === "on_track"
+                      ? { ...slice, count: slice.count + customCount }
+                      : slice,
+                  )}
+                />
+                <footer>
+                  <span className={summary.attentionCount ? "is-live" : ""}>
+                    <b>{summary.attentionCount}</b> need you
+                  </span>
+                  <span className={summary.overdue ? "is-live" : ""}>
+                    <b>{summary.overdue}</b> overdue
+                  </span>
+                  <span className={summary.blocked ? "is-live" : ""}>
+                    <b>{summary.blocked}</b> blocked
+                  </span>
+                </footer>
+              </button>
+            );
+          })}
+        </div>
+      </Panel>
 
       {needsAttention.length > 0 && (
         <Panel
@@ -417,159 +407,152 @@ function WaitingMain() {
   const [resolveItem, setResolveItem] = useState<WaitingState | null>(null);
   const [lastResolved, setLastResolved] = useState<WaitingState | null>(null);
   const scopedHubIds = new Set(scope.hubs.map((hub) => hub.id));
-  const scopedWaiting = waiting.filter((item) =>
-    scopedHubIds.has(item.hubId),
-  );
+  const scopedWaiting = waiting.filter((item) => scopedHubIds.has(item.hubId));
   const visible = scopedWaiting.filter((item) =>
     inWaitingSection(item, section),
   );
   return (
     <main className="trevv-main waiting-center">
-        <PageHeader
-          eyebrow="Follow-ups"
-          title="Waiting Center"
-          subtitle="Track dependencies that are waiting on a person, team, decision, document, or external partner."
-          hintId="waiting"
-        />
-        {notice && (
-          <div className="success-toast" role="status">
-            <CheckCircle2 size={15} />
-            {notice}
-            {lastResolved && (
-              <button
-                className="toast-undo"
-                onClick={() => {
-                  setWaiting((current) => [lastResolved, ...current]);
-                  setNotice("Waiting state restored.");
-                  setLastResolved(null);
-                }}
-              >
-                Undo
-              </button>
-            )}
-            <button aria-label="Dismiss notice" onClick={() => setNotice(null)}>
-              <X size={14} />
-            </button>
-          </div>
-        )}
-        <div className="attention-tabs waiting-tabs">
-          {waitingSections.map((name) => (
+      <PageHeader
+        eyebrow="Follow-ups"
+        title="Waiting Center"
+        subtitle="Track dependencies that are waiting on a person, team, decision, document, or external partner."
+        hintId="waiting"
+      />
+      {notice && (
+        <div className="success-toast" role="status">
+          <CheckCircle2 size={15} />
+          {notice}
+          {lastResolved && (
             <button
-              key={name}
-              className={section === name ? "active" : ""}
-              onClick={() => setSection(name)}
+              className="toast-undo"
+              onClick={() => {
+                setWaiting((current) => [lastResolved, ...current]);
+                setNotice("Waiting state restored.");
+                setLastResolved(null);
+              }}
             >
-              {name}
-              <b>
-                {
-                  scopedWaiting.filter((item) =>
-                    inWaitingSection(item, name),
-                  ).length
-                }
-              </b>
+              Undo
             </button>
-          ))}
+          )}
+          <button aria-label="Dismiss notice" onClick={() => setNotice(null)}>
+            <X size={14} />
+          </button>
         </div>
-        <div className="waiting-list">
-          {visible.map((item) => (
-            <article key={item.id}>
-              <div className="waiting-icon">
-                <Hourglass size={18} />
+      )}
+      <div className="attention-tabs waiting-tabs">
+        {waitingSections.map((name) => (
+          <button
+            key={name}
+            className={section === name ? "active" : ""}
+            onClick={() => setSection(name)}
+          >
+            {name}
+            <b>
+              {
+                scopedWaiting.filter((item) => inWaitingSection(item, name))
+                  .length
+              }
+            </b>
+          </button>
+        ))}
+      </div>
+      <div className="waiting-list">
+        {visible.map((item) => (
+          <article key={item.id}>
+            <div className="waiting-icon">
+              <Hourglass size={18} />
+            </div>
+            <div>
+              <p>
+                {hubFor(item.hubId)?.name} · {item.entityType.replace("_", " ")}
+              </p>
+              <h2>{item.title}</h2>
+              <span>
+                Waiting on{" "}
+                <b>
+                  {item.waitingLabel ?? item.waitingType.replaceAll("_", " ")}
+                </b>{" "}
+                since {item.waitingSince}
+              </span>
+              {item.waitingNote && <small>{item.waitingNote}</small>}
+            </div>
+            <dl>
+              <div>
+                <dt>Expected</dt>
+                <dd
+                  className={
+                    item.expectedBy && item.expectedBy < "2026-08-24"
+                      ? "overdue"
+                      : ""
+                  }
+                >
+                  {item.expectedBy ?? "Not set"}
+                </dd>
               </div>
               <div>
-                <p>
-                  {hubFor(item.hubId)?.name} ·{" "}
-                  {item.entityType.replace("_", " ")}
-                </p>
-                <h2>{item.title}</h2>
-                <span>
-                  Waiting on{" "}
-                  <b>
-                    {item.waitingLabel ?? item.waitingType.replaceAll("_", " ")}
-                  </b>{" "}
-                  since {item.waitingSince}
-                </span>
-                {item.waitingNote && <small>{item.waitingNote}</small>}
+                <dt>Follow-up owner</dt>
+                <dd>{item.followUpOwnerName}</dd>
               </div>
-              <dl>
-                <div>
-                  <dt>Expected</dt>
-                  <dd
-                    className={
-                      item.expectedBy && item.expectedBy < "2026-08-24"
-                        ? "overdue"
-                        : ""
-                    }
-                  >
-                    {item.expectedBy ?? "Not set"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Follow-up owner</dt>
-                  <dd>{item.followUpOwnerName}</dd>
-                </div>
-                <div>
-                  <dt>Next follow-up</dt>
-                  <dd>{item.nextFollowUp ?? "Not set"}</dd>
-                </div>
-              </dl>
-              <footer>
-                <button onClick={() => setNudgeItem(item)}>
-                  <Send size={14} />
-                  Nudge
-                </button>
-                <button
-                  className="resolve"
-                  onClick={() => setResolveItem(item)}
-                >
-                  <Check size={14} />
-                  Resolve
-                </button>
-              </footer>
-            </article>
-          ))}
-          {!visible.length && (
-            <EmptyState
-              icon={CheckCircle2}
-              title="Nothing waiting here"
-              note="Change the filter or add a waiting state from a work item, decision, or approval."
-            />
-          )}
-        </div>
-        {nudgeItem && (
-          <WaitingNudgeDialog
-            item={nudgeItem}
-            onClose={() => setNudgeItem(null)}
-            onRecord={(message, nextFollowUp) => {
-              setWaiting((current) =>
-                current.map((item) =>
-                  item.id === nudgeItem.id
-                    ? { ...item, waitingNote: message, nextFollowUp }
-                    : item,
-                ),
-              );
-              setLastResolved(null);
-              setNotice(
-                `Follow-up prepared for ${nudgeItem.waitingLabel ?? "the owner"}.`,
-              );
-              setNudgeItem(null);
-            }}
+              <div>
+                <dt>Next follow-up</dt>
+                <dd>{item.nextFollowUp ?? "Not set"}</dd>
+              </div>
+            </dl>
+            <footer>
+              <button onClick={() => setNudgeItem(item)}>
+                <Send size={14} />
+                Nudge
+              </button>
+              <button className="resolve" onClick={() => setResolveItem(item)}>
+                <Check size={14} />
+                Resolve
+              </button>
+            </footer>
+          </article>
+        ))}
+        {!visible.length && (
+          <EmptyState
+            icon={CheckCircle2}
+            title="Nothing waiting here"
+            note="Change the filter or add a waiting state from a work item, decision, or approval."
           />
         )}
-        {resolveItem && (
-          <WaitingResolveDialog
-            item={resolveItem}
-            onClose={() => setResolveItem(null)}
-            onConfirm={() => {
-              setWaiting((current) =>
-                current.filter((candidate) => candidate.id !== resolveItem.id),
-              );
-              setLastResolved(resolveItem);
-              setNotice(`Resolved “${resolveItem.title}”.`);
-              setResolveItem(null);
-            }}
-          />
-        )}
+      </div>
+      {nudgeItem && (
+        <WaitingNudgeDialog
+          item={nudgeItem}
+          onClose={() => setNudgeItem(null)}
+          onRecord={(message, nextFollowUp) => {
+            setWaiting((current) =>
+              current.map((item) =>
+                item.id === nudgeItem.id
+                  ? { ...item, waitingNote: message, nextFollowUp }
+                  : item,
+              ),
+            );
+            setLastResolved(null);
+            setNotice(
+              `Follow-up prepared for ${nudgeItem.waitingLabel ?? "the owner"}.`,
+            );
+            setNudgeItem(null);
+          }}
+        />
+      )}
+      {resolveItem && (
+        <WaitingResolveDialog
+          item={resolveItem}
+          onClose={() => setResolveItem(null)}
+          onConfirm={() => {
+            setWaiting((current) =>
+              current.filter((candidate) => candidate.id !== resolveItem.id),
+            );
+            setLastResolved(resolveItem);
+            setNotice(`Resolved “${resolveItem.title}”.`);
+            setResolveItem(null);
+          }}
+        />
+      )}
     </main>
   );
 }
@@ -791,181 +774,178 @@ function ReviewsMain() {
   );
   return (
     <main className="trevv-main review-page">
-        <PageHeader
-          eyebrow="Management memory"
-          title="Review Rituals"
-          subtitle="Optional operating rhythms that turn updates into snapshots and refreshed attention."
-          hintId="reviews"
-        />
-        <div className="review-grid">
-          <section className="trevv-panel daily-focus">
-            <PanelHeading
-              icon={Sparkles}
-              title="Daily Focus"
-              subtitle="A short list for the next useful move."
-            />
-            <ul>
-              <li>
-                <b>{Math.min(scope.attentionCount, 4)}</b> top Attention items
-              </li>
-              <li>
-                <b>{decisionCount}</b> decisions due
-              </li>
-              <li>
-                <b>{scope.waiting.length}</b> waiting follow-ups
-              </li>
-              <li>
-                <b>{milestoneRiskCount}</b> milestones at risk
-              </li>
-            </ul>
-          </section>
-          <section className="trevv-panel weekly-review">
-            <PanelHeading
-              icon={MessageSquareText}
-              title={`Weekly ${activeProject ? "project" : "portfolio"} review`}
-              subtitle={`${reviewLabel} · due today`}
-            />
-            {posted ? (
-              <div className="review-posted">
-                <CheckCircle2 size={24} />
-                <h2>Review published</h2>
-                <p>
-                  Structured update posted, a project snapshot captured, and
-                  Attention signals refreshed for {reviewLabel}.
-                </p>
-                <a href="/app/portfolio">
-                  See refreshed workspace <ArrowRight size={13} />
-                </a>
-              </div>
-            ) : (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setPosted(true);
-                }}
-              >
+      <PageHeader
+        eyebrow="Management memory"
+        title="Review Rituals"
+        subtitle="Optional operating rhythms that turn updates into snapshots and refreshed attention."
+        hintId="reviews"
+      />
+      <div className="review-grid">
+        <section className="trevv-panel daily-focus">
+          <PanelHeading
+            icon={Sparkles}
+            title="Daily Focus"
+            subtitle="A short list for the next useful move."
+          />
+          <ul>
+            <li>
+              <b>{Math.min(scope.attentionCount, 4)}</b> top Attention items
+            </li>
+            <li>
+              <b>{decisionCount}</b> decisions due
+            </li>
+            <li>
+              <b>{scope.waiting.length}</b> waiting follow-ups
+            </li>
+            <li>
+              <b>{milestoneRiskCount}</b> milestones at risk
+            </li>
+          </ul>
+        </section>
+        <section className="trevv-panel weekly-review">
+          <PanelHeading
+            icon={MessageSquareText}
+            title={`Weekly ${activeProject ? "project" : "portfolio"} review`}
+            subtitle={`${reviewLabel} · due today`}
+          />
+          {posted ? (
+            <div className="review-posted">
+              <CheckCircle2 size={24} />
+              <h2>Review published</h2>
+              <p>
+                Structured update posted, a project snapshot captured, and
+                Attention signals refreshed for {reviewLabel}.
+              </p>
+              <a href="/app/portfolio">
+                See refreshed workspace <ArrowRight size={13} />
+              </a>
+            </div>
+          ) : (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                setPosted(true);
+              }}
+            >
+              <label>
+                Health
+                <select defaultValue={activeProject?.health ?? "watch"}>
+                  <option value="on_track">On Track</option>
+                  <option value="watch">Attention</option>
+                  <option value="critical">Critical</option>
+                  <option value="parked">Parked</option>
+                </select>
+              </label>
+              <label>
+                Biggest progress
+                <textarea
+                  defaultValue={
+                    activeProject?.latestUpdate.text ??
+                    "Summarize the most meaningful progress since the last review."
+                  }
+                />
+              </label>
+              <label>
+                Biggest blocker
+                <textarea
+                  defaultValue={
+                    activeProject?.healthNote ??
+                    "Describe the strongest blocker or emerging risk."
+                  }
+                />
+              </label>
+              <div>
                 <label>
-                  Health
-                  <select defaultValue={activeProject?.health ?? "watch"}>
-                    <option value="on_track">On Track</option>
-                    <option value="watch">Attention</option>
-                    <option value="critical">Critical</option>
-                    <option value="parked">Parked</option>
-                  </select>
-                </label>
-                <label>
-                  Biggest progress
-                  <textarea
-                    defaultValue={
-                      activeProject?.latestUpdate.text ??
-                      "Summarize the most meaningful progress since the last review."
-                    }
-                  />
-                </label>
-                <label>
-                  Biggest blocker
-                  <textarea
-                    defaultValue={
-                      activeProject?.healthNote ??
-                      "Describe the strongest blocker or emerging risk."
-                    }
-                  />
-                </label>
-                <div>
-                  <label>
-                    Next milestone
-                    <input
-                      defaultValue={
-                        activeProject?.nextMilestone.title ?? "Next milestone"
-                      }
-                    />
-                  </label>
-                  <label>
-                    Priority next week
-                    <input
-                      defaultValue={
-                        activeProject?.priority ?? "Set the next priority"
-                      }
-                    />
-                  </label>
-                </div>
-                <label>
-                  Decision needed
+                  Next milestone
                   <input
                     defaultValue={
-                      scope.items.find(
-                        (item) =>
-                          item.type === "decision" && item.status !== "done",
-                      )?.title ?? "No open decision recorded"
+                      activeProject?.nextMilestone.title ?? "Next milestone"
                     }
                   />
                 </label>
-                <button className="primary-button" type="submit">
-                  Publish review & snapshot
-                </button>
-              </form>
-            )}
-          </section>
-        </div>
-        <section className="trevv-panel time-machine">
-          <PanelHeading
-            icon={History}
-            title={`${reviewLabel} Time Machine`}
-            subtitle="Lightweight rollups captured by reviews — not copies of the full board."
-          />
-          <div
-            className="trend-line"
-            aria-label={`${reviewLabel} health trend`}
-          >
-            {snapshots.map((snapshot, index) => (
-              <div key={snapshot.id}>
-                <span className={`trend-dot ${snapshot.health}`} />
-                {index < snapshots.length - 1 && <i />}
-                <strong>
-                  {new Intl.DateTimeFormat("en", {
-                    month: "short",
-                    day: "2-digit",
-                  }).format(new Date(snapshot.capturedAt))}
-                </strong>
-                <small>{snapshot.health.replace("_", " ")}</small>
-                <b>{snapshot.attentionCount} signals</b>
+                <label>
+                  Priority next week
+                  <input
+                    defaultValue={
+                      activeProject?.priority ?? "Set the next priority"
+                    }
+                  />
+                </label>
               </div>
-            ))}
-            {!snapshots.length && (
-              <EmptyState
-                icon={History}
-                title="No review history yet"
-                note={`Publish the first ${reviewLabel} review to start a durable health timeline.`}
-              />
-            )}
-          </div>
-        </section>
-        <section className="trevv-panel ritual-settings">
-          <PanelHeading
-            icon={CalendarClock}
-            title="Cadence settings"
-            subtitle="Each ritual can be configured or disabled completely."
-          />
-          {rituals.map((ritual) => (
-            <article key={ritual.id}>
-              <div>
-                <strong>{ritual.type.replaceAll("_", " ")}</strong>
-                <span>
-                  {ritual.cadence} ·{" "}
-                  {ritual.reminderEnabled ? "Reminder on" : "No reminder"}
-                </span>
-              </div>
-              <button
-                role="switch"
-                aria-checked={enabled.has(ritual.id)}
-                className={enabled.has(ritual.id) ? "on" : ""}
-                onClick={() => toggleRitual(ritual.id)}
-              >
-                <i />
+              <label>
+                Decision needed
+                <input
+                  defaultValue={
+                    scope.items.find(
+                      (item) =>
+                        item.type === "decision" && item.status !== "done",
+                    )?.title ?? "No open decision recorded"
+                  }
+                />
+              </label>
+              <button className="primary-button" type="submit">
+                Publish review & snapshot
               </button>
-            </article>
-          ))}
+            </form>
+          )}
         </section>
+      </div>
+      <section className="trevv-panel time-machine">
+        <PanelHeading
+          icon={History}
+          title={`${reviewLabel} Time Machine`}
+          subtitle="Lightweight rollups captured by reviews — not copies of the full board."
+        />
+        <div className="trend-line" aria-label={`${reviewLabel} health trend`}>
+          {snapshots.map((snapshot, index) => (
+            <div key={snapshot.id}>
+              <span className={`trend-dot ${snapshot.health}`} />
+              {index < snapshots.length - 1 && <i />}
+              <strong>
+                {new Intl.DateTimeFormat("en", {
+                  month: "short",
+                  day: "2-digit",
+                }).format(new Date(snapshot.capturedAt))}
+              </strong>
+              <small>{snapshot.health.replace("_", " ")}</small>
+              <b>{snapshot.attentionCount} signals</b>
+            </div>
+          ))}
+          {!snapshots.length && (
+            <EmptyState
+              icon={History}
+              title="No review history yet"
+              note={`Publish the first ${reviewLabel} review to start a durable health timeline.`}
+            />
+          )}
+        </div>
+      </section>
+      <section className="trevv-panel ritual-settings">
+        <PanelHeading
+          icon={CalendarClock}
+          title="Cadence settings"
+          subtitle="Each ritual can be configured or disabled completely."
+        />
+        {rituals.map((ritual) => (
+          <article key={ritual.id}>
+            <div>
+              <strong>{ritual.type.replaceAll("_", " ")}</strong>
+              <span>
+                {ritual.cadence} ·{" "}
+                {ritual.reminderEnabled ? "Reminder on" : "No reminder"}
+              </span>
+            </div>
+            <button
+              role="switch"
+              aria-checked={enabled.has(ritual.id)}
+              className={enabled.has(ritual.id) ? "on" : ""}
+              onClick={() => toggleRitual(ritual.id)}
+            >
+              <i />
+            </button>
+          </article>
+        ))}
+      </section>
     </main>
   );
 }

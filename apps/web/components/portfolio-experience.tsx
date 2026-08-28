@@ -144,6 +144,12 @@ function PortfolioMain() {
         title={portfolio?.name ?? vocab.groupOne}
         subtitle={portfolio?.description ?? copy.portfolio.subtitle}
         hintId="portfolios"
+        badge={
+          <span className="scope-view-badge portfolio-scope-badge">
+            <Grid2X2 size={13} />
+            Portfolio view
+          </span>
+        }
         selector={
           <label className="hero-select">
             <span>{vocab.groupOne}</span>

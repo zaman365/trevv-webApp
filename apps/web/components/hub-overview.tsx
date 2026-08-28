@@ -179,9 +179,15 @@ function HubWorkspace({
           title={hub.name}
           hintId="hubs"
           badge={
-            <span className={`health-badge ${hub.health}`}>
-              {hubHealthCopy[hub.health]}
-            </span>
+            <>
+              <span className="scope-view-badge project-scope-badge">
+                <FolderKanban size={13} />
+                Project workspace
+              </span>
+              <span className={`health-badge ${hub.health}`}>
+                {hubHealthCopy[hub.health]}
+              </span>
+            </>
           }
           subtitle={hub.healthNote}
           accent={hub.accent}

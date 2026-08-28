@@ -52,16 +52,19 @@ export function WorkspaceProvider({
   children,
   initialPortfolioId = DEFAULT_PORTFOLIO_ID,
   initialProjectId,
+  restoreStoredProject = true,
 }: {
   children: ReactNode;
   initialPortfolioId?: string;
   initialProjectId?: string;
+  restoreStoredProject?: boolean;
 }) {
   const [locale, setLocale] = useState<Locale>("en");
   const [theme, setTheme] = useState<Theme>("light");
   const [portfolioId, setPortfolioState] = useState(initialPortfolioId);
-  const [workspaceLevel, setWorkspaceLevel] =
-    useState<WorkspaceLevel>(initialProjectId ? "project" : "portfolio");
+  const [workspaceLevel, setWorkspaceLevel] = useState<WorkspaceLevel>(
+    initialProjectId ? "project" : "portfolio",
+  );
   const [projectId, setProjectId] = useState<string | null>(
     initialProjectId ?? null,
   );
@@ -89,6 +92,7 @@ export function WorkspaceProvider({
             if (typeof selection.portfolioId === "string")
               setPortfolioState(selection.portfolioId);
             if (
+              restoreStoredProject &&
               selection.level === "project" &&
               typeof selection.projectId === "string"
             ) {
@@ -103,7 +107,7 @@ export function WorkspaceProvider({
       setSelectionHydrated(true);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [initialProjectId]);
+  }, [initialProjectId, restoreStoredProject]);
 
   useEffect(() => {
     if (!selectionHydrated) return;

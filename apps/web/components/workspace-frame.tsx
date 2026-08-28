@@ -110,6 +110,7 @@ export function WorkspaceFrame({
     : undefined;
   return (
     <WorkspaceProvider
+      restoreStoredProject={active !== "home" && active !== "portfolio"}
       {...(routeProject
         ? {
             initialPortfolioId: routeProject.portfolioId,
@@ -284,7 +285,7 @@ function WorkspaceChrome({
   const attentionCount = scope.attentionCount;
 
   const nav = [
-    ["home", copy.nav.home, "/app/home", House, undefined],
+    ["home", "Portfolio home", "/app/home", House, undefined],
     [
       workspaceLevel === "project" ? "hub" : "portfolio",
       workspaceLevel === "project" ? "Project" : copy.nav.portfolio,
@@ -466,10 +467,7 @@ function WorkspaceChrome({
                             setWorkspaceMenuOpen(false);
                             setWorkspaceQuery("");
                             setOpen(false);
-                            if (
-                              (active === "hub" || active === "portfolio") &&
-                              project.slug !== hubSlug
-                            ) {
+                            if (active !== "hub" || project.slug !== hubSlug) {
                               router.push(`/app/hubs/${project.slug}`);
                             }
                           }}

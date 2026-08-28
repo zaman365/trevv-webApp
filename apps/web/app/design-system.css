@@ -145,6 +145,39 @@
   flex: 0 0 auto;
   margin-top: 3px;
 }
+.scope-view-badge {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: var(--fh-text-2xs);
+  font-weight: var(--fh-weight-strong);
+  letter-spacing: 0.025em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.portfolio-scope-badge {
+  color: var(--fh-primary-strong);
+  background: var(--fh-primary-soft);
+  border-color: color-mix(in srgb, var(--fh-primary) 18%, transparent);
+}
+.project-scope-badge {
+  color: var(--brand, var(--hub-accent, var(--fh-primary-strong)));
+  background: color-mix(
+    in srgb,
+    var(--brand, var(--hub-accent, var(--fh-primary))) 10%,
+    var(--fh-surface)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--brand, var(--hub-accent, var(--fh-primary))) 24%,
+    transparent
+  );
+}
 .home-portfolio-switcher {
   position: relative;
   width: 224px;
@@ -654,6 +687,9 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+.home-project-overview {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 .project-tile {
   position: relative;
