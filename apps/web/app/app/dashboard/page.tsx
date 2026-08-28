@@ -4,7 +4,7 @@ import { DashboardExperience } from "@/components/dashboard-experience";
 export const metadata: Metadata = {
   title: "Dashboard",
   description:
-    "Live reporting across every project — status, owners, load, and overdue work.",
+    "Access-aware reporting across portfolio, project, team, and personal views.",
 };
 
 export default function DashboardPage() {

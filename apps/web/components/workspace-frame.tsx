@@ -44,6 +44,7 @@ import { useCustomHubs } from "@/lib/custom-hubs";
 type ActivePage =
   | "home"
   | "portfolio"
+  | "dashboard"
   | "attention"
   | "myWork"
   | "inbox"
@@ -149,6 +150,7 @@ function WorkspaceChrome({
   const nav = [
     ["home", copy.nav.home, "/app/home", House, undefined],
     ["portfolio", copy.nav.portfolio, "/app/portfolio", Grid2X2, undefined],
+    ["dashboard", "Dashboard", "/app/dashboard", ChartColumn, undefined],
     [
       "attention",
       copy.nav.attention,
@@ -255,13 +257,6 @@ function WorkspaceChrome({
           </button>
         </nav>
         <div className="sidebar-foot">
-          <Link
-            className={`nav-item ${active === "reviews" ? "active" : ""}`}
-            href="/app/dashboard"
-          >
-            <ChartColumn size={17} />
-            <span>Dashboard</span>
-          </Link>
           <Link
             className={`nav-item ${active === "templates" ? "active" : ""}`}
             href="/app/blueprints"

@@ -1093,6 +1093,120 @@
 
 /* ======================================================= dashboard widgets */
 
+.dashboard-target-select {
+  min-width: 190px;
+}
+.dashboard-target-readonly strong {
+  min-width: 190px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  color: var(--fh-ink);
+  background: var(--fh-surface);
+  border: 1px solid var(--fh-border-strong);
+  border-radius: var(--fh-radius-control);
+  font-size: var(--fh-text-sm);
+}
+.dashboard-target-readonly strong svg {
+  color: var(--fh-primary);
+}
+.dashboard-hierarchy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--fh-border);
+}
+.dashboard-hierarchy-intro {
+  min-width: 188px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--fh-primary);
+}
+.dashboard-hierarchy-intro > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dashboard-hierarchy-intro strong {
+  color: var(--fh-ink);
+  font-size: var(--fh-text-xs);
+}
+.dashboard-hierarchy-intro small {
+  color: var(--fh-muted);
+  font-size: var(--fh-text-2xs);
+  line-height: 1.35;
+}
+.dashboard-hierarchy-levels {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dashboard-hierarchy-levels::-webkit-scrollbar {
+  display: none;
+}
+.dashboard-hierarchy-step {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--fh-muted);
+}
+.dashboard-hierarchy-step > svg {
+  margin: 0 4px;
+}
+.dashboard-hierarchy-step button {
+  min-width: 122px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--fh-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.dashboard-hierarchy-step button:hover {
+  color: var(--fh-ink);
+  background: var(--fh-surface-subtle);
+  border-color: var(--fh-border);
+}
+.dashboard-hierarchy-step button.is-active {
+  color: var(--fh-primary);
+  background: var(--fh-primary-soft);
+  border-color: color-mix(in srgb, var(--fh-primary) 24%, var(--fh-border));
+}
+.dashboard-hierarchy-step button > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.dashboard-hierarchy-step button strong {
+  color: var(--fh-ink);
+  font-size: var(--fh-text-xs);
+}
+.dashboard-hierarchy-step button.is-active strong {
+  color: var(--fh-primary-strong);
+}
+.dashboard-hierarchy-step button small {
+  font-size: var(--fh-text-2xs);
+}
+
 .dashboard-intelligence-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.75fr);
@@ -2085,6 +2199,14 @@
   .dashboard-main .hero-select {
     flex: 1;
   }
+  .dashboard-hierarchy {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .dashboard-hierarchy-intro {
+    min-width: 0;
+  }
   .dashboard-intelligence-grid {
     grid-template-columns: 1fr;
   }
@@ -2112,6 +2234,8 @@
   }
   .dashboard-main .hero-select,
   .dashboard-main .hero-select select,
+  .dashboard-target-readonly,
+  .dashboard-target-readonly strong,
   .dashboard-main .quiet-button {
     width: 100%;
   }
@@ -2143,6 +2267,13 @@
   }
 }
 @media (max-width: 620px) {
+  .dashboard-hierarchy-step button {
+    min-width: 104px;
+    padding: 7px 8px;
+  }
+  .dashboard-hierarchy-step button small {
+    display: none;
+  }
   .dashboard-brief > header,
   .dashboard-work-lens > header {
     align-items: flex-start;

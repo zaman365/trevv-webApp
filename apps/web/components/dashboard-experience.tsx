@@ -7,31 +7,44 @@ import {
   Blocks,
   CalendarClock,
   CheckCircle2,
+  ChevronRight,
   CircleDot,
   Download,
   Filter,
   Gauge,
+  Layers3,
   LayoutGrid,
   ListChecks,
   MoreHorizontal,
   PieChart,
   Plus,
   Search,
+  ShieldCheck,
   Sparkles,
   Target,
+  UserRound,
   Users,
 } from "lucide-react";
 import {
   demoHubs,
   demoItems,
   demoPortfolios,
+  type Hub,
+  type Portfolio,
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { type GroupedSignal, NOW } from "@/lib/attention";
 import { useCapturedWork } from "@/lib/captured-work";
-import { summarizePortfolio } from "@/lib/portfolios";
+import {
+  CURRENT_DASHBOARD_USER,
+  dashboardLevelsForAccess,
+  dashboardTeamsForAccess,
+  filterItemsForDashboardView,
+  type DashboardTeam,
+  type DashboardViewLevel,
+} from "@/lib/dashboard-access";
 import { vocabularyFor } from "@/lib/terminology";
 import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceFrame } from "./workspace-frame";
@@ -91,32 +104,64 @@ const DAY = 86_400_000;
 
 export function DashboardExperience() {
   return (
-    <WorkspaceFrame active="reviews">
+    <WorkspaceFrame active="dashboard">
       <DashboardMain />
     </WorkspaceFrame>
   );
 }
 
 function DashboardMain() {
-  const { scope, portfolioId, setPortfolioId, setCaptureOpen } = useWorkspace();
+  const {
+    scope,
+    portfolioId,
+    setPortfolioId,
+    setCaptureOpen,
+    dashboardAccess,
+  } = useWorkspace();
   const capturedWork = useCapturedWork();
   const vocab = vocabularyFor();
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("open");
   const [lens, setLens] = useState<DashboardLens>(DEFAULT_LENS);
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const availableLevels = dashboardLevelsForAccess(dashboardAccess);
+  const accessibleTeams = dashboardTeamsForAccess(dashboardAccess);
+  const accessiblePortfolioIds = new Set(dashboardAccess.portfolioIds);
+  const accessiblePortfolios = demoPortfolios.filter((item) =>
+    accessiblePortfolioIds.has(item.id),
+  );
+  const accessibleProjectIds = new Set(dashboardAccess.projectIds);
+  const accessibleProjects = scope.hubs.filter((project) =>
+    accessibleProjectIds.has(project.id),
+  );
+  const [viewLevel, setViewLevel] = useState<DashboardViewLevel>(
+    availableLevels[0] ?? "personal",
+  );
+  const [projectId, setProjectId] = useState(
+    () => accessibleProjects[0]?.id ?? "",
+  );
+  const [teamId, setTeamId] = useState(() => accessibleTeams[0]?.id ?? "");
 
   const portfolio = demoPortfolios.find((item) => item.id === portfolioId);
-  const summary = useMemo(
-    () => (portfolio ? summarizePortfolio(portfolio) : undefined),
-    [portfolio],
-  );
+  const selectedProject =
+    accessibleProjects.find((project) => project.id === projectId) ??
+    accessibleProjects[0];
+  const selectedTeam =
+    accessibleTeams.find((team) => team.id === teamId) ?? accessibleTeams[0];
+  const viewTargetId =
+    viewLevel === "project"
+      ? (selectedProject?.id ?? "")
+      : viewLevel === "team"
+        ? (selectedTeam?.id ?? "")
+        : viewLevel === "personal"
+          ? CURRENT_DASHBOARD_USER
+          : portfolioId;
 
-  const allItems = useMemo<WorkItem[]>(() => {
-    const hubIds = new Set(scope.hubs.map((hub) => hub.id));
+  const capturedItems = useMemo<WorkItem[]>(() => {
+    const projectIds = new Set(scope.hubs.map((project) => project.id));
     const existingIds = new Set(scope.items.map((item) => item.id));
-    const capturedItems = capturedWork
-      .filter((item) => hubIds.has(item.hubId) && !existingIds.has(item.id))
+    return capturedWork
+      .filter((item) => projectIds.has(item.hubId) && !existingIds.has(item.id))
       .map<WorkItem>((item) => ({
         id: item.id,
         hubId: item.hubId,
@@ -130,8 +175,41 @@ function DashboardMain() {
           ? { assignee: item.owner }
           : {}),
       }));
-    return [...scope.items, ...capturedItems];
   }, [capturedWork, scope.hubs, scope.items]);
+
+  const portfolioItems = useMemo(
+    () => [...scope.items, ...capturedItems],
+    [capturedItems, scope.items],
+  );
+
+  const allItems = useMemo(
+    () => filterItemsForDashboardView(portfolioItems, viewLevel, viewTargetId),
+    [portfolioItems, viewLevel, viewTargetId],
+  );
+
+  const viewItemIds = useMemo(
+    () => new Set(allItems.map((item) => item.id)),
+    [allItems],
+  );
+  const viewAttention = useMemo(
+    () => scope.attention.filter((group) => viewItemIds.has(group.entityId)),
+    [scope.attention, viewItemIds],
+  );
+  const viewHubs = useMemo(() => {
+    if (viewLevel === "portfolio") return scope.hubs;
+    if (viewLevel === "project")
+      return selectedProject ? [selectedProject] : [];
+    const projectIds = new Set(allItems.map((item) => item.hubId));
+    return scope.hubs.filter((project) => projectIds.has(project.id));
+  }, [allItems, scope.hubs, selectedProject, viewLevel]);
+  const viewHealth = useMemo(() => dashboardHealth(viewHubs), [viewHubs]);
+  const viewFocusHub = useMemo(() => dashboardFocusHub(viewHubs), [viewHubs]);
+  const viewDescriptor = dashboardViewDescriptor(
+    viewLevel,
+    portfolio?.name,
+    selectedProject,
+    selectedTeam,
+  );
 
   const openItems = useMemo(
     () => allItems.filter((item) => item.status !== "done"),
@@ -143,8 +221,8 @@ function DashboardMain() {
   );
 
   const attentionItemIds = useMemo(
-    () => new Set(scope.attention.map((group) => group.entityId)),
-    [scope.attention],
+    () => new Set(viewAttention.map((group) => group.entityId)),
+    [viewAttention],
   );
   const overdueItems = useMemo(
     () => openItems.filter((item) => isOverdue(item)),
@@ -261,7 +339,7 @@ function DashboardMain() {
 
   const projectBars: Bar[] = useMemo(
     () =>
-      scope.hubs
+      viewHubs
         .map((hub) => ({
           key: hub.id,
           label: hub.name,
@@ -282,12 +360,12 @@ function DashboardMain() {
         .filter((bar) => bar.value > 0)
         .sort((a, b) => b.value - a.value)
         .slice(0, 8),
-    [items, scope.hubs],
+    [items, viewHubs],
   );
 
   const overdueBars: Bar[] = useMemo(
     () =>
-      scope.hubs
+      viewHubs
         .map((hub) => ({
           key: hub.id,
           label: hub.name,
@@ -296,12 +374,12 @@ function DashboardMain() {
         }))
         .filter((bar) => bar.value > 0)
         .sort((a, b) => b.value - a.value),
-    [overdueItems, scope.hubs],
+    [overdueItems, viewHubs],
   );
 
   const pressureIndex = useMemo(() => {
     if (!openItems.length) return 0;
-    const criticalHubs = scope.hubs.filter(
+    const criticalHubs = viewHubs.filter(
       (hub) => hub.health === "critical",
     ).length;
     const riskShare =
@@ -320,7 +398,7 @@ function DashboardMain() {
             5,
       ),
     );
-  }, [counts.blocked, openItems, riskItemIds, scope.hubs, unassignedItems]);
+  }, [counts.blocked, openItems, riskItemIds, unassignedItems, viewHubs]);
 
   const pressure =
     pressureIndex >= 68
@@ -328,9 +406,12 @@ function DashboardMain() {
       : pressureIndex >= 40
         ? { label: "Watch the load", tone: "watch" }
         : { label: "Operating cleanly", tone: "healthy" };
-  const topSignal = scope.attention[0];
+  const topSignal = viewAttention[0];
   const topOwner = ownerLoad.find(([owner]) => owner !== "Unassigned");
-  const capturedCount = Math.max(0, allItems.length - scope.items.length);
+  const capturedItemIds = new Set(capturedItems.map((item) => item.id));
+  const capturedCount = allItems.filter((item) =>
+    capturedItemIds.has(item.id),
+  ).length;
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -364,27 +445,46 @@ function DashboardMain() {
     });
   };
 
+  const resetDashboardFocus = () => {
+    setLens(DEFAULT_LENS);
+    setQuery("");
+    setShowAll(false);
+  };
+
+  const selectViewLevel = (level: DashboardViewLevel) => {
+    setViewLevel(level);
+    resetDashboardFocus();
+  };
+
   return (
     <main className="trevv-main dashboard-main">
       <PageHero
-        eyebrow={<>Reporting · {portfolio?.name}</>}
+        eyebrow={<>Reporting · {viewDescriptor.levelLabel}</>}
         title="Dashboard"
-        subtitle={`A live command view across every ${vocab.one.toLowerCase()} in this ${vocab.groupOne.toLowerCase()}. Select any number or chart to inspect the work behind it.`}
+        subtitle={`${viewDescriptor.name} — ${viewDescriptor.description} Select any number or chart to inspect the work behind it.`}
         hintId="dashboard"
         selector={
-          <label className="hero-select">
-            <span>{vocab.groupOne}</span>
-            <select
-              value={portfolioId}
-              onChange={(event) => setPortfolioId(event.target.value)}
-            >
-              {demoPortfolios.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <DashboardTargetSelector
+            level={viewLevel}
+            portfolioId={portfolioId}
+            portfolios={accessiblePortfolios}
+            projectId={selectedProject?.id ?? ""}
+            teamId={selectedTeam?.id ?? ""}
+            projects={accessibleProjects}
+            teams={accessibleTeams}
+            onPortfolio={(id) => {
+              setPortfolioId(id);
+              resetDashboardFocus();
+            }}
+            onProject={(id) => {
+              setProjectId(id);
+              resetDashboardFocus();
+            }}
+            onTeam={(id) => {
+              setTeamId(id);
+              resetDashboardFocus();
+            }}
+          />
         }
         actions={
           <>
@@ -406,7 +506,7 @@ function DashboardMain() {
             </div>
             <button
               className="quiet-button"
-              onClick={() => exportDashboard(items, portfolio?.name)}
+              onClick={() => exportDashboard(items, viewDescriptor.name)}
             >
               <Download size={15} />
               Export {scopeFilter === "open" ? "open work" : "all work"}
@@ -479,11 +579,17 @@ function DashboardMain() {
             />
           </>
         }
-      />
+      >
+        <DashboardHierarchy
+          availableLevels={availableLevels}
+          activeLevel={viewLevel}
+          onSelect={selectViewLevel}
+        />
+      </PageHero>
 
       <section
         className="dashboard-intelligence-grid"
-        aria-label="TREVV portfolio briefing"
+        aria-label={`TREVV ${viewDescriptor.levelLabel.toLocaleLowerCase()} briefing`}
       >
         <article className="dashboard-brief">
           <header>
@@ -504,8 +610,8 @@ function DashboardMain() {
             <span>{pressure.label}</span>
             <h3>
               {counts.attention
-                ? `${counts.attention} commitments need intervention before the portfolio can move cleanly.`
-                : "The portfolio has no unresolved intervention signals."}
+                ? `${counts.attention} commitments need intervention before this ${viewDescriptor.levelNoun} can move cleanly.`
+                : `This ${viewDescriptor.levelNoun} has no unresolved intervention signals.`}
             </h3>
             <p>
               {topSignal
@@ -528,7 +634,7 @@ function DashboardMain() {
           </div>
 
           <ol className="dashboard-next-actions">
-            {scope.attention.slice(0, 3).map((group, index) => (
+            {viewAttention.slice(0, 3).map((group, index) => (
               <li key={group.id}>
                 <span>{index + 1}</span>
                 <div>
@@ -803,7 +909,7 @@ function DashboardMain() {
 
       <div className="dashboard-section-heading">
         <div>
-          <p>Explore the portfolio</p>
+          <p>Explore this {viewDescriptor.levelNoun}</p>
           <h2>Interactive reporting</h2>
         </div>
         <span>Select any segment or bar to update the Work lens.</span>
@@ -890,7 +996,7 @@ function DashboardMain() {
         >
           <BarChart
             bars={projectBars}
-            emptyNote={`No work in this ${vocab.groupOne.toLowerCase()}.`}
+            emptyNote={`No work in this ${viewDescriptor.levelNoun}.`}
             onSelect={(bar) =>
               focusLens({
                 kind: "hub",
@@ -967,25 +1073,25 @@ function DashboardMain() {
         <Widget
           icon={CheckCircle2}
           title={`${vocab.one} health`}
-          note={`${summary?.count ?? 0} ${vocab.many.toLowerCase()} · live health evidence`}
+          note={`${viewHubs.length} ${viewHubs.length === 1 ? vocab.one.toLowerCase() : vocab.many.toLowerCase()} · live health evidence`}
           span={6}
           hintId="portfolios"
           exportData={{
-            health: summary?.health ?? [],
-            focus: summary?.focus ?? null,
+            health: viewHealth,
+            focus: viewFocusHub ?? null,
           }}
           scopeFilter={scopeFilter}
           onScopeFilter={setScopeFilter}
         >
           <div className="widget-health">
-            <HealthBar slices={summary?.health ?? []} />
-            {summary?.focus && (
+            <HealthBar slices={viewHealth} />
+            {viewFocusHub && (
               <p className="widget-focus">
                 <b>Most urgent</b>
-                <Link href={`/app/hubs/${summary.focus.hub.slug}`}>
-                  {summary.focus.hub.name}
+                <Link href={`/app/hubs/${viewFocusHub.slug}`}>
+                  {viewFocusHub.name}
                 </Link>
-                <small>{summary.focus.hub.healthNote}</small>
+                <small>{viewFocusHub.healthNote}</small>
               </p>
             )}
           </div>
@@ -993,6 +1099,224 @@ function DashboardMain() {
       </div>
     </main>
   );
+}
+
+const DASHBOARD_VIEW_META: Record<
+  DashboardViewLevel,
+  {
+    label: string;
+    caption: string;
+    targetLabel: string;
+    icon: typeof Layers3;
+  }
+> = {
+  portfolio: {
+    label: "Portfolio",
+    caption: "All projects",
+    targetLabel: "Portfolio view",
+    icon: Layers3,
+  },
+  project: {
+    label: "Project",
+    caption: "One project",
+    targetLabel: "Project view",
+    icon: LayoutGrid,
+  },
+  team: {
+    label: "Team",
+    caption: "Functional team",
+    targetLabel: "Team view",
+    icon: Users,
+  },
+  personal: {
+    label: "Personal",
+    caption: "My work",
+    targetLabel: "Personal view",
+    icon: UserRound,
+  },
+};
+
+function DashboardHierarchy({
+  availableLevels,
+  activeLevel,
+  onSelect,
+}: {
+  availableLevels: DashboardViewLevel[];
+  activeLevel: DashboardViewLevel;
+  onSelect: (level: DashboardViewLevel) => void;
+}) {
+  return (
+    <div className="dashboard-hierarchy">
+      <div className="dashboard-hierarchy-intro">
+        <ShieldCheck size={16} />
+        <span>
+          <strong>Reporting hierarchy</strong>
+          <small>Only views allowed by your access are shown.</small>
+        </span>
+      </div>
+      <div
+        className="dashboard-hierarchy-levels"
+        role="tablist"
+        aria-label="Dashboard reporting level"
+      >
+        {availableLevels.map((level, index) => {
+          const meta = DASHBOARD_VIEW_META[level];
+          const Icon = meta.icon;
+          return (
+            <span className="dashboard-hierarchy-step" key={level}>
+              {index > 0 && <ChevronRight size={14} aria-hidden="true" />}
+              <button
+                className={activeLevel === level ? "is-active" : ""}
+                type="button"
+                role="tab"
+                aria-selected={activeLevel === level}
+                onClick={() => onSelect(level)}
+              >
+                <Icon size={15} />
+                <span>
+                  <strong>{meta.label}</strong>
+                  <small>{meta.caption}</small>
+                </span>
+              </button>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DashboardTargetSelector({
+  level,
+  portfolioId,
+  projectId,
+  teamId,
+  portfolios,
+  projects,
+  teams,
+  onPortfolio,
+  onProject,
+  onTeam,
+}: {
+  level: DashboardViewLevel;
+  portfolioId: string;
+  projectId: string;
+  teamId: string;
+  portfolios: readonly Portfolio[];
+  projects: readonly Hub[];
+  teams: readonly DashboardTeam[];
+  onPortfolio: (id: string) => void;
+  onProject: (id: string) => void;
+  onTeam: (id: string) => void;
+}) {
+  const meta = DASHBOARD_VIEW_META[level];
+  if (level === "personal") {
+    return (
+      <div className="hero-select dashboard-target-readonly">
+        <span>{meta.targetLabel}</span>
+        <strong>
+          <UserRound size={14} /> My work
+        </strong>
+      </div>
+    );
+  }
+
+  const value =
+    level === "portfolio"
+      ? portfolioId
+      : level === "project"
+        ? projectId
+        : teamId;
+  return (
+    <label className="hero-select dashboard-target-select">
+      <span>{meta.targetLabel}</span>
+      <select
+        value={value}
+        onChange={(event) => {
+          if (level === "portfolio") onPortfolio(event.target.value);
+          else if (level === "project") onProject(event.target.value);
+          else onTeam(event.target.value);
+        }}
+      >
+        {level === "portfolio" &&
+          portfolios.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        {level === "project" &&
+          projects.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        {level === "team" &&
+          teams.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+      </select>
+    </label>
+  );
+}
+
+function dashboardViewDescriptor(
+  level: DashboardViewLevel,
+  portfolioName?: string,
+  project?: Hub,
+  team?: DashboardTeam,
+) {
+  if (level === "portfolio")
+    return {
+      levelLabel: "Portfolio view",
+      levelNoun: "portfolio",
+      name: portfolioName ?? "Accessible portfolio",
+      description: "Executive visibility across every accessible project.",
+    };
+  if (level === "project")
+    return {
+      levelLabel: "Project view",
+      levelNoun: "project",
+      name: project?.name ?? "Accessible project",
+      description: "Delivery, risk, ownership, and decisions for one project.",
+    };
+  if (level === "team")
+    return {
+      levelLabel: "Team view",
+      levelNoun: "team",
+      name: team?.name ?? "Accessible team",
+      description: `Shared commitments owned by this team${portfolioName ? ` within ${portfolioName}` : ""}.`,
+    };
+  return {
+    levelLabel: "Personal view",
+    levelNoun: "workload",
+    name: "My work",
+    description: `Your owned commitments${portfolioName ? ` within ${portfolioName}` : ""}.`,
+  };
+}
+
+const DASHBOARD_HEALTH_ORDER = [
+  { key: "critical", label: "Critical" },
+  { key: "watch", label: "Watch" },
+  { key: "on_track", label: "On track" },
+  { key: "parked", label: "Parked" },
+] as const;
+
+function dashboardHealth(projects: readonly Hub[]) {
+  return DASHBOARD_HEALTH_ORDER.map(({ key, label }) => ({
+    key,
+    label,
+    count: projects.filter((project) => project.health === key).length,
+  }));
+}
+
+function dashboardFocusHub(projects: readonly Hub[]) {
+  for (const { key } of DASHBOARD_HEALTH_ORDER) {
+    const project = projects.find((candidate) => candidate.health === key);
+    if (project) return project;
+  }
+  return undefined;
 }
 
 function RunwayButton({
@@ -1273,7 +1597,7 @@ function signalActionLabel(group: GroupedSignal) {
   return "Open";
 }
 
-function exportDashboard(items: WorkItem[], portfolioName?: string) {
+function exportDashboard(items: WorkItem[], scopeName?: string) {
   const rows = items.map((item) =>
     [
       item.id,
@@ -1289,7 +1613,7 @@ function exportDashboard(items: WorkItem[], portfolioName?: string) {
       .join(","),
   );
   downloadDashboardFile(
-    `trevv-dashboard-${portfolioName?.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "portfolio"}.csv`,
+    `trevv-dashboard-${scopeName?.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "view"}.csv`,
     ["id,title,type,status,priority,owner,due_date,project", ...rows].join(
       "\n",
     ),

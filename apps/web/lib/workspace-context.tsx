@@ -14,6 +14,10 @@ import {
   scopeWorkspace,
   type WorkspaceScope,
 } from "./attention";
+import {
+  DEMO_DASHBOARD_ACCESS,
+  type DashboardAccess,
+} from "./dashboard-access";
 
 type Theme = "light" | "dark";
 
@@ -27,6 +31,8 @@ interface WorkspaceContextValue {
   setPortfolioId: (id: string) => void;
   /** Derived once, read by every surface. See lib/attention.ts. */
   scope: WorkspaceScope;
+  /** Reporting levels and entities the signed-in member may inspect. */
+  dashboardAccess: DashboardAccess;
   captureOpen: boolean;
   setCaptureOpen: (open: boolean) => void;
 }
@@ -68,6 +74,7 @@ export function WorkspaceProvider({
       portfolioId,
       setPortfolioId,
       scope: scopeWorkspace(portfolioId),
+      dashboardAccess: DEMO_DASHBOARD_ACCESS,
       captureOpen,
       setCaptureOpen,
     }),

@@ -77,6 +77,37 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   await expect(
     page.getByRole("heading", { name: "Work lens · Needs intervention" }),
   ).toBeVisible();
+  const primaryNavLabels = await page
+    .locator('nav[aria-label="Primary navigation"] a')
+    .allTextContents();
+  expect(primaryNavLabels.indexOf("Dashboard")).toBe(
+    primaryNavLabels.indexOf("Portfolio") + 1,
+  );
+  await expect(
+    page.getByRole("tab", { name: /Portfolio All projects/ }),
+  ).toHaveAttribute("aria-selected", "true");
+
+  await page.getByRole("tab", { name: /Project One project/ }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Project view" }),
+  ).toHaveValue("hub-northstar");
+  await expect(
+    page.getByRole("button", { name: /5 All work items/ }),
+  ).toBeVisible();
+
+  await page.getByRole("tab", { name: /Team Functional team/ }).click();
+  await page
+    .getByRole("combobox", { name: "Team view" })
+    .selectOption("marketing");
+  await expect(
+    page.getByRole("button", { name: /6 All work items/ }),
+  ).toBeVisible();
+
+  await page.getByRole("tab", { name: /Personal My work/ }).click();
+  await expect(page.locator(".dashboard-target-readonly")).toContainText(
+    "My work",
+  );
+  await page.getByRole("tab", { name: /Portfolio All projects/ }).click();
 
   await page
     .getByRole("button", { name: /4 Stuck Blocked on something/ })
