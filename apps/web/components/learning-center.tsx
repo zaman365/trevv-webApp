@@ -38,7 +38,7 @@ import {
   type LearningResource,
 } from "@/lib/learning-resources";
 import { useWorkspace } from "@/lib/workspace-context";
-import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
+import { resolveLearningRoute } from "@/lib/learning-routes";
 
 interface LearningCenterContextValue {
   openLearningCenter: (resourceId?: string) => void;
@@ -570,35 +570,3 @@ function LearningResourceDetail({
   );
 }
 
-const workspaceLearningRoutes: Record<string, WorkspaceView> = {
-  "/app/attention": "attention",
-  "/app/approvals": "approvals",
-  "/app/blueprints": "blueprints",
-  "/app/dashboard": "dashboard",
-  "/app/decisions": "decisions",
-  "/app/ideas": "ideas",
-  "/app/inbox": "inbox",
-  "/app/my-work": "my-work",
-  "/app/notifications": "notifications",
-  "/app/reviews": "reviews",
-  "/app/search": "search",
-  "/app/team": "team",
-  "/app/waiting": "waiting",
-};
-
-function resolveLearningRoute(
-  route: string | undefined,
-  workspaceSlug?: string,
-) {
-  if (!route || !workspaceSlug) return route;
-  const workspaceView = workspaceLearningRoutes[route];
-  if (workspaceView) return workspaceHref(workspaceSlug, workspaceView);
-  if (route === "/app/settings/import") {
-    return `/app/workspaces/${encodeURIComponent(workspaceSlug)}/settings/import`;
-  }
-  if (route.startsWith("/app/settings/integrations")) {
-    const hash = route.split("#")[1];
-    return workspaceHref(workspaceSlug, "settings", hash);
-  }
-  return route;
-}

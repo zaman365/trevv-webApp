@@ -19,7 +19,7 @@ import {
 import { demoBoards, demoHubs, type WorkItemType } from "@founderhq/core";
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { storeCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
-import { routeForWorkItemType, validateCapture } from "@/lib/workflow-rules";
+import { validateCapture } from "@/lib/workflow-rules";
 import { Hint } from "./learning-center";
 
 const createTypes = [
@@ -399,11 +399,6 @@ export function UniversalCreateDialog({
       </form>
     </div>
   );
-}
-
-export function routeForCapturedType(type: CapturedWorkItem["type"]) {
-  if (type === "note" || type === "link") return "/app/inbox";
-  return routeForWorkItemType(type);
 }
 
 function titleLabel(type: WorkItemType) {

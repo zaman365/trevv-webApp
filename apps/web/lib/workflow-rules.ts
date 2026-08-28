@@ -1,4 +1,5 @@
 import type { WorkItemType } from "@founderhq/core";
+import { workspaceHref } from "./workspace-routes";
 
 export interface OpportunityFactors {
   impact: number;
@@ -30,9 +31,21 @@ export function validateCapture(input: {
   return errors;
 }
 
-export function routeForWorkItemType(type: WorkItemType): string {
-  if (type === "decision") return "/app/decisions";
-  if (type === "idea") return "/app/ideas";
-  if (type === "approval") return "/app/approvals";
-  return "/app/my-work";
+const managementViewFor = (type: WorkItemType) => {
+  if (type === "decision") return "decisions";
+  if (type === "idea") return "ideas";
+  if (type === "approval") return "approvals";
+  return "my-work";
+};
+
+/**
+ * Management surfaces are workspace-scoped. Without a workspace there is
+ * no single destination, so the caller is sent to the portfolio to pick.
+ */
+export function routeForWorkItemType(
+  type: WorkItemType,
+  workspaceSlug?: string,
+): string {
+  if (!workspaceSlug) return "/app/portfolio";
+  return workspaceHref(workspaceSlug, managementViewFor(type));
 }

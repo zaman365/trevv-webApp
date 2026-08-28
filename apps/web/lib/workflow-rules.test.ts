@@ -25,10 +25,23 @@ describe("workflow rules", () => {
     expect(validateCapture({ type: "milestone", title: "" })).toHaveLength(2);
   });
 
-  it("routes specialized work to its management surface", () => {
-    expect(routeForWorkItemType("decision")).toBe("/app/decisions");
-    expect(routeForWorkItemType("idea")).toBe("/app/ideas");
-    expect(routeForWorkItemType("approval")).toBe("/app/approvals");
-    expect(routeForWorkItemType("task")).toBe("/app/my-work");
+  it("routes specialized work to its workspace management surface", () => {
+    const slug = "northstar-apparel";
+    expect(routeForWorkItemType("decision", slug)).toBe(
+      "/app/workspaces/northstar-apparel/decisions",
+    );
+    expect(routeForWorkItemType("idea", slug)).toBe(
+      "/app/workspaces/northstar-apparel/ideas",
+    );
+    expect(routeForWorkItemType("approval", slug)).toBe(
+      "/app/workspaces/northstar-apparel/approvals",
+    );
+    expect(routeForWorkItemType("task", slug)).toBe(
+      "/app/workspaces/northstar-apparel/my-work",
+    );
+  });
+
+  it("falls back to the portfolio without a workspace", () => {
+    expect(routeForWorkItemType("decision")).toBe("/app/portfolio");
   });
 });

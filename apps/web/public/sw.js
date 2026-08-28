@@ -1,13 +1,8 @@
-const CACHE = "trevv-v3";
-const SHELL = [
-  "/",
-  "/app/portfolio",
-  "/app/my-work",
-  "/app/inbox",
-  "/app/messages",
-  "/manifest.webmanifest",
-  "/icon",
-];
+const CACHE = "trevv-v4";
+// Module routes are workspace-scoped, so there is no static URL to
+// precache for them. addAll rejects wholesale on a single 404, which
+// would fail the install.
+const SHELL = ["/", "/app/portfolio", "/manifest.webmanifest", "/icon"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
