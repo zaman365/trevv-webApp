@@ -48,7 +48,7 @@ type ProviderKey =
 type ProviderStatus = "connected" | "enabled" | "off";
 type AuditCategory =
   "Integration" | "Security" | "Organization" | "Member" | "Export";
-type MemberRole = "Owner" | "Admin" | "Hub lead" | "Member" | "Stakeholder";
+type MemberRole = "Owner" | "Admin" | "Project lead" | "Member" | "Stakeholder";
 
 interface ProviderDefinition {
   key: ProviderKey;
@@ -276,7 +276,7 @@ const initialSettings: StoredSettings = {
       name: "Amira Demir",
       email: "amira@example.com",
       initials: "AD",
-      role: "Hub lead",
+      role: "Project lead",
       status: "active",
       lastActive: "Yesterday",
     },
@@ -395,7 +395,11 @@ function loadStoredSettings(raw: string | null): StoredSettings {
       providers: { ...initialSettings.providers, ...parsed.providers },
       organization: { ...initialSettings.organization, ...parsed.organization },
       members: Array.isArray(parsed.members)
-        ? parsed.members
+        ? parsed.members.map((member) =>
+            (member.role as string) === "Hub lead"
+              ? { ...member, role: "Project lead" as const }
+              : member,
+          )
         : initialSettings.members,
       sessions: Array.isArray(parsed.sessions)
         ? parsed.sessions
@@ -1057,8 +1061,8 @@ function IntegrationsPanel({
         <div>
           <strong>Optional by design</strong>
           <span>
-            Your Hubs, boards and decisions keep working if every provider is
-            disconnected.
+            Your projects, boards and decisions keep working if every provider
+            is disconnected.
           </span>
         </div>
       </div>
@@ -1389,7 +1393,7 @@ function MembersPanel({
             >
               <option>Owner</option>
               <option>Admin</option>
-              <option>Hub lead</option>
+              <option>Project lead</option>
               <option>Member</option>
               <option>Stakeholder</option>
             </select>
@@ -1846,7 +1850,7 @@ function InviteDialog({
               onChange={(event) => onRole(event.target.value as MemberRole)}
             >
               <option>Admin</option>
-              <option>Hub lead</option>
+              <option>Project lead</option>
               <option>Member</option>
               <option>Stakeholder</option>
             </select>
@@ -1976,8 +1980,9 @@ function roleDescription(role: MemberRole): string {
       "Full organization access, including ownership and deletion controls.",
     Admin:
       "Can manage organization settings, members, templates, and integrations.",
-    "Hub lead": "Can manage assigned Hubs and the people working in them.",
-    Member: "Can create and update work in Hubs they can access.",
+    "Project lead":
+      "Can manage assigned projects and the people working in them.",
+    Member: "Can create and update work in projects they can access.",
     Stakeholder: "Read-only access to explicitly shared stakeholder views.",
   };
   return descriptions[role];

@@ -314,7 +314,7 @@ export function generateAttentionSignals(
       responsibility: item.assignee ? 1 : 1.2,
       reason: `${item.title} depends on blocked work in ${prerequisiteHub.name}: ${prerequisite.title}.`,
       recommendedAction:
-        "Coordinate the owners across both Hubs and agree the unblock path.",
+        "Coordinate the owners across both projects and agree the unblock path.",
       metadata: {
         title: item.title,
         dependsOnItemId: prerequisite.id,
@@ -341,7 +341,7 @@ export function generateAttentionSignals(
         urgency: Math.min(5, Math.ceil(ageDays / 4)),
         responsibility: 1,
         reason: `${hub.name} has not published an update for ${ageDays} days.`,
-        recommendedAction: "Ask the Hub lead for a structured update.",
+        recommendedAction: "Ask the project lead for a structured update.",
         metadata: { hubName: hub.name, ageDays },
       });
   }

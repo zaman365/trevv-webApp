@@ -24,7 +24,7 @@ export default function HubScreen() {
         {hubs.isLoading ? (
           <ActivityIndicator color={nativeTheme.colors.primary} />
         ) : (
-          <Text>Hub unavailable.</Text>
+          <Text>Project unavailable.</Text>
         )}
       </SafeAreaView>
     );

@@ -745,7 +745,7 @@ export function ReviewsExperience() {
           <section className="trevv-panel weekly-review">
             <PanelHeading
               icon={MessageSquareText}
-              title="Weekly Hub Review"
+              title="Weekly project review"
               subtitle="Northstar Apparel · due today"
             />
             {posted ? (
@@ -918,7 +918,7 @@ export function HubsExperience() {
             </div>
           )}
           <PageHeader
-            eyebrow="Responsibility containers"
+            eyebrow="Portfolio projects"
             title="All projects"
             subtitle="Businesses, brands, clients, products, departments, ventures, initiatives, and projects — without forcing one vocabulary."
             hintId="hubs"
@@ -928,7 +928,7 @@ export function HubsExperience() {
                 onClick={() => setCreateOpen(true)}
               >
                 <Plus size={16} />
-                New Hub
+                New project
               </button>
             }
           />
@@ -947,7 +947,7 @@ export function HubsExperience() {
               </select>
             </label>
             <span>
-              {hubs.length} {hubs.length === 1 ? "Hub" : "Hubs"}
+              {hubs.length} {hubs.length === 1 ? "project" : "projects"}
             </span>
           </div>
           <div className="hub-directory">
@@ -1043,9 +1043,9 @@ function CreateHubDialog({
             <Grid2X2 size={17} />
           </span>
           <div>
-            <h2 id="create-hub-title">Create a project Hub</h2>
+            <h2 id="create-hub-title">Create a project</h2>
             <p>
-              A Hub keeps work, decisions, updates, evidence, and ownership
+              A project keeps work, decisions, updates, evidence, and ownership
               together.
             </p>
           </div>

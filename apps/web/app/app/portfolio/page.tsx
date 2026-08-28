@@ -4,7 +4,7 @@ import { PortfolioExperience } from "@/components/portfolio-experience";
 export const metadata: Metadata = {
   title: "Portfolio",
   description:
-    "See every Hub, risk, decision, approval, and next milestone in one live portfolio.",
+    "See every project, risk, decision, approval, and next milestone in one live portfolio.",
 };
 
 export default function PortfolioPage() {

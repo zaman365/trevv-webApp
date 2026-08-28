@@ -216,7 +216,7 @@ export function UniversalCreateDialog({
 
           <div className="create-core-fields">
             <label>
-              <span>Hub</span>
+              <span>Project</span>
               <div>
                 <span>{currentHubs.find((hub) => hub.id === hubId)?.icon}</span>
                 <select

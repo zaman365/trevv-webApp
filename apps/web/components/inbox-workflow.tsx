@@ -359,12 +359,12 @@ export function InboxWorkflow({
               </select>
             </label>
             <label>
-              <span>Hub</span>
+              <span>Project</span>
               <select
                 value={hubId}
                 onChange={(event) => setHubId(event.target.value)}
               >
-                <option value="all">All Hubs</option>
+                <option value="all">All projects</option>
                 {demoHubs
                   .filter((hub) => !hub.id.startsWith("original-"))
                   .map((hub) => (
@@ -482,7 +482,7 @@ export function InboxWorkflow({
                   </span>
                   <strong>{action.title}</strong>
                   <small>
-                    {action.source} · {hub?.name ?? "No Hub"} ·{" "}
+                    {action.source} · {hub?.name ?? "No project"} ·{" "}
                     {action.receivedAt}
                   </small>
                   {action.disposition === "snoozed" && (
@@ -755,7 +755,7 @@ function QuickCapture({
               <ChevronDown size={12} />
             </label>
             <label>
-              <span className="sr-only">Capture Hub</span>
+              <span className="sr-only">Capture project</span>
               <Inbox size={13} />
               <select
                 value={hubId}
@@ -883,7 +883,7 @@ function InboxDetailDialog({
             <div>
               <strong>{action.source}</strong>
               <small>
-                {hub?.name ?? "No Hub"} · {action.receivedAt}
+                {hub?.name ?? "No project"} · {action.receivedAt}
               </small>
             </div>
             <span className={`inbox-priority ${action.priority}`}>

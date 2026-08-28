@@ -78,7 +78,7 @@ export default function PortfolioScreen() {
             </Text>
           </View>
         </View>
-        <Text style={styles.sectionTitle}>Hubs</Text>
+        <Text style={styles.sectionTitle}>Projects</Text>
         {portfolio.data.hubs.map(({ hub, rollup }) => (
           <Pressable
             key={hub.id}

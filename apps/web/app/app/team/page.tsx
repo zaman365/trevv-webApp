@@ -4,7 +4,7 @@ import { TeamExperience } from "@/components/management-experience";
 export const metadata: Metadata = {
   title: "Team pressure",
   description:
-    "Cross-Hub workload evidence without timesheets or hourly estimates.",
+    "Cross-project workload evidence without timesheets or hourly estimates.",
 };
 
 export default function TeamPage() {

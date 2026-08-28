@@ -1290,7 +1290,9 @@ function exportDashboard(items: WorkItem[], portfolioName?: string) {
   );
   downloadDashboardFile(
     `trevv-dashboard-${portfolioName?.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "portfolio"}.csv`,
-    ["id,title,type,status,priority,owner,due_date,hub", ...rows].join("\n"),
+    ["id,title,type,status,priority,owner,due_date,project", ...rows].join(
+      "\n",
+    ),
     "text/csv;charset=utf-8",
   );
 }
@@ -1309,5 +1311,5 @@ function csvValue(value: string): string {
 }
 
 function hubForDashboard(hubId: string): string {
-  return demoHubs.find((hub) => hub.id === hubId)?.name ?? "Unknown Hub";
+  return demoHubs.find((hub) => hub.id === hubId)?.name ?? "Unknown project";
 }

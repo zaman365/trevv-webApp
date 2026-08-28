@@ -268,12 +268,12 @@ export function IdeasWorkflow() {
         </label>
         <label className="workflow-filter-select">
           <Filter size={14} />
-          <span className="sr-only">Filter by Hub</span>
+          <span className="sr-only">Filter by project</span>
           <select
             value={hubId}
             onChange={(event) => setHubId(event.target.value)}
           >
-            <option value="all">All Hubs</option>
+            <option value="all">All projects</option>
             {demoHubs
               .filter((hub) => !hub.id.startsWith("original-"))
               .map((hub) => (
@@ -324,7 +324,7 @@ export function IdeasWorkflow() {
                 </span>
                 <div>
                   <p>
-                    {hub?.name ?? "No Hub"} · {stageLabels[idea.stage]}
+                    {hub?.name ?? "No project"} · {stageLabels[idea.stage]}
                   </p>
                   <h2>{idea.title}</h2>
                 </div>
@@ -483,7 +483,7 @@ function IdeaDetailDialog({
           </span>
           <div>
             <p>
-              {hub?.name ?? "No Hub"} · {stageLabels[idea.stage]}
+              {hub?.name ?? "No project"} · {stageLabels[idea.stage]}
             </p>
             <h2 id="idea-detail-title">{idea.title}</h2>
           </div>
@@ -823,7 +823,7 @@ function CaptureIdeaDialog({
           </label>
           <div className="form-grid-two">
             <label className="stacked-field">
-              <span>Hub</span>
+              <span>Project</span>
               <select
                 value={hubId}
                 onChange={(event) => setHubId(event.target.value)}

@@ -32,14 +32,14 @@ export const learningResources: LearningResource[] = [
     type: "Tutorial",
     title: "Welcome to TREVV",
     summary: "A five-minute tour of the operating system and its core rhythm.",
-    body: "TREVV keeps the work you run, the signals that need you, and the decisions that move things forward in one calm workspace. Start with Home, respond to Attention, and keep every Hub current.",
+    body: "TREVV keeps the work you run, the signals that need you, and the decisions that move things forward in one calm workspace. Start with Home, respond to Attention, and keep every project current.",
     duration: "5 min",
     route: "/app/home",
     steps: [
       "Open Home to see the portfolio-level picture.",
       "Review Attention for the few signals that need your judgment.",
       "Use My Work for owned commitments and Inbox for requests from others.",
-      "Open a Hub when you need the full operating context.",
+      "Open a project when you need the full operating context.",
     ],
     tips: ["Use Quick capture whenever something should not be lost."],
     keywords: ["start", "tour", "basics", "home", "overview"],
@@ -52,11 +52,11 @@ export const learningResources: LearningResource[] = [
     title: "Find your way around",
     summary:
       "Understand the sidebar, top bar, mobile navigation, and page hierarchy.",
-    body: "The left sidebar separates personal focus, favorite Hubs, workflows, reporting, and administration. On smaller screens, the most-used destinations move to the bottom navigation.",
+    body: "The left sidebar separates personal focus, favorite projects, workflows, reporting, and administration. On smaller screens, the most-used destinations move to the bottom navigation.",
     duration: "3 min",
     steps: [
       "Workspace links show your personal queues.",
-      "Favorites keep important Hubs one click away.",
+      "Favorites keep important projects one click away.",
       "Workflows group decisions, ideas, and team coordination.",
       "The lower section contains reporting, Blueprints, Waiting, learning, and settings.",
     ],
@@ -75,7 +75,7 @@ export const learningResources: LearningResource[] = [
     steps: [
       "Open Quick capture from the top bar or mobile action.",
       "Write the smallest useful description.",
-      "Optionally choose a work type, Hub, owner, or date.",
+      "Optionally choose a work type, project, owner, or date.",
       "Capture now and refine it when you have context.",
     ],
     tips: ["A short verb-first title is easier to process later."],
@@ -118,8 +118,8 @@ export const learningResources: LearningResource[] = [
     type: "Guide",
     title: "Portfolios and responsibility",
     summary:
-      "Group Hubs into a useful management view without changing how teams execute.",
-    body: "A Portfolio is a lens across related Hubs. It gives an owner a combined health, workload, and Attention view while each Hub keeps its own operating context.",
+      "Group projects into a useful management view without changing how teams execute.",
+    body: "A Portfolio is a lens across related projects. It gives an owner a combined health, workload, and Attention view while each project keeps its own operating context.",
     duration: "4 min",
     route: "/app/portfolio",
     tips: [
@@ -132,14 +132,14 @@ export const learningResources: LearningResource[] = [
     id: "hubs",
     category: "Structure & work",
     type: "Tutorial",
-    title: "Understand Hubs",
+    title: "Understand projects",
     summary:
       "Use one flexible container for a business, client, product, project, or function.",
-    body: "A Hub holds the boards, people, updates, resources, decisions, and health of one responsibility container. TREVV uses neutral structure so different kinds of work can coexist.",
+    body: "A project holds the boards, people, updates, resources, decisions, and health of one responsibility. Its type can be a business, brand, client, product, department, or initiative.",
     duration: "5 min",
     route: "/app/hubs",
     steps: [
-      "Give the Hub a clear outcome and owner.",
+      "Give the project a clear outcome and owner.",
       "Choose the lifecycle stage that reflects its current reality.",
       "Add a small number of boards for distinct workflows.",
       "Keep the latest update and next milestone current.",
@@ -184,7 +184,7 @@ export const learningResources: LearningResource[] = [
     category: "Structure & work",
     type: "Guide",
     title: "Use My Work",
-    summary: "See commitments assigned to you across every accessible Hub.",
+    summary: "See commitments assigned to you across every accessible project.",
     body: "My Work is an ownership view. It groups your work by urgency and date so you can plan execution without visiting every board.",
     duration: "3 min",
     route: "/app/my-work",
@@ -310,7 +310,7 @@ export const learningResources: LearningResource[] = [
     type: "Guide",
     title: "Read team pressure responsibly",
     summary: "Use workload signals to rebalance commitments, not rank people.",
-    body: "Team pressure combines urgent work, near-term dates, blockers, critical Hubs, and milestone ownership. It is a coordination signal and never a performance score.",
+    body: "Team pressure combines urgent work, near-term dates, blockers, critical projects, and milestone ownership. It is a coordination signal and never a performance score.",
     duration: "4 min",
     route: "/app/team",
     tips: ["Discuss constraints and trade-offs before moving ownership."],
@@ -349,7 +349,7 @@ export const learningResources: LearningResource[] = [
     title: "Read the Dashboard",
     summary:
       "Interpret live portfolio reporting without maintaining a second set of numbers.",
-    body: "Dashboard widgets are calculated from the same work items, owners, dates, priorities, and Hub health used everywhere else. Change the portfolio and work scope to answer a specific management question, then export the visible dataset when needed.",
+    body: "Dashboard widgets are calculated from the same work items, owners, dates, priorities, and project health used everywhere else. Change the portfolio and work scope to answer a specific management question, then export the visible dataset when needed.",
     duration: "5 min",
     route: "/app/dashboard",
     steps: [
@@ -378,10 +378,10 @@ export const learningResources: LearningResource[] = [
     id: "dashboard-ownership",
     category: "Reporting & routines",
     type: "Tip",
-    title: "Work by owner and Hub",
+    title: "Work by owner and project",
     summary:
       "Find where commitments are concentrated before load becomes a blocker.",
-    body: "Owner bars show the number of visible items assigned to each person. Hub bars show where open work sits. Read both together before deciding whether to move ownership or reduce scope.",
+    body: "Owner bars show the number of visible items assigned to each person. Project bars show where open work sits. Read both together before deciding whether to move ownership or reduce scope.",
     duration: "2 min",
     keywords: ["dashboard", "owner", "hub", "load", "capacity"],
   },
@@ -415,7 +415,7 @@ export const learningResources: LearningResource[] = [
       "Apply the selection or detach the instance if it should evolve independently.",
     ],
     tips: [
-      "Use Blueprints for standards that should improve across several Hubs.",
+      "Use Blueprints for standards that should improve across several projects.",
     ],
     keywords: [
       "blueprint",
@@ -433,7 +433,7 @@ export const learningResources: LearningResource[] = [
     type: "Guide",
     title: "Search across accessible work",
     summary:
-      "Find Hubs, work items, updates, and resources without exposing inaccessible data.",
+      "Find projects, work items, updates, and resources without exposing inaccessible data.",
     body: "Search applies the same permissions as the rest of TREVV. Use specific outcome, client, owner, or artifact terms and narrow the result type when the list is broad.",
     duration: "3 min",
     route: "/app/search",
@@ -488,7 +488,7 @@ export const learningResources: LearningResource[] = [
     title: "Members, roles, and permissions",
     summary:
       "Give each person the smallest role that supports their responsibility.",
-    body: "Owners control the organization; admins manage settings and members; Hub leads manage assigned Hubs; members execute work; stakeholders only see explicitly shared views.",
+    body: "Owners control the organization; admins manage settings and members; project leads manage assigned projects; members execute work; stakeholders only see explicitly shared views.",
     duration: "5 min",
     route: "/app/settings/integrations#members",
     tips: ["Review admin and stakeholder access regularly."],

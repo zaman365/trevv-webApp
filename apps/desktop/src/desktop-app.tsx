@@ -47,7 +47,7 @@ function DesktopPortfolio() {
           <Grid2X2 size={16} />
           Portfolio
         </button>
-        <p>Hubs</p>
+        <p>Projects</p>
         {hubs.slice(0, 7).map(({ hub }) => (
           <button key={hub.id}>
             <i style={{ color: hub.accent, background: `${hub.accent}18` }}>

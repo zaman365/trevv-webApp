@@ -40,6 +40,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { storeCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
+import { labelForProjectType } from "@/lib/terminology";
 import {
   currentMessagingUserId,
   messagingPeople,
@@ -927,7 +928,7 @@ function RoomContext({
             <header>
               <span>{hub.icon}</span>
               <div>
-                <small>{hub.type.replaceAll("_", " ")} Hub</small>
+                <small>{labelForProjectType(hub.type)}</small>
                 <strong>{hub.name}</strong>
               </div>
               <span className={`health-label ${hub.health}`}>
@@ -947,7 +948,7 @@ function RoomContext({
               </span>
             </div>
             <Link href={`/app/hubs/${hub.slug}`}>
-              Open Hub <ArrowRight size={12} />
+              Open project <ArrowRight size={12} />
             </Link>
           </section>
         ) : (
@@ -1022,7 +1023,7 @@ function RoomContext({
                 ? "Guests only see this room and explicitly shared work."
                 : conversation.visibility === "private"
                   ? "Only invited participants can open this room."
-                  : "Access follows organization and Hub membership."}
+                  : "Access follows organization and project membership."}
             </span>
           </div>
         </section>
@@ -1255,7 +1256,7 @@ function NewConversationDialog({
                       setKind(event.target.value as ConversationKind)
                     }
                   >
-                    <option value="hub">Hub room</option>
+                    <option value="hub">Project room</option>
                     <option value="team">Internal team room</option>
                     <option value="external">Guest-scoped room</option>
                   </select>
@@ -1273,7 +1274,7 @@ function NewConversationDialog({
               </label>
               {kind === "hub" && (
                 <label className="stacked-field">
-                  <span>Linked Hub</span>
+                  <span>Linked project</span>
                   <select
                     value={hubId}
                     onChange={(event) => setHubId(event.target.value)}
@@ -1313,7 +1314,7 @@ function NewConversationDialog({
                   {kind === "external"
                     ? "External people receive access only to this room and explicitly shared work."
                     : kind === "hub"
-                      ? "Membership stays aligned with the linked Hub."
+                      ? "Membership stays aligned with the linked project."
                       : "Only workspace members added here can participate."}
                 </span>
               </div>

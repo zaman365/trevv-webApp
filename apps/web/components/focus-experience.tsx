@@ -315,7 +315,7 @@ function SearchView({
   const chips = [
     ["everything", "Everything"],
     ["work", "Work items"],
-    ["hubs", "Hubs"],
+    ["hubs", "Projects"],
     ["updates", "Updates"],
     ["resources", "Resources"],
   ] as const;
@@ -327,7 +327,7 @@ function SearchView({
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search work, Hubs, comments and resources…"
+          placeholder="Search work, projects, comments and resources…"
         />
         <kbd>⌘ K</kbd>
       </div>
@@ -534,8 +534,8 @@ function SettingsView() {
           <div>
             <strong>Optional by design</strong>
             <span>
-              Your Hubs, boards and decisions keep working if every provider is
-              disconnected.
+              Your projects, boards and decisions keep working if every provider
+              is disconnected.
             </span>
           </div>
         </div>

@@ -117,3 +117,12 @@ const TYPE_LABELS: Record<string, string> = {
 export function labelForType(type: HubType) {
   return TYPE_LABELS[type] ?? TYPE_LABELS.other!;
 }
+
+/**
+ * A project can still describe the kind of responsibility it contains without
+ * reintroducing the old "Hub" product jargon in compact labels.
+ */
+export function labelForProjectType(type: HubType) {
+  const typeLabel = labelForType(type);
+  return typeLabel === "Project" ? typeLabel : `${typeLabel} project`;
+}

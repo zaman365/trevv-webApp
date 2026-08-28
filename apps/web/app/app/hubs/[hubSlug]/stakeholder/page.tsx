@@ -4,7 +4,7 @@ import { StakeholderExperience } from "@/components/stakeholder-experience";
 export const metadata: Metadata = {
   title: "Stakeholder view",
   description:
-    "A permission-safe summary containing only explicitly shared Hub information.",
+    "A permission-safe summary containing only explicitly shared project information.",
 };
 
 export default async function StakeholderPage({

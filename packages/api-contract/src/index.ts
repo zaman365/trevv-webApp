@@ -294,7 +294,7 @@ export const createConversationSchema = conversationSchema
       context.addIssue({
         code: "custom",
         path: ["hubId"],
-        message: "A Hub room must be linked to a Hub.",
+        message: "A project room must be linked to a project.",
       });
     if (value.kind === "direct" && value.participantIds.length !== 2)
       context.addIssue({

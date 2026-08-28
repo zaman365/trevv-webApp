@@ -186,7 +186,7 @@ export function BoardExperience({
       <WorkspaceFrame active="hub" hubSlug={hubSlug}>
         <main className="board-main board-not-found">
           <h1>Board not found</h1>
-          <p>This board does not belong to the requested Hub.</p>
+          <p>This board does not belong to the requested project.</p>
           <Link href={hub ? `/app/hubs/${hub.slug}` : "/app/hubs"}>
             Return to {hub?.name ?? "all projects"}
           </Link>

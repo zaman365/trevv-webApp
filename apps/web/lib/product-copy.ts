@@ -15,7 +15,7 @@ export const productCopy = {
       reviews: "Reviews",
       templates: "Templates",
       settings: "Settings",
-      hubs: "Hubs",
+      hubs: "Projects",
     },
     shell: {
       search: "Search work, projects and people…",
@@ -117,13 +117,13 @@ export const productCopy = {
         "Read every connected mailbox and keep actionable requests one tab away.",
       decisionsTitle: "Decision Center",
       decisionsSubtitle:
-        "Resolve the choices that unblock progress across every Hub.",
+        "Resolve the choices that unblock progress across every project.",
       approvalsTitle: "Approval Center",
       approvalsSubtitle:
         "Review assets and requests without losing their context.",
       searchTitle: "Search",
       searchSubtitle:
-        "Permission-aware results across Hubs, work, comments, updates and links.",
+        "Permission-aware results across projects, work, comments, updates and links.",
       templatesTitle: "Templates",
       templatesSubtitle:
         "Start proven operating workflows without adding hierarchy.",
@@ -171,7 +171,7 @@ export const productCopy = {
       organization: "Organization name",
       language: "Language",
       timezone: "Time zone",
-      chooseHubs: "Choose starter Hubs",
+      chooseHubs: "Choose starter projects",
       invite: "Invite your team",
       optional: "Optional",
     },

@@ -21,7 +21,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ title: "Portfolio" }} />
-        <Stack.Screen name="hubs/[slug]" options={{ title: "Hub" }} />
+        <Stack.Screen name="hubs/[slug]" options={{ title: "Project" }} />
       </Stack>
     </QueryClientProvider>
   );

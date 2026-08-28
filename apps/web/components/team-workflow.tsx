@@ -112,7 +112,7 @@ export function TeamWorkflow() {
     <>
       <header className="trevv-page-header">
         <div>
-          <p>Across Hubs</p>
+          <p>Across projects</p>
           <h1 className="page-title-with-hint">
             Team workspace <Hint resourceId="team-pressure" />
           </h1>
@@ -246,7 +246,7 @@ export function TeamWorkflow() {
           <span>Urgent / high</span>
           <span>Due this week</span>
           <span>Blocked</span>
-          <span>Hubs</span>
+          <span>Projects</span>
           <span>Pressure</span>
           <span>
             <span className="sr-only">Actions</span>
@@ -443,7 +443,7 @@ function MemberDetailDialog({
               </select>
             </label>
             <div className="member-access-list">
-              <b>Hub access</b>
+              <b>Project access</b>
               {currentHubs.slice(0, 5).map((hub) => (
                 <label key={hub.id}>
                   <input
@@ -487,7 +487,7 @@ function MemberDetailDialog({
               </span>
               <span>
                 <b>{member.criticalHubResponsibilities}</b>
-                <small>Critical Hubs</small>
+                <small>Critical projects</small>
               </span>
             </div>
             <button className="primary-button full-width" onClick={onRebalance}>
@@ -630,11 +630,11 @@ function InviteMemberDialog({
               <option>Guest</option>
             </select>
             <small className="field-help">
-              Members can create and update work in Hubs they can access.
+              Members can create and update work in projects they can access.
             </small>
           </label>
           <fieldset className="invite-hub-access">
-            <legend>Initial Hub access</legend>
+            <legend>Initial project access</legend>
             {currentHubs.slice(0, 6).map((hub) => (
               <label key={hub.id}>
                 <input

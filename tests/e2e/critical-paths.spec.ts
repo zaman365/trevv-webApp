@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("operator starts in Home and opens a Hub from Portfolio", async ({
+test("operator starts in Home and opens a project from Portfolio", async ({
   page,
 }) => {
   await page.goto("/app/home");
@@ -110,11 +110,11 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   await page.getByRole("button", { name: "Close Create" }).click();
 });
 
-test("a new project creates a working Hub and board", async ({ page }) => {
+test("a new project creates a working project and board", async ({ page }) => {
   await page.goto("/app/portfolio");
   await page.getByRole("link", { name: "New project" }).click();
   await expect(
-    page.getByRole("heading", { name: "Create a project Hub" }),
+    page.getByRole("heading", { name: "Create a project" }),
   ).toBeVisible();
   await page.getByLabel("Project name").fill("Customer Onboarding Lab");
   await page
@@ -313,7 +313,7 @@ test("Inbox is actionable while Quick Capture remains separate", async ({
   ).toBeVisible();
 });
 
-test("Messages keeps requests, threads, and Hub context connected", async ({
+test("Messages keeps requests, threads, and project context connected", async ({
   page,
 }) => {
   await page.goto("/app/messages");
@@ -333,7 +333,7 @@ test("Messages keeps requests, threads, and Hub context connected", async ({
   await expect(
     page.getByRole("button", { name: /Needs response \d+/ }),
   ).toBeVisible();
-  const hubContextLink = page.getByRole("link", { name: "Open Hub" });
+  const hubContextLink = page.getByRole("link", { name: "Open project" });
   if (!(await hubContextLink.isVisible()))
     await page.getByRole("button", { name: "Open room context" }).click();
   await expect(hubContextLink).toBeVisible();
@@ -365,13 +365,13 @@ test("Messages keeps requests, threads, and Hub context connected", async ({
   );
 });
 
-test("onboarding configures a generalized first Hub", async ({ page }) => {
+test("onboarding configures a generalized first project", async ({ page }) => {
   await page.goto("/onboarding");
   await expect(
     page.getByRole("heading", { name: "What are you managing?" }),
   ).toBeVisible();
   for (const heading of [
-    "Create your first Hub",
+    "Create your first project",
     "Choose a starter Blueprint",
     "Bring your team and context",
     "Your Portfolio is ready",
