@@ -4621,12 +4621,13 @@
   gap: 3px;
 }
 .topbar-create-button {
-  min-width: 120px;
+  position: relative;
+  min-width: 96px;
   height: 38px;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 7px;
   margin-right: 4px;
-  padding: 0 7px 0 11px;
+  padding: 0 12px;
   color: white;
   background: var(--fh-primary);
   border-color: var(--fh-primary);
@@ -4636,20 +4637,39 @@
   color: white;
   background: var(--fh-primary-strong);
 }
-.topbar-create-button kbd {
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  margin-left: auto;
-  padding: 0;
+.topbar-create-shortcut {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
   color: white;
-  background: color-mix(in srgb, white 14%, transparent);
-  border: 1px solid color-mix(in srgb, white 24%, transparent);
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 760;
+  background: var(--fh-ink);
+  border-radius: 7px;
+  box-shadow: var(--fh-shadow-md);
+  font-size: var(--fh-text-xs);
+  font-weight: 650;
   line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+.topbar-create-shortcut kbd {
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+}
+.topbar-create-button:hover .topbar-create-shortcut,
+.topbar-create-button:focus-visible .topbar-create-shortcut {
+  opacity: 1;
+  transform: none;
 }
 .topbar-tool {
   position: relative;
@@ -4736,7 +4756,6 @@
     padding: 0;
   }
   .topbar-create-label,
-  .topbar-create-button kbd,
   .topbar-tool-help {
     display: none;
   }

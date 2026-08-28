@@ -510,11 +510,17 @@ function WorkspaceChrome({
               className="quiet-button capture-button topbar-create-button"
               onClick={() => setCaptureOpen(true)}
               aria-label="Create work"
-              title="Create work (Q)"
+              aria-describedby="create-work-shortcut"
             >
               <Plus size={16} />
               <span className="topbar-create-label">Create</span>
-              <kbd>Q</kbd>
+              <span
+                className="topbar-create-shortcut"
+                id="create-work-shortcut"
+                role="tooltip"
+              >
+                Press <kbd>Q</kbd>
+              </span>
             </button>
             <Link
               className={`topbar-tool topbar-tool-attention ${active === "attention" ? "active" : ""}`}
