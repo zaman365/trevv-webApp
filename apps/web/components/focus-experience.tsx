@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { demoHubs, demoItems } from "@founderhq/core";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
@@ -302,6 +302,7 @@ function SearchView({
   results: typeof demoItems;
   allowedHubIds: readonly string[];
 }) {
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState<
     "everything" | "work" | "hubs" | "updates" | "resources"
   >("everything");
@@ -372,13 +373,29 @@ function SearchView({
         <Search size={19} />
         <input
           autoFocus
+          ref={searchInputRef}
           data-trevv-search-input
           aria-keyshortcuts="/"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search work, Workspaces, comments and resources…"
         />
-        <kbd title="Press slash to focus search">/</kbd>
+        {query ? (
+          <button
+            type="button"
+            className="big-search-clear"
+            aria-label="Clear search"
+            title="Clear search"
+            onClick={() => {
+              setQuery("");
+              searchInputRef.current?.focus();
+            }}
+          >
+            <X size={15} />
+          </button>
+        ) : (
+          <kbd title="Press slash to focus search">/</kbd>
+        )}
       </div>
       <div className="search-chips">
         {chips.map(([value, label]) => (

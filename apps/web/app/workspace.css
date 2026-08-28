@@ -1083,6 +1083,31 @@
   border-radius: 6px;
   font-size: var(--fh-text-xs);
 }
+.big-search-clear {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--fh-muted);
+  background: var(--fh-canvas);
+  border: 1px solid var(--fh-border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.big-search-clear svg {
+  color: currentColor;
+}
+.big-search-clear:hover {
+  color: var(--fh-ink);
+  background: var(--fh-surface-subtle);
+  border-color: var(--fh-border-strong);
+}
+.big-search-clear:focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 2px;
+}
 .search-chips {
   display: flex;
   gap: 5px;
