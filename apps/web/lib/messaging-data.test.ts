@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { messagingPeople } from "./messaging-data";
+import {
+  conversationGroupFor,
+  conversationIdForTeam,
+  messagingPeople,
+} from "./messaging-data";
 
 describe("messaging people directory", () => {
   it("provides unique searchable identities and email actions", () => {
@@ -11,6 +15,21 @@ describe("messaging people directory", () => {
     );
     expect(messagingPeople.every((person) => person.email.includes("@"))).toBe(
       true,
+    );
+  });
+});
+
+describe("conversation organization", () => {
+  it("separates team rooms, work rooms, and individual people", () => {
+    expect(conversationGroupFor({ kind: "team" })).toBe("teams");
+    expect(conversationGroupFor({ kind: "workspace" })).toBe("rooms");
+    expect(conversationGroupFor({ kind: "external" })).toBe("rooms");
+    expect(conversationGroupFor({ kind: "direct" })).toBe("people");
+  });
+
+  it("uses a stable room id for each workspace team", () => {
+    expect(conversationIdForTeam("workspace-a-marketing")).toBe(
+      "conversation-team-workspace-a-marketing",
     );
   });
 });

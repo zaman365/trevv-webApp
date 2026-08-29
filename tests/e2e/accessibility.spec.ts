@@ -38,6 +38,7 @@ const routes = [
   workspaceRoute("waiting"),
   workspaceRoute("decisions"),
   workspaceRoute("messages"),
+  workspaceRoute("teams"),
   workspaceRoute("blueprints"),
   boardRoute(),
   `${workspaceHome(STAKEHOLDER_WORKSPACE)}/stakeholder`,

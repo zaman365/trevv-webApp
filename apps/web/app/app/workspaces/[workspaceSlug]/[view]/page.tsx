@@ -48,7 +48,7 @@ export default async function WorkspaceModulePage({
       return <ReviewsExperience workspaceSlug={workspaceSlug} />;
     case "waiting":
       return <WaitingExperience workspaceSlug={workspaceSlug} />;
-    case "team":
+    case "teams":
       return <TeamExperience workspaceSlug={workspaceSlug} />;
     case "blueprints":
       return <BlueprintsExperience workspaceSlug={workspaceSlug} />;

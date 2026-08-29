@@ -231,7 +231,7 @@ function PortfolioMain() {
             : detail === "approvals"
               ? "approvals"
               : detail === "unassignedUrgent"
-                ? "team"
+                ? "teams"
                 : "attention";
         return {
           id: item.id,

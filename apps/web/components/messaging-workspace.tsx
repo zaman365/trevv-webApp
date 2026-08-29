@@ -44,6 +44,8 @@ import { labelForProjectType } from "@/lib/terminology";
 import { useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import {
+  conversationGroupFor,
+  conversationIdForTeam,
   currentMessagingUserId,
   messagingPeople,
   personById,
@@ -54,6 +56,13 @@ import {
   type ConversationMessage,
   type MessageIntent,
 } from "@/lib/messaging-data";
+import {
+  createInitialWorkspaceTeams,
+  readWorkspaceTeamsSnapshot,
+  workspaceTeamsChangedEvent,
+  type StoredWorkspaceTeamMember,
+  type WorkspaceTeam,
+} from "@/lib/teams";
 
 const conversationsStorageKey = "trevv:messaging-conversations";
 const messagesStorageKey = "trevv:messaging-messages";
@@ -61,6 +70,7 @@ const demoNow = new Date("2026-08-27T10:00:00.000Z");
 
 type FocusFilter = "all" | "needs-response" | "unread";
 type NewConversationMode = "room" | "direct" | null;
+type RoomKind = Extract<ConversationKind, "workspace" | "external">;
 
 const intentDetails: Record<
   MessageIntent,
@@ -91,8 +101,42 @@ const intentDetails: Record<
 export function MessagingWorkspace() {
   const { scope } = useWorkspace();
   const workspace = scope.workspaces[0];
+  const defaultTeamMembers = useMemo<StoredWorkspaceTeamMember[]>(
+    () =>
+      workspace
+        ? messagingPeople
+            .filter((person) => !person.external)
+            .map((person) => ({
+              userId: teamMemberIdForName(person.name),
+              userName: person.name,
+              workspaceIds: [workspace.id],
+              email: person.email,
+              role:
+                person.id === currentMessagingUserId
+                  ? ("Owner" as const)
+                  : ("Member" as const),
+              status:
+                person.presence === "away"
+                  ? ("away" as const)
+                  : ("active" as const),
+            }))
+        : [],
+    [workspace],
+  );
+  const defaultWorkspaceTeams = useMemo(
+    () =>
+      workspace
+        ? createInitialWorkspaceTeams([workspace], defaultTeamMembers)
+        : [],
+    [defaultTeamMembers, workspace],
+  );
   const [conversations, setConversations] = useState(seedConversations);
   const [messages, setMessages] = useState(seedMessages);
+  const [workspaceTeams, setWorkspaceTeams] = useState<WorkspaceTeam[]>([]);
+  const [workspaceTeamMembers, setWorkspaceTeamMembers] = useState<
+    StoredWorkspaceTeamMember[]
+  >([]);
+  const [teamDataReady, setTeamDataReady] = useState(false);
   const [selectedId, setSelectedId] = useState(seedConversations[0]!.id);
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState<FocusFilter>("all");
@@ -131,6 +175,27 @@ export function MessagingWorkspace() {
   }, []);
 
   useEffect(() => {
+    let frame = 0;
+    const syncTeams = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const stored = readWorkspaceTeamsSnapshot();
+        setWorkspaceTeams(stored?.teams ?? defaultWorkspaceTeams);
+        setWorkspaceTeamMembers(stored?.members ?? defaultTeamMembers);
+        setTeamDataReady(true);
+      });
+    };
+    syncTeams();
+    window.addEventListener(workspaceTeamsChangedEvent, syncTeams);
+    window.addEventListener("storage", syncTeams);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener(workspaceTeamsChangedEvent, syncTeams);
+      window.removeEventListener("storage", syncTeams);
+    };
+  }, [defaultTeamMembers, defaultWorkspaceTeams]);
+
+  useEffect(() => {
     if (!hydrated) return;
     try {
       localStorage.setItem(
@@ -142,6 +207,27 @@ export function MessagingWorkspace() {
       // State remains functional for the current session.
     }
   }, [conversations, hydrated, messages]);
+
+  useEffect(() => {
+    if (!hydrated || !teamDataReady || !workspace) return;
+    const frame = window.requestAnimationFrame(() => {
+      setConversations((current) =>
+        synchronizeWorkspaceConversations(
+          current,
+          workspace,
+          workspaceTeams,
+          workspaceTeamMembers,
+        ),
+      );
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    hydrated,
+    teamDataReady,
+    workspace,
+    workspaceTeamMembers,
+    workspaceTeams,
+  ]);
 
   useEffect(() => {
     if (!hydrated || !workspace) return;
@@ -293,6 +379,32 @@ export function MessagingWorkspace() {
         new Date(left.lastActivity).getTime()
       );
     });
+  const conversationGroups = [
+    {
+      key: "teams" as const,
+      label: "Teams",
+      empty: "No team rooms",
+      items: visibleConversations.filter(
+        (conversation) => conversationGroupFor(conversation) === "teams",
+      ),
+    },
+    {
+      key: "rooms" as const,
+      label: "Rooms",
+      empty: "No work rooms",
+      items: visibleConversations.filter(
+        (conversation) => conversationGroupFor(conversation) === "rooms",
+      ),
+    },
+    {
+      key: "people" as const,
+      label: "People",
+      empty: "No direct conversations",
+      items: visibleConversations.filter(
+        (conversation) => conversationGroupFor(conversation) === "people",
+      ),
+    },
+  ];
 
   const participants = selected.participantIds.map(personById);
   const otherParticipants = participants.filter(
@@ -596,15 +708,46 @@ export function MessagingWorkspace() {
             />
           </label>
           <div className="conversation-list">
-            {visibleConversations.map((conversation) => (
-              <ConversationRow
-                key={conversation.id}
-                conversation={conversation}
-                active={conversation.id === selected.id}
-                needsResponse={roomsNeedingResponse.has(conversation.id)}
-                latestMessage={latestMessageFor(messages, conversation.id)}
-                onSelect={() => chooseConversation(conversation.id)}
-              />
+            {conversationGroups.map((group) => (
+              <section
+                className={`conversation-group group-${group.key}`}
+                aria-labelledby={`conversation-group-${group.key}`}
+                key={group.key}
+              >
+                <header id={`conversation-group-${group.key}`}>
+                  <span>
+                    {group.key === "teams" ? (
+                      <Users size={12} />
+                    ) : group.key === "rooms" ? (
+                      <Hash size={12} />
+                    ) : (
+                      <AtSign size={12} />
+                    )}
+                    {group.label}
+                  </span>
+                  <b>{group.items.length}</b>
+                </header>
+                <div className="conversation-group-items">
+                  {group.items.map((conversation) => (
+                    <ConversationRow
+                      key={conversation.id}
+                      conversation={conversation}
+                      active={conversation.id === selected.id}
+                      needsResponse={roomsNeedingResponse.has(conversation.id)}
+                      latestMessage={latestMessageFor(
+                        messages,
+                        conversation.id,
+                      )}
+                      onSelect={() => chooseConversation(conversation.id)}
+                    />
+                  ))}
+                  {!group.items.length && (
+                    <span className="conversation-group-empty">
+                      {group.empty}
+                    </span>
+                  )}
+                </div>
+              </section>
             ))}
             {!visibleConversations.length && (
               <div className="conversation-empty">
@@ -634,6 +777,8 @@ export function MessagingWorkspace() {
                   personId={otherParticipants[0]?.id ?? currentMessagingUserId}
                 />
               ) : selected.kind === "external" ? (
+                <Users size={18} />
+              ) : selected.kind === "team" ? (
                 <Users size={18} />
               ) : (
                 <Hash size={18} />
@@ -671,6 +816,8 @@ export function MessagingWorkspace() {
               <span>
                 {selected.kind === "direct" ? (
                   <MessageCircleMore size={20} />
+                ) : selected.kind === "team" ? (
+                  <Users size={20} />
                 ) : (
                   <Hash size={20} />
                 )}
@@ -856,6 +1003,8 @@ function ConversationRow({
         {conversation.kind === "direct" ? (
           <Avatar personId={directPerson ?? currentMessagingUserId} small />
         ) : conversation.kind === "external" ? (
+          <Users size={15} />
+        ) : conversation.kind === "team" ? (
           <Users size={15} />
         ) : (
           <Hash size={15} />
@@ -1246,7 +1395,7 @@ function NewConversationDialog({
   );
   const [title, setTitle] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [kind, setKind] = useState<ConversationKind>("workspace");
+  const [kind, setKind] = useState<RoomKind>("workspace");
   const workspaceId = currentWorkspaces[0]?.id ?? "";
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [directPersonId, setDirectPersonId] = useState(
@@ -1381,11 +1530,10 @@ function NewConversationDialog({
                   <select
                     value={kind}
                     onChange={(event) =>
-                      setKind(event.target.value as ConversationKind)
+                      setKind(event.target.value as RoomKind)
                     }
                   >
                     <option value="workspace">Workspace room</option>
-                    <option value="team">Internal team room</option>
                     <option value="external">Guest-scoped room</option>
                   </select>
                 </label>
@@ -1406,6 +1554,23 @@ function NewConversationDialog({
                   <strong>
                     {currentWorkspaces[0].icon} {currentWorkspaces[0].name}
                   </strong>
+                </div>
+              )}
+              {currentWorkspaces[0] && (
+                <div className="team-room-source-callout">
+                  <Users size={16} />
+                  <span>
+                    <b>Team rooms are automatic</b>
+                    <small>
+                      Create or update teams in Workspace Teams. Their rooms and
+                      membership stay synchronized here.
+                    </small>
+                  </span>
+                  <Link
+                    href={workspaceHref(currentWorkspaces[0].slug, "teams")}
+                  >
+                    Manage teams <ArrowRight size={12} />
+                  </Link>
                 </div>
               )}
               <fieldset className="room-participant-grid">
@@ -1491,6 +1656,156 @@ function Avatar({
       <i className={`presence-${person.presence}`} />
     </span>
   );
+}
+
+function synchronizeWorkspaceConversations(
+  current: Conversation[],
+  workspace: { id: string; slug: string; name: string },
+  allTeams: readonly WorkspaceTeam[],
+  teamMembers: readonly StoredWorkspaceTeamMember[],
+): Conversation[] {
+  const teams = allTeams.filter((team) => team.workspaceId === workspace.id);
+  const membersById = new Map(
+    teamMembers.map((member) => [member.userId, member]),
+  );
+  const messagingPersonIdByName = new Map(
+    messagingPeople.map((person) => [
+      normalizeIdentity(person.name),
+      person.id,
+    ]),
+  );
+  const participantIdsForTeam = (team: WorkspaceTeam) => [
+    ...new Set([
+      currentMessagingUserId,
+      ...team.memberIds
+        .map((memberId) => membersById.get(memberId)?.userName)
+        .filter((name): name is string => Boolean(name))
+        .map((name) => messagingPersonIdByName.get(normalizeIdentity(name)))
+        .filter((personId): personId is string => Boolean(personId)),
+    ]),
+  ];
+  const synchronizedTeamIds = new Set<string>();
+  let changed = false;
+  const next = current.map((conversation) => {
+    if (
+      conversation.workspaceId !== workspace.id ||
+      conversation.kind !== "team"
+    )
+      return conversation;
+    const team = teams.find(
+      (candidate) =>
+        candidate.id === conversation.teamId ||
+        conversation.id === conversationIdForTeam(candidate.id) ||
+        normalizeIdentity(conversation.title).startsWith(
+          normalizeIdentity(candidate.name),
+        ),
+    );
+    if (!team) return conversation;
+    synchronizedTeamIds.add(team.id);
+    const participantIds = participantIdsForTeam(team);
+    if (
+      conversation.teamId === team.id &&
+      conversation.title === team.name &&
+      conversation.purpose === team.description &&
+      sameIds(conversation.participantIds, participantIds)
+    )
+      return conversation;
+    changed = true;
+    return {
+      ...conversation,
+      teamId: team.id,
+      title: team.name,
+      purpose: team.description,
+      participantIds,
+      visibility: "private" as const,
+    };
+  });
+
+  for (const team of teams) {
+    if (synchronizedTeamIds.has(team.id)) continue;
+    next.push({
+      id: conversationIdForTeam(team.id),
+      title: team.name,
+      purpose: team.description,
+      kind: "team",
+      teamId: team.id,
+      participantIds: participantIdsForTeam(team),
+      workspaceId: workspace.id,
+      workspaceSlug: workspace.slug,
+      unread: 0,
+      visibility: "private",
+      lastActivity: new Date(0).toISOString(),
+    });
+    changed = true;
+  }
+
+  if (
+    !next.some(
+      (conversation) =>
+        conversation.workspaceId === workspace.id &&
+        ["workspace", "external"].includes(conversation.kind),
+    )
+  ) {
+    next.push({
+      id: `conversation-${workspace.id}-general`,
+      title: `${workspace.name} · General`,
+      purpose: "Workspace-wide coordination and context.",
+      kind: "workspace",
+      participantIds: messagingPeople
+        .filter((person) => !person.external)
+        .map((person) => person.id),
+      workspaceId: workspace.id,
+      workspaceSlug: workspace.slug,
+      unread: 0,
+      visibility: "organization",
+      lastActivity: new Date(0).toISOString(),
+    });
+    changed = true;
+  }
+
+  for (const person of messagingPeople.filter(
+    (candidate) =>
+      !candidate.external && candidate.id !== currentMessagingUserId,
+  )) {
+    const exists = next.some(
+      (conversation) =>
+        conversation.kind === "direct" &&
+        conversation.workspaceId === workspace.id &&
+        conversation.participantIds.includes(person.id),
+    );
+    if (exists) continue;
+    next.push({
+      id: `conversation-${workspace.id}-${person.id}`,
+      title: person.name,
+      purpose: "Direct conversation",
+      kind: "direct",
+      participantIds: [currentMessagingUserId, person.id],
+      workspaceId: workspace.id,
+      workspaceSlug: workspace.slug,
+      unread: 0,
+      visibility: "private",
+      lastActivity: new Date(0).toISOString(),
+    });
+    changed = true;
+  }
+
+  return changed ? next : current;
+}
+
+function teamMemberIdForName(name: string): string {
+  return `user-${normalizeIdentity(name).replaceAll(" ", "-")}`;
+}
+
+function normalizeIdentity(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id));
 }
 
 function latestMessageFor(

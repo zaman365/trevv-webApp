@@ -676,7 +676,7 @@ export function IdeasExperience({ workspaceSlug }: { workspaceSlug?: string }) {
 
 export function TeamExperience({ workspaceSlug }: { workspaceSlug?: string }) {
   return (
-    <WorkspaceFrame active="team" workspaceSlug={workspaceSlug}>
+    <WorkspaceFrame active="teams" workspaceSlug={workspaceSlug}>
       <main className="trevv-main team-page">
         <TeamWorkflow />
       </main>

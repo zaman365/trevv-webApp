@@ -3,14 +3,17 @@
 import {
   ArrowRight,
   ArrowRightLeft,
-  BriefcaseBusiness,
+  Blocks,
   CalendarClock,
   CheckCircle2,
   Filter,
+  Layers3,
   Mail,
   MapPin,
   MoreHorizontal,
+  Plus,
   Search,
+  Settings2,
   ShieldCheck,
   Sparkles,
   UserPlus,
@@ -24,9 +27,20 @@ import {
   type ResourcePressure,
 } from "@founderhq/core";
 import Link from "next/link";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
+import {
+  capabilitiesForMember,
+  createInitialWorkspaceTeams,
+  readWorkspaceTeamsSnapshot,
+  setTeamMembership,
+  teamCapabilityCatalog,
+  teamsForMember,
+  writeWorkspaceTeamsSnapshot,
+  type TeamCapabilityId,
+  type WorkspaceTeam,
+} from "@/lib/teams";
 import { Hint } from "./learning-center";
 
 type MemberStatus = "active" | "away" | "invited";
@@ -66,19 +80,57 @@ const initialMembers: TeamMember[] = calculateResourcePressure(
       : "Balancing delivery work with review commitments.",
 }));
 
+const initialTeams = createInitialWorkspaceTeams(
+  currentWorkspaces,
+  initialMembers,
+);
+
+const capabilityLabel = new Map(
+  teamCapabilityCatalog.map((capability) => [capability.id, capability.label]),
+);
+
 export function TeamWorkflow() {
   const { scope } = useWorkspace();
   const [members, setMembers] = useState(initialMembers);
+  const [teams, setTeams] = useState(initialTeams);
   const [query, setQuery] = useState("");
   const [pressureFilter, setPressureFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [teamFilter, setTeamFilter] = useState("all");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [createTeamOpen, setCreateTeamOpen] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rebalanceId, setRebalanceId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [storageReady, setStorageReady] = useState(false);
+
+  useEffect(() => {
+    const stored = readWorkspaceTeamsSnapshot<TeamMember>();
+    const frame = window.requestAnimationFrame(() => {
+      if (stored) {
+        setMembers(stored.members);
+        setTeams(stored.teams);
+      }
+      setStorageReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      writeWorkspaceTeamsSnapshot({ members, teams });
+    } catch {
+      // In-memory state keeps the workflow usable if storage is unavailable.
+    }
+  }, [members, storageReady, teams]);
 
   const scopedWorkspaceIds = new Set(
     scope.workspaces.map((project) => project.id),
+  );
+  const scopedTeams = teams.filter((team) =>
+    scopedWorkspaceIds.has(team.workspaceId),
   );
   const scopedMembers = members.filter((member) =>
     member.workspaceIds.some((workspaceId) =>
@@ -86,6 +138,7 @@ export function TeamWorkflow() {
     ),
   );
   const selected = scopedMembers.find((member) => member.userId === selectedId);
+  const selectedTeam = scopedTeams.find((team) => team.id === selectedTeamId);
   const rebalanceMember = scopedMembers.find(
     (member) => member.userId === rebalanceId,
   );
@@ -96,14 +149,29 @@ export function TeamWorkflow() {
         return false;
       if (statusFilter !== "all" && member.status !== statusFilter)
         return false;
+      const memberTeams = teamsForMember(scopedTeams, member.userId);
+      if (
+        teamFilter !== "all" &&
+        !memberTeams.some((team) => team.id === teamFilter)
+      )
+        return false;
       return (
         !normalized ||
-        `${member.userName} ${member.email} ${member.role}`
+        `${member.userName} ${member.email} ${member.role} ${memberTeams
+          .map((team) => team.name)
+          .join(" ")}`
           .toLocaleLowerCase()
           .includes(normalized)
       );
     });
-  }, [pressureFilter, query, scopedMembers, statusFilter]);
+  }, [
+    pressureFilter,
+    query,
+    scopedMembers,
+    scopedTeams,
+    statusFilter,
+    teamFilter,
+  ]);
 
   const updateMember = (id: string, update: Partial<TeamMember>) => {
     setMembers((current) =>
@@ -119,26 +187,39 @@ export function TeamWorkflow() {
   const elevated = scopedMembers.filter(
     (member) => member.pressure !== "normal",
   ).length;
-  const unassigned = scope.items.filter(
-    (item) => !item.assignee && item.status !== "done",
-  ).length;
+  const updateTeam = (id: string, update: Partial<WorkspaceTeam>) => {
+    setTeams((current) =>
+      current.map((team) => (team.id === id ? { ...team, ...update } : team)),
+    );
+  };
 
   return (
     <>
       <header className="trevv-page-header">
         <div>
-          <p>Workspace team</p>
+          <p>Workspace</p>
           <h1 className="page-title-with-hint">
-            Team workspace <Hint resourceId="team-pressure" />
+            Workspace teams <Hint resourceId="team-pressure" />
           </h1>
           <span>
-            Coordinate access, availability, and workload signals without
-            turning activity into a performance score.
+            Organize people into focused teams. Members inherit each team&apos;s
+            tools, access, and collaboration features.
           </span>
         </div>
-        <button className="primary-button" onClick={() => setInviteOpen(true)}>
-          <UserPlus size={16} /> Invite member
-        </button>
+        <div className="team-header-actions">
+          <button
+            className="secondary-button"
+            onClick={() => setInviteOpen(true)}
+          >
+            <UserPlus size={16} /> Invite person
+          </button>
+          <button
+            className="primary-button"
+            onClick={() => setCreateTeamOpen(true)}
+          >
+            <Plus size={16} /> Add team
+          </button>
+        </div>
       </header>
 
       {notice && (
@@ -157,11 +238,20 @@ export function TeamWorkflow() {
       <section className="team-summary-grid" aria-label="Team summary">
         <article>
           <span>
+            <Layers3 size={17} />
+          </span>
+          <div>
+            <b>{scopedTeams.length}</b>
+            <small>Teams</small>
+          </div>
+        </article>
+        <article>
+          <span>
             <Users size={17} />
           </span>
           <div>
             <b>{scopedMembers.length}</b>
-            <small>Total members</small>
+            <small>People</small>
           </div>
         </article>
         <article>
@@ -182,15 +272,104 @@ export function TeamWorkflow() {
             <small>Pressure signals</small>
           </div>
         </article>
-        <article>
-          <span>
-            <BriefcaseBusiness size={17} />
-          </span>
+      </section>
+
+      <section
+        className="workspace-teams-section"
+        aria-labelledby="teams-heading"
+      >
+        <header>
           <div>
-            <b>{unassigned}</b>
-            <small>Unassigned work</small>
+            <p>Structure and inherited access</p>
+            <h2 id="teams-heading">Teams in this workspace</h2>
           </div>
-        </article>
+          <span>{scopedTeams.length} configured</span>
+        </header>
+        <div className="workspace-team-grid">
+          {scopedTeams.map((team) => {
+            const teamMembers = scopedMembers.filter((member) =>
+              team.memberIds.includes(member.userId),
+            );
+            const lead = teamMembers.find(
+              (member) => member.userId === team.leadMemberId,
+            );
+            return (
+              <article
+                className={`workspace-team-card ${team.accent}`}
+                key={team.id}
+              >
+                <header>
+                  <span className="workspace-team-icon">
+                    <Blocks size={17} />
+                  </span>
+                  <div>
+                    <h3>{team.name}</h3>
+                    <small>
+                      {teamMembers.length}{" "}
+                      {teamMembers.length === 1 ? "member" : "members"}
+                    </small>
+                  </div>
+                  <button
+                    className="table-row-menu"
+                    aria-label={`Manage ${team.name}`}
+                    onClick={() => setSelectedTeamId(team.id)}
+                  >
+                    <Settings2 size={16} />
+                  </button>
+                </header>
+                <p>{team.description}</p>
+                <div
+                  className="team-capability-chips"
+                  aria-label={`${team.name} features`}
+                >
+                  {team.capabilities.slice(0, 3).map((capability) => (
+                    <span key={capability}>
+                      {capabilityLabel.get(capability)}
+                    </span>
+                  ))}
+                  {team.capabilities.length > 3 && (
+                    <span>+{team.capabilities.length - 3}</span>
+                  )}
+                </div>
+                <footer>
+                  <div
+                    className="team-avatar-stack"
+                    aria-label={`${team.name} members`}
+                  >
+                    {teamMembers.slice(0, 4).map((member) => (
+                      <span
+                        className="avatar"
+                        title={member.userName}
+                        key={member.userId}
+                      >
+                        {initialsFor(member.userName)}
+                      </span>
+                    ))}
+                    {teamMembers.length > 4 && (
+                      <span className="avatar">+{teamMembers.length - 4}</span>
+                    )}
+                  </div>
+                  <span>
+                    {lead ? `Led by ${lead.userName}` : "No lead assigned"}
+                  </span>
+                  <button onClick={() => setSelectedTeamId(team.id)}>
+                    Manage <ArrowRight size={13} />
+                  </button>
+                </footer>
+              </article>
+            );
+          })}
+          {!scopedTeams.length && (
+            <button
+              className="workspace-team-empty"
+              onClick={() => setCreateTeamOpen(true)}
+            >
+              <Plus size={20} />
+              <strong>Create the first team</strong>
+              <span>Group people and choose the features they inherit.</span>
+            </button>
+          )}
+        </div>
       </section>
 
       {elevated > 0 && (
@@ -228,6 +407,21 @@ export function TeamWorkflow() {
           />
         </label>
         <label className="workflow-filter-select">
+          <Layers3 size={14} />
+          <span className="sr-only">Filter by team</span>
+          <select
+            value={teamFilter}
+            onChange={(event) => setTeamFilter(event.target.value)}
+          >
+            <option value="all">All teams</option>
+            {scopedTeams.map((team) => (
+              <option value={team.id} key={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="workflow-filter-select">
           <Filter size={14} />
           <span className="sr-only">Filter by pressure</span>
           <select
@@ -257,51 +451,77 @@ export function TeamWorkflow() {
       <section className="trevv-panel team-directory-table">
         <header>
           <span>Person</span>
-          <span>Access</span>
+          <span>Workspace role</span>
+          <span>Teams</span>
+          <span>Inherited features</span>
           <span>Urgent / high</span>
-          <span>Due this week</span>
           <span>Blocked</span>
-          <span>Projects</span>
           <span>Pressure</span>
           <span>
             <span className="sr-only">Actions</span>
           </span>
         </header>
-        {visible.map((member) => (
-          <article key={member.userId}>
-            <button
-              className="team-person-cell"
-              onClick={() => setSelectedId(member.userId)}
-            >
-              <span className="avatar">{initialsFor(member.userName)}</span>
-              <span>
-                <strong>{member.userName}</strong>
-                <small>
-                  {member.status === "active" ? member.location : member.status}
-                </small>
+        {visible.map((member) => {
+          const memberTeams = teamsForMember(scopedTeams, member.userId);
+          const inheritedCapabilities = capabilitiesForMember(
+            scopedTeams,
+            member.userId,
+          );
+          return (
+            <article key={member.userId}>
+              <button
+                className="team-person-cell"
+                onClick={() => setSelectedId(member.userId)}
+              >
+                <span className="avatar">{initialsFor(member.userName)}</span>
+                <span>
+                  <strong>{member.userName}</strong>
+                  <small>
+                    {member.status === "active"
+                      ? member.location
+                      : member.status}
+                  </small>
+                </span>
+              </button>
+              <span
+                className={`role-badge role-${member.role.toLocaleLowerCase()}`}
+              >
+                {member.role}
               </span>
-            </button>
-            <span
-              className={`role-badge role-${member.role.toLocaleLowerCase()}`}
-            >
-              {member.role}
-            </span>
-            <b>{member.urgentHighActive}</b>
-            <b>{member.dueThisWeek}</b>
-            <b>{member.blockedResponsibilities}</b>
-            <b>{member.workspaceIds.length}</b>
-            <span className={`pressure-badge ${member.pressure}`}>
-              {member.pressure}
-            </span>
-            <button
-              className="table-row-menu"
-              aria-label={`Open actions for ${member.userName}`}
-              onClick={() => setSelectedId(member.userId)}
-            >
-              <MoreHorizontal size={16} />
-            </button>
-          </article>
-        ))}
+              <button
+                className="member-team-summary"
+                onClick={() => setSelectedId(member.userId)}
+                aria-label={`Manage teams for ${member.userName}`}
+              >
+                {memberTeams.length ? (
+                  <>
+                    <b>{memberTeams.length}</b>
+                    <span>
+                      {memberTeams.map((team) => team.name).join(", ")}
+                    </span>
+                  </>
+                ) : (
+                  <span>Unassigned</span>
+                )}
+              </button>
+              <span className="inherited-feature-count">
+                <ShieldCheck size={13} /> {inheritedCapabilities.length}
+              </span>
+              <b>{member.urgentHighActive}</b>
+              <b>{member.blockedResponsibilities}</b>
+              <span className={`pressure-badge ${member.pressure}`}>
+                {member.pressure}
+              </span>
+              <button
+                className="table-row-menu"
+                aria-label={`Open actions for ${member.userName}`}
+                onClick={() => setSelectedId(member.userId)}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+            </article>
+          );
+        })}
         {!visible.length && (
           <div className="table-empty">
             <Users size={22} />
@@ -314,9 +534,17 @@ export function TeamWorkflow() {
       {inviteOpen && (
         <InviteMemberDialog
           projects={scope.workspaces}
+          teams={scopedTeams}
           onClose={() => setInviteOpen(false)}
-          onInvite={(member) => {
+          onInvite={(member, teamIds) => {
             setMembers((current) => [...current, member]);
+            setTeams((current) =>
+              teamIds.reduce(
+                (next, teamId) =>
+                  setTeamMembership(next, teamId, member.userId, true),
+                current,
+              ),
+            );
             setInviteOpen(false);
             setNotice(
               `Invitation prepared for ${member.email}. No external email is sent in this demo.`,
@@ -328,6 +556,7 @@ export function TeamWorkflow() {
         <MemberDetailDialog
           member={selected}
           projects={scope.workspaces}
+          teams={scopedTeams}
           {...(scope.workspaces[0]
             ? { workspaceSlug: scope.workspaces[0].slug }
             : {})}
@@ -336,9 +565,48 @@ export function TeamWorkflow() {
             updateMember(selected.userId, update);
             setNotice(message);
           }}
+          onTeamMembershipChange={(teamId, assigned) => {
+            setTeams((current) =>
+              setTeamMembership(current, teamId, selected.userId, assigned),
+            );
+            setNotice(
+              `${selected.userName} ${assigned ? "joined" : "left"} ${
+                scopedTeams.find((team) => team.id === teamId)?.name ??
+                "the team"
+              }.`,
+            );
+          }}
           onRebalance={() => {
             setSelectedId(null);
             setRebalanceId(selected.userId);
+          }}
+        />
+      )}
+      {createTeamOpen && scope.workspaces[0] && (
+        <CreateTeamDialog
+          workspaceId={scope.workspaces[0].id}
+          members={scopedMembers}
+          onClose={() => setCreateTeamOpen(false)}
+          onCreate={(team) => {
+            setTeams((current) => [...current, team]);
+            setCreateTeamOpen(false);
+            setNotice(`${team.name} was added to this workspace.`);
+          }}
+        />
+      )}
+      {selectedTeam && (
+        <TeamDetailDialog
+          team={selectedTeam}
+          members={scopedMembers}
+          onClose={() => setSelectedTeamId(null)}
+          onUpdate={(update, message) => {
+            updateTeam(selectedTeam.id, update);
+            if (message) setNotice(message);
+          }}
+          onMembershipChange={(memberId, assigned) => {
+            setTeams((current) =>
+              setTeamMembership(current, selectedTeam.id, memberId, assigned),
+            );
           }}
         />
       )}
@@ -383,18 +651,23 @@ export function TeamWorkflow() {
 function MemberDetailDialog({
   member,
   projects,
+  teams,
   workspaceSlug,
   onClose,
   onUpdate,
+  onTeamMembershipChange,
   onRebalance,
 }: {
   member: TeamMember;
   projects: typeof demoWorkspaces;
+  teams: WorkspaceTeam[];
   workspaceSlug?: string;
   onClose: () => void;
   onUpdate: (update: Partial<TeamMember>, message: string) => void;
+  onTeamMembershipChange: (teamId: string, assigned: boolean) => void;
   onRebalance: () => void;
 }) {
+  const inheritedCapabilities = capabilitiesForMember(teams, member.userId);
   return (
     <div
       className="workflow-dialog-layer"
@@ -481,6 +754,24 @@ function MemberDetailDialog({
                 </label>
               ))}
             </div>
+            <fieldset className="member-team-access">
+              <legend>Team membership</legend>
+              {teams.map((team) => (
+                <label key={team.id}>
+                  <input
+                    type="checkbox"
+                    checked={team.memberIds.includes(member.userId)}
+                    onChange={(event) =>
+                      onTeamMembershipChange(team.id, event.target.checked)
+                    }
+                  />
+                  <span>
+                    <b>{team.name}</b>
+                    <small>{team.capabilities.length} inherited features</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <Link
               className="linked-work-callout"
               href={
@@ -494,6 +785,22 @@ function MemberDetailDialog({
             </Link>
           </section>
           <aside>
+            <h3>Inherited team features</h3>
+            <div className="inherited-capability-list">
+              {inheritedCapabilities.map((capabilityId) => {
+                const capability = teamCapabilityCatalog.find(
+                  (candidate) => candidate.id === capabilityId,
+                )!;
+                return (
+                  <span key={capability.id}>
+                    <ShieldCheck size={13} /> {capability.label}
+                  </span>
+                );
+              })}
+              {!inheritedCapabilities.length && (
+                <p>Assign this person to a team to grant team features.</p>
+              )}
+            </div>
             <h3>Current pressure</h3>
             <div className="member-pressure-summary">
               <span className={`pressure-badge ${member.pressure}`}>
@@ -560,38 +867,52 @@ function InviteMemberDialog({
   onClose,
   onInvite,
   projects,
+  teams,
 }: {
   onClose: () => void;
-  onInvite: (member: TeamMember) => void;
+  onInvite: (member: TeamMember, teamIds: string[]) => void;
   projects: typeof demoWorkspaces;
+  teams: WorkspaceTeam[];
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<MemberRole>("Member");
-  const [workspaceIds, setWorkspaceIds] = useState<string[]>([]);
+  const [workspaceIds, setWorkspaceIds] = useState<string[]>(
+    projects[0] ? [projects[0].id] : [],
+  );
+  const [teamIds, setTeamIds] = useState<string[]>([]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!email.trim() || !name.trim()) return;
-    onInvite({
-      userId: `user-${Date.now()}`,
-      userName: name.trim(),
-      email: email.trim(),
-      role,
-      status: "invited",
-      location: "Not provided",
-      weeklyCapacity: 40,
-      focusNote: "Invitation pending.",
-      urgentHighActive: 0,
-      dueThisWeek: 0,
-      blockedResponsibilities: 0,
-      criticalWorkspaceResponsibilities: 0,
-      milestonesOwned: 0,
-      workspaceIds,
-      pressure: "normal",
-    });
+    onInvite(
+      {
+        userId: `user-${Date.now()}`,
+        userName: name.trim(),
+        email: email.trim(),
+        role,
+        status: "invited",
+        location: "Not provided",
+        weeklyCapacity: 40,
+        focusNote: "Invitation pending.",
+        urgentHighActive: 0,
+        dueThisWeek: 0,
+        blockedResponsibilities: 0,
+        criticalWorkspaceResponsibilities: 0,
+        milestonesOwned: 0,
+        workspaceIds,
+        pressure: "normal",
+      },
+      teamIds,
+    );
   };
   const toggleWorkspace = (id: string) =>
     setWorkspaceIds((current) =>
+      current.includes(id)
+        ? current.filter((candidate) => candidate !== id)
+        : [...current, id],
+    );
+  const toggleTeam = (id: string) =>
+    setTeamIds((current) =>
       current.includes(id)
         ? current.filter((candidate) => candidate !== id)
         : [...current, id],
@@ -615,8 +936,8 @@ function InviteMemberDialog({
             <UserPlus size={18} />
           </span>
           <div>
-            <p>Team workspace</p>
-            <h2 id="invite-member-title">Invite a member</h2>
+            <p>Workspace teams</p>
+            <h2 id="invite-member-title">Invite a person</h2>
           </div>
           <button
             type="button"
@@ -679,6 +1000,19 @@ function InviteMemberDialog({
               </label>
             ))}
           </fieldset>
+          <fieldset className="invite-workspace-access">
+            <legend>Assign to teams</legend>
+            {teams.map((team) => (
+              <label key={team.id}>
+                <input
+                  type="checkbox"
+                  checked={teamIds.includes(team.id)}
+                  onChange={() => toggleTeam(team.id)}
+                />
+                <span>{team.name}</span>
+              </label>
+            ))}
+          </fieldset>
         </div>
         <footer className="workflow-dialog-actions">
           <span>You can change role and access later.</span>
@@ -695,11 +1029,350 @@ function InviteMemberDialog({
               type="submit"
               disabled={!name.trim() || !email.trim()}
             >
-              <UserPlus size={14} /> Create invitation
+              <UserPlus size={14} /> Invite person
             </button>
           </div>
         </footer>
       </form>
+    </div>
+  );
+}
+
+function CreateTeamDialog({
+  workspaceId,
+  members,
+  onClose,
+  onCreate,
+}: {
+  workspaceId: string;
+  members: TeamMember[];
+  onClose: () => void;
+  onCreate: (team: WorkspaceTeam) => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [leadMemberId, setLeadMemberId] = useState("");
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [capabilities, setCapabilities] = useState<TeamCapabilityId[]>([
+    "work",
+    "messages",
+  ]);
+
+  const toggleMember = (memberId: string) => {
+    setMemberIds((current) =>
+      current.includes(memberId)
+        ? current.filter((candidate) => candidate !== memberId)
+        : [...current, memberId],
+    );
+  };
+  const toggleCapability = (capability: TeamCapabilityId) => {
+    setCapabilities((current) =>
+      current.includes(capability)
+        ? current.filter((candidate) => candidate !== capability)
+        : [...current, capability],
+    );
+  };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    const assignedMemberIds = leadMemberId
+      ? [...new Set([...memberIds, leadMemberId])]
+      : memberIds;
+    onCreate({
+      id: `${workspaceId}-${name
+        .trim()
+        .toLocaleLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
+      workspaceId,
+      name: name.trim(),
+      description:
+        description.trim() ||
+        "A focused team working together in this workspace.",
+      leadMemberId: leadMemberId || null,
+      memberIds: assignedMemberIds,
+      capabilities,
+      accent: "green",
+    });
+  };
+
+  return (
+    <div
+      className="workflow-dialog-layer"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <form
+        className="workflow-dialog team-editor-dialog"
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-team-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <span className="dialog-title-icon">
+            <Layers3 size={18} />
+          </span>
+          <div>
+            <p>Workspace structure</p>
+            <h2 id="create-team-title">Add a team</h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close team creator"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <div className="workflow-dialog-body team-editor-body">
+          <section className="form-stack">
+            <label className="stacked-field">
+              <span>Team name</span>
+              <input
+                autoFocus
+                required
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Operations"
+              />
+            </label>
+            <label className="stacked-field">
+              <span>Purpose</span>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="What this team owns and coordinates"
+              />
+            </label>
+            <label className="stacked-field">
+              <span>Team lead</span>
+              <select
+                value={leadMemberId}
+                onChange={(event) => setLeadMemberId(event.target.value)}
+              >
+                <option value="">No lead yet</option>
+                {members.map((member) => (
+                  <option value={member.userId} key={member.userId}>
+                    {member.userName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <fieldset className="team-member-picker">
+              <legend>Assign people</legend>
+              {members.map((member) => (
+                <label key={member.userId}>
+                  <input
+                    type="checkbox"
+                    checked={
+                      memberIds.includes(member.userId) ||
+                      leadMemberId === member.userId
+                    }
+                    disabled={leadMemberId === member.userId}
+                    onChange={() => toggleMember(member.userId)}
+                  />
+                  <span className="avatar">{initialsFor(member.userName)}</span>
+                  <span>
+                    <b>{member.userName}</b>
+                    <small>{member.role}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </section>
+          <fieldset className="team-capability-options">
+            <legend>Features this team inherits</legend>
+            <p>Every assigned person receives the selected team features.</p>
+            {teamCapabilityCatalog.map((capability) => (
+              <label key={capability.id}>
+                <input
+                  type="checkbox"
+                  checked={capabilities.includes(capability.id)}
+                  onChange={() => toggleCapability(capability.id)}
+                />
+                <span>
+                  <b>{capability.label}</b>
+                  <small>{capability.description}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        </div>
+        <footer className="workflow-dialog-actions">
+          <span>
+            {memberIds.length +
+              (leadMemberId && !memberIds.includes(leadMemberId) ? 1 : 0)}{" "}
+            people · {capabilities.length} features
+          </span>
+          <div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={!name.trim()}
+            >
+              <Plus size={14} /> Add team
+            </button>
+          </div>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function TeamDetailDialog({
+  team,
+  members,
+  onClose,
+  onUpdate,
+  onMembershipChange,
+}: {
+  team: WorkspaceTeam;
+  members: TeamMember[];
+  onClose: () => void;
+  onUpdate: (update: Partial<WorkspaceTeam>, message: string) => void;
+  onMembershipChange: (memberId: string, assigned: boolean) => void;
+}) {
+  const assignedMembers = members.filter((member) =>
+    team.memberIds.includes(member.userId),
+  );
+  const toggleCapability = (capability: TeamCapabilityId) => {
+    const capabilities = team.capabilities.includes(capability)
+      ? team.capabilities.filter((candidate) => candidate !== capability)
+      : [...team.capabilities, capability];
+    onUpdate({ capabilities }, `${team.name} features were updated.`);
+  };
+
+  return (
+    <div
+      className="workflow-dialog-layer"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <section
+        className="workflow-dialog team-editor-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="team-detail-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <span className="dialog-title-icon">
+            <Blocks size={18} />
+          </span>
+          <div>
+            <p>
+              {assignedMembers.length}{" "}
+              {assignedMembers.length === 1 ? "member" : "members"} ·{" "}
+              {team.capabilities.length} features
+            </p>
+            <h2 id="team-detail-title">Manage {team.name}</h2>
+          </div>
+          <button
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close team settings"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        <div className="workflow-dialog-body team-editor-body">
+          <section className="form-stack">
+            <label className="stacked-field">
+              <span>Team name</span>
+              <input
+                value={team.name}
+                onChange={(event) => onUpdate({ name: event.target.value }, "")}
+              />
+            </label>
+            <label className="stacked-field">
+              <span>Purpose</span>
+              <textarea
+                value={team.description}
+                onChange={(event) =>
+                  onUpdate({ description: event.target.value }, "")
+                }
+              />
+            </label>
+            <label className="stacked-field">
+              <span>Team lead</span>
+              <select
+                value={team.leadMemberId ?? ""}
+                onChange={(event) =>
+                  onUpdate(
+                    { leadMemberId: event.target.value || null },
+                    `${team.name} lead was updated.`,
+                  )
+                }
+              >
+                <option value="">No lead assigned</option>
+                {assignedMembers.map((member) => (
+                  <option value={member.userId} key={member.userId}>
+                    {member.userName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <fieldset className="team-member-picker">
+              <legend>People in this team</legend>
+              {members.map((member) => (
+                <label key={member.userId}>
+                  <input
+                    type="checkbox"
+                    checked={team.memberIds.includes(member.userId)}
+                    onChange={(event) =>
+                      onMembershipChange(member.userId, event.target.checked)
+                    }
+                  />
+                  <span className="avatar">{initialsFor(member.userName)}</span>
+                  <span>
+                    <b>{member.userName}</b>
+                    <small>{member.role}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </section>
+          <fieldset className="team-capability-options">
+            <legend>Inherited team features</legend>
+            <p>
+              These features are available to every person assigned to{" "}
+              {team.name}.
+            </p>
+            {teamCapabilityCatalog.map((capability) => (
+              <label key={capability.id}>
+                <input
+                  type="checkbox"
+                  checked={team.capabilities.includes(capability.id)}
+                  onChange={() => toggleCapability(capability.id)}
+                />
+                <span>
+                  <b>{capability.label}</b>
+                  <small>{capability.description}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        </div>
+        <footer className="workflow-dialog-actions">
+          <span>
+            Membership changes immediately update inherited team features.
+          </span>
+          <div>
+            <button className="primary-button" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </footer>
+      </section>
     </div>
   );
 }

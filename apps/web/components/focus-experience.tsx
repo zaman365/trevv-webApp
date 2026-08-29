@@ -426,7 +426,7 @@ function SearchView({
           aria-keyshortcuts="/"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search work, people, Workspaces, comments and resources…"
+          placeholder="Search work, people, updates & more…"
         />
         {query ? (
           <button

@@ -405,9 +405,15 @@ test("Messages keeps requests, threads, and project context connected", async ({
       .locator("strong"),
   ).toBeVisible();
   await expect(
+    page.locator(".group-teams").getByRole("button", { name: /Leadership/ }),
+  ).toBeVisible();
+  await expect(
     page
-      .getByRole("button", { name: /Leadership decisions/ })
-      .locator("strong"),
+      .locator(".group-rooms")
+      .getByRole("button", { name: /Northstar · Launch room/ }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".group-people").getByRole("button", { name: /Nora Klein/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Needs response \d+/ }),
@@ -475,7 +481,7 @@ test("member focus centers and informational notifications render", async ({
     { view: "decisions", heading: "Decision Center" },
     { view: "approvals", heading: "Approval Center" },
     { view: "ideas", heading: "Ideas & evidence" },
-    { view: "team", heading: "Team workspace" },
+    { view: "teams", heading: "Workspace teams" },
     { view: "notifications", heading: "Notifications" },
   ];
   for (const { view, heading } of modules) {
@@ -484,4 +490,70 @@ test("member focus centers and informational notifications render", async ({
       page.getByRole("heading", { name: heading, level: 1 }),
     ).toBeVisible();
   }
+});
+
+test("workspace teams create groups, assign people, and expose inherited features", async ({
+  page,
+}) => {
+  await gotoCanonical(page, workspaceRoute("teams"));
+
+  await expect(
+    page.getByRole("region", { name: "Teams in this workspace" }),
+  ).toContainText("Marketing");
+  await page.getByRole("button", { name: "Add team", exact: true }).click();
+
+  const createTeam = page.getByRole("dialog", { name: "Add a team" });
+  await createTeam.getByLabel("Team name").fill("Operations");
+  await createTeam
+    .getByLabel("Purpose")
+    .fill("Run delivery, staffing, and operational handoffs.");
+  await createTeam.getByLabel("Team lead").selectOption({ index: 1 });
+  await createTeam.getByLabel(/Approvals/).check();
+  await createTeam.getByRole("button", { name: "Add team" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Operations", exact: true }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Invite person", exact: true })
+    .click();
+  const invite = page.getByRole("dialog", { name: "Invite a person" });
+  await invite.getByLabel("Name").fill("Test Operator");
+  await invite.getByLabel("Email").fill("operator@example.invalid");
+  await invite.getByLabel("Operations").check();
+  await invite.getByRole("button", { name: "Invite person" }).click();
+
+  await page
+    .getByRole("button", { name: "TO Test Operator invited", exact: true })
+    .click();
+  const member = page.getByRole("dialog", { name: "Test Operator" });
+  await expect(member.getByLabel("Operations")).toBeChecked();
+  await expect(
+    member.getByText("Boards & tasks", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    member.getByText("Team messages", { exact: true }),
+  ).toBeVisible();
+  await expect(member.getByText("Approvals", { exact: true })).toBeVisible();
+  await member.getByRole("button", { name: "Done" }).click();
+
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Operations", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Manage teams for Test Operator" }),
+  ).toContainText("Operations");
+
+  await gotoCanonical(page, workspaceRoute("messages"));
+  await expect(
+    page.locator(".group-teams").getByRole("button", { name: /Operations/ }),
+  ).toBeVisible();
+  await expect(page.locator(".group-rooms .conversation-row")).not.toHaveCount(
+    0,
+  );
+  await expect(page.locator(".group-people .conversation-row")).not.toHaveCount(
+    0,
+  );
 });

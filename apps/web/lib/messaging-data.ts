@@ -19,6 +19,7 @@ export interface Conversation {
   purpose: string;
   kind: ConversationKind;
   participantIds: string[];
+  teamId?: string;
   workspaceId?: string;
   workspaceSlug?: string;
   unread: number;
@@ -26,6 +27,20 @@ export interface Conversation {
   archived?: boolean;
   visibility: "organization" | "private" | "guest-scoped";
   lastActivity: string;
+}
+
+export type ConversationGroup = "teams" | "rooms" | "people";
+
+export function conversationGroupFor(
+  conversation: Pick<Conversation, "kind">,
+): ConversationGroup {
+  if (conversation.kind === "team") return "teams";
+  if (conversation.kind === "direct") return "people";
+  return "rooms";
+}
+
+export function conversationIdForTeam(teamId: string): string {
+  return `conversation-team-${teamId}`;
 }
 
 export interface MessageReaction {

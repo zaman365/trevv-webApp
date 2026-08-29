@@ -20,6 +20,8 @@ describe("workspace routes", () => {
 
   it("recognizes only supported workspace modules", () => {
     expect(isWorkspaceView("dashboard")).toBe(true);
+    expect(isWorkspaceView("teams")).toBe(true);
+    expect(isWorkspaceView("team")).toBe(false);
     expect(isWorkspaceView("portfolio")).toBe(false);
     expect(isWorkspaceView("unknown")).toBe(false);
   });

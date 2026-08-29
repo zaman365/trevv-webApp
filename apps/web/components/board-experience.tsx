@@ -661,8 +661,8 @@ function BoardWorkspace({
                   {name}
                 </span>
               ))}
-            <Link href={workspaceHref(workspace.slug, "team")}>
-              Manage team
+            <Link href={workspaceHref(workspace.slug, "teams")}>
+              Manage teams
             </Link>
           </section>
         )}

@@ -9,7 +9,7 @@ export const workspaceViews = [
   "ideas",
   "reviews",
   "waiting",
-  "team",
+  "teams",
   "blueprints",
   "notifications",
   "search",

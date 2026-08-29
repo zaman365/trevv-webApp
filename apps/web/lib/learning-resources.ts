@@ -314,7 +314,7 @@ export const learningResources: LearningResource[] = [
     summary: "Use workload signals to rebalance commitments, not rank people.",
     body: "Team pressure combines urgent work, near-term dates, blockers, critical Workspace signals, and milestone ownership. It is a coordination signal and never a performance score.",
     duration: "4 min",
-    route: "/app/team",
+    route: "/app/teams",
     tips: ["Discuss constraints and trade-offs before moving ownership."],
     keywords: ["team", "pressure", "workload", "capacity", "owner"],
   },

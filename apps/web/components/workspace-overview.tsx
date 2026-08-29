@@ -51,7 +51,7 @@ const workspaceTabIds = [
   "decisions",
   "ideas",
   "files",
-  "team",
+  "teams",
 ] as const;
 type WorkspaceTabId = (typeof workspaceTabIds)[number];
 
@@ -607,10 +607,10 @@ function WorkspaceWorkspace({
                 <ExternalLink size={12} />
               </a>
             </section>
-            <section className="side-overview-card team-row" id="team">
+            <section className="side-overview-card team-row" id="teams">
               <header>
                 <Users size={15} />
-                <h2>{copy.team}</h2>
+                <h2>{copy.teams}</h2>
               </header>
               <div>
                 {team.slice(0, showAllTeam ? team.length : 5).map((name) => (

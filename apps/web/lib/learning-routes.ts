@@ -17,7 +17,7 @@ export const workspaceLearningRoutes: Record<string, WorkspaceView> = {
   "/app/notifications": "notifications",
   "/app/reviews": "reviews",
   "/app/search": "search",
-  "/app/team": "team",
+  "/app/teams": "teams",
   "/app/waiting": "waiting",
 };
 

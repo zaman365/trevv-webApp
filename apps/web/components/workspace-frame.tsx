@@ -73,7 +73,7 @@ type ActivePage =
   | "decisions"
   | "approvals"
   | "ideas"
-  | "team"
+  | "teams"
   | "reviews"
   | "notifications"
   | "search"
@@ -476,13 +476,13 @@ function WorkspaceChrome({
                           <FolderKanban size={15} /> Open workspace
                         </Link>
                         <Link
-                          href={workspaceHref(contextProject.slug, "team")}
+                          href={workspaceHref(contextProject.slug, "teams")}
                           onClick={() => {
                             setWorkspaceMenuOpen(false);
                             setOpen(false);
                           }}
                         >
-                          <Users size={15} /> People
+                          <Users size={15} /> Teams
                         </Link>
                       </div>
                     </div>
@@ -621,6 +621,13 @@ function WorkspaceChrome({
                   </Link>
                 );
               })}
+              <Link
+                className={`nav-item ${active === "teams" ? "active" : ""}`}
+                href={scopedHref("teams")}
+              >
+                <Users size={17} />
+                <span>{copy.nav.teams}</span>
+              </Link>
               <p className="nav-label spaced">Work</p>
               <Link
                 className={`nav-item ${active === "decisions" ? "active" : ""}`}
@@ -664,14 +671,6 @@ function WorkspaceChrome({
                 <Plus size={16} />
                 <span>Create</span>
               </button>
-              <p className="nav-label spaced">People</p>
-              <Link
-                className={`nav-item ${active === "team" ? "active" : ""}`}
-                href={scopedHref("team")}
-              >
-                <Users size={17} />
-                <span>{copy.nav.team}</span>
-              </Link>
             </>
           ) : (
             <button
@@ -1000,11 +999,11 @@ function WorkspaceChrome({
                         <Settings2 size={14} /> Workspace settings
                       </Link>
                       <Link
-                        href={scopedHref("team")}
+                        href={scopedHref("teams")}
                         role="menuitem"
                         onClick={() => setUserMenuOpen(false)}
                       >
-                        <Users size={14} /> Team and access
+                        <Users size={14} /> Teams and access
                       </Link>
                     </>
                   )}
