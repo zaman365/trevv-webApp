@@ -64,6 +64,7 @@ a {
   height: 48px;
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 10px;
   padding: 0 7px 14px;
   border-bottom: 1px solid var(--fh-border);
@@ -101,9 +102,31 @@ a {
   font-weight: 750;
 }
 .sidebar nav {
-  padding-top: 16px;
-  overflow: auto;
-  scrollbar-width: none;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 16px 2px 16px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.sidebar nav:hover,
+.sidebar nav:focus-within {
+  scrollbar-color: var(--fh-border-strong) transparent;
+}
+.sidebar nav::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+.sidebar nav:hover::-webkit-scrollbar-thumb,
+.sidebar nav:focus-within::-webkit-scrollbar-thumb {
+  background: var(--fh-border-strong);
 }
 .nav-label {
   margin: 0 9px 7px;
@@ -188,7 +211,8 @@ a {
   color: var(--fh-muted);
 }
 .sidebar-foot {
-  margin-top: auto;
+  flex: 0 0 auto;
+  margin-top: 0;
   padding-top: 10px;
   border-top: 1px solid var(--fh-border);
 }

@@ -14,7 +14,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:e2e": "playwright test tests/e2e/critical-paths.spec.ts tests/e2e/capability-truth.spec.ts",
+    "test:e2e": "playwright test tests/e2e/critical-paths.spec.ts tests/e2e/capability-truth.spec.ts tests/e2e/visual-regressions.spec.ts",
     "test:a11y": "playwright test tests/e2e/accessibility.spec.ts",
     "security:audit": "node scripts/audit.mjs",
     "format": "prettier --write .",
