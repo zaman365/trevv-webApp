@@ -421,16 +421,16 @@ a {
   padding: 0 15px;
   border: 0;
   border-radius: 11px;
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   box-shadow: 0 6px 14px rgb(91 91 214 / 20%);
   font-size: var(--fh-text-md);
   font-weight: 680;
   white-space: nowrap;
   cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    background 0.15s ease;
+  /* Disabled controls use a light surface. Snapping the fill when they become
+     enabled prevents a transient white-on-light contrast failure. */
+  transition: transform 0.15s ease;
 }
 .primary-button:hover {
   transform: translateY(-1px);
@@ -1176,7 +1176,7 @@ a {
   font-weight: 650;
 }
 .board-header-actions > .primary-button {
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   border: 0;
 }

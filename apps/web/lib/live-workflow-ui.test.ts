@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clearLiveDraftStorage,
   isLiveDraftEnvelope,
   liveDraftStorageKey,
   workspaceSlugFromName,
@@ -46,6 +47,42 @@ describe("live workflow UI helpers", () => {
       ),
     ).toBe(true);
     expect(value.idempotencyKey).toBe("8f6b91d8-f493-46e8-923f-d1e644cd1ab3");
+  });
+
+  it("purges every private live draft without touching UI preferences", () => {
+    const values = new Map([
+      ["trevv:live-draft:v1:org-one:user-one:quick-capture", "private"],
+      ["trevv:live-draft:v1:org-two:user-two:message%3Aroom", "private"],
+      ["trevv:messages-layout:v1:org-one:user-one:workspace-one", "272"],
+    ]);
+    const storage = {
+      get length() {
+        return values.size;
+      },
+      key(index: number) {
+        return [...values.keys()][index] ?? null;
+      },
+      removeItem(key: string) {
+        values.delete(key);
+      },
+    };
+
+    expect(clearLiveDraftStorage(storage)).toBe(2);
+    expect([...values.keys()]).toEqual([
+      "trevv:messages-layout:v1:org-one:user-one:workspace-one",
+    ]);
+  });
+
+  it("does not block sign-out when browser storage is unavailable", () => {
+    const storage = {
+      get length(): number {
+        throw new DOMException("Storage disabled", "SecurityError");
+      },
+      key: () => null,
+      removeItem: () => undefined,
+    };
+
+    expect(clearLiveDraftStorage(storage)).toBe(0);
   });
 
   it("creates deterministic available workspace slugs", () => {

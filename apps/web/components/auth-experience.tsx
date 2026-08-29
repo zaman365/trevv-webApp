@@ -14,6 +14,7 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
+import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";
 import { CapabilityNotice, TechnicalPreviewBadge } from "./capability-status";
 
 export function AuthExperience({
@@ -32,6 +33,7 @@ export function AuthExperience({
   verified?: boolean;
 }) {
   const [pending, setPending] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState(
     verified
       ? "Your email is verified. Sign in to finish setup."
@@ -43,6 +45,11 @@ export function AuthExperience({
             ? "You have signed out."
             : "",
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setHydrated(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -258,13 +265,17 @@ export function AuthExperience({
                 : "Your account stays separate from the fictional product samples."}
           </p>
           {!demoEnabled ? (
-            <form onSubmit={submit}>
+            <form
+              aria-busy={!hydrated || pending}
+              method="post"
+              onSubmit={submit}
+            >
               {mode === "sign-up" ? (
                 <label>
                   <span>Name</span>
                   <input
                     autoComplete="name"
-                    disabled={pending}
+                    disabled={!hydrated || pending}
                     minLength={2}
                     name="name"
                     required
@@ -275,7 +286,7 @@ export function AuthExperience({
                 <span>Email</span>
                 <input
                   autoComplete="email"
-                  disabled={pending}
+                  disabled={!hydrated || pending}
                   inputMode="email"
                   name="email"
                   required
@@ -288,7 +299,7 @@ export function AuthExperience({
                   autoComplete={
                     mode === "sign-in" ? "current-password" : "new-password"
                   }
-                  disabled={pending}
+                  disabled={!hydrated || pending}
                   maxLength={128}
                   minLength={12}
                   name="password"
@@ -301,7 +312,7 @@ export function AuthExperience({
                   <span>Confirm password</span>
                   <input
                     autoComplete="new-password"
-                    disabled={pending}
+                    disabled={!hydrated || pending}
                     maxLength={128}
                     minLength={12}
                     name="passwordConfirmation"
@@ -325,7 +336,7 @@ export function AuthExperience({
               ) : null}
               <button
                 className="primary-button"
-                disabled={pending}
+                disabled={!hydrated || pending}
                 type="submit"
               >
                 {mode === "sign-in" ? (
@@ -612,6 +623,7 @@ function LiveOnboardingExperience() {
       setMessage("This browser could not be signed out. Try again.");
       return;
     }
+    clearLiveDraftStorage(window.localStorage);
     window.location.replace("/sign-in");
   }
 

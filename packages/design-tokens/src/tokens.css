@@ -11,6 +11,7 @@
   --fh-primary: #5b5bd6;
   --fh-primary-strong: #4747bd;
   --fh-primary-soft: #eeeeff;
+  --fh-on-primary: #ffffff;
   --fh-success: #146b50;
   --fh-success-soft: #e7f5ef;
   --fh-warning: #865006;
@@ -64,6 +65,7 @@
   --fh-primary: #8b88ff;
   --fh-primary-strong: #a4a2ff;
   --fh-primary-soft: #29294d;
+  --fh-on-primary: #111522;
 
   /* The semantic colours need their own dark values. The light ones are
      tuned for a white ground and land at 2.5–3.3:1 on a dark surface —

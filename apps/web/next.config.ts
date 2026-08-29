@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const sensitiveAuthHeaders = [
   {
@@ -14,6 +18,8 @@ const sensitiveAuthHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: workspaceRoot,
   transpilePackages: [
     "@founderhq/api-client",
     "@founderhq/api-contract",
@@ -21,6 +27,15 @@ const nextConfig: NextConfig = {
     "@founderhq/design-tokens",
     "@founderhq/i18n",
   ],
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      ".js": [".ts", ".tsx", ".js"],
+      ".mjs": [".mts", ".mjs"],
+      ".cjs": [".cts", ".cjs"],
+    };
+    return config;
+  },
   async headers() {
     return [
       {

@@ -15300,7 +15300,7 @@
   font-weight: 750;
 }
 .attention-panel-footer > button.primary-button {
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   border-color: var(--fh-primary);
 }

@@ -60,6 +60,7 @@ export async function proxyApiRequest(
     ...(body ? { body } : {}),
     cache: "no-store",
     redirect: "manual",
+    signal: request.signal,
   });
   const responseHeaders = copyResponseHeaders(upstream.headers);
   responseHeaders.set("cache-control", "private, no-store, max-age=0");

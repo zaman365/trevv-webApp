@@ -84,3 +84,31 @@ test("item detail panel has no serious automated accessibility violations", asyn
     .analyze();
   expect(seriousViolations(results.violations)).toEqual([]);
 });
+
+test("primary actions keep AA contrast when enabled and in either theme", async ({
+  page,
+}) => {
+  await gotoCanonical(page, workspaceRoute("reviews"));
+  const primaryAction = page.locator(".primary-button:visible").first();
+  await expect(primaryAction).toBeEnabled();
+  await primaryAction.evaluate((element) => {
+    element.setAttribute("data-contrast-probe", "");
+  });
+
+  expect(
+    await primaryAction.evaluate(
+      (element) => getComputedStyle(element).transitionProperty,
+    ),
+  ).toBe("transform");
+
+  for (const theme of ["light", "dark"] as const) {
+    await page.locator("html").evaluate((element, nextTheme) => {
+      element.dataset.theme = nextTheme;
+    }, theme);
+    const results = await new AxeBuilder({ page })
+      .include("[data-contrast-probe]")
+      .withRules(["color-contrast"])
+      .analyze();
+    expect(seriousViolations(results.violations)).toEqual([]);
+  }
+});

@@ -49,28 +49,14 @@ export function validateProductionWebConfiguration(
   webRuntimeMode(environment);
   requireConfigured("NEXT_PUBLIC_APP_URL", environment);
   requireConfigured("API_ORIGIN", environment);
-  requireConfigured("BETTER_AUTH_URL", environment);
 
   const canonical = webCanonicalUrl(environment);
-  const api = webApiOrigin(environment);
-  const auth = validatedUrl(
-    "BETTER_AUTH_URL",
-    environment.BETTER_AUTH_URL!,
-    environment,
-  );
+  webApiOrigin(environment);
 
   if (canonical.pathname !== "/") {
     throw new Error(
       "NEXT_PUBLIC_APP_URL must contain an origin without a path.",
     );
-  }
-  if (auth.pathname !== "/" && auth.pathname !== "/api/auth") {
-    throw new Error(
-      "BETTER_AUTH_URL must be an HTTPS origin or its /api/auth base.",
-    );
-  }
-  if (auth.origin !== api.origin) {
-    throw new Error("BETTER_AUTH_URL must use the configured API_ORIGIN.");
   }
 }
 

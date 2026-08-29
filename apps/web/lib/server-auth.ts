@@ -54,6 +54,7 @@ const fictionalDemoSession = {
       role: "owner" as const,
     },
   ],
+  managedWorkspaceIds: demoWorkspaces.map((workspace) => workspace.id),
   expiresAt: "2099-01-01T00:00:00.000Z",
 } satisfies WebAppSession;
 

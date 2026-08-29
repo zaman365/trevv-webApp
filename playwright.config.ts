@@ -34,7 +34,7 @@ export default defineConfig({
       },
     },
     {
-      command: `pnpm --filter @founderhq/web exec next dev --hostname ${webUrl.hostname} --port ${webUrl.port || "3000"}`,
+      command: `pnpm --filter @founderhq/web exec next dev --webpack --hostname ${webUrl.hostname} --port ${webUrl.port || "3000"}`,
       url: `${webBaseUrl}/app/portfolio`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

@@ -22,6 +22,7 @@ let organizationId = "";
 let workspaceId = "";
 let boardId = "";
 let capturedItemId = "";
+let ownerUserId = "";
 
 interface MailRecord {
   message: { to: string; subject: string; text: string };
@@ -58,9 +59,12 @@ test.describe.serial("live founder operating loop", () => {
 
     const session = await browserJson(page, "/api/v1/session");
     expect(session.status).toBe(200);
-    organizationId = String(
-      (session.body as { organizationId: string }).organizationId,
-    );
+    const ownerSession = session.body as {
+      organizationId: string;
+      user: { id: string };
+    };
+    organizationId = String(ownerSession.organizationId);
+    ownerUserId = ownerSession.user.id;
 
     await page.getByTestId("create-workspace-open").click();
     const workspaceDialog = page.getByTestId("create-workspace-dialog");
@@ -416,6 +420,221 @@ test.describe.serial("live founder operating loop", () => {
       collaboratorPage.getByTestId(`workspace-card-${workspaceSlug}`),
     ).toBeVisible();
 
+    const teamName = `Launch Team ${suffix}`;
+    const ownerMessage = `Owner coordination note ${suffix}`;
+    const collaboratorMessage = `Collaborator acknowledgement ${suffix}`;
+    await collaboratorPage.goto(`/app/workspaces/${workspaceSlug}/messages`);
+    await expect(collaboratorPage.getByTestId("live-messages")).toBeVisible();
+    await ownerPage.goto(`/app/workspaces/${workspaceSlug}/teams`);
+    await expect(ownerPage.getByTestId("live-teams")).toBeVisible();
+    await ownerPage.getByRole("button", { name: "Create Team" }).click();
+    const teamCreator = ownerPage.getByRole("dialog", {
+      name: "Create Team",
+    });
+    await teamCreator.getByLabel("Team name").fill(teamName);
+    await teamCreator.getByLabel("Feature preset").selectOption("technology");
+    await teamCreator
+      .getByRole("checkbox", { name: /Founder Loop Owner/ })
+      .check();
+    await teamCreator
+      .getByRole("checkbox", { name: /Founder Loop Collaborator/ })
+      .check();
+    await teamCreator
+      .getByLabel("Team lead")
+      .selectOption({ label: "Founder Loop Owner" });
+    await teamCreator
+      .getByRole("button", { name: "Create Team and room" })
+      .click();
+    await expect(
+      ownerPage.getByText(`Team “${teamName}” and its room were saved.`),
+    ).toBeVisible();
+    await expect(
+      ownerPage.getByText("Technology preset defaults"),
+    ).toBeVisible();
+
+    const collaboratorTeamRoom = collaboratorPage.getByRole("button", {
+      name: new RegExp(teamName),
+    });
+    await expect(collaboratorTeamRoom).toBeVisible({ timeout: 15_000 });
+    await collaboratorTeamRoom.click();
+    await collaboratorPage
+      .getByRole("textbox", { name: "Message" })
+      .fill(collaboratorMessage);
+    await collaboratorPage.getByRole("button", { name: "Send" }).click();
+    await expect(collaboratorPage.getByText("Message sent")).toBeVisible();
+    const collaboratorRootMessage = collaboratorPage
+      .locator("[data-message-id]")
+      .filter({ hasText: collaboratorMessage })
+      .first();
+    await collaboratorRootMessage
+      .getByRole("button", { name: /Reply to Founder Loop Collaborator/ })
+      .click();
+    const collaboratorThread = collaboratorPage.getByRole("region", {
+      name: "Replies to Founder Loop Collaborator",
+    });
+    await expect(collaboratorThread).toBeVisible();
+
+    await ownerPage.goto(`/app/workspaces/${workspaceSlug}/messages`);
+    const ownerTeamRoom = ownerPage.getByRole("button", {
+      name: new RegExp(teamName),
+    });
+    await expect(ownerTeamRoom).toBeVisible();
+    await ownerTeamRoom.click();
+    await expect(ownerPage.getByText(collaboratorMessage)).toBeVisible({
+      timeout: 15_000,
+    });
+    const ownerRootMessage = ownerPage
+      .locator("[data-message-id]")
+      .filter({ hasText: collaboratorMessage })
+      .first();
+    await ownerRootMessage
+      .getByRole("button", { name: /Reply to Founder Loop Collaborator/ })
+      .click();
+    await expect(
+      ownerPage.getByRole("region", {
+        name: "Replies to Founder Loop Collaborator",
+      }),
+    ).toBeVisible();
+    await ownerPage
+      .getByRole("textbox", { name: "Message" })
+      .fill(ownerMessage);
+    await ownerPage.getByRole("button", { name: "Send" }).click();
+    await expect(ownerPage.getByText("Message sent")).toBeVisible();
+    await expect(
+      collaboratorThread.getByText(ownerMessage, { exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const messageLayout = ownerPage.getByRole("region", {
+      name: "Messaging workspace",
+    });
+    for (const width of [1_024, 1_180, 1_280, 1_440]) {
+      await ownerPage.setViewportSize({ width, height: 820 });
+      const geometry = await messageLayout.evaluate((element) => {
+        const layout = element as HTMLElement;
+        const thread = layout.querySelector(
+          '[class*="threadPane"]',
+        ) as HTMLElement;
+        const composer = layout.querySelector("textarea") as HTMLElement;
+        const labels = [...layout.querySelectorAll("nav strong")];
+        const composerRect = composer.getBoundingClientRect();
+        return {
+          layoutFits: layout.scrollWidth <= layout.clientWidth + 1,
+          threadWidth: thread.getBoundingClientRect().width,
+          composerRight: composerRect.right,
+          composerBottom: composerRect.bottom,
+          labelsFit: labels.every(
+            (label) => label.scrollWidth <= label.clientWidth + 1,
+          ),
+        };
+      });
+      expect(geometry.layoutFits).toBe(true);
+      expect(geometry.threadWidth).toBeGreaterThan(380);
+      expect(geometry.composerRight).toBeLessThanOrEqual(width);
+      expect(geometry.composerBottom).toBeLessThanOrEqual(820);
+      expect(geometry.labelsFit).toBe(true);
+      if (width <= 1_280) {
+        await expect(
+          ownerPage.getByRole("button", {
+            name: "Open conversation context",
+          }),
+        ).toBeVisible();
+      }
+    }
+
+    await ownerPage.setViewportSize({ width: 1_180, height: 820 });
+    await expect(
+      ownerPage.getByRole("button", { name: "Collapse conversations" }),
+    ).toBeHidden();
+    const contextToggle = ownerPage.getByRole("button", {
+      name: "Open conversation context",
+    });
+    await contextToggle.click();
+    await expect(ownerPage.getByRole("dialog")).toBeVisible();
+    await ownerPage.keyboard.press("Escape");
+    await expect(contextToggle).toBeFocused();
+
+    await ownerPage.setViewportSize({ width: 1_440, height: 820 });
+    const railResizer = ownerPage.getByRole("separator", {
+      name: "Resize conversation list",
+    });
+    await expect(railResizer).toBeVisible();
+    await railResizer.focus();
+    await ownerPage.keyboard.press("End");
+    await expect(railResizer).toHaveAttribute("aria-valuenow", "352");
+    await ownerPage.reload();
+    await expect(
+      ownerPage.getByRole("separator", {
+        name: "Resize conversation list",
+      }),
+    ).toHaveAttribute("aria-valuenow", "352");
+
+    await ownerPage.setViewportSize({ width: 900, height: 820 });
+    await ownerPage
+      .getByRole("button", { name: "Collapse conversations" })
+      .click();
+    await expect(
+      ownerPage.getByRole("button", { name: "Show conversations" }),
+    ).toBeVisible();
+    await ownerPage.reload();
+    await expect(
+      ownerPage.getByRole("button", { name: "Show conversations" }),
+    ).toBeVisible();
+    await ownerPage.getByRole("button", { name: "Show conversations" }).click();
+    await expect(
+      ownerPage.getByRole("button", { name: "Collapse conversations" }),
+    ).toBeVisible();
+    await expectNoSeriousAccessibilityViolations(ownerPage);
+    await ownerPage.setViewportSize({ width: 1_280, height: 720 });
+
+    await ownerPage.goto(`/app/workspaces/${workspaceSlug}/teams`);
+    await ownerPage.getByRole("button", { name: `Manage ${teamName}` }).click();
+    await ownerPage
+      .getByRole("button", {
+        name: `Remove Founder Loop Collaborator from ${teamName}`,
+      })
+      .click();
+    await expect(collaboratorTeamRoom).toHaveCount(0, { timeout: 15_000 });
+
+    for (const name of [
+      "Marketing",
+      "Technology",
+      "Sales",
+      "Operations",
+      "Customer Success",
+    ]) {
+      const response = await browserJson(
+        ownerPage,
+        `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            workspaceId,
+            name: `${name} ${suffix}`,
+            purpose: `${name} coordination for the founder operating loop.`,
+            preset: "custom",
+            featureCapabilities: ["work", "messages"],
+            memberIds: [ownerUserId],
+            leadUserId: ownerUserId,
+          }),
+        },
+      );
+      expect(response.status).toBe(201);
+    }
+    await ownerPage.reload();
+    await ownerPage.setViewportSize({ width: 1_280, height: 900 });
+    const teamCards = ownerPage.locator('[data-testid^="team-card-"]');
+    await expect(teamCards).toHaveCount(6);
+    for (let index = 0; index < 6; index += 1) {
+      await expect(teamCards.nth(index)).toBeInViewport();
+    }
+    await expect(
+      teamCards.filter({ hasText: "options available to" }).first(),
+    ).toBeVisible();
+
     const collaborationTitle = `Cross-browser update ${suffix}`;
     await collaboratorPage.goto(
       `/app/workspaces/${workspaceSlug}/boards/${encodeURIComponent(boardId)}`,
@@ -668,6 +887,8 @@ async function runInternalWorker() {
         env: {
           ...process.env,
           DATABASE_URL: databaseUrl,
+          DEMO_MODE: "false",
+          NODE_ENV: "test",
           WORKER_ID: "live-e2e-worker",
         },
       },

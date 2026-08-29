@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build --webpack",
     "build:cloudflare": "vinext build --config vite.config.ts",
     "build:sites": "vinext build --config sites.vite.config.ts",
-    "deploy:cloudflare": "pnpm run build:cloudflare && wrangler deploy",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",

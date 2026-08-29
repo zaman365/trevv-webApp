@@ -95,4 +95,58 @@ describe("browser API proxy boundary", () => {
     });
     expect(text).not.toContain("must-not-cross-the-web-boundary");
   });
+
+  it("streams server events and aborts the upstream request when the browser disconnects", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const encoder = new TextEncoder();
+    let upstreamSignal: AbortSignal | null | undefined;
+    const upstream = vi
+      .fn()
+      .mockImplementation(async (_url: URL, init: RequestInit) => {
+        upstreamSignal = init.signal;
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode('event: ready\ndata: {"cursor":1}\n\n'),
+              );
+              controller.enqueue(
+                encoder.encode('event: message.sent\ndata: {"cursor":2}\n\n'),
+              );
+            },
+          }),
+          {
+            headers: {
+              "cache-control": "no-cache",
+              "content-type": "text/event-stream; charset=utf-8",
+            },
+          },
+        );
+      });
+    vi.stubGlobal("fetch", upstream);
+    const browserAbort = new AbortController();
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/v1/events?workspaceId=workspace-a", {
+        signal: browserAbort.signal,
+      }),
+      ["v1", "events"],
+    );
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    const second = await reader.read();
+
+    expect(new TextDecoder().decode(first.value)).toContain('cursor":1');
+    expect(new TextDecoder().decode(second.value)).toContain('cursor":2');
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(response.headers.get("cache-control")).toBe(
+      "private, no-store, max-age=0",
+    );
+    expect(upstreamSignal).toBeDefined();
+    expect(upstreamSignal?.aborted).toBe(false);
+
+    browserAbort.abort();
+    expect(upstreamSignal?.aborted).toBe(true);
+    await reader.cancel();
+  });
 });

@@ -53,7 +53,7 @@ export default defineConfig({
     },
     {
       command:
-        "pnpm --filter @founderhq/web exec next dev --hostname 127.0.0.1 --port 3200",
+        "pnpm --filter @founderhq/web exec next dev --webpack --hostname 127.0.0.1 --port 3200",
       url: `${webOrigin}/sign-up`,
       reuseExistingServer: false,
       timeout: 120_000,

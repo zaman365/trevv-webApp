@@ -3,6 +3,8 @@ import { DashboardExperience } from "@/components/dashboard-experience";
 import { FocusExperience } from "@/components/focus-experience";
 import { LiveWorkspaceOverview } from "@/components/live-workspace-overview";
 import { LiveWorkView } from "@/components/live-work-views";
+import { LiveMessagingWorkspace } from "@/components/live-messaging-workspace";
+import { LiveTeamWorkflow } from "@/components/live-team-workflow";
 import {
   AttentionExperience,
   BlueprintsExperience,
@@ -34,6 +36,12 @@ export default async function WorkspaceModulePage({
   if (webRuntimeMode() === "live") {
     if (view === "dashboard") {
       return <LiveWorkspaceOverview dashboard workspaceSlug={workspaceSlug} />;
+    }
+    if (view === "messages") {
+      return <LiveMessagingWorkspace workspaceSlug={workspaceSlug} />;
+    }
+    if (view === "teams") {
+      return <LiveTeamWorkflow workspaceSlug={workspaceSlug} />;
     }
     return <LiveWorkView view={view} workspaceSlug={workspaceSlug} />;
   }

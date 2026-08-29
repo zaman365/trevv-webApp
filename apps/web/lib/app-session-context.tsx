@@ -16,6 +16,7 @@ export interface AppSessionView {
     role: string;
     slug: string;
   }>;
+  managedWorkspaceIds: readonly string[];
   user: { id: string; email: string; name: string; role: string };
 }
 

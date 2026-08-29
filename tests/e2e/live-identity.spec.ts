@@ -223,6 +223,32 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     "invalid, expired, or has already been used",
   );
   await replayContext.close();
+
+  await ownerPage.goto("/app/account/sessions");
+  await ownerPage.evaluate(() => {
+    window.localStorage.setItem(
+      "trevv:live-draft:v1:private-org:private-user:message%3Aprivate-room",
+      "confidential recoverable draft",
+    );
+    window.localStorage.setItem(
+      "trevv:messages-layout:v1:private-org:private-user:workspace",
+      "272",
+    );
+  });
+  await ownerPage
+    .getByRole("button", { name: "Sign out this browser" })
+    .click();
+  await ownerPage.waitForURL("**/sign-in?signedOut=1");
+  await expect(
+    ownerPage.evaluate(() => ({
+      draft: window.localStorage.getItem(
+        "trevv:live-draft:v1:private-org:private-user:message%3Aprivate-room",
+      ),
+      preference: window.localStorage.getItem(
+        "trevv:messages-layout:v1:private-org:private-user:workspace",
+      ),
+    })),
+  ).resolves.toEqual({ draft: null, preference: "272" });
   await ownerContext.close();
 });
 

@@ -1,5 +1,7 @@
 import type { WorkItemDto } from "@founderhq/api-contract";
 
+export const LIVE_DRAFT_STORAGE_PREFIX = "trevv:live-draft:v1:";
+
 export interface LiveDraftEnvelope<T> {
   version: 1;
   idempotencyKey: string;
@@ -18,7 +20,25 @@ export function liveDraftStorageKey({
 }) {
   const safe = (value: string) =>
     encodeURIComponent(value.trim().toLocaleLowerCase());
-  return `trevv:live-draft:v1:${safe(organizationId)}:${safe(userId)}:${safe(scope)}`;
+  return `${LIVE_DRAFT_STORAGE_PREFIX}${safe(organizationId)}:${safe(userId)}:${safe(scope)}`;
+}
+
+export function clearLiveDraftStorage(
+  storage: Pick<Storage, "key" | "length" | "removeItem">,
+) {
+  try {
+    const keys: string[] = [];
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+      if (key?.startsWith(LIVE_DRAFT_STORAGE_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) storage.removeItem(key);
+    return keys.length;
+  } catch {
+    // A hardened browser can deny storage access. Session termination must
+    // still complete; no private response is copied into another cache.
+    return 0;
+  }
 }
 
 export function isLiveDraftEnvelope<T>(

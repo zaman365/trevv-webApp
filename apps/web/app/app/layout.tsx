@@ -47,6 +47,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             slug: organization.slug,
           }),
         ),
+        managedWorkspaceIds: session.managedWorkspaceIds,
         user: {
           id: session.user.id,
           email: session.user.email,

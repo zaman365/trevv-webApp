@@ -188,13 +188,13 @@
 }
 
 .panel :global(.primary-button) {
-  color: #fff;
+  color: var(--fh-on-primary, #fff);
   background: var(--fh-primary);
   border: 0;
 }
 
 .panel :global(.primary-button):hover:not(:disabled) {
-  color: #fff;
+  color: var(--fh-on-primary, #fff);
   background: var(--fh-primary-strong);
   border-color: transparent;
 }

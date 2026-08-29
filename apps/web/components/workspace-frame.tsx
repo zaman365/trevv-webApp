@@ -56,7 +56,12 @@ import {
 } from "@/lib/custom-workspaces";
 import { useAppSession } from "@/lib/app-session-context";
 import { useOptionalLiveAppData } from "@/lib/live-app-data";
+import {
+  LiveCollaborationEventBridge,
+  LiveUnreadBadge,
+} from "@/lib/live-collaboration";
 import { presentLiveError } from "@/lib/live-errors";
+import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";
 import { LiveStateNotice } from "./live-state";
 import {
   LiveQuickCaptureDialog,
@@ -300,6 +305,7 @@ function WorkspaceChrome({
         return;
       }
     }
+    clearLiveDraftStorage(window.localStorage);
     window.location.replace("/sign-in?signedOut=1");
   }
 
@@ -432,17 +438,13 @@ function WorkspaceChrome({
       undefined,
     ],
     ["inbox", copy.nav.inbox, scopedHref("inbox"), Inbox, undefined],
-    ...(appSession.demo
-      ? [
-          [
-            "messages",
-            copy.nav.messages,
-            scopedHref("messages"),
-            MessageCircleMore,
-            4,
-          ] as const,
-        ]
-      : []),
+    [
+      "messages",
+      copy.nav.messages,
+      scopedHref("messages"),
+      MessageCircleMore,
+      appSession.demo ? 4 : undefined,
+    ],
   ] as const;
 
   return (
@@ -696,18 +698,21 @@ function WorkspaceChrome({
                     {badge !== undefined && badge > 0 && (
                       <span className="nav-badge">{badge}</span>
                     )}
+                    {key === "messages" &&
+                    !appSession.demo &&
+                    contextProject ? (
+                      <LiveUnreadBadge workspaceId={contextProject.id} />
+                    ) : null}
                   </Link>
                 );
               })}
-              {appSession.demo ? (
-                <Link
-                  className={`nav-item ${active === "teams" ? "active" : ""}`}
-                  href={scopedHref("teams")}
-                >
-                  <Users size={17} />
-                  <span>{copy.nav.teams}</span>
-                </Link>
-              ) : null}
+              <Link
+                className={`nav-item ${active === "teams" ? "active" : ""}`}
+                href={scopedHref("teams")}
+              >
+                <Users size={17} />
+                <span>{copy.nav.teams}</span>
+              </Link>
               <p className="nav-label spaced">Work</p>
               <Link
                 className={`nav-item ${active === "decisions" ? "active" : ""}`}
@@ -1028,33 +1033,31 @@ function WorkspaceChrome({
             ) : null}
             {contextProject && (
               <>
+                <Link
+                  className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
+                  aria-label="Messages"
+                  aria-current={active === "messages" ? "page" : undefined}
+                  href={scopedHref("messages")}
+                  title="Messages"
+                >
+                  <MessageCircleMore size={18} />
+                </Link>
                 {appSession.demo ? (
-                  <>
-                    <Link
-                      className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
-                      aria-label="Messages"
-                      aria-current={active === "messages" ? "page" : undefined}
-                      href={scopedHref("messages")}
-                      title="Messages"
-                    >
-                      <MessageCircleMore size={18} />
-                    </Link>
-                    <Link
-                      className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
-                      aria-label={copy.shell.notifications}
-                      aria-current={
-                        active === "notifications" ? "page" : undefined
-                      }
-                      href={scopedHref("notifications")}
-                      title={copy.shell.notifications}
-                    >
-                      <Bell size={18} />
-                      <span
-                        className="topbar-tool-dot notification-dot"
-                        aria-hidden="true"
-                      />
-                    </Link>
-                  </>
+                  <Link
+                    className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
+                    aria-label={copy.shell.notifications}
+                    aria-current={
+                      active === "notifications" ? "page" : undefined
+                    }
+                    href={scopedHref("notifications")}
+                    title={copy.shell.notifications}
+                  >
+                    <Bell size={18} />
+                    <span
+                      className="topbar-tool-dot notification-dot"
+                      aria-hidden="true"
+                    />
+                  </Link>
                 ) : null}
               </>
             )}
@@ -1098,15 +1101,13 @@ function WorkspaceChrome({
                       >
                         <Settings2 size={14} /> Workspace settings
                       </Link>
-                      {appSession.demo ? (
-                        <Link
-                          href={scopedHref("teams")}
-                          role="menuitem"
-                          onClick={() => setUserMenuOpen(false)}
-                        >
-                          <Users size={14} /> Teams and access
-                        </Link>
-                      ) : null}
+                      <Link
+                        href={scopedHref("teams")}
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <Users size={14} /> Teams and access
+                      </Link>
                     </>
                   )}
                   <Link
@@ -1219,23 +1220,13 @@ function WorkspaceChrome({
               <Inbox size={19} />
               <span>{messages.nav.inbox}</span>
             </Link>
-            {appSession.demo ? (
-              <Link
-                className={active === "messages" ? "active" : ""}
-                href={scopedHref("messages")}
-              >
-                <MessageCircleMore size={19} />
-                <span>Messages</span>
-              </Link>
-            ) : (
-              <Link
-                className={active === "attention" ? "active" : ""}
-                href={scopedHref("attention")}
-              >
-                <Sparkles size={19} />
-                <span>Attention</span>
-              </Link>
-            )}
+            <Link
+              className={active === "messages" ? "active" : ""}
+              href={scopedHref("messages")}
+            >
+              <MessageCircleMore size={19} />
+              <span>Messages</span>
+            </Link>
           </>
         ) : (
           <>
@@ -1410,6 +1401,9 @@ function WorkspaceChrome({
           }}
         />
       )}
+      {!appSession.demo && contextProject ? (
+        <LiveCollaborationEventBridge workspaceId={contextProject.id} />
+      ) : null}
     </div>
   );
 }

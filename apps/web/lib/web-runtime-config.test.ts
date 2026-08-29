@@ -9,8 +9,7 @@ const secureProduction = {
   NODE_ENV: "production",
   DEMO_MODE: "false",
   NEXT_PUBLIC_APP_URL: "https://trevv.test",
-  API_ORIGIN: "https://api.trevv.test",
-  BETTER_AUTH_URL: "https://api.trevv.test/api/auth",
+  API_ORIGIN: "https://api.service.internal",
 };
 
 describe("Web runtime configuration", () => {
@@ -35,7 +34,7 @@ describe("Web runtime configuration", () => {
     ).toThrow(/explicitly set/);
   });
 
-  it("requires secure, path-free canonical and API-aligned auth URLs", () => {
+  it("requires a secure public URL and a path-free private API upstream", () => {
     expect(() =>
       validateProductionWebConfiguration(secureProduction),
     ).not.toThrow();
@@ -54,9 +53,30 @@ describe("Web runtime configuration", () => {
     expect(() =>
       validateProductionWebConfiguration({
         ...secureProduction,
-        BETTER_AUTH_URL: "https://auth.trevv.test/api/auth",
+        API_ORIGIN: "https://api.service.internal/api/v1",
       }),
-    ).toThrow(/API_ORIGIN/);
+    ).toThrow(/without a path/);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        API_ORIGIN: "https://user:password@api.service.internal",
+      }),
+    ).toThrow(/credentials/);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        API_ORIGIN: "http://api.service.internal:8787",
+      }),
+    ).toThrow(/HTTPS/);
+  });
+
+  it("does not make the Web runtime depend on the API-owned auth base URL", () => {
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        BETTER_AUTH_URL: "https://unrelated.example.test/api/auth",
+      }),
+    ).not.toThrow();
   });
 
   it("accepts only internal auth return destinations", () => {

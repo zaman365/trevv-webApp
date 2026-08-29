@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAppSession } from "@/lib/app-session-context";
+import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";
 import type { RedactedSession } from "@/lib/session-route";
 
 export function SessionManagement() {
@@ -68,6 +69,7 @@ export function SessionManagement() {
           errorMessage(body, "The session could not be revoked."),
         );
       if (session.current) {
+        clearLiveDraftStorage(window.localStorage);
         window.location.replace("/sign-in?signedOut=1");
         return;
       }
@@ -97,6 +99,7 @@ export function SessionManagement() {
       const body: unknown = await response.json();
       if (!response.ok)
         throw new Error(errorMessage(body, "Sessions could not be revoked."));
+      clearLiveDraftStorage(window.localStorage);
       window.location.replace("/sign-in?signedOut=all");
     } catch (error) {
       setMessage(
@@ -118,6 +121,7 @@ export function SessionManagement() {
       });
       if (!response.ok)
         throw new Error("This browser could not be signed out.");
+      clearLiveDraftStorage(window.localStorage);
       window.location.replace("/sign-in?signedOut=1");
     } catch (error) {
       setMessage(
