@@ -4,12 +4,14 @@ export const openApiDocument = {
     title: "TREVV API",
     version: "2.0.0",
     description:
-      "Versioned, permission-scoped contracts shared by the TREVV Web, Mobile, and Desktop clients. Health, this OpenAPI document, and provider-managed /api/auth/* endpoints are public; product routes require both a Better Auth session and X-Organization-Id in live mode.",
+      "Versioned, permission-scoped contracts shared by the TREVV Web, Mobile, and Desktop clients. Health, this OpenAPI document, and provider-managed /api/auth/* endpoints are public. In live mode every product request derives its user, selected organization, role, and managed scopes from a Better Auth session and active PostgreSQL memberships.",
   },
   servers: [{ url: "http://localhost:8787", description: "Local API" }],
-  security: [{ SessionCookie: [], OrganizationContext: [] }],
+  security: [{ SessionCookie: [] }],
   tags: [
     { name: "System" },
+    { name: "Identity" },
+    { name: "Organization" },
     { name: "Portfolio" },
     { name: "Attention" },
     { name: "Waiting" },
@@ -72,9 +74,388 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/session/organizations": {
+      get: {
+        tags: ["Identity"],
+        operationId: "listSessionOrganizations",
+        description:
+          "List only the active organizations derived from the authenticated identity's server-side memberships, for selecting an active organization.",
+        responses: {
+          "200": {
+            description: "Active organization choices",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  minItems: 1,
+                  maxItems: 100,
+                  items: {
+                    $ref: "#/components/schemas/OrganizationSummary",
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/session/organization": {
+      post: {
+        tags: ["Identity"],
+        operationId: "selectOrganization",
+        description:
+          "Persist a server-validated active organization selection. The requested identifier is never used as authorization context until membership is verified.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/OrganizationSelection" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Session with the validated organization selected",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Session" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/onboarding": {
+      get: {
+        tags: ["Identity"],
+        operationId: "getOnboarding",
+        responses: {
+          "200": {
+            description: "Recoverable onboarding progress",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/OnboardingState" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      put: {
+        tags: ["Identity"],
+        operationId: "saveOnboarding",
+        parameters: [{ $ref: "#/components/parameters/IfMatch" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/OnboardingDraft" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Durably saved onboarding progress",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/OnboardingState" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/onboarding/complete": {
+      post: {
+        tags: ["Identity"],
+        operationId: "completeOnboarding",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CompleteOnboarding" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description:
+              "Application user, owner membership, default Portfolio, first Workspace, starter board, and Blueprint committed atomically",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/OnboardingState" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/invitations": {
+      get: {
+        tags: ["Organization"],
+        operationId: "listInvitations",
+        responses: {
+          "200": {
+            description:
+              "Sanitized organization invitations without tokens or hashes",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Invitation" },
+                },
+              },
+            },
+          },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      post: {
+        tags: ["Organization"],
+        operationId: "createInvitation",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateInvitation" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description:
+              "Durable invitation record. deliveryStatus truthfully reports whether email delivery succeeded.",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Invitation" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/invitations/{id}/resend": {
+      post: {
+        tags: ["Organization"],
+        operationId: "resendInvitation",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description: "Rotated one-time token and current delivery result",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Invitation" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/invitations/{id}": {
+      delete: {
+        tags: ["Organization"],
+        operationId: "revokeInvitation",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description: "Revoked invitation",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Invitation" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/invitations/accept": {
+      post: {
+        tags: ["Identity"],
+        operationId: "acceptInvitation",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/AcceptInvitation" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "One-time invitation acceptance and membership creation",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/InvitationAcceptance" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/memberships": {
+      get: {
+        tags: ["Organization"],
+        operationId: "listMemberships",
+        responses: {
+          "200": {
+            description: "Active organization memberships",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Membership" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/memberships/{userId}": {
+      patch: {
+        tags: ["Organization"],
+        operationId: "updateMembership",
+        parameters: [
+          {
+            name: "userId",
+            in: "path",
+            required: true,
+            schema: { type: "string", minLength: 3, maxLength: 128 },
+          },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateMembership" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated role or active state",
+            headers: {
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Membership" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -100,7 +481,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -123,7 +503,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -155,7 +534,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -197,7 +575,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "409": { $ref: "#/components/responses/Conflict" },
@@ -223,7 +600,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -265,7 +641,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "409": { $ref: "#/components/responses/Conflict" },
@@ -288,7 +663,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -308,7 +682,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -345,7 +718,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "409": { $ref: "#/components/responses/Conflict" },
@@ -370,7 +742,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "501": { $ref: "#/components/responses/CapabilityUnavailable" },
@@ -391,7 +762,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "501": { $ref: "#/components/responses/CapabilityUnavailable" },
@@ -414,7 +784,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "501": { $ref: "#/components/responses/CapabilityUnavailable" },
@@ -434,7 +803,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "501": { $ref: "#/components/responses/CapabilityUnavailable" },
@@ -462,7 +830,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "422": { $ref: "#/components/responses/Validation" },
@@ -486,7 +853,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -507,7 +873,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
@@ -541,7 +906,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "422": { $ref: "#/components/responses/Validation" },
@@ -579,7 +943,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "409": { $ref: "#/components/responses/Conflict" },
@@ -623,7 +986,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "409": { $ref: "#/components/responses/Conflict" },
@@ -654,7 +1016,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "422": { $ref: "#/components/responses/Validation" },
@@ -675,7 +1036,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "501": { $ref: "#/components/responses/CapabilityUnavailable" },
@@ -699,7 +1059,6 @@ export const openApiDocument = {
             description: "Demo Board CSV export",
             content: { "text/csv": { schema: { type: "string" } } },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "501": { $ref: "#/components/responses/CapabilityUnavailable" },
@@ -719,7 +1078,6 @@ export const openApiDocument = {
               },
             },
           },
-          "400": { $ref: "#/components/responses/OrganizationContextRequired" },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "501": { $ref: "#/components/responses/CapabilityUnavailable" },
@@ -732,16 +1090,9 @@ export const openApiDocument = {
       SessionCookie: {
         type: "apiKey",
         in: "cookie",
-        name: "better-auth.session_token",
+        name: "trevv.session_token",
         description:
           "Better Auth session cookie. Production may apply the standard __Secure- cookie prefix; clients must obtain the cookie through the public /api/auth/* endpoints.",
-      },
-      OrganizationContext: {
-        type: "apiKey",
-        in: "header",
-        name: "X-Organization-Id",
-        description:
-          "Required in live mode. The server verifies this selection against the authenticated user's active membership.",
       },
     },
     parameters: {
@@ -763,7 +1114,7 @@ export const openApiDocument = {
         in: "header",
         required: true,
         description:
-          "A UUID scoped to the selected organization and authenticated user. Reusing it with the same request returns the original status and body; reusing it with a different request returns 409.",
+          "A UUID scoped to the authenticated identity and, after onboarding, the selected organization. Reusing it with the same request returns the original status and body after the mutation completes; reusing it with a different request returns 409.",
         schema: { type: "string", format: "uuid" },
       },
       OptionalIdempotencyKey: {
@@ -853,9 +1204,36 @@ export const openApiDocument = {
           locale: { type: "string", enum: ["en", "de"] },
         },
       },
+      OrganizationSummary: {
+        type: "object",
+        required: ["id", "name", "slug", "role"],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          slug: { type: "string", minLength: 1, maxLength: 120 },
+          role: {
+            type: "string",
+            enum: [
+              "owner",
+              "admin",
+              "workspace_lead",
+              "member",
+              "guest",
+              "viewer",
+            ],
+          },
+        },
+      },
       Session: {
         type: "object",
-        required: ["user", "organizationId", "expiresAt"],
+        required: [
+          "user",
+          "organizationId",
+          "organization",
+          "availableOrganizations",
+          "expiresAt",
+        ],
         additionalProperties: false,
         properties: {
           user: { $ref: "#/components/schemas/User" },
@@ -864,7 +1242,336 @@ export const openApiDocument = {
             minLength: 3,
             maxLength: 128,
           },
+          organization: {
+            $ref: "#/components/schemas/OrganizationSummary",
+          },
+          availableOrganizations: {
+            type: "array",
+            minItems: 1,
+            maxItems: 100,
+            items: { $ref: "#/components/schemas/OrganizationSummary" },
+          },
           expiresAt: { type: "string", format: "date-time" },
+        },
+      },
+      OrganizationSelection: {
+        type: "object",
+        required: ["organizationId"],
+        additionalProperties: false,
+        properties: {
+          organizationId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+        },
+      },
+      OnboardingDraft: {
+        type: "object",
+        required: ["step"],
+        additionalProperties: false,
+        properties: {
+          step: { type: "integer", enum: [1, 2, 3, 4, 5] },
+          organizationName: {
+            type: "string",
+            minLength: 2,
+            maxLength: 160,
+          },
+          organizationSlug: {
+            type: "string",
+            minLength: 2,
+            maxLength: 80,
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          },
+          workspaceName: {
+            type: "string",
+            minLength: 2,
+            maxLength: 160,
+          },
+          workspaceSlug: {
+            type: "string",
+            minLength: 2,
+            maxLength: 80,
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          },
+          workspaceType: {
+            type: "string",
+            enum: [
+              "business",
+              "brand",
+              "client",
+              "product",
+              "department",
+              "venture",
+              "initiative",
+              "investment",
+              "campaign",
+              "program",
+              "project",
+              "shared_function",
+              "client_program",
+              "journey",
+              "other",
+            ],
+          },
+          workspaceColor: {
+            type: "string",
+            pattern: "^#[0-9a-fA-F]{6}$",
+          },
+          blueprintKey: {
+            type: "string",
+            enum: [
+              "operating_business",
+              "client_delivery",
+              "product_initiative",
+              "launch_campaign",
+              "blank",
+            ],
+          },
+        },
+      },
+      CompleteOnboarding: {
+        allOf: [
+          { $ref: "#/components/schemas/OnboardingDraft" },
+          {
+            type: "object",
+            required: [
+              "step",
+              "organizationName",
+              "organizationSlug",
+              "workspaceName",
+              "workspaceSlug",
+              "workspaceType",
+              "workspaceColor",
+              "blueprintKey",
+            ],
+            properties: {
+              step: { type: "integer", const: 5 },
+            },
+          },
+        ],
+      },
+      OnboardingState: {
+        type: "object",
+        required: ["status", "step", "draft", "version", "updatedAt"],
+        additionalProperties: false,
+        properties: {
+          status: {
+            type: "string",
+            enum: ["not_started", "in_progress", "completed"],
+          },
+          step: { type: "integer", enum: [1, 2, 3, 4, 5] },
+          draft: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              organizationName: {
+                type: "string",
+                minLength: 2,
+                maxLength: 160,
+              },
+              organizationSlug: {
+                type: "string",
+                minLength: 2,
+                maxLength: 80,
+                pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              },
+              workspaceName: {
+                type: "string",
+                minLength: 2,
+                maxLength: 160,
+              },
+              workspaceSlug: {
+                type: "string",
+                minLength: 2,
+                maxLength: 80,
+                pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              },
+              workspaceType: {
+                type: "string",
+                enum: [
+                  "business",
+                  "brand",
+                  "client",
+                  "product",
+                  "department",
+                  "venture",
+                  "initiative",
+                  "investment",
+                  "campaign",
+                  "program",
+                  "project",
+                  "shared_function",
+                  "client_program",
+                  "journey",
+                  "other",
+                ],
+              },
+              workspaceColor: {
+                type: "string",
+                pattern: "^#[0-9a-fA-F]{6}$",
+              },
+              blueprintKey: {
+                type: "string",
+                enum: [
+                  "operating_business",
+                  "client_delivery",
+                  "product_initiative",
+                  "launch_campaign",
+                  "blank",
+                ],
+              },
+            },
+          },
+          version: { type: "integer", minimum: 0 },
+          updatedAt: { type: "string", format: "date-time" },
+          completedAt: { type: "string", format: "date-time" },
+          organizationId: { type: "string", minLength: 3, maxLength: 128 },
+          portfolioId: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          boardId: { type: "string", minLength: 3, maxLength: 128 },
+          blueprintInstanceId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+        },
+      },
+      Invitation: {
+        type: "object",
+        required: [
+          "id",
+          "organizationId",
+          "email",
+          "role",
+          "status",
+          "deliveryStatus",
+          "version",
+          "expiresAt",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          organizationId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+          email: { type: "string", format: "email" },
+          role: {
+            type: "string",
+            enum: ["admin", "workspace_lead", "member", "guest", "viewer"],
+          },
+          status: {
+            type: "string",
+            enum: ["pending", "accepted", "revoked", "expired"],
+          },
+          deliveryStatus: {
+            type: "string",
+            enum: ["pending", "sent", "failed"],
+          },
+          version: { type: "integer", minimum: 1 },
+          expiresAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+          acceptedAt: { type: "string", format: "date-time" },
+          revokedAt: { type: "string", format: "date-time" },
+          lastSentAt: { type: "string", format: "date-time" },
+        },
+      },
+      CreateInvitation: {
+        type: "object",
+        required: ["email", "role"],
+        additionalProperties: false,
+        properties: {
+          email: { type: "string", format: "email" },
+          role: {
+            type: "string",
+            enum: ["admin", "workspace_lead", "member", "guest", "viewer"],
+          },
+        },
+      },
+      AcceptInvitation: {
+        type: "object",
+        required: ["token"],
+        additionalProperties: false,
+        properties: {
+          token: { type: "string", minLength: 32, maxLength: 1024 },
+        },
+      },
+      InvitationAcceptance: {
+        type: "object",
+        required: ["invitationId", "organizationId", "role", "acceptedAt"],
+        additionalProperties: false,
+        properties: {
+          invitationId: { type: "string", minLength: 3, maxLength: 128 },
+          organizationId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+          role: {
+            type: "string",
+            enum: ["admin", "workspace_lead", "member", "guest", "viewer"],
+          },
+          acceptedAt: { type: "string", format: "date-time" },
+        },
+      },
+      Membership: {
+        type: "object",
+        required: [
+          "organizationId",
+          "user",
+          "role",
+          "active",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          organizationId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+          user: {
+            type: "object",
+            required: ["id", "email", "name"],
+            additionalProperties: false,
+            properties: {
+              id: { type: "string", minLength: 3, maxLength: 128 },
+              email: { type: "string", format: "email" },
+              name: { type: "string", minLength: 1, maxLength: 160 },
+            },
+          },
+          role: {
+            type: "string",
+            enum: [
+              "owner",
+              "admin",
+              "workspace_lead",
+              "member",
+              "guest",
+              "viewer",
+            ],
+          },
+          active: { type: "boolean" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      UpdateMembership: {
+        type: "object",
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          role: {
+            type: "string",
+            enum: ["admin", "workspace_lead", "member", "guest", "viewer"],
+          },
+          active: { type: "boolean" },
         },
       },
       Portfolio: {
@@ -2240,15 +2947,6 @@ export const openApiDocument = {
     responses: {
       Unauthenticated: {
         description: "Authentication required",
-        content: {
-          "application/json": {
-            schema: { $ref: "#/components/schemas/Error" },
-          },
-        },
-      },
-      OrganizationContextRequired: {
-        description:
-          "X-Organization-Id is required in live mode and must select an organization in which the authenticated user has an active membership.",
         content: {
           "application/json": {
             schema: { $ref: "#/components/schemas/Error" },

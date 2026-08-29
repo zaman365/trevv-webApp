@@ -143,7 +143,11 @@ export type DataPlaneErrorCode =
   | "scope_mismatch"
   | "version_conflict"
   | "idempotency_key_reused"
-  | "organization_context_required"
+  | "invitation_delivery_incomplete"
+  | "identity_verification_required"
+  | "onboarding_required"
+  | "organization_selection_required"
+  | "identity_access_unavailable"
   | "repository_unavailable"
   | "capability_unavailable";
 

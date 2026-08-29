@@ -13,7 +13,7 @@ import type {
   WorkItemProjection,
   WorkspaceProjection,
 } from "@founderhq/db";
-import { createOrganizationScope } from "@founderhq/db";
+import { createIdentityScope, createOrganizationScope } from "@founderhq/db";
 import { requireAccess, type AccessContext } from "@founderhq/permissions";
 import {
   DataPlaneError,
@@ -24,7 +24,7 @@ import {
 } from "./data-plane.js";
 
 export interface LiveIdentity {
-  userId: string;
+  authUserId: string;
   expiresAt: Date;
 }
 
@@ -42,27 +42,20 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
     async resolve(request, resolvedRequestId) {
       const identity = await options.resolveIdentity(request);
       if (!identity) return null;
-      const organizationId = request.headers.get("x-organization-id")?.trim();
-      if (!organizationId)
-        throw new DataPlaneError(
-          "organization_context_required",
-          "Choose an organization before accessing live data.",
-        );
       const requestId =
         resolvedRequestId ??
         request.headers.get("x-request-id") ??
         crypto.randomUUID();
-      const resolved = await options.repositories
-        .forOrganization(
-          createOrganizationScope({
-            organizationId,
-            userId: identity.userId,
-            requestId,
-          }),
+      const identityResolution = await options.repositories
+        .forIdentity(
+          createIdentityScope({ authUserId: identity.authUserId, requestId }),
         )
-        .session.resolve();
+        .resolve();
+      if (identityResolution.status !== "active")
+        throw identityResolutionError(identityResolution.status);
+      const resolved = identityResolution;
       const access: AccessContext = {
-        userId: resolved.user.id,
+        userId: resolved.appUser.id,
         organizationId: resolved.organization.id,
         role: resolved.membership.role,
         accessiblePortfolioIds: new Set(resolved.portfolioIds),
@@ -74,13 +67,20 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         access,
         session: {
           user: {
-            id: resolved.user.id,
-            email: resolved.user.email,
-            name: resolved.user.name,
+            id: resolved.appUser.id,
+            email: resolved.appUser.email,
+            name: resolved.appUser.name,
             role: resolved.membership.role,
-            locale: locale(resolved.user.locale),
+            locale: locale(resolved.appUser.locale),
           },
           organizationId: resolved.organization.id,
+          organization: {
+            id: resolved.organization.id,
+            name: resolved.organization.name,
+            slug: resolved.organization.slug,
+            role: resolved.membership.role,
+          },
+          availableOrganizations: resolved.availableOrganizations,
           expiresAt: identity.expiresAt.toISOString(),
         },
       };
@@ -453,6 +453,37 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
   };
 
   return { dataPlane, accessResolver };
+}
+
+function identityResolutionError(
+  status:
+    | "verification_required"
+    | "onboarding_required"
+    | "organization_selection_required"
+    | "access_unavailable",
+): DataPlaneError {
+  switch (status) {
+    case "verification_required":
+      return new DataPlaneError(
+        "identity_verification_required",
+        "Verify your email before accessing TREVV.",
+      );
+    case "onboarding_required":
+      return new DataPlaneError(
+        "onboarding_required",
+        "Complete onboarding before accessing organization data.",
+      );
+    case "organization_selection_required":
+      return new DataPlaneError(
+        "organization_selection_required",
+        "Choose one of your organizations before continuing.",
+      );
+    case "access_unavailable":
+      return new DataPlaneError(
+        "identity_access_unavailable",
+        "This account does not have active organization access.",
+      );
+  }
 }
 
 function scoped(

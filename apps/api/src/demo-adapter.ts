@@ -570,6 +570,20 @@ function demoSession(): Session {
       locale: "en",
     },
     organizationId: "org-demo",
+    organization: {
+      id: "org-demo",
+      name: "TREVV Demo",
+      slug: "trevv-demo",
+      role: "owner",
+    },
+    availableOrganizations: [
+      {
+        id: "org-demo",
+        name: "TREVV Demo",
+        slug: "trevv-demo",
+        role: "owner",
+      },
+    ],
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   };
 }

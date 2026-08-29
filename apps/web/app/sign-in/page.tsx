@@ -1,4 +1,25 @@
 import { AuthExperience } from "@/components/auth-experience";
-export default function SignInPage() {
-  return <AuthExperience mode="sign-in" />;
+import { safeReturnPath, webRuntimeMode } from "@/lib/web-runtime-config";
+
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    next?: string;
+    reset?: string;
+    signedOut?: string;
+    verified?: string;
+  }>;
+}) {
+  const query = await searchParams;
+  return (
+    <AuthExperience
+      demoEnabled={webRuntimeMode() === "demo"}
+      mode="sign-in"
+      passwordReset={query.reset === "1"}
+      returnTo={safeReturnPath(query.next)}
+      {...(query.signedOut ? { signedOut: query.signedOut } : {})}
+      verified={query.verified === "1"}
+    />
+  );
 }

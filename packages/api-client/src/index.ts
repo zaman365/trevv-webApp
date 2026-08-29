@@ -1,18 +1,29 @@
 import {
   apiErrorSchema,
+  acceptInvitationSchema,
   attentionActionSchema,
   attentionSignalSchema,
   changeRadarSchema,
+  completeOnboardingSchema,
+  createInvitationSchema,
   createItemSchema,
   entityTagSchema,
   idempotencyKeySchema,
+  invitationAcceptanceSchema,
+  invitationSchema,
   managementMemorySchema,
+  membershipSchema,
+  onboardingDraftSchema,
+  onboardingStateSchema,
+  organizationSummarySchema,
+  organizationSelectionSchema,
   paginatedItemsSchema,
   portfolioResponseSchema,
   portfolioSchema,
   searchResultSchema,
   sessionSchema,
   updateItemSchema,
+  updateMembershipSchema,
   waitingActionSchema,
   waitingStateSchema,
   weeklyReviewInputSchema,
@@ -22,12 +33,21 @@ import {
   workspaceSchema,
   type AttentionSignalDto,
   type ChangeRadarDto,
+  type CompleteOnboardingInput,
+  type CreateInvitationInput,
   type CreateItemInput,
   type PortfolioResponse,
   type ManagementMemoryDto,
+  type Invitation,
+  type InvitationAcceptance,
+  type Membership,
+  type OnboardingDraft,
+  type OnboardingState,
+  type OrganizationSummary,
   type SearchResultDto,
   type Session,
   type UpdateItemInput,
+  type UpdateMembershipInput,
   type WaitingAction,
   type WaitingStateDto,
   type WeeklyReviewInput,
@@ -53,7 +73,6 @@ export class TrevvApiError extends Error {
 export interface ApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => Promise<string | null>;
-  getOrganizationId?: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
 }
 
@@ -75,22 +94,17 @@ interface RawResponse {
 export function createApiClient({
   baseUrl,
   getAccessToken,
-  getOrganizationId,
   fetchImpl = fetch,
 }: ApiClientOptions) {
   const request = async (
     path: string,
     init?: RequestInit,
   ): Promise<RawResponse> => {
-    const [token, organizationId] = await Promise.all([
-      getAccessToken?.(),
-      getOrganizationId?.(),
-    ]);
+    const token = await getAccessToken?.();
     const headers = new Headers(init?.headers);
     headers.set("accept", "application/json");
     if (init?.body) headers.set("content-type", "application/json");
     if (token) headers.set("authorization", `Bearer ${token}`);
-    if (organizationId) headers.set("x-organization-id", organizationId);
     const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
       headers,
@@ -121,6 +135,132 @@ export function createApiClient({
   return {
     session: async (): Promise<Session> =>
       sessionSchema.parse((await request("/session")).body),
+
+    organizations: async (): Promise<OrganizationSummary[]> =>
+      organizationSummarySchema
+        .array()
+        .parse((await request("/session/organizations")).body),
+
+    selectOrganization: async (organizationId: string): Promise<Session> => {
+      const body = organizationSelectionSchema.parse({ organizationId });
+      return sessionSchema.parse(
+        (
+          await request("/session/organization", {
+            method: "POST",
+            body: JSON.stringify(body),
+          })
+        ).body,
+      );
+    },
+
+    onboarding: async (): Promise<OnboardingState> =>
+      onboardingStateSchema.parse((await request("/onboarding")).body),
+
+    saveOnboarding: async (
+      input: OnboardingDraft,
+      version: number,
+    ): Promise<OnboardingState> =>
+      onboardingStateSchema.parse(
+        (
+          await request("/onboarding", {
+            method: "PUT",
+            headers: { "if-match": entityTagSchema.parse(`"${version}"`) },
+            body: JSON.stringify(onboardingDraftSchema.parse(input)),
+          })
+        ).body,
+      ),
+
+    completeOnboarding: async (
+      input: CompleteOnboardingInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<OnboardingState>> => {
+      const body = completeOnboardingSchema.parse(input);
+      const key = idempotencyKeySchema.parse(idempotencyKey);
+      const response = await request("/onboarding/complete", {
+        method: "POST",
+        headers: { "idempotency-key": key },
+        body: JSON.stringify(body),
+      });
+      return parseVersionedMutation(response, onboardingStateSchema);
+    },
+
+    invitations: async (): Promise<Invitation[]> =>
+      invitationSchema.array().parse((await request("/invitations")).body),
+
+    createInvitation: async (
+      input: CreateInvitationInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<Invitation>> => {
+      const response = await request("/invitations", {
+        method: "POST",
+        headers: {
+          "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+        },
+        body: JSON.stringify(createInvitationSchema.parse(input)),
+      });
+      return parseVersionedMutation(response, invitationSchema);
+    },
+
+    resendInvitation: async (
+      id: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<Invitation>> => {
+      const response = await request(
+        `/invitations/${encodeURIComponent(id)}/resend`,
+        {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+        },
+      );
+      return parseVersionedMutation(response, invitationSchema);
+    },
+
+    revokeInvitation: async (
+      id: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<Invitation>> => {
+      const response = await request(`/invitations/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: mutationHeaders(version, idempotencyKey),
+      });
+      return parseVersionedMutation(response, invitationSchema);
+    },
+
+    acceptInvitation: async (token: string): Promise<InvitationAcceptance> =>
+      invitationAcceptanceSchema.parse(
+        (
+          await request("/invitations/accept", {
+            method: "POST",
+            body: JSON.stringify(acceptInvitationSchema.parse({ token })),
+          })
+        ).body,
+      ),
+
+    memberships: async (): Promise<Membership[]> =>
+      membershipSchema.array().parse((await request("/memberships")).body),
+
+    updateMembership: async (
+      userId: string,
+      input: UpdateMembershipInput,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<Membership>> => {
+      const response = await request(
+        `/memberships/${encodeURIComponent(userId)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(updateMembershipSchema.parse(input)),
+        },
+      );
+      return {
+        data: membershipSchema.parse(response.body),
+        ...mutationMetadata(response.response),
+      };
+    },
 
     portfolio: async (portfolioId?: string): Promise<PortfolioResponse> =>
       portfolioResponseSchema.parse(

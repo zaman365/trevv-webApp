@@ -13,9 +13,11 @@
   },
   "dependencies": {
     "better-auth": "latest",
+    "nodemailer": "latest",
     "pg": "latest"
   },
   "devDependencies": {
+    "@types/nodemailer": "latest",
     "@types/pg": "latest",
     "typescript": "5.9.3"
   }

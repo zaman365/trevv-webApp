@@ -90,11 +90,11 @@ describe("TREVV API v1 dependency boundaries", () => {
       ...createUnavailableLiveDependencies(),
     });
     const missingOrganization = await app.request("/api/v1/portfolios");
-    expect(missingOrganization.status).toBe(400);
+    expect(missingOrganization.status).toBe(503);
     expect(
       ((await missingOrganization.json()) as { error: { code: string } }).error
         .code,
-    ).toBe("organization_context_required");
+    ).toBe("repository_unavailable");
 
     const unavailable = await app.request("/api/v1/portfolios", {
       headers: { "x-organization-id": "org-live" },
@@ -103,6 +103,131 @@ describe("TREVV API v1 dependency boundaries", () => {
     expect(
       ((await unavailable.json()) as { error: { code: string } }).error.code,
     ).toBe("repository_unavailable");
+  });
+
+  it("allows only verified cookie identities through exact pre-membership paths", async () => {
+    const live = createUnavailableLiveDependencies();
+    const verifiedIdentity = {
+      authUserId: "auth-test",
+      email: "verified@example.test",
+      name: "Verified User",
+      emailVerified: true,
+      sessionId: "session-test",
+      expiresAt: new Date("2026-08-30T12:00:00.000Z"),
+    };
+    const app = createApiApp({
+      mode: "live",
+      ...live,
+      authIdentityResolver: {
+        resolve: async () => verifiedIdentity,
+      },
+      preMembershipPaths: ["/api/v1/pre-membership"],
+    });
+    app.get("/api/v1/pre-membership", (context) =>
+      context.json({ authUserId: context.get("authIdentity").authUserId }),
+    );
+    app.get("/api/v1/pre-membership/extra", (context) =>
+      context.json({ reached: true }),
+    );
+
+    const allowed = await app.request("/api/v1/pre-membership");
+    expect(allowed.status).toBe(200);
+    await expect(allowed.json()).resolves.toEqual({ authUserId: "auth-test" });
+
+    const similarButProtected = await app.request(
+      "/api/v1/pre-membership/extra",
+    );
+    expect(similarButProtected.status).toBe(503);
+
+    const unverified = createApiApp({
+      mode: "live",
+      ...live,
+      authIdentityResolver: {
+        resolve: async () => ({
+          ...verifiedIdentity,
+          emailVerified: false,
+        }),
+      },
+      preMembershipPaths: ["/api/v1/pre-membership"],
+    });
+    unverified.get("/api/v1/pre-membership", (context) =>
+      context.json({ reached: true }),
+    );
+    const rejected = await unverified.request("/api/v1/pre-membership");
+    expect(rejected.status).toBe(403);
+    await expect(errorCode(rejected)).resolves.toBe(
+      "identity_verification_required",
+    );
+  });
+
+  it("requires the configured Web origin for live cookie mutations", async () => {
+    const live = createUnavailableLiveDependencies();
+    const app = createApiApp({
+      mode: "live",
+      ...live,
+      webOrigin: "https://app.trevv.test",
+      authIdentityResolver: {
+        resolve: async () => ({
+          authUserId: "auth-origin-test",
+          email: "origin@example.test",
+          name: "Origin Test",
+          emailVerified: true,
+          sessionId: "session-origin-test",
+          expiresAt: new Date("2026-08-30T12:00:00.000Z"),
+        }),
+      },
+      preMembershipPaths: ["/api/v1/pre-membership-mutation"],
+    });
+    app.post("/api/v1/pre-membership-mutation", (context) =>
+      context.json({ accepted: true }),
+    );
+
+    for (const origin of [undefined, "https://other.trevv.test"]) {
+      const rejected = await app.request("/api/v1/pre-membership-mutation", {
+        method: "POST",
+        headers: {
+          cookie: "trevv.session_token=opaque",
+          ...(origin ? { origin } : {}),
+        },
+      });
+      expect(rejected.status).toBe(403);
+      await expect(errorCode(rejected)).resolves.toBe("invalid_request_origin");
+    }
+
+    const accepted = await app.request("/api/v1/pre-membership-mutation", {
+      method: "POST",
+      headers: {
+        cookie: "trevv.session_token=opaque",
+        origin: "https://app.trevv.test",
+      },
+    });
+    expect(accepted.status).toBe(200);
+    await expect(accepted.json()).resolves.toEqual({ accepted: true });
+
+    const browserAccepted = await app.request(
+      "/api/v1/pre-membership-mutation",
+      {
+        method: "POST",
+        headers: {
+          cookie: "trevv.session_token=opaque",
+          "sec-fetch-site": "same-origin",
+        },
+      },
+    );
+    expect(browserAccepted.status).toBe(200);
+
+    const conflictingSignals = await app.request(
+      "/api/v1/pre-membership-mutation",
+      {
+        method: "POST",
+        headers: {
+          cookie: "trevv.session_token=opaque",
+          origin: "https://other.trevv.test",
+          "sec-fetch-site": "same-origin",
+        },
+      },
+    );
+    expect(conflictingSignals.status).toBe(403);
   });
 });
 
@@ -485,3 +610,8 @@ describe("TREVV API v1 demo contract", () => {
     expect(await boardExport.text()).toContain("Approve packaging");
   });
 });
+
+async function errorCode(response: Response): Promise<string | undefined> {
+  const body = (await response.json()) as { error?: { code?: string } };
+  return body.error?.code;
+}

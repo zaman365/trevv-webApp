@@ -74,10 +74,155 @@ export const userSchema = z.object({
   locale: z.enum(["en", "de"]),
 });
 
+export const organizationSummarySchema = z.object({
+  id: idSchema,
+  name: z.string().min(1).max(160),
+  slug: z.string().min(1).max(120),
+  role: roleSchema,
+});
+
 export const sessionSchema = z.object({
   user: userSchema,
   organizationId: idSchema,
+  organization: organizationSummarySchema,
+  availableOrganizations: z.array(organizationSummarySchema).min(1).max(100),
   expiresAt: z.iso.datetime(),
+});
+
+const productSlugSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(80)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+    message: "Use lowercase letters, numbers, and single hyphens.",
+  });
+
+export const onboardingBlueprintSchema = z.enum([
+  "operating_business",
+  "client_delivery",
+  "product_initiative",
+  "launch_campaign",
+  "blank",
+]);
+
+export const onboardingStepSchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+
+export const onboardingDraftSchema = z
+  .object({
+    step: onboardingStepSchema,
+    organizationName: z.string().trim().min(2).max(160).optional(),
+    organizationSlug: productSlugSchema.optional(),
+    workspaceName: z.string().trim().min(2).max(160).optional(),
+    workspaceSlug: productSlugSchema.optional(),
+    workspaceType: workspaceTypeSchema.optional(),
+    workspaceColor: z
+      .string()
+      .regex(/^#[0-9a-f]{6}$/i)
+      .optional(),
+    blueprintKey: onboardingBlueprintSchema.optional(),
+  })
+  .strict();
+
+export const completeOnboardingSchema = onboardingDraftSchema.extend({
+  step: z.literal(5),
+  organizationName: z.string().trim().min(2).max(160),
+  organizationSlug: productSlugSchema,
+  workspaceName: z.string().trim().min(2).max(160),
+  workspaceSlug: productSlugSchema,
+  workspaceType: workspaceTypeSchema,
+  workspaceColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+  blueprintKey: onboardingBlueprintSchema,
+});
+
+export const onboardingStateSchema = z.object({
+  status: z.enum(["not_started", "in_progress", "completed"]),
+  step: onboardingStepSchema,
+  draft: onboardingDraftSchema.omit({ step: true }),
+  version: z.number().int().nonnegative(),
+  updatedAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().optional(),
+  organizationId: idSchema.optional(),
+  portfolioId: idSchema.optional(),
+  workspaceId: idSchema.optional(),
+  boardId: idSchema.optional(),
+  blueprintInstanceId: idSchema.optional(),
+});
+
+export const invitationRoleSchema = z.enum([
+  "admin",
+  "workspace_lead",
+  "member",
+  "guest",
+  "viewer",
+]);
+
+export const invitationSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  email: z.email(),
+  role: invitationRoleSchema,
+  status: z.enum(["pending", "accepted", "revoked", "expired"]),
+  deliveryStatus: z.enum(["pending", "sent", "failed"]),
+  version: z.number().int().positive(),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  acceptedAt: z.iso.datetime().optional(),
+  revokedAt: z.iso.datetime().optional(),
+  lastSentAt: z.iso.datetime().optional(),
+});
+
+export const createInvitationSchema = z
+  .object({
+    email: z.email().transform((value) => value.trim().toLowerCase()),
+    role: invitationRoleSchema,
+  })
+  .strict();
+
+export const acceptInvitationSchema = z
+  .object({ token: z.string().min(32).max(1_024) })
+  .strict();
+
+export const invitationAcceptanceSchema = z.object({
+  invitationId: idSchema,
+  organizationId: idSchema,
+  role: invitationRoleSchema,
+  acceptedAt: z.iso.datetime(),
+});
+
+export const organizationSelectionSchema = z
+  .object({ organizationId: idSchema })
+  .strict();
+
+export const updateMembershipSchema = z
+  .object({
+    role: roleSchema.exclude(["owner"]).optional(),
+    active: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.role !== undefined || value.active !== undefined,
+    "Change a role or active state.",
+  );
+
+export const membershipSchema = z.object({
+  organizationId: idSchema,
+  user: z.object({
+    id: idSchema,
+    email: z.email(),
+    name: z.string().min(1).max(160),
+  }),
+  role: roleSchema,
+  active: z.boolean(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export const workspaceSchema = z.object({
@@ -586,6 +731,15 @@ export const apiErrorSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
+export type OnboardingDraft = z.infer<typeof onboardingDraftSchema>;
+export type CompleteOnboardingInput = z.infer<typeof completeOnboardingSchema>;
+export type OnboardingState = z.infer<typeof onboardingStateSchema>;
+export type Invitation = z.infer<typeof invitationSchema>;
+export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
+export type InvitationAcceptance = z.infer<typeof invitationAcceptanceSchema>;
+export type Membership = z.infer<typeof membershipSchema>;
+export type UpdateMembershipInput = z.infer<typeof updateMembershipSchema>;
 export type WorkspaceDto = z.infer<typeof workspaceSchema>;
 export type WorkItemDto = z.infer<typeof workItemSchema>;
 export type CreateItemInput = z.infer<typeof createItemSchema>;
