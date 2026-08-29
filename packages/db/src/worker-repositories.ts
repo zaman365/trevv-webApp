@@ -354,6 +354,23 @@ export const workerEventCatalog = {
     effect: "recompute_attention",
     reason: "A weekly review publishes an update and changes staleness.",
   },
+  "privacy.request.submitted": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason:
+      "Submission records an auditable request; reviewed effects use a separately approved lifecycle processor.",
+  },
+  "privacy.request.cancelled": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Cancellation is complete when the request transaction commits.",
+  },
+  "privacy.retention.updated": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason:
+      "The versioned retention override and legal-hold state are already durable.",
+  },
   "team.created": {
     handler: "collaboration",
     effect: "apply_collaboration_effect",

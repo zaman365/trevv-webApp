@@ -15,6 +15,7 @@ const producerSources = [
     new URL("./collaboration-repositories.ts", import.meta.url),
     "utf8",
   ),
+  readFileSync(new URL("./privacy-repositories.ts", import.meta.url), "utf8"),
 ];
 
 describe("worker event catalog", () => {
@@ -61,6 +62,16 @@ describe("worker event catalog", () => {
       "membership.restored",
     ]) {
       expect(repositorySource).toContain(`"${eventType}"`);
+      emitted.add(eventType);
+    }
+
+    const privacySource = producerSources[3]!;
+    for (const eventType of [
+      "privacy.request.submitted",
+      "privacy.request.cancelled",
+      "privacy.retention.updated",
+    ]) {
+      expect(privacySource).toContain(`"${eventType}"`);
       emitted.add(eventType);
     }
 

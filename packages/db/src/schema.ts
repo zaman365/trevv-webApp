@@ -1035,6 +1035,196 @@ export const auditLogs = pgTable(
     index("audit_org_date_idx").on(table.organizationId, table.createdAt),
   ],
 );
+
+/**
+ * Durable privacy requests are deliberately workflow records rather than a
+ * boolean "delete me" flag. A request may need identity verification, legal
+ * review, export generation, retention holds, and provider revocation before
+ * it is safe to complete. Keeping those states explicit prevents the product
+ * from claiming that a destructive or external effect happened synchronously.
+ */
+export const dataLifecycleRequests = pgTable(
+  "data_lifecycle_requests",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    requestedBy: text("requested_by")
+      .notNull()
+      .references(() => users.id),
+    subjectUserId: text("subject_user_id").references(() => users.id),
+    kind: text("kind").notNull(),
+    requestScope: text("request_scope").notNull(),
+    status: text("status").notNull().default("submitted"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    processingStartedAt: timestamp("processing_started_at", {
+      withTimezone: true,
+    }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    retentionUntil: timestamp("retention_until", { withTimezone: true }),
+    resultManifest: jsonb("result_manifest").notNull().default({}),
+    failureCode: text("failure_code"),
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.requestedBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "data_lifecycle_requests_org_requester_membership_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.subjectUserId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "data_lifecycle_requests_org_subject_membership_fk",
+    }),
+    uniqueIndex("data_lifecycle_requests_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    index("data_lifecycle_requests_org_requester_created_idx").on(
+      table.organizationId,
+      table.requestedBy,
+      table.createdAt,
+    ),
+    index("data_lifecycle_requests_work_queue_idx").on(
+      table.status,
+      table.dueAt,
+    ),
+    check(
+      "data_lifecycle_requests_kind_check",
+      sql`${table.kind} in ('access', 'portability', 'erasure', 'rectification', 'restriction', 'objection')`,
+    ),
+    check(
+      "data_lifecycle_requests_scope_check",
+      sql`${table.requestScope} in ('user', 'organization')`,
+    ),
+    check(
+      "data_lifecycle_requests_kind_scope_check",
+      sql`${table.requestScope} = 'user' or ${table.kind} in ('access', 'portability', 'erasure', 'restriction')`,
+    ),
+    check(
+      "data_lifecycle_requests_status_check",
+      sql`${table.status} in ('submitted', 'under_review', 'approved', 'processing', 'completed', 'rejected', 'cancelled', 'failed')`,
+    ),
+    check(
+      "data_lifecycle_requests_org_scope_subject_check",
+      sql`(${table.requestScope} = 'user' and ${table.subjectUserId} is not null) or (${table.requestScope} = 'organization' and ${table.subjectUserId} is null)`,
+    ),
+    check("data_lifecycle_requests_version_check", sql`${table.version} >= 1`),
+  ],
+);
+
+/**
+ * Organization overrides for the versioned default retention catalogue.
+ * Legal holds always win over a requested disposition; processing workers
+ * must check this row again in the same transaction as any destructive step.
+ */
+export const dataRetentionPolicies = pgTable(
+  "data_retention_policies",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    retentionDays: integer("retention_days").notNull(),
+    disposition: text("disposition").notNull(),
+    legalHold: boolean("legal_hold").notNull().default(false),
+    policyVersion: integer("policy_version").notNull().default(1),
+    updatedBy: text("updated_by")
+      .notNull()
+      .references(() => users.id),
+    effectiveAt: timestamp("effective_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.category] }),
+    foreignKey({
+      columns: [table.organizationId, table.updatedBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "data_retention_policies_org_updater_membership_fk",
+    }),
+    check(
+      "data_retention_policies_category_check",
+      sql`${table.category} in ('identity', 'organization', 'work', 'collaboration', 'audit', 'operations', 'integrations', 'billing')`,
+    ),
+    check(
+      "data_retention_policies_days_check",
+      sql`${table.retentionDays} between 1 and 3650`,
+    ),
+    check(
+      "data_retention_policies_disposition_check",
+      sql`${table.disposition} in ('delete', 'anonymize', 'archive', 'manual_review')`,
+    ),
+    check(
+      "data_retention_policies_version_check",
+      sql`${table.policyVersion} >= 1`,
+    ),
+  ],
+);
+
+// Request-protection state is operational and deliberately stores a one-way
+// client-key digest rather than an IP address or session identifier. A shared
+// PostgreSQL row makes enforcement coherent across API replicas.
+export const apiRateLimitWindows = pgTable(
+  "api_rate_limit_windows",
+  {
+    bucket: text("bucket").notNull(),
+    clientKeyHash: text("client_key_hash").notNull(),
+    windowStartedAt: timestamp("window_started_at", {
+      withTimezone: true,
+    }).notNull(),
+    windowMs: integer("window_ms").notNull(),
+    requestCount: integer("request_count").notNull().default(1),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "api_rate_limit_windows_pk",
+      columns: [table.bucket, table.clientKeyHash, table.windowStartedAt],
+    }),
+    index("api_rate_limit_windows_expiry_idx").on(table.expiresAt),
+    check(
+      "api_rate_limit_windows_bucket_check",
+      sql`${table.bucket} ~ '^[a-z0-9][a-z0-9._-]{0,63}$'`,
+    ),
+    check(
+      "api_rate_limit_windows_client_hash_check",
+      sql`${table.clientKeyHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "api_rate_limit_windows_window_check",
+      sql`${table.windowMs} between 1000 and 86400000`,
+    ),
+    check(
+      "api_rate_limit_windows_count_check",
+      sql`${table.requestCount} >= 1`,
+    ),
+    check(
+      "api_rate_limit_windows_expiry_check",
+      sql`${table.expiresAt} > ${table.windowStartedAt}`,
+    ),
+  ],
+);
 export const savedViews = pgTable("saved_views", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),

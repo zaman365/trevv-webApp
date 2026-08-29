@@ -8,6 +8,10 @@ import {
   createCollaborationRepositories,
   type CollaborationRepositories,
 } from "./collaboration-repositories.js";
+import {
+  createPrivacyRepositories,
+  type PrivacyRepositories,
+} from "./privacy-repositories.js";
 import type {
   DecisionOutcome,
   MeaningfulChange,
@@ -506,6 +510,7 @@ export interface CreateWorkspaceSnapshotInput {
 
 export interface OrganizationScopedRepositories {
   collaboration: CollaborationRepositories;
+  privacy: PrivacyRepositories;
   organization: {
     get: () => Promise<typeof organizations.$inferSelect>;
     update: (
@@ -1097,6 +1102,7 @@ function createScopedRepositories(
       scope,
       runInTransaction,
     ),
+    privacy: createPrivacyRepositories(database, scope, runInTransaction),
     organization: {
       get: () => getOrganization(database, scope),
       update: (input, context) =>
@@ -7733,7 +7739,7 @@ async function writeAuditAndOutbox(
   });
 }
 
-async function withIdempotency<T>(
+export async function withIdempotency<T>(
   database: TrevvDatabase,
   scope: OrganizationScope,
   context: MutationContext,
