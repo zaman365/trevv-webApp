@@ -15,7 +15,7 @@ The PostgreSQL worker is implemented and exercised locally/in CI, but it is not 
 
 Required production input:
 
-- `DATABASE_URL`: TLS-protected PostgreSQL connection with only the required application privileges
+- `DATABASE_URL`: least-privilege PostgreSQL connection; production requires exactly one `sslmode=verify-full` and a runtime trust store containing the managed database CA so both certificate and hostname are verified
 - `WORKER_ID`: stable instance identifier, 3–128 URL-safe characters
 
 Optional bounded controls:
@@ -50,11 +50,10 @@ Example operator flow:
 ```bash
 createdb founderhq_restore
 pg_restore --clean --if-exists --no-owner --dbname founderhq_restore backup.dump
-DATABASE_URL=postgresql://…/founderhq_restore pnpm db:migrate
-DATABASE_URL=postgresql://…/founderhq_restore pnpm db:seed
+NODE_ENV=production DATABASE_URL='postgresql://…/founderhq_restore?sslmode=verify-full' pnpm db:migrate
 ```
 
-Do not run `--clean` against production. A restore swaps a verified replacement database through deployment configuration after writes are paused and a final recovery point is captured.
+Do not run `--clean` against production and never seed a restored real-data database. A restore swaps a verified replacement database through deployment configuration after writes are paused and a final recovery point is captured.
 
 ## Incident runbook
 

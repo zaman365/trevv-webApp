@@ -24,7 +24,7 @@ The audit gate fails on every high/critical advisory except two exact `image-siz
 
 ## Production hardening checklist
 
-1. Set `DEMO_MODE=false`; reject startup if auth, database, HTTPS origins, database TLS, cookie topology, or authenticated TLS mail configuration is absent.
+1. Set `DEMO_MODE=false`; reject startup if auth, database, HTTPS origins, verified database TLS (`sslmode=verify-full`, never identity-unverified `sslmode=require`), cookie topology, or authenticated TLS mail configuration is absent.
 2. Terminate TLS at the edge and keep API/database/storage in EU regions where offered.
 3. Apply edge rate limits to auth, invitation, search, export, and webhook endpoints.
 4. Rotate database, auth, mail, storage, and integration credentials; test session and invitation revocation.
