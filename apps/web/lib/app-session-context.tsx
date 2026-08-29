@@ -4,14 +4,19 @@ import { createContext, useContext, type ReactNode } from "react";
 
 export interface AppSessionView {
   demo: boolean;
-  organization: { id: string; name: string; role: string };
+  organization: {
+    id: string;
+    name: string;
+    role: string;
+    timezone?: string;
+  };
   availableOrganizations: Array<{
     id: string;
     name: string;
     role: string;
     slug: string;
   }>;
-  user: { email: string; name: string; role: string };
+  user: { id: string; email: string; name: string; role: string };
 }
 
 const AppSessionContext = createContext<AppSessionView | null>(null);

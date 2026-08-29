@@ -1,24 +1,31 @@
 "use client";
 
 import { Grid2X2, Plus, X } from "lucide-react";
-import {
-  type Workspace,
-  type WorkspaceType,
-  type Portfolio,
-} from "@founderhq/core";
+import { type WorkspaceType, type Portfolio } from "@founderhq/core";
 import { useState, type FormEvent } from "react";
-import { createCustomWorkspace } from "@/lib/custom-workspaces";
+
+export interface CreateWorkspaceValues {
+  name: string;
+  portfolioId: string;
+  type: WorkspaceType;
+  lead: string;
+  priority: string;
+  milestone: string;
+  milestoneDate: string;
+}
 
 export function CreateWorkspaceDialog({
   portfolios,
   initialPortfolioId,
+  mode = "demo",
   onClose,
   onCreated,
 }: {
   portfolios: readonly Portfolio[];
   initialPortfolioId: string;
+  mode?: "demo" | "live";
   onClose: () => void;
-  onCreated: (workspace: Workspace) => Promise<boolean> | boolean;
+  onCreated: (values: CreateWorkspaceValues) => Promise<boolean> | boolean;
 }) {
   const [name, setName] = useState("");
   const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
@@ -35,7 +42,7 @@ export function CreateWorkspaceDialog({
     if (!name.trim() || !milestoneDate || pending) return;
     setMessage("");
     setPending(true);
-    const record = createCustomWorkspace({
+    const values = {
       name,
       portfolioId,
       type,
@@ -43,16 +50,18 @@ export function CreateWorkspaceDialog({
       priority,
       milestone,
       milestoneDate,
-    });
+    } satisfies CreateWorkspaceValues;
     let completed = false;
     try {
-      completed = await onCreated(record.workspace);
+      completed = await onCreated(values);
     } catch {
       completed = false;
     }
     if (!completed) {
       setMessage(
-        "The fictional workspace remains in this browser, but its preview could not be opened. Try again.",
+        mode === "demo"
+          ? "The fictional workspace could not be created. Try again."
+          : "The server did not confirm this workspace. Nothing was created; your form is still here.",
       );
       setPending(false);
     }
@@ -140,14 +149,16 @@ export function CreateWorkspaceDialog({
               </select>
             </label>
           </div>
-          <label>
-            Lead
-            <input
-              required
-              value={lead}
-              onChange={(event) => setLead(event.target.value)}
-            />
-          </label>
+          {mode === "demo" ? (
+            <label>
+              Lead
+              <input
+                required
+                value={lead}
+                onChange={(event) => setLead(event.target.value)}
+              />
+            </label>
+          ) : null}
           <label>
             Current priority
             <input
@@ -156,31 +167,35 @@ export function CreateWorkspaceDialog({
               placeholder="What outcome matters first?"
             />
           </label>
-          <div>
-            <label>
-              First milestone
-              <input
-                required
-                value={milestone}
-                onChange={(event) => setMilestone(event.target.value)}
-              />
-            </label>
-            <label>
-              Target date
-              <input
-                required
-                type="date"
-                value={milestoneDate}
-                onChange={(event) => setMilestoneDate(event.target.value)}
-              />
-            </label>
-          </div>
+          {mode === "demo" ? (
+            <div>
+              <label>
+                First milestone
+                <input
+                  required
+                  value={milestone}
+                  onChange={(event) => setMilestone(event.target.value)}
+                />
+              </label>
+              <label>
+                Target date
+                <input
+                  required
+                  type="date"
+                  value={milestoneDate}
+                  onChange={(event) => setMilestoneDate(event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <footer>
           <span role={message ? "alert" : undefined}>
             {message ||
-              "Creates a fictional browser-only overview and empty board."}
+              (mode === "demo"
+                ? "Creates a fictional browser-only overview and empty board."
+                : "The workspace and its first board are saved to your organization.")}
           </span>
           <div>
             <button onClick={onClose} type="button">
@@ -192,7 +207,13 @@ export function CreateWorkspaceDialog({
               type="submit"
             >
               <Plus size={14} />
-              {pending ? "Opening preview…" : "Create fictional workspace"}
+              {pending
+                ? mode === "demo"
+                  ? "Opening preview…"
+                  : "Saving workspace…"
+                : mode === "demo"
+                  ? "Create fictional workspace"
+                  : "Create workspace"}
             </button>
           </div>
         </footer>

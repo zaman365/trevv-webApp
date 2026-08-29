@@ -1,6 +1,6 @@
 import { demoWorkspaces } from "@founderhq/core";
 import { describe, expect, it } from "vitest";
-import { NOW, scopeWorkspace } from "./attention";
+import { NOW, scopeWorkspace, scopeWorkspaceFromData } from "./attention";
 
 describe("workspace scope", () => {
   it("keeps portfolio scope when no project is selected", () => {
@@ -48,6 +48,21 @@ describe("workspace scope", () => {
 
     expect(scope.workspaces).toEqual([customProject]);
     expect(scope.items).toEqual([]);
+    expect(scope.attentionCount).toBe(0);
+  });
+
+  it("never substitutes fictional records when the live source is empty", () => {
+    const scope = scopeWorkspaceFromData("portfolio-demo", NOW, {
+      workspaces: [],
+      items: [],
+      waiting: [],
+      attention: [],
+    });
+
+    expect(scope.workspaces).toEqual([]);
+    expect(scope.items).toEqual([]);
+    expect(scope.waiting).toEqual([]);
+    expect(scope.attention).toEqual([]);
     expect(scope.attentionCount).toBe(0);
   });
 });

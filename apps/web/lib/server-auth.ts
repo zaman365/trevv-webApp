@@ -44,6 +44,7 @@ const fictionalDemoSession = {
     name: "Fictional TREVV Demo",
     slug: "trevv-demo",
     role: "owner" as const,
+    timezone: "Europe/Berlin",
   },
   availableOrganizations: [
     {

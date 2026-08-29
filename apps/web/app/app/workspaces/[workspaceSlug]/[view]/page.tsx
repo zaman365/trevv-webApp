@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { DashboardExperience } from "@/components/dashboard-experience";
 import { FocusExperience } from "@/components/focus-experience";
+import { LiveWorkspaceOverview } from "@/components/live-workspace-overview";
+import { LiveWorkView } from "@/components/live-work-views";
 import {
   AttentionExperience,
   BlueprintsExperience,
@@ -14,6 +16,7 @@ import { MessagingWorkspace } from "@/components/messaging-workspace";
 import { SettingsExperience } from "@/components/settings-experience";
 import { WorkspaceFrame } from "@/components/workspace-frame";
 import { requireWorkspaceAccess } from "@/lib/server-auth";
+import { webRuntimeMode } from "@/lib/web-runtime-config";
 import { isWorkspaceView, workspaceHref } from "@/lib/workspace-routes";
 
 export default async function WorkspaceModulePage({
@@ -27,6 +30,13 @@ export default async function WorkspaceModulePage({
     : workspaceHref(workspaceSlug);
   await requireWorkspaceAccess(workspaceSlug, returnTo);
   if (!isWorkspaceView(view)) notFound();
+
+  if (webRuntimeMode() === "live") {
+    if (view === "dashboard") {
+      return <LiveWorkspaceOverview dashboard workspaceSlug={workspaceSlug} />;
+    }
+    return <LiveWorkView view={view} workspaceSlug={workspaceSlug} />;
+  }
 
   switch (view) {
     case "dashboard":

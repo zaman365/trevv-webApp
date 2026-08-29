@@ -47,9 +47,21 @@ export async function gotoCanonical(page: Page, route: string) {
     // native same-document navigation so hash subscribers receive the change.
     await page.evaluate((href) => window.location.assign(href), target.href);
   } else {
-    await page.goto(route);
+    await page.goto(route, { waitUntil: "networkidle" });
   }
   await expect(page).toHaveURL(
     new RegExp(`${escapeForRegExp(route)}(?:[?#].*)?$`),
   );
+
+  if (await page.locator(".product-shell").count()) {
+    const visibleShell = page.locator(".product-shell:visible");
+    await expect(visibleShell).toHaveCount(1);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await expect(visibleShell).toHaveCount(1);
+  }
 }

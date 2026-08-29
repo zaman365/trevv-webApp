@@ -10,6 +10,8 @@ import {
   rankAttentionSignals,
   type AttentionSignal,
   type AttentionSeverity,
+  type WaitingState,
+  type WorkItem,
   type Workspace,
 } from "@founderhq/core";
 
@@ -180,6 +182,58 @@ export function scopeWorkspace(
     now,
   );
   const attention = groupSignalsByEntity(ranked, now);
+  return {
+    portfolioId,
+    projectId: projectId ?? null,
+    workspaces,
+    items,
+    waiting,
+    attention,
+    attentionCount: attention.length,
+    breakdown: portfolioSignals(workspaces, items, now),
+  };
+}
+
+/**
+ * Build the same presentation scope from canonical server records. Live paths
+ * receive already-computed Attention signals; they never regenerate them from
+ * a browser clock or fall back to the fictional corpus.
+ */
+export function scopeWorkspaceFromData(
+  portfolioId: string,
+  now: Date,
+  source: {
+    workspaces: readonly Workspace[];
+    items: readonly WorkItem[];
+    waiting: readonly WaitingState[];
+    attention: readonly AttentionSignal[];
+  },
+  projectId?: string,
+): WorkspaceScope {
+  const portfolioWorkspaces = source.workspaces.filter(
+    (workspace) => workspace.portfolioId === portfolioId,
+  );
+  const workspaces = projectId
+    ? portfolioWorkspaces.filter((workspace) => workspace.id === projectId)
+    : portfolioWorkspaces;
+  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  const items = source.items.filter((item) =>
+    workspaceIds.has(item.workspaceId),
+  );
+  const waiting = source.waiting.filter((state) =>
+    workspaceIds.has(state.workspaceId),
+  );
+  const attention = groupSignalsByEntity(
+    rankAttentionSignals(
+      source.attention.filter(
+        (signal) =>
+          signal.portfolioId === portfolioId &&
+          (!signal.workspaceId || workspaceIds.has(signal.workspaceId)),
+      ),
+      now,
+    ),
+    now,
+  );
   return {
     portfolioId,
     projectId: projectId ?? null,

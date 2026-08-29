@@ -17,7 +17,7 @@ process.env.LIVE_E2E_MAIL_SINK_FILE = mailSinkFile;
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "live-identity.spec.ts",
+  testMatch: ["live-identity.spec.ts", "live-founder-loop.spec.ts"],
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
@@ -26,6 +26,8 @@ export default defineConfig({
   reporter: process.env.CI ? [["html", { open: "never" }], ["github"]] : "list",
   use: {
     baseURL: webOrigin,
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

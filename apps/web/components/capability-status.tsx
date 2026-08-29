@@ -6,17 +6,25 @@ import {
 } from "@/lib/product-capabilities";
 import styles from "./capability-status.module.css";
 
-export function TechnicalPreviewBadge() {
+export function TechnicalPreviewBadge({
+  mode = "demo",
+}: {
+  mode?: "demo" | "live";
+}) {
+  const live = mode === "live";
+  const label = live
+    ? "Authenticated preview · canonical changes save to TREVV"
+    : productPreview.conciseLabel;
   return (
-    <span
-      className={styles.previewBadge}
-      aria-label={productPreview.conciseLabel}
-      title={productPreview.conciseLabel}
-    >
+    <span className={styles.previewBadge} aria-label={label} title={label}>
       <span className={styles.previewBadgeDot} aria-hidden="true" />
       <span className={styles.previewBadgeText}>
-        <strong>{productPreview.stage}</strong>
-        <small>Fictional data · browser-only</small>
+        <strong>{live ? "Authenticated preview" : productPreview.stage}</strong>
+        <small>
+          {live
+            ? "Canonical work · server-saved"
+            : "Fictional data · browser-only"}
+        </small>
       </span>
     </span>
   );

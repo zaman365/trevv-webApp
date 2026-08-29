@@ -7,6 +7,7 @@ import {
   workspaceSelectionCookie,
 } from "@/lib/workspace-selection";
 import { requireAppSession } from "@/lib/server-auth";
+import { loadLiveAppData } from "@/lib/server-live-data";
 import { webRuntimeMode } from "@/lib/web-runtime-config";
 
 export const metadata: Metadata = {
@@ -16,7 +17,11 @@ export const metadata: Metadata = {
 export default async function AppLayout({ children }: { children: ReactNode }) {
   // Read on the server so the shell renders the member's workspace on the
   // first paint instead of correcting itself after hydration.
+  const mode = webRuntimeMode();
   const [store, session] = await Promise.all([cookies(), requireAppSession()]);
+  // Resolve identity and onboarding first so an anonymous request redirects
+  // cleanly instead of racing a protected data request into the error boundary.
+  const liveData = mode === "live" ? await loadLiveAppData() : undefined;
   const storedSelection = parseWorkspaceSelection(
     store.get(workspaceSelectionCookie)?.value,
   );
@@ -24,11 +29,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AppShellProviders
       session={{
-        demo: webRuntimeMode() === "demo",
+        demo: mode === "demo",
         organization: {
           id: session.organization.id,
           name: session.organization.name,
           role: session.organization.role,
+          ...("timezone" in session.organization &&
+          session.organization.timezone
+            ? { timezone: session.organization.timezone }
+            : {}),
         },
         availableOrganizations: session.availableOrganizations.map(
           (organization) => ({
@@ -39,12 +48,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           }),
         ),
         user: {
+          id: session.user.id,
           email: session.user.email,
           name: session.user.name,
           role: session.user.role,
         },
       }}
       {...(storedSelection ? { storedSelection } : {})}
+      {...(liveData ? { liveData } : {})}
     >
       {children}
     </AppShellProviders>

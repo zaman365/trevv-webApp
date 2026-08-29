@@ -50,8 +50,18 @@ import type { CapturedWorkItem } from "@/lib/captured-work";
 import { UniversalCreateDialog } from "./universal-create";
 import { CreateWorkspaceDialog } from "./create-workspace-dialog";
 import { TechnicalPreviewBadge } from "./capability-status";
-import { useCustomWorkspaces } from "@/lib/custom-workspaces";
+import {
+  createCustomWorkspace,
+  useCustomWorkspaces,
+} from "@/lib/custom-workspaces";
 import { useAppSession } from "@/lib/app-session-context";
+import { useOptionalLiveAppData } from "@/lib/live-app-data";
+import { presentLiveError } from "@/lib/live-errors";
+import { LiveStateNotice } from "./live-state";
+import {
+  LiveQuickCaptureDialog,
+  type LiveCaptureSuccess,
+} from "./live-quick-capture";
 import {
   createCustomPortfolio,
   portfolioAccentOptions,
@@ -93,8 +103,8 @@ const workspaceHealthLabels = {
   parked: "Parked",
 } as const;
 
-function workspaceWorkCounts(projectId: string) {
-  const openItems = demoItems.filter(
+function workspaceWorkCounts(projectId: string, items = demoItems) {
+  const openItems = items.filter(
     (item) => item.workspaceId === projectId && item.status !== "done",
   );
 
@@ -163,11 +173,14 @@ function WorkspaceChrome({
   workspaceSlug?: string | undefined;
 }) {
   const appSession = useAppSession();
+  const liveData = useOptionalLiveAppData();
   const userInitials = initialsForUser(appSession.user.name) || "U";
   const [open, setOpen] = useState(false);
   const [latestCapture, setLatestCapture] = useState<CapturedWorkItem | null>(
     null,
   );
+  const [latestLiveCapture, setLatestLiveCapture] =
+    useState<LiveCaptureSuccess | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [accountMessage, setAccountMessage] = useState("");
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -192,6 +205,11 @@ function WorkspaceChrome({
     projectId,
     selectProject,
     dashboardAccess,
+    dataMode,
+    allPortfolios,
+    allWorkspaces,
+    allItems,
+    lastRefreshedAt,
   } = useWorkspace();
   const customWorkspaceRecords = useCustomWorkspaces();
   const customPortfolioRecords = useCustomPortfolios();
@@ -203,10 +221,21 @@ function WorkspaceChrome({
   const customPortfolioIds = new Set(
     customPortfolioRecords.map((record) => record.portfolio.id),
   );
-  const accessibleProjects = [
-    ...customWorkspaceRecords.map((record) => record.workspace),
-    ...demoWorkspaces,
-  ].filter(
+  const workspaceSource =
+    dataMode === "live"
+      ? allWorkspaces
+      : [
+          ...customWorkspaceRecords.map((record) => record.workspace),
+          ...demoWorkspaces,
+        ];
+  const portfolioSource =
+    dataMode === "live"
+      ? allPortfolios
+      : [
+          ...demoPortfolios,
+          ...customPortfolioRecords.map((record) => record.portfolio),
+        ];
+  const accessibleProjects = workspaceSource.filter(
     (project) =>
       allowedProjectIds.has(project.id) ||
       allowedPortfolioIds.has(project.portfolioId) ||
@@ -216,10 +245,7 @@ function WorkspaceChrome({
     ...allowedPortfolioIds,
     ...accessibleProjects.map((project) => project.portfolioId),
   ]);
-  const accessiblePortfolios = [
-    ...demoPortfolios,
-    ...customPortfolioRecords.map((record) => record.portfolio),
-  ].filter(
+  const accessiblePortfolios = portfolioSource.filter(
     (portfolio) =>
       visiblePortfolioIds.has(portfolio.id) ||
       customPortfolioIds.has(portfolio.id),
@@ -249,7 +275,10 @@ function WorkspaceChrome({
     },
   );
   const contextProjectCounts = contextProject
-    ? workspaceWorkCounts(contextProject.id)
+    ? workspaceWorkCounts(
+        contextProject.id,
+        dataMode === "live" ? [...allItems] : demoItems,
+      )
     : undefined;
   const contextPortfolioVisual = contextPortfolio
     ? portfolioVisualFor(contextPortfolio, customPortfolioRecords)
@@ -403,13 +432,17 @@ function WorkspaceChrome({
       undefined,
     ],
     ["inbox", copy.nav.inbox, scopedHref("inbox"), Inbox, undefined],
-    [
-      "messages",
-      copy.nav.messages,
-      scopedHref("messages"),
-      MessageCircleMore,
-      4,
-    ],
+    ...(appSession.demo
+      ? [
+          [
+            "messages",
+            copy.nav.messages,
+            scopedHref("messages"),
+            MessageCircleMore,
+            4,
+          ] as const,
+        ]
+      : []),
   ] as const;
 
   return (
@@ -529,7 +562,10 @@ function WorkspaceChrome({
                       <strong>{visibleWorkspaceProjects.length}</strong>
                     </header>
                     {visibleWorkspaceProjects.map((project) => {
-                      const counts = workspaceWorkCounts(project.id);
+                      const counts = workspaceWorkCounts(
+                        project.id,
+                        dataMode === "live" ? [...allItems] : demoItems,
+                      );
                       const isSelected = project.id === contextProject?.id;
 
                       return (
@@ -585,7 +621,8 @@ function WorkspaceChrome({
                     })}
                   </div>
 
-                  {appSession.demo && (
+                  {appSession.demo ||
+                  canManageOrganization(appSession.organization.role) ? (
                     <button
                       type="button"
                       className="workspace-switcher-create"
@@ -599,10 +636,14 @@ function WorkspaceChrome({
                         <Plus size={16} />
                       </span>
                       <span>
-                        <strong>New fictional workspace</strong>
+                        <strong>
+                          {appSession.demo
+                            ? "New fictional workspace"
+                            : "New workspace"}
+                        </strong>
                       </span>
                     </button>
-                  )}
+                  ) : null}
                 </section>
               )}
             </div>
@@ -658,13 +699,15 @@ function WorkspaceChrome({
                   </Link>
                 );
               })}
-              <Link
-                className={`nav-item ${active === "teams" ? "active" : ""}`}
-                href={scopedHref("teams")}
-              >
-                <Users size={17} />
-                <span>{copy.nav.teams}</span>
-              </Link>
+              {appSession.demo ? (
+                <Link
+                  className={`nav-item ${active === "teams" ? "active" : ""}`}
+                  href={scopedHref("teams")}
+                >
+                  <Users size={17} />
+                  <span>{copy.nav.teams}</span>
+                </Link>
+              ) : null}
               <p className="nav-label spaced">Work</p>
               <Link
                 className={`nav-item ${active === "decisions" ? "active" : ""}`}
@@ -680,13 +723,15 @@ function WorkspaceChrome({
                 <CheckCircle2 size={17} />
                 <span>{copy.nav.approvals}</span>
               </Link>
-              <Link
-                className={`nav-item ${active === "ideas" ? "active" : ""}`}
-                href={scopedHref("ideas")}
-              >
-                <Lightbulb size={17} />
-                <span>{copy.nav.ideas}</span>
-              </Link>
+              {appSession.demo ? (
+                <Link
+                  className={`nav-item ${active === "ideas" ? "active" : ""}`}
+                  href={scopedHref("ideas")}
+                >
+                  <Lightbulb size={17} />
+                  <span>{copy.nav.ideas}</span>
+                </Link>
+              ) : null}
               <Link
                 className={`nav-item ${active === "reviews" ? "active" : ""}`}
                 href={scopedHref("reviews")}
@@ -724,13 +769,15 @@ function WorkspaceChrome({
           {contextProject && (
             <>
               <p className="nav-label">System</p>
-              <Link
-                className={`nav-item ${active === "templates" ? "active" : ""}`}
-                href={scopedHref("blueprints")}
-              >
-                <LayoutTemplate size={17} />
-                <span>Blueprints</span>
-              </Link>
+              {appSession.demo ? (
+                <Link
+                  className={`nav-item ${active === "templates" ? "active" : ""}`}
+                  href={scopedHref("blueprints")}
+                >
+                  <LayoutTemplate size={17} />
+                  <span>Blueprints</span>
+                </Link>
+              ) : null}
               <button
                 className="nav-item nav-button learning-center-nav"
                 onClick={() => {
@@ -871,22 +918,24 @@ function WorkspaceChrome({
                     })}
                   </div>
 
-                  <button
-                    type="button"
-                    className="portfolio-switcher-create"
-                    onClick={() => {
-                      setPortfolioMenuOpen(false);
-                      setPortfolioCreateOpen(true);
-                    }}
-                  >
-                    <span>
-                      <Plus size={16} />
-                    </span>
-                    <span>
-                      <strong>New portfolio</strong>
-                      <small>Create a new Workspace collection</small>
-                    </span>
-                  </button>
+                  {appSession.demo ? (
+                    <button
+                      type="button"
+                      className="portfolio-switcher-create"
+                      onClick={() => {
+                        setPortfolioMenuOpen(false);
+                        setPortfolioCreateOpen(true);
+                      }}
+                    >
+                      <span>
+                        <Plus size={16} />
+                      </span>
+                      <span>
+                        <strong>New portfolio</strong>
+                        <small>Create a new Workspace collection</small>
+                      </span>
+                    </button>
+                  ) : null}
                 </section>
               )}
             </div>
@@ -920,7 +969,7 @@ function WorkspaceChrome({
               <kbd title="Press slash to search">/</kbd>
             </Link>
           )}
-          <TechnicalPreviewBadge />
+          <TechnicalPreviewBadge mode={appSession.demo ? "demo" : "live"} />
           <nav className="topbar-actions" aria-label="Workspace shortcuts">
             {contextProject && (
               <>
@@ -966,39 +1015,47 @@ function WorkspaceChrome({
                 </Link>
               </>
             )}
-            <Link
-              className={`topbar-tool topbar-tool-mail ${active === "mail" ? "active" : ""}`}
-              aria-label="Email"
-              aria-current={active === "mail" ? "page" : undefined}
-              href="/app/mail"
-              title="Email"
-            >
-              <Mail size={18} />
-            </Link>
+            {appSession.demo ? (
+              <Link
+                className={`topbar-tool topbar-tool-mail ${active === "mail" ? "active" : ""}`}
+                aria-label="Email"
+                aria-current={active === "mail" ? "page" : undefined}
+                href="/app/mail"
+                title="Email"
+              >
+                <Mail size={18} />
+              </Link>
+            ) : null}
             {contextProject && (
               <>
-                <Link
-                  className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
-                  aria-label="Messages"
-                  aria-current={active === "messages" ? "page" : undefined}
-                  href={scopedHref("messages")}
-                  title="Messages"
-                >
-                  <MessageCircleMore size={18} />
-                </Link>
-                <Link
-                  className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
-                  aria-label={copy.shell.notifications}
-                  aria-current={active === "notifications" ? "page" : undefined}
-                  href={scopedHref("notifications")}
-                  title={copy.shell.notifications}
-                >
-                  <Bell size={18} />
-                  <span
-                    className="topbar-tool-dot notification-dot"
-                    aria-hidden="true"
-                  />
-                </Link>
+                {appSession.demo ? (
+                  <>
+                    <Link
+                      className={`topbar-tool topbar-tool-messages ${active === "messages" ? "active" : ""}`}
+                      aria-label="Messages"
+                      aria-current={active === "messages" ? "page" : undefined}
+                      href={scopedHref("messages")}
+                      title="Messages"
+                    >
+                      <MessageCircleMore size={18} />
+                    </Link>
+                    <Link
+                      className={`topbar-tool notification-button ${active === "notifications" ? "active" : ""}`}
+                      aria-label={copy.shell.notifications}
+                      aria-current={
+                        active === "notifications" ? "page" : undefined
+                      }
+                      href={scopedHref("notifications")}
+                      title={copy.shell.notifications}
+                    >
+                      <Bell size={18} />
+                      <span
+                        className="topbar-tool-dot notification-dot"
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  </>
+                ) : null}
               </>
             )}
             <button
@@ -1041,13 +1098,15 @@ function WorkspaceChrome({
                       >
                         <Settings2 size={14} /> Workspace settings
                       </Link>
-                      <Link
-                        href={scopedHref("teams")}
-                        role="menuitem"
-                        onClick={() => setUserMenuOpen(false)}
-                      >
-                        <Users size={14} /> Teams and access
-                      </Link>
+                      {appSession.demo ? (
+                        <Link
+                          href={scopedHref("teams")}
+                          role="menuitem"
+                          onClick={() => setUserMenuOpen(false)}
+                        >
+                          <Users size={14} /> Teams and access
+                        </Link>
+                      ) : null}
                     </>
                   )}
                   <Link
@@ -1108,6 +1167,29 @@ function WorkspaceChrome({
             </div>
           </nav>
         </header>
+        {!appSession.demo && liveData?.stale ? (
+          <div className="live-data-banner">
+            <LiveStateNotice
+              compact
+              {...(liveData.error
+                ? presentLiveError(liveData.error)
+                : {
+                    kind: "stale" as const,
+                    title: "Showing last-known data",
+                    description:
+                      "TREVV has not completed a recent refresh. New writes remain unavailable until acknowledged.",
+                  })}
+              {...(lastRefreshedAt !== undefined
+                ? { lastSyncedAt: lastRefreshedAt }
+                : {})}
+              actions={
+                <button type="button" onClick={() => void liveData.refresh()}>
+                  Retry now
+                </button>
+              }
+            />
+          </div>
+        ) : null}
         {children}
       </div>
 
@@ -1137,13 +1219,23 @@ function WorkspaceChrome({
               <Inbox size={19} />
               <span>{messages.nav.inbox}</span>
             </Link>
-            <Link
-              className={active === "messages" ? "active" : ""}
-              href={scopedHref("messages")}
-            >
-              <MessageCircleMore size={19} />
-              <span>Messages</span>
-            </Link>
+            {appSession.demo ? (
+              <Link
+                className={active === "messages" ? "active" : ""}
+                href={scopedHref("messages")}
+              >
+                <MessageCircleMore size={19} />
+                <span>Messages</span>
+              </Link>
+            ) : (
+              <Link
+                className={active === "attention" ? "active" : ""}
+                href={scopedHref("attention")}
+              >
+                <Sparkles size={19} />
+                <span>Attention</span>
+              </Link>
+            )}
           </>
         ) : (
           <>
@@ -1155,10 +1247,12 @@ function WorkspaceChrome({
               <FolderKanban size={19} />
               <span>Workspace</span>
             </button>
-            <Link href="/app/mail">
-              <Mail size={19} />
-              <span>Email</span>
-            </Link>
+            {appSession.demo ? (
+              <Link href="/app/mail">
+                <Mail size={19} />
+                <span>Email</span>
+              </Link>
+            ) : null}
           </>
         )}
         <button onClick={() => setOpen(true)}>
@@ -1193,21 +1287,62 @@ function WorkspaceChrome({
           </button>
         </div>
       )}
-      {contextProject && captureOpen && (
-        <UniversalCreateDialog
-          availableWorkspaceIds={scope.workspaces.map(
-            (workspace) => workspace.id,
-          )}
-          {...(workspaceLevel === "project" && projectId
-            ? { defaultWorkspaceId: projectId }
-            : {})}
-          onClose={() => setCaptureOpen(false)}
-          onCreated={(item) => {
-            setLatestCapture(item);
-            setCaptureOpen(false);
-          }}
-        />
+      {contextProject && latestLiveCapture && (
+        <div className="global-capture-toast" role="status">
+          <CheckCircle2 size={16} />
+          <div>
+            <strong>{latestLiveCapture.title}</strong>
+            <span>
+              {latestLiveCapture.replayed
+                ? "The original server-confirmed result was recovered safely."
+                : latestLiveCapture.destination === "inbox"
+                  ? "Saved to the canonical Inbox."
+                  : "Saved as a canonical board item."}
+            </span>
+          </div>
+          <Link
+            href={workspaceHref(
+              latestLiveCapture.workspaceSlug,
+              latestLiveCapture.routeView,
+            )}
+          >
+            Open
+          </Link>
+          <button
+            aria-label="Dismiss capture confirmation"
+            onClick={() => setLatestLiveCapture(null)}
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
+      {contextProject &&
+        captureOpen &&
+        (appSession.demo ? (
+          <UniversalCreateDialog
+            availableWorkspaceIds={scope.workspaces.map(
+              (workspace) => workspace.id,
+            )}
+            {...(workspaceLevel === "project" && projectId
+              ? { defaultWorkspaceId: projectId }
+              : {})}
+            onClose={() => setCaptureOpen(false)}
+            onCreated={(item) => {
+              setLatestCapture(item);
+              setCaptureOpen(false);
+            }}
+          />
+        ) : liveData ? (
+          <LiveQuickCaptureDialog
+            workspaceId={contextProject.id}
+            workspaceSlug={contextProject.slug}
+            onClose={() => setCaptureOpen(false)}
+            onConfirmed={(result) => {
+              setLatestLiveCapture(result);
+              setCaptureOpen(false);
+            }}
+          />
+        ) : null)}
       {portfolioCreateOpen && (
         <PortfolioCreateDialog
           onClose={() => setPortfolioCreateOpen(false)}
@@ -1219,24 +1354,58 @@ function WorkspaceChrome({
           }}
         />
       )}
-      {appSession.demo && workspaceCreateOpen && contextPortfolio && (
+      {workspaceCreateOpen && contextPortfolio && (
         <CreateWorkspaceDialog
           portfolios={accessiblePortfolios}
           initialPortfolioId={contextPortfolio.id}
+          mode={appSession.demo ? "demo" : "live"}
           onClose={() => setWorkspaceCreateOpen(false)}
-          onCreated={async (workspace) => {
-            if (!appSession.demo) return false;
-            const response = await fetch("/api/web/demo-workspaces", {
-              body: JSON.stringify({ slug: workspace.slug }),
-              credentials: "same-origin",
-              headers: { "content-type": "application/json" },
-              method: "POST",
-            });
-            if (!response.ok) return false;
+          onCreated={async (values) => {
+            if (appSession.demo) {
+              const record = createCustomWorkspace(values);
+              const response = await fetch("/api/web/demo-workspaces", {
+                body: JSON.stringify({ slug: record.workspace.slug }),
+                credentials: "same-origin",
+                headers: { "content-type": "application/json" },
+                method: "POST",
+              });
+              if (!response.ok) return false;
+              setWorkspaceCreateOpen(false);
+              selectProject(record.workspace.id, record.workspace.portfolioId);
+              setOpen(false);
+              router.push(workspaceHref(record.workspace.slug));
+              return true;
+            }
+            if (!liveData) return false;
+            const slug = availableSlug(
+              values.name,
+              liveData.workspaces.map((workspace) => workspace.slug),
+            );
+            const result = await liveData.client.createWorkspace(
+              {
+                portfolioId: values.portfolioId,
+                name: values.name,
+                slug,
+                description: "",
+                type: values.type,
+                accent: "#5b56db",
+                icon: values.name.trim().slice(0, 1).toUpperCase(),
+                stage: "idea",
+                health: "on_track",
+                healthNote: "",
+                priority: values.priority,
+                initialBoardName: `${values.name.trim()} Board`,
+              },
+              crypto.randomUUID(),
+            );
+            await liveData.refresh();
             setWorkspaceCreateOpen(false);
-            selectProject(workspace.id, workspace.portfolioId);
+            selectProject(
+              result.data.workspace.id,
+              result.data.workspace.portfolioId,
+            );
             setOpen(false);
-            router.push(workspaceHref(workspace.slug));
+            router.push(workspaceHref(result.data.workspace.slug));
             return true;
           }}
         />
@@ -1247,6 +1416,22 @@ function WorkspaceChrome({
 
 function canManageOrganization(role: string): boolean {
   return role === "owner" || role === "admin";
+}
+
+function availableSlug(name: string, existingSlugs: readonly string[]) {
+  const base =
+    name
+      .trim()
+      .toLocaleLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "workspace";
+  const existing = new Set(existingSlugs);
+  let candidate = base;
+  let suffix = 2;
+  while (existing.has(candidate)) candidate = `${base}-${suffix++}`;
+  return candidate;
 }
 
 function PortfolioCreateDialog({

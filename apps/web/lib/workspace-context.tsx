@@ -1,6 +1,13 @@
 "use client";
 
 import { getMessages, type Locale } from "@founderhq/i18n";
+import type {
+  AttentionSignal,
+  Portfolio,
+  WaitingState,
+  WorkItem,
+  Workspace,
+} from "@founderhq/core";
 import {
   createContext,
   useCallback,
@@ -14,6 +21,7 @@ import {
   DEFAULT_PORTFOLIO_ID,
   NOW,
   scopeWorkspace,
+  scopeWorkspaceFromData,
   type WorkspaceScope,
 } from "./attention";
 import {
@@ -44,8 +52,22 @@ interface WorkspaceContextValue {
   scope: WorkspaceScope;
   /** Reporting levels and entities the signed-in member may inspect. */
   dashboardAccess: DashboardAccess;
+  dataMode: "demo" | "live";
+  allPortfolios: readonly Portfolio[];
+  allWorkspaces: readonly Workspace[];
+  allItems: readonly WorkItem[];
+  lastRefreshedAt?: string;
   captureOpen: boolean;
   setCaptureOpen: (open: boolean) => void;
+}
+
+export interface WorkspaceLiveSource {
+  portfolios: readonly Portfolio[];
+  workspaces: readonly Workspace[];
+  items: readonly WorkItem[];
+  waiting: readonly WaitingState[];
+  attention: readonly AttentionSignal[];
+  refreshedAt: string;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -56,6 +78,7 @@ export function WorkspaceProvider({
   routeProjectId,
   storedSelection,
   portfolioScoped = false,
+  liveSource,
 }: {
   children: ReactNode;
   /** Workspace named by the current route, when the route names one. */
@@ -65,11 +88,16 @@ export function WorkspaceProvider({
   storedSelection?: StoredWorkspaceSelection;
   /** Report across the whole portfolio even while a workspace is selected. */
   portfolioScoped?: boolean;
+  liveSource?: WorkspaceLiveSource;
 }) {
+  const defaultPortfolioId =
+    liveSource?.portfolios.find((portfolio) => portfolio.isDefault)?.id ??
+    liveSource?.portfolios[0]?.id ??
+    DEFAULT_PORTFOLIO_ID;
   const [locale, setLocale] = useState<Locale>("en");
   const [theme, setTheme] = useState<Theme>("light");
   const [portfolioId, setPortfolioState] = useState(
-    routePortfolioId ?? storedSelection?.portfolioId ?? DEFAULT_PORTFOLIO_ID,
+    routePortfolioId ?? storedSelection?.portfolioId ?? defaultPortfolioId,
   );
   const [workspaceLevel, setWorkspaceLevel] = useState<WorkspaceLevel>(
     (routeProjectId ?? storedSelection?.projectId) ? "project" : "portfolio",
@@ -83,15 +111,30 @@ export function WorkspaceProvider({
     () => customWorkspaceRecords.map((record) => record.workspace),
     [customWorkspaceRecords],
   );
+  const allWorkspaces = liveSource?.workspaces ?? customWorkspaces;
 
   // The shell outlives navigation, so a route naming a workspace wins over
   // the remembered one. Deriving this during render rather than syncing it
   // in an effect keeps navigation to a single pass — the second pass is
   // what showed up as a flicker in the switcher.
-  const activeProjectId = routeProjectId ?? projectId;
-  const activePortfolioId = routeProjectId
+  const requestedProjectId = routeProjectId ?? projectId;
+  const requestedPortfolioId = routeProjectId
     ? (routePortfolioId ?? portfolioId)
     : portfolioId;
+  const activePortfolioId =
+    liveSource &&
+    !liveSource.portfolios.some(({ id }) => id === requestedPortfolioId)
+      ? defaultPortfolioId
+      : requestedPortfolioId;
+  const activeProjectId =
+    liveSource &&
+    requestedProjectId &&
+    !liveSource.workspaces.some(
+      ({ id, portfolioId: ownerPortfolioId }) =>
+        id === requestedProjectId && ownerPortfolioId === activePortfolioId,
+    )
+      ? null
+      : requestedProjectId;
   const activeWorkspaceLevel: WorkspaceLevel = routeProjectId
     ? "project"
     : workspaceLevel;
@@ -144,21 +187,31 @@ export function WorkspaceProvider({
 
   const scope = useMemo(
     () =>
-      scopeWorkspace(
-        activePortfolioId,
-        NOW,
-        // The portfolio reports across every workspace even while one
-        // stays selected in the switcher.
-        !portfolioScoped && activeWorkspaceLevel === "project"
-          ? (activeProjectId ?? undefined)
-          : undefined,
-        customWorkspaces,
-      ),
+      liveSource
+        ? scopeWorkspaceFromData(
+            activePortfolioId,
+            new Date(),
+            liveSource,
+            !portfolioScoped && activeWorkspaceLevel === "project"
+              ? (activeProjectId ?? undefined)
+              : undefined,
+          )
+        : scopeWorkspace(
+            activePortfolioId,
+            NOW,
+            // The portfolio reports across every workspace even while one
+            // stays selected in the switcher.
+            !portfolioScoped && activeWorkspaceLevel === "project"
+              ? (activeProjectId ?? undefined)
+              : undefined,
+            customWorkspaces,
+          ),
     [
       activePortfolioId,
       activeProjectId,
       activeWorkspaceLevel,
       customWorkspaces,
+      liveSource,
       portfolioScoped,
     ],
   );
@@ -176,7 +229,19 @@ export function WorkspaceProvider({
       projectId: activeProjectId,
       selectProject,
       scope,
-      dashboardAccess: DEMO_DASHBOARD_ACCESS,
+      dashboardAccess: liveSource
+        ? {
+            portfolioIds: liveSource.portfolios.map(({ id }) => id),
+            projectIds: liveSource.workspaces.map(({ id }) => id),
+            teamIds: [],
+            personal: true,
+          }
+        : DEMO_DASHBOARD_ACCESS,
+      dataMode: liveSource ? "live" : "demo",
+      allPortfolios: liveSource?.portfolios ?? [],
+      allWorkspaces,
+      allItems: liveSource?.items ?? [],
+      ...(liveSource ? { lastRefreshedAt: liveSource.refreshedAt } : {}),
       captureOpen,
       setCaptureOpen,
     }),
@@ -186,6 +251,8 @@ export function WorkspaceProvider({
       activeWorkspaceLevel,
       captureOpen,
       locale,
+      allWorkspaces,
+      liveSource,
       scope,
       selectProject,
       setPortfolioId,

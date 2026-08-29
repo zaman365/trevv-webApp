@@ -242,9 +242,7 @@ function BoardWorkspace({
   );
   const [items, setItems] = useState(seedItems);
   const [view, setView] = useState<"table" | "kanban">("table");
-  const [selected, setSelected] = useState<BoardItem | null>(
-    seedItems[0] ?? null,
-  );
+  const [selected, setSelected] = useState<BoardItem | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
