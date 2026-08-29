@@ -1,9 +1,15 @@
 import type {
   AttentionSignalDto,
   BoardDto,
+  CollaborationEventBatch,
+  CollaborationUserDto,
+  ConversationDto,
+  ConversationMessageDto,
   InboxItemDto,
   PortfolioDto,
   PortfolioResponse,
+  TeamDto,
+  TeamPreset,
   WeeklyReviewRecordDto,
   WorkItemEvidenceDto,
   WorkItemHistoryEntryDto,
@@ -12,10 +18,15 @@ import type {
   WorkspaceSnapshotDto,
   WorkspaceDto,
 } from "@founderhq/api-contract";
+import { teamFeatureCapabilitiesForPreset } from "@founderhq/api-contract";
 import type {
+  CollaborationUserProjection,
+  ConversationProjection,
   InboxItemProjection,
+  MessageProjection,
   OrganizationScopedRepositories,
   PostgresRepositories,
+  TeamProjection,
   WaitingProjection,
   WorkItemHistoryProjection,
   WorkItemProjection,
@@ -23,9 +34,16 @@ import type {
   WorkspaceProjection,
 } from "@founderhq/db";
 import { createIdentityScope, createOrganizationScope } from "@founderhq/db";
-import { requireAccess, type AccessContext } from "@founderhq/permissions";
+import {
+  canCollaborate,
+  requireAccess,
+  requireCollaborationAccess,
+  type AccessContext,
+  type CollaborationScope,
+} from "@founderhq/permissions";
 import {
   DataPlaneError,
+  dataPlaneErrorCode,
   type AccessResolver,
   type ApiMutationContext,
   type ApiRequestContext,
@@ -91,6 +109,7 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
             timezone: resolved.organization.timezone,
           },
           availableOrganizations: resolved.availableOrganizations,
+          managedWorkspaceIds: resolved.managedWorkspaceIds,
           expiresAt: identity.expiresAt.toISOString(),
         },
       };
@@ -99,6 +118,10 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
 
   const dataPlane: DataPlane = {
     mode: "live",
+    async readiness() {
+      await options.repositories.readiness();
+      return { database: "ready" };
+    },
 
     async listPortfolios(context) {
       const repositories = scoped(options.repositories, context);
@@ -521,6 +544,433 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         rollup: rollupWorkspace(workspace, items, context.now),
         items: items.map(toWorkItemDto),
       };
+    },
+
+    async listTeamDirectory(context, workspaceId) {
+      const repositories = scoped(options.repositories, context);
+      requireWorkspaceAccess(context.access, "read", workspaceId);
+      const [teams, availableMembers] = await Promise.all([
+        repositories.collaboration.listTeams(workspaceId),
+        repositories.collaboration.listWorkspaceUsers(workspaceId),
+      ]);
+      return {
+        teams: teams
+          .filter((team) =>
+            canCollaborate(
+              context.access,
+              "read",
+              "team",
+              teamCollaborationScope(context.access, team),
+            ),
+          )
+          .map((team) => toTeamDto(team)),
+        availableMembers: availableMembers.map(toCollaborationUserDto),
+      };
+    },
+
+    async getTeam(context, id) {
+      const team = await scoped(
+        options.repositories,
+        context,
+      ).collaboration.getTeam(id);
+      requireCollaborationAccess(
+        context.access,
+        "read",
+        "team",
+        teamCollaborationScope(context.access, team),
+      );
+      return toTeamDto(team);
+    },
+
+    async createTeam(context, input) {
+      requireCollaborationAccess(context.access, "create", "team", {
+        organizationId: context.access.organizationId,
+        workspaceId: input.workspaceId,
+        kind: "team",
+        visibility: "private",
+        activeParticipant: false,
+        activeTeamMember: false,
+      });
+      const featurePolicySource =
+        input.featureCapabilities === undefined ? "preset" : "override";
+      const featureCapabilities =
+        input.featureCapabilities ??
+        teamFeatureCapabilitiesForPreset(input.preset);
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).collaboration.createTeam(
+        {
+          workspaceId: input.workspaceId,
+          name: input.name,
+          purpose: input.purpose,
+          preset: input.preset,
+          featureCapabilities,
+          featurePolicySource,
+          memberIds: input.memberIds,
+          ...(input.leadUserId ? { leadUserId: input.leadUserId } : {}),
+        },
+        mutation(context),
+      );
+      return { value: toTeamDto(result.value), replayed: result.replayed };
+    },
+
+    async updateTeam(context, id, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const team = await repositories.collaboration.getTeam(id);
+      requireCollaborationAccess(
+        context.access,
+        "update",
+        "team",
+        teamCollaborationScope(context.access, team),
+      );
+      const normalized = {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.purpose !== undefined ? { purpose: input.purpose } : {}),
+        ...(input.preset !== undefined ? { preset: input.preset } : {}),
+        ...(input.featureCapabilities !== undefined
+          ? {
+              featureCapabilities: input.featureCapabilities,
+              featurePolicySource: "override" as const,
+            }
+          : {}),
+        ...(input.preset && input.featureCapabilities === undefined
+          ? {
+              featureCapabilities: teamFeatureCapabilitiesForPreset(
+                input.preset,
+              ),
+              featurePolicySource: "preset" as const,
+            }
+          : {}),
+      };
+      const result = await repositories.collaboration.updateTeam(
+        id,
+        expectedVersion,
+        normalized,
+        mutation(context),
+      );
+      return { value: toTeamDto(result.value), replayed: result.replayed };
+    },
+
+    async setTeamMember(context, teamId, userId, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const team = await repositories.collaboration.getTeam(teamId);
+      requireCollaborationAccess(
+        context.access,
+        "manage_members",
+        "team",
+        teamCollaborationScope(context.access, team),
+      );
+      const result = await repositories.collaboration.setTeamMember(
+        teamId,
+        userId,
+        expectedVersion,
+        input.role,
+        mutation(context),
+      );
+      return { value: toTeamDto(result.value), replayed: result.replayed };
+    },
+
+    async removeTeamMember(context, teamId, userId, expectedVersion) {
+      const repositories = scoped(options.repositories, context);
+      const team = await repositories.collaboration.getTeam(teamId);
+      requireCollaborationAccess(
+        context.access,
+        "manage_members",
+        "team",
+        teamCollaborationScope(context.access, team),
+      );
+      const result = await repositories.collaboration.removeTeamMember(
+        teamId,
+        userId,
+        expectedVersion,
+        mutation(context),
+      );
+      return { value: toTeamDto(result.value), replayed: result.replayed };
+    },
+
+    async listConversations(context, filters) {
+      requireWorkspaceAccess(context.access, "read", filters.workspaceId);
+      const page = await scoped(
+        options.repositories,
+        context,
+      ).collaboration.listConversations(filters.workspaceId, {
+        ...(filters.cursor ? { cursor: filters.cursor } : {}),
+        limit: filters.limit,
+      });
+      return {
+        data: page.data
+          .filter((conversation) =>
+            canCollaborate(
+              context.access,
+              "read",
+              "conversation",
+              conversationCollaborationScope(context.access, conversation),
+            ),
+          )
+          .map(toConversationDto),
+        nextCursor: page.nextCursor,
+      };
+    },
+
+    async getConversation(context, id) {
+      const conversation = await scoped(
+        options.repositories,
+        context,
+      ).collaboration.getConversation(id);
+      requireCollaborationAccess(
+        context.access,
+        "read",
+        "conversation",
+        conversationCollaborationScope(context.access, conversation),
+      );
+      return toConversationDto(conversation);
+    },
+
+    async createConversation(context, input) {
+      requireCollaborationAccess(context.access, "create", "conversation", {
+        organizationId: context.access.organizationId,
+        workspaceId: input.workspaceId,
+        kind: input.kind,
+        visibility: input.visibility,
+        activeParticipant: true,
+      });
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).collaboration.createConversation(
+        {
+          ...input,
+          retentionDays: input.retentionDays,
+        },
+        mutation(context),
+      );
+      return {
+        value: toConversationDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
+    async setConversationParticipant(
+      context,
+      conversationId,
+      userId,
+      expectedVersion,
+      active,
+      participantRole,
+    ) {
+      const repositories = scoped(options.repositories, context);
+      const conversation =
+        await repositories.collaboration.getConversation(conversationId);
+      requireCollaborationAccess(
+        context.access,
+        "manage_participants",
+        "conversation",
+        conversationCollaborationScope(context.access, conversation),
+      );
+      const result =
+        await repositories.collaboration.setConversationParticipant(
+          conversationId,
+          userId,
+          expectedVersion,
+          active,
+          mutation(context),
+          participantRole,
+        );
+      return {
+        value: toConversationDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
+    async listConversationMessages(context, conversationId, filters) {
+      const repositories = scoped(options.repositories, context);
+      const conversation =
+        await repositories.collaboration.getConversation(conversationId);
+      requireCollaborationAccess(
+        context.access,
+        "read",
+        "message",
+        conversationCollaborationScope(context.access, conversation),
+      );
+      const page = await repositories.collaboration.listMessages(
+        conversationId,
+        {
+          ...(filters.cursor ? { cursor: filters.cursor } : {}),
+          ...(filters.parentMessageId
+            ? { parentMessageId: filters.parentMessageId }
+            : {}),
+          limit: filters.limit,
+        },
+      );
+      return {
+        data: page.data.map(toConversationMessageDto),
+        nextCursor: page.nextCursor,
+      };
+    },
+
+    async sendConversationMessage(context, conversationId, input) {
+      const repositories = scoped(options.repositories, context);
+      const conversation =
+        await repositories.collaboration.getConversation(conversationId);
+      requireCollaborationAccess(
+        context.access,
+        "send",
+        "message",
+        conversationCollaborationScope(context.access, conversation),
+      );
+      const result = await repositories.collaboration.sendMessage(
+        conversationId,
+        {
+          clientMessageId: input.clientMessageId,
+          body: input.body,
+          intent: input.intent,
+          metadata: input.metadata,
+          ...(input.parentMessageId
+            ? { parentMessageId: input.parentMessageId }
+            : {}),
+          ...(input.responseOwnerId
+            ? { responseOwnerId: input.responseOwnerId }
+            : {}),
+          ...(input.responseDueAt
+            ? { responseDueAt: new Date(input.responseDueAt) }
+            : {}),
+        },
+        mutation(context),
+      );
+      return {
+        value: toConversationMessageDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
+    async updateMessageResponse(
+      context,
+      messageId,
+      expectedVersion,
+      responseState,
+    ) {
+      const repositories = scoped(options.repositories, context);
+      const message = await repositories.collaboration.getMessage(messageId);
+      const conversation = await repositories.collaboration.getConversation(
+        message.message.conversationId,
+      );
+      requireCollaborationAccess(
+        context.access,
+        "update",
+        "message",
+        conversationCollaborationScope(context.access, conversation, message),
+      );
+      const result = await repositories.collaboration.setMessageResponse(
+        message.message.conversationId,
+        messageId,
+        expectedVersion,
+        responseState,
+        mutation(context),
+      );
+      return {
+        value: toConversationMessageDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
+    async addMessageReaction(context, messageId, expectedVersion, emoji) {
+      return changeMessageReaction(
+        scoped(options.repositories, context),
+        context,
+        messageId,
+        expectedVersion,
+        emoji,
+        true,
+      );
+    },
+
+    async removeMessageReaction(context, messageId, expectedVersion, emoji) {
+      return changeMessageReaction(
+        scoped(options.repositories, context),
+        context,
+        messageId,
+        expectedVersion,
+        emoji,
+        false,
+      );
+    },
+
+    async markConversationRead(context, conversationId, messageId) {
+      const repositories = scoped(options.repositories, context);
+      const conversation =
+        await repositories.collaboration.getConversation(conversationId);
+      requireCollaborationAccess(
+        context.access,
+        "mark_read",
+        "conversation",
+        conversationCollaborationScope(context.access, conversation),
+      );
+      const message = await repositories.collaboration.getMessage(messageId);
+      if (message.message.conversationId !== conversationId) throw notFound();
+      const result = await repositories.collaboration.markRead(
+        conversationId,
+        messageId,
+        mutation(context),
+      );
+      return {
+        value: {
+          conversationId: result.value.conversationId,
+          userId: result.value.userId,
+          messageId,
+          messageSequence: message.message.sequence,
+          readAt: dateTime(result.value.lastReadAt),
+          version: result.value.version,
+        },
+        replayed: result.replayed,
+      };
+    },
+
+    async listCollaborationEvents(context, workspaceId, after) {
+      requireWorkspaceAccess(context.access, "read", workspaceId);
+      const repositories = scoped(options.repositories, context);
+      const batch = await repositories.collaboration.listEvents(workspaceId, {
+        afterCursor: after,
+        limit: 500,
+      });
+      const events: CollaborationEventBatch["events"] = [];
+      for (const event of batch.events) {
+        let conversation: ConversationProjection | undefined;
+        if (event.conversationId) {
+          try {
+            conversation = await repositories.collaboration.getConversation(
+              event.conversationId,
+            );
+            requireCollaborationAccess(
+              context.access,
+              "read",
+              "conversation",
+              conversationCollaborationScope(context.access, conversation),
+            );
+          } catch (error) {
+            if (isNotFound(error)) continue;
+            throw error;
+          }
+        }
+        events.push({
+          cursor: event.cursor,
+          organizationId: event.organizationId,
+          workspaceId: event.workspaceId,
+          type: collaborationEventType(event.eventType),
+          aggregateType: collaborationAggregateType(event.aggregateType),
+          aggregateId: event.aggregateId,
+          ...(event.aggregateType === "team"
+            ? { teamId: event.aggregateId }
+            : conversation?.teamId
+              ? { teamId: conversation.teamId }
+              : {}),
+          ...(event.conversationId
+            ? { conversationId: event.conversationId }
+            : {}),
+          occurredAt: dateTime(event.createdAt),
+        });
+      }
+      return { events, nextCursor: batch.nextCursor };
     },
 
     async listBoards(context, workspaceId) {
@@ -963,6 +1413,289 @@ function mutationWithoutIdempotency(context: ApiMutationContext) {
     responseStatus: context.responseStatus,
     now: context.now,
   };
+}
+
+async function changeMessageReaction(
+  repositories: OrganizationScopedRepositories,
+  context: ApiMutationContext,
+  messageId: string,
+  expectedVersion: number,
+  emoji: string,
+  add: boolean,
+) {
+  const message = await repositories.collaboration.getMessage(messageId);
+  const conversation = await repositories.collaboration.getConversation(
+    message.message.conversationId,
+  );
+  requireCollaborationAccess(
+    context.access,
+    "react",
+    "message",
+    conversationCollaborationScope(context.access, conversation, message),
+  );
+  const result = add
+    ? await repositories.collaboration.addReaction(
+        message.message.conversationId,
+        messageId,
+        expectedVersion,
+        emoji,
+        mutation(context),
+      )
+    : await repositories.collaboration.removeReaction(
+        message.message.conversationId,
+        messageId,
+        expectedVersion,
+        emoji,
+        mutation(context),
+      );
+  return {
+    value: toConversationMessageDto(result.value),
+    replayed: result.replayed,
+  };
+}
+
+function teamCollaborationScope(
+  access: AccessContext,
+  projection: TeamProjection,
+): CollaborationScope {
+  const membership = projection.members.find(
+    ({ user }) => user.id === access.userId,
+  );
+  return {
+    organizationId: projection.team.organizationId,
+    workspaceId: projection.team.workspaceId,
+    kind: "team",
+    visibility: "private",
+    activeParticipant: Boolean(membership),
+    activeTeamMember: Boolean(membership),
+    teamLead: membership?.membership.role === "lead",
+  };
+}
+
+function conversationCollaborationScope(
+  access: AccessContext,
+  projection: ConversationProjection,
+  message?: MessageProjection,
+): CollaborationScope {
+  const participant = projection.participants.find(
+    ({ user }) => user.id === access.userId,
+  );
+  return {
+    organizationId: projection.conversation.organizationId,
+    workspaceId: projection.conversation.workspaceId,
+    kind: conversationKind(projection.conversation.kind),
+    visibility: conversationVisibility(projection.conversation.visibility),
+    activeParticipant: Boolean(participant),
+    ...(projection.teamId
+      ? { activeTeamMember: participant?.participant.source === "team" }
+      : {}),
+    conversationOwner: participant?.participant.participantRole === "owner",
+    ...(message
+      ? {
+          messageSender: message.message.senderId === access.userId,
+          responseOwner: message.message.responseOwnerId === access.userId,
+        }
+      : {}),
+  };
+}
+
+function toCollaborationUserDto(
+  user: CollaborationUserProjection,
+): CollaborationUserDto {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    organizationRole: user.organizationRole,
+  };
+}
+
+function toTeamDto(projection: TeamProjection): TeamDto {
+  return {
+    id: projection.team.id,
+    organizationId: projection.team.organizationId,
+    portfolioId: projection.portfolioId,
+    workspaceId: projection.team.workspaceId,
+    name: projection.team.name,
+    purpose: projection.team.purpose,
+    preset: teamPreset(projection.team.presetKey),
+    featureCapabilities: projection.featureCapabilities,
+    featurePolicySource: projection.featurePolicySource,
+    members: projection.members.map(({ membership, user }) => ({
+      user: toCollaborationUserDto(user),
+      role: membership.role,
+      joinedAt: dateTime(membership.joinedAt),
+    })),
+    room: projection.room,
+    version: projection.team.version,
+    createdAt: dateTime(projection.team.createdAt),
+    updatedAt: dateTime(projection.team.updatedAt),
+  };
+}
+
+function toConversationDto(
+  projection: ConversationProjection,
+): ConversationDto {
+  const conversation = projection.conversation;
+  return {
+    id: conversation.id,
+    organizationId: conversation.organizationId,
+    portfolioId: conversation.portfolioId,
+    workspaceId: conversation.workspaceId,
+    ...(projection.teamId ? { teamId: projection.teamId } : {}),
+    title: conversation.title,
+    purpose: conversation.purpose,
+    kind: conversationKind(conversation.kind),
+    visibility: conversationVisibility(conversation.visibility),
+    participants: projection.participants.map(
+      ({ participant, user, checkpoint }) => ({
+        user: toCollaborationUserDto(user),
+        participantRole: conversationParticipantRole(
+          participant.participantRole,
+        ),
+        notificationLevel: conversationNotificationLevel(
+          participant.notificationLevel,
+        ),
+        ...(checkpoint?.lastReadMessageId
+          ? { lastReadMessageId: checkpoint.lastReadMessageId }
+          : {}),
+        ...(checkpoint?.lastReadAt
+          ? { lastReadAt: dateTime(checkpoint.lastReadAt) }
+          : {}),
+        joinedAt: dateTime(participant.joinedAt),
+      }),
+    ),
+    unreadCount: projection.unreadCount,
+    needsResponseCount: projection.needsResponseCount,
+    retentionDays: conversation.retentionDays,
+    lastMessageAt: dateTime(conversation.lastMessageAt),
+    version: conversation.version,
+    createdAt: dateTime(conversation.createdAt),
+    updatedAt: dateTime(conversation.updatedAt),
+  };
+}
+
+function toConversationMessageDto(
+  projection: MessageProjection,
+): ConversationMessageDto {
+  const message = projection.message;
+  if (!message.expiresAt)
+    throw new DataPlaneError(
+      "repository_unavailable",
+      "A persisted collaboration message is missing its retention deadline.",
+    );
+  return {
+    id: message.id,
+    sequence: message.sequence,
+    clientMessageId: message.clientMessageId,
+    organizationId: message.organizationId,
+    conversationId: message.conversationId,
+    senderId: message.senderId,
+    sender: toCollaborationUserDto(projection.sender),
+    ...(message.parentMessageId
+      ? { parentMessageId: message.parentMessageId }
+      : {}),
+    body: message.body,
+    intent: message.intent,
+    ...(message.responseOwnerId
+      ? { responseOwnerId: message.responseOwnerId }
+      : {}),
+    ...(message.responseDueAt
+      ? { responseDueAt: dateTime(message.responseDueAt) }
+      : {}),
+    ...(message.responseState ? { responseState: message.responseState } : {}),
+    ...(message.linkedEntityType
+      ? { linkedEntityType: message.linkedEntityType }
+      : {}),
+    ...(message.linkedEntityId
+      ? { linkedEntityId: message.linkedEntityId }
+      : {}),
+    metadata: isRecord(message.metadata) ? message.metadata : {},
+    reactions: projection.reactions,
+    retainedUntil: dateTime(message.expiresAt),
+    version: message.version,
+    ...(message.editedAt ? { editedAt: dateTime(message.editedAt) } : {}),
+    createdAt: dateTime(message.createdAt),
+  };
+}
+
+function teamPreset(value: string): TeamPreset {
+  if (
+    value === "leadership" ||
+    value === "marketing" ||
+    value === "technology" ||
+    value === "operations" ||
+    value === "sales" ||
+    value === "custom"
+  )
+    return value;
+  throw invalidManagementValue("Team preset");
+}
+
+function conversationKind(value: string): ConversationDto["kind"] {
+  if (
+    value === "workspace" ||
+    value === "team" ||
+    value === "direct" ||
+    value === "external"
+  )
+    return value;
+  throw invalidManagementValue("conversation kind");
+}
+
+function conversationVisibility(value: string): ConversationDto["visibility"] {
+  if (
+    value === "organization" ||
+    value === "private" ||
+    value === "guest_scoped"
+  )
+    return value;
+  throw invalidManagementValue("conversation visibility");
+}
+
+function conversationParticipantRole(
+  value: string,
+): ConversationDto["participants"][number]["participantRole"] {
+  if (value === "owner" || value === "member" || value === "guest")
+    return value;
+  throw invalidManagementValue("conversation participant role");
+}
+
+function conversationNotificationLevel(
+  value: string,
+): ConversationDto["participants"][number]["notificationLevel"] {
+  if (value === "all" || value === "mentions" || value === "none") return value;
+  throw invalidManagementValue("conversation notification level");
+}
+
+function collaborationEventType(
+  value: string,
+): CollaborationEventBatch["events"][number]["type"] {
+  if (
+    value === "team.created" ||
+    value === "team.updated" ||
+    value === "team.membership_changed" ||
+    value === "conversation.created" ||
+    value === "conversation.participants_changed" ||
+    value === "message.sent" ||
+    value === "message.response_changed" ||
+    value === "message.reaction_changed" ||
+    value === "conversation.read"
+  )
+    return value;
+  throw invalidManagementValue("collaboration event type");
+}
+
+function collaborationAggregateType(
+  value: string,
+): CollaborationEventBatch["events"][number]["aggregateType"] {
+  if (value === "team" || value === "conversation" || value === "message")
+    return value;
+  throw invalidManagementValue("collaboration aggregate type");
+}
+
+function isNotFound(error: unknown): boolean {
+  return dataPlaneErrorCode(error) === "resource_not_found";
 }
 
 async function getDefaultPortfolioRollup(

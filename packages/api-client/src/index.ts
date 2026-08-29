@@ -9,12 +9,19 @@ import {
   boardSchema,
   captureInboxItemSchema,
   changeRadarSchema,
+  collaborationEventBatchSchema,
   completeOnboardingSchema,
+  conversationMessageSchema,
+  conversationReadCheckpointSchema,
+  conversationSchema,
   convertInboxItemSchema,
   convertedInboxItemSchema,
   createBoardSchema,
+  createConversationMessageSchema,
+  createConversationSchema,
   createInvitationSchema,
   createItemSchema,
+  createTeamSchema,
   createWaitingSchema,
   createWorkspaceSchema,
   decisionTransitionSchema,
@@ -24,21 +31,31 @@ import {
   invitationAcceptanceSchema,
   invitationSchema,
   managementMemorySchema,
+  markConversationReadSchema,
   membershipSchema,
+  messageReactionInputSchema,
   onboardingDraftSchema,
   onboardingStateSchema,
   operationsStatusSchema,
   organizationSummarySchema,
   organizationSelectionSchema,
   paginatedItemsSchema,
+  paginatedConversationMessagesSchema,
+  paginatedConversationsSchema,
   portfolioResponseSchema,
   portfolioSchema,
   searchResultSchema,
   sessionSchema,
+  setConversationParticipantSchema,
+  setTeamMemberSchema,
+  teamDirectorySchema,
+  teamSchema,
   resolveWorkItemSchema,
   updateInboxItemSchema,
   updateItemSchema,
   updateMembershipSchema,
+  updateMessageResponseSchema,
+  updateTeamSchema,
   waitingActionSchema,
   waitingStateSchema,
   weeklyReviewInputSchema,
@@ -61,10 +78,17 @@ import {
   type BoardDto,
   type CaptureInboxItemInput,
   type ChangeRadarDto,
+  type CollaborationEventBatch,
   type CompleteOnboardingInput,
+  type ConversationDto,
+  type ConversationMessageDto,
+  type ConversationReadCheckpointDto,
   type ConvertInboxItemInput,
   type ConvertedInboxItem,
   type CreateInvitationInput,
+  type CreateConversationInput,
+  type CreateConversationMessageInput,
+  type CreateTeamInput,
   type CreateItemInput,
   type CreateBoardInput,
   type CreateWaitingInput,
@@ -80,12 +104,18 @@ import {
   type OnboardingState,
   type OperationsStatusDto,
   type OrganizationSummary,
+  type PaginatedConversationMessages,
+  type PaginatedConversations,
   type SearchResultDto,
   type Session,
+  type SetTeamMemberInput,
+  type TeamDirectoryDto,
+  type TeamDto,
   type ResolveWorkItemInput,
   type UpdateInboxItemInput,
   type UpdateItemInput,
   type UpdateMembershipInput,
+  type UpdateTeamInput,
   type WaitingAction,
   type WaitingStateDto,
   type WeeklyReviewInput,
@@ -395,6 +425,284 @@ export function createApiClient({
     workspace: async (slug: string): Promise<WorkspaceDetailDto> =>
       workspaceDetailSchema.parse(
         (await request(`/workspaces/${encodeURIComponent(slug)}`)).body,
+      ),
+
+    teamDirectory: async (workspaceId: string): Promise<TeamDirectoryDto> =>
+      teamDirectorySchema.parse(
+        (await request(`/workspaces/${encodeURIComponent(workspaceId)}/teams`))
+          .body,
+      ),
+
+    team: async (id: string): Promise<TeamDto> =>
+      teamSchema.parse(
+        (await request(`/teams/${encodeURIComponent(id)}`)).body,
+      ),
+
+    createTeam: async (
+      input: CreateTeamInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<TeamDto>> => {
+      const body = createTeamSchema.parse(input);
+      const response = await request(
+        `/workspaces/${encodeURIComponent(body.workspaceId)}/teams`,
+        {
+          method: "POST",
+          headers: {
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      return parseVersionedMutation(response, teamSchema);
+    },
+
+    updateTeam: async (
+      id: string,
+      input: UpdateTeamInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<TeamDto>> => {
+      const response = await request(`/teams/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: mutationHeaders(version, idempotencyKey),
+        body: JSON.stringify(updateTeamSchema.parse(input)),
+      });
+      return parseVersionedMutation(response, teamSchema);
+    },
+
+    setTeamMember: async (
+      teamId: string,
+      userId: string,
+      input: SetTeamMemberInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<TeamDto>> => {
+      const response = await request(
+        `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
+        {
+          method: "PUT",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(setTeamMemberSchema.parse(input)),
+        },
+      );
+      return parseVersionedMutation(response, teamSchema);
+    },
+
+    removeTeamMember: async (
+      teamId: string,
+      userId: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<TeamDto>> => {
+      const response = await request(
+        `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
+        {
+          method: "DELETE",
+          headers: mutationHeaders(version, idempotencyKey),
+        },
+      );
+      return parseVersionedMutation(response, teamSchema);
+    },
+
+    conversations: async (filters: {
+      workspaceId: string;
+      cursor?: string;
+      limit?: number;
+    }): Promise<PaginatedConversations> => {
+      const query = new URLSearchParams();
+      if (filters.cursor) query.set("cursor", filters.cursor);
+      if (filters.limit) query.set("limit", String(filters.limit));
+      return paginatedConversationsSchema.parse(
+        (
+          await request(
+            `/workspaces/${encodeURIComponent(filters.workspaceId)}/conversations${query.size ? `?${query}` : ""}`,
+          )
+        ).body,
+      );
+    },
+
+    conversation: async (id: string): Promise<ConversationDto> =>
+      conversationSchema.parse(
+        (await request(`/conversations/${encodeURIComponent(id)}`)).body,
+      ),
+
+    createConversation: async (
+      input: CreateConversationInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<ConversationDto>> => {
+      const body = createConversationSchema.parse(input);
+      const response = await request(
+        `/workspaces/${encodeURIComponent(body.workspaceId)}/conversations`,
+        {
+          method: "POST",
+          headers: {
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      return parseVersionedMutation(response, conversationSchema);
+    },
+
+    setConversationParticipant: async (
+      conversationId: string,
+      userId: string,
+      version: number,
+      idempotencyKey: string,
+      participantRole: "member" | "owner" = "member",
+    ): Promise<VersionedMutationResponse<ConversationDto>> => {
+      const body = setConversationParticipantSchema.parse({ participantRole });
+      const response = await request(
+        `/conversations/${encodeURIComponent(conversationId)}/participants/${encodeURIComponent(userId)}`,
+        {
+          method: "PUT",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(body),
+        },
+      );
+      return parseVersionedMutation(response, conversationSchema);
+    },
+
+    removeConversationParticipant: async (
+      conversationId: string,
+      userId: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<ConversationDto>> => {
+      const response = await request(
+        `/conversations/${encodeURIComponent(conversationId)}/participants/${encodeURIComponent(userId)}`,
+        {
+          method: "DELETE",
+          headers: mutationHeaders(version, idempotencyKey),
+        },
+      );
+      return parseVersionedMutation(response, conversationSchema);
+    },
+
+    conversationMessages: async (
+      conversationId: string,
+      filters: {
+        cursor?: string;
+        limit?: number;
+        parentMessageId?: string;
+      } = {},
+    ): Promise<PaginatedConversationMessages> => {
+      const query = new URLSearchParams();
+      if (filters.cursor) query.set("cursor", filters.cursor);
+      if (filters.limit) query.set("limit", String(filters.limit));
+      if (filters.parentMessageId)
+        query.set("parentMessageId", filters.parentMessageId);
+      return paginatedConversationMessagesSchema.parse(
+        (
+          await request(
+            `/conversations/${encodeURIComponent(conversationId)}/messages${query.size ? `?${query}` : ""}`,
+          )
+        ).body,
+      );
+    },
+
+    sendConversationMessage: async (
+      conversationId: string,
+      input: CreateConversationMessageInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<ConversationMessageDto>> => {
+      const response = await request(
+        `/conversations/${encodeURIComponent(conversationId)}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(createConversationMessageSchema.parse(input)),
+        },
+      );
+      return parseVersionedMutation(response, conversationMessageSchema);
+    },
+
+    setMessageResponse: async (
+      messageId: string,
+      responseState: "open" | "resolved",
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<ConversationMessageDto>> => {
+      const response = await request(
+        `/messages/${encodeURIComponent(messageId)}/response`,
+        {
+          method: "PATCH",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(
+            updateMessageResponseSchema.parse({ responseState }),
+          ),
+        },
+      );
+      return parseVersionedMutation(response, conversationMessageSchema);
+    },
+
+    addMessageReaction: async (
+      messageId: string,
+      emoji: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<ConversationMessageDto>> => {
+      const body = messageReactionInputSchema.parse({ emoji });
+      const response = await request(
+        `/messages/${encodeURIComponent(messageId)}/reactions/${encodeURIComponent(body.emoji)}`,
+        {
+          method: "PUT",
+          headers: mutationHeaders(version, idempotencyKey),
+        },
+      );
+      return parseVersionedMutation(response, conversationMessageSchema);
+    },
+
+    removeMessageReaction: async (
+      messageId: string,
+      emoji: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<ConversationMessageDto>> => {
+      const body = messageReactionInputSchema.parse({ emoji });
+      const response = await request(
+        `/messages/${encodeURIComponent(messageId)}/reactions/${encodeURIComponent(body.emoji)}`,
+        {
+          method: "DELETE",
+          headers: mutationHeaders(version, idempotencyKey),
+        },
+      );
+      return parseVersionedMutation(response, conversationMessageSchema);
+    },
+
+    markConversationRead: async (
+      conversationId: string,
+      messageId: string,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<ConversationReadCheckpointDto>> => {
+      const response = await request(
+        `/conversations/${encodeURIComponent(conversationId)}/read-checkpoint`,
+        {
+          method: "PUT",
+          headers: {
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(markConversationReadSchema.parse({ messageId })),
+        },
+      );
+      return {
+        data: conversationReadCheckpointSchema.parse(response.body),
+        ...mutationMetadata(response.response),
+      };
+    },
+
+    collaborationEvents: async (
+      workspaceId: string,
+      after = 0,
+    ): Promise<CollaborationEventBatch> =>
+      collaborationEventBatchSchema.parse(
+        (
+          await request(
+            `/events?workspaceId=${encodeURIComponent(workspaceId)}&after=${encodeURIComponent(String(after))}&format=json`,
+          )
+        ).body,
       ),
 
     boards: async (workspaceId: string): Promise<BoardDto[]> =>

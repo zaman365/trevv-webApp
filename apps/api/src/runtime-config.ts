@@ -1,4 +1,5 @@
 import type { SmtpMailConfiguration } from "@founderhq/auth-server";
+import { validatePostgresDatabaseUrl } from "@founderhq/db";
 import { tmpdir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -18,8 +19,6 @@ export type RuntimeConfiguration =
     };
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>;
-
-const TLS_DATABASE_MODES = new Set(["require", "verify-ca", "verify-full"]);
 
 export function readRuntimeConfiguration(
   environment: RuntimeEnvironment = process.env,
@@ -54,7 +53,7 @@ export function readRuntimeConfiguration(
   );
   const authSecret = required(environment, "BETTER_AUTH_SECRET");
   validateAuthSecret(authSecret);
-  validateDatabaseUrl(databaseUrl, production);
+  validatePostgresDatabaseUrl(databaseUrl, { production });
 
   const cookieDomain = optional(environment, "AUTH_COOKIE_DOMAIN");
   validateCookieTopology(authBaseUrl, webOrigin, cookieDomain, production);
@@ -186,24 +185,6 @@ function validateAuthSecret(secret: string): void {
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters.");
   if (/replace-with|change-me|example|password/i.test(secret))
     throw new Error("BETTER_AUTH_SECRET must not be a placeholder value.");
-}
-
-function validateDatabaseUrl(value: string, production: boolean): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error("DATABASE_URL must be a valid PostgreSQL URL.");
-  }
-  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:")
-    throw new Error("DATABASE_URL must use the postgres protocol.");
-  if (
-    production &&
-    !TLS_DATABASE_MODES.has(parsed.searchParams.get("sslmode") ?? "")
-  )
-    throw new Error(
-      "Production DATABASE_URL must require TLS transport with sslmode.",
-    );
 }
 
 function validateCookieTopology(

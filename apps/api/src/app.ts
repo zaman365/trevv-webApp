@@ -8,19 +8,28 @@ import {
   completeOnboardingSchema,
   convertInboxItemSchema,
   createBoardSchema,
+  createConversationMessageSchema,
+  createConversationSchema,
   createInvitationSchema,
   createItemSchema,
+  createTeamSchema,
   createWaitingSchema,
   createWorkspaceSchema,
   decisionTransitionSchema,
   idSchema,
   idempotencyKeySchema,
+  markConversationReadSchema,
+  messageReactionInputSchema,
   onboardingDraftSchema,
   organizationSelectionSchema,
   resolveWorkItemSchema,
+  setConversationParticipantSchema,
+  setTeamMemberSchema,
   updateInboxItemSchema,
   updateItemSchema,
+  updateMessageResponseSchema,
   updateMembershipSchema,
+  updateTeamSchema,
   waitingActionSchema,
   weeklyReviewInputSchema,
   workItemEvidenceInputSchema,
@@ -58,6 +67,7 @@ import {
 } from "@founderhq/permissions";
 import { zValidator } from "@hono/zod-validator";
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { randomBytes } from "node:crypto";
@@ -136,6 +146,19 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     context.header("x-request-id", requestId);
     await next();
   });
+  api.use(
+    "/api/v1/*",
+    bodyLimit({
+      maxSize: 128 * 1024,
+      onError: (context) =>
+        failure(
+          context as unknown as ApiContext,
+          413,
+          "payload_too_large",
+          "The request body cannot exceed 128 KiB.",
+        ),
+    }),
+  );
 
   api.on(["GET", "POST"], "/api/auth/*", async (context) => {
     if (!dependencies.authHandler)
@@ -149,7 +172,10 @@ export function createApiApp(dependencies: ApiAppDependencies) {
   });
 
   api.use("/api/v1/*", async (context, next) => {
-    if (context.req.path === "/api/v1/health") {
+    if (
+      context.req.path === "/api/v1/health" ||
+      context.req.path === "/api/v1/readyz"
+    ) {
       await next();
       return;
     }
@@ -229,6 +255,33 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       time: clock().toISOString(),
     }),
   );
+
+  api.get("/api/v1/readyz", async (context) => {
+    const time = clock().toISOString();
+    try {
+      const readiness = await dependencies.dataPlane.readiness();
+      return context.json({
+        status: "ready" as const,
+        service: "trevv-api" as const,
+        version: "v1" as const,
+        mode: dependencies.mode,
+        database: readiness.database,
+        time,
+      });
+    } catch {
+      return context.json(
+        {
+          status: "unavailable" as const,
+          service: "trevv-api" as const,
+          version: "v1" as const,
+          mode: dependencies.mode,
+          database: "unavailable" as const,
+          time,
+        },
+        503,
+      );
+    }
+  });
 
   api.get("/api/v1/session", (context) => context.json(context.get("session")));
 
@@ -380,7 +433,12 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     const repositories = organizationRepositories(dependencies, context);
     const created = await repositories.invitations.create(
       {
-        ...parsed.data,
+        email: parsed.data.email,
+        role: parsed.data.role,
+        ...(parsed.data.workspaceId
+          ? { workspaceId: parsed.data.workspaceId }
+          : {}),
+        ...(parsed.data.teamId ? { teamId: parsed.data.teamId } : {}),
         tokenHash: hashInvitationToken(token),
         expiresAt,
       },
@@ -510,7 +568,9 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       invitationId: accepted.invitationId,
       organizationId: accepted.organizationId,
       role: accepted.membership.role,
-      acceptedAt: now.toISOString(),
+      ...(accepted.workspaceId ? { workspaceId: accepted.workspaceId } : {}),
+      ...(accepted.teamId ? { teamId: accepted.teamId } : {}),
+      acceptedAt: accepted.acceptedAt.toISOString(),
     });
   });
 
@@ -936,6 +996,539 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       ),
     ),
   );
+
+  api.get("/api/v1/workspaces/:workspaceId/teams", async (context) => {
+    const workspaceId = idSchema.safeParse(context.req.param("workspaceId"));
+    if (!workspaceId.success)
+      return failure(
+        context,
+        404,
+        "resource_not_found",
+        "The requested resource is unavailable.",
+      );
+    return context.json(
+      await dependencies.dataPlane.listTeamDirectory(
+        requestContext(context, clock, idGenerator),
+        workspaceId.data,
+      ),
+    );
+  });
+
+  api.post("/api/v1/workspaces/:workspaceId/teams", async (context) => {
+    const parsed = createTeamSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Team fields.",
+        parsed.error.flatten(),
+      );
+    if (parsed.data.workspaceId !== context.req.param("workspaceId"))
+      return failure(
+        context,
+        404,
+        "resource_not_found",
+        "The requested resource is unavailable.",
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createTeam(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/workspaces/:workspaceId/teams",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
+
+  api.get("/api/v1/teams/:id", async (context) => {
+    const team = await dependencies.dataPlane.getTeam(
+      requestContext(context, clock, idGenerator),
+      context.req.param("id"),
+    );
+    context.header("etag", `"${team.version}"`);
+    return context.json(team);
+  });
+
+  api.patch("/api/v1/teams/:id", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = updateTeamSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Team changes.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.updateTeam(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/teams/:id",
+        { id, patch: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.put("/api/v1/teams/:teamId/members/:userId", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = setTeamMemberSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Team membership.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const teamId = context.req.param("teamId");
+    const userId = context.req.param("userId");
+    const result = await dependencies.dataPlane.setTeamMember(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/teams/:teamId/members/:userId",
+        { teamId, userId, membership: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      teamId,
+      userId,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.delete("/api/v1/teams/:teamId/members/:userId", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const teamId = context.req.param("teamId");
+    const userId = context.req.param("userId");
+    const result = await dependencies.dataPlane.removeTeamMember(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/teams/:teamId/members/:userId",
+        { teamId, userId },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      teamId,
+      userId,
+      expectedVersion,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.get("/api/v1/workspaces/:workspaceId/conversations", async (context) => {
+    const parsed = z
+      .object({
+        workspaceId: idSchema,
+        cursor: z.string().min(1).max(512).optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      })
+      .safeParse({
+        workspaceId: context.req.param("workspaceId"),
+        cursor: context.req.query("cursor"),
+        limit: context.req.query("limit"),
+      });
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the conversation filters.",
+        parsed.error.flatten(),
+      );
+    return context.json(
+      await dependencies.dataPlane.listConversations(
+        requestContext(context, clock, idGenerator),
+        {
+          workspaceId: parsed.data.workspaceId,
+          limit: parsed.data.limit,
+          ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {}),
+        },
+      ),
+    );
+  });
+
+  api.post("/api/v1/workspaces/:workspaceId/conversations", async (context) => {
+    const parsed = createConversationSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the conversation fields.",
+        parsed.error.flatten(),
+      );
+    if (parsed.data.workspaceId !== context.req.param("workspaceId"))
+      return failure(
+        context,
+        404,
+        "resource_not_found",
+        "The requested resource is unavailable.",
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createConversation(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/workspaces/:workspaceId/conversations",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
+
+  api.get("/api/v1/conversations/:id", async (context) => {
+    const conversation = await dependencies.dataPlane.getConversation(
+      requestContext(context, clock, idGenerator),
+      context.req.param("id"),
+    );
+    context.header("etag", `"${conversation.version}"`);
+    return context.json(conversation);
+  });
+
+  api.put("/api/v1/conversations/:id/participants/:userId", async (context) =>
+    mutateConversationParticipant(context, true),
+  );
+
+  api.delete(
+    "/api/v1/conversations/:id/participants/:userId",
+    async (context) => mutateConversationParticipant(context, false),
+  );
+
+  async function mutateConversationParticipant(
+    context: ApiContext,
+    active: boolean,
+  ) {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = z
+      .object({ conversationId: idSchema, userId: idSchema })
+      .safeParse({
+        conversationId: context.req.param("id"),
+        userId: context.req.param("userId"),
+      });
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Choose a valid conversation participant.",
+        parsed.error.flatten(),
+      );
+    const participantInput = active
+      ? setConversationParticipantSchema.safeParse(
+          await context.req.json().catch(() => undefined),
+        )
+      : setConversationParticipantSchema.safeParse({});
+    if (!participantInput.success)
+      return validationFailure(
+        context,
+        "Choose a valid participant role.",
+        participantInput.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const route = "/api/v1/conversations/:id/participants/:userId";
+    const result = await dependencies.dataPlane.setConversationParticipant(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        route,
+        { ...parsed.data, active, ...participantInput.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      parsed.data.conversationId,
+      parsed.data.userId,
+      expectedVersion,
+      active,
+      participantInput.data.participantRole,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  }
+
+  api.get("/api/v1/conversations/:id/messages", async (context) => {
+    const parsed = z
+      .object({
+        cursor: z.string().min(1).max(512).optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+        parentMessageId: idSchema.optional(),
+      })
+      .safeParse({
+        cursor: context.req.query("cursor"),
+        limit: context.req.query("limit"),
+        parentMessageId: context.req.query("parentMessageId"),
+      });
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the message filters.",
+        parsed.error.flatten(),
+      );
+    return context.json(
+      await dependencies.dataPlane.listConversationMessages(
+        requestContext(context, clock, idGenerator),
+        context.req.param("id"),
+        {
+          limit: parsed.data.limit,
+          ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {}),
+          ...(parsed.data.parentMessageId
+            ? { parentMessageId: parsed.data.parentMessageId }
+            : {}),
+        },
+      ),
+    );
+  });
+
+  api.post("/api/v1/conversations/:id/messages", async (context) => {
+    const parsed = createConversationMessageSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the message.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const conversationId = context.req.param("id");
+    const result = await dependencies.dataPlane.sendConversationMessage(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/conversations/:id/messages",
+        { conversationId, message: parsed.data },
+        idempotency,
+        201,
+      ),
+      conversationId,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
+
+  api.patch("/api/v1/messages/:id/response", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = updateMessageResponseSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the response state.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    if (!id)
+      return failure(
+        context,
+        404,
+        "resource_not_found",
+        "The requested resource is unavailable.",
+      );
+    const result = await dependencies.dataPlane.updateMessageResponse(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/messages/:id/response",
+        { id, response: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data.responseState,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.put("/api/v1/messages/:id/reactions/:emoji", async (context) => {
+    return mutateMessageReaction(context, "add");
+  });
+
+  api.delete("/api/v1/messages/:id/reactions/:emoji", async (context) => {
+    return mutateMessageReaction(context, "remove");
+  });
+
+  async function mutateMessageReaction(
+    context: ApiContext,
+    action: "add" | "remove",
+  ) {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = messageReactionInputSchema.safeParse({
+      emoji: context.req.param("emoji"),
+    });
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Choose a valid reaction.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    if (!id)
+      return failure(
+        context,
+        404,
+        "resource_not_found",
+        "The requested resource is unavailable.",
+      );
+    const route = "/api/v1/messages/:id/reactions/:emoji";
+    const mutation = await mutationContext(
+      context,
+      clock,
+      idGenerator,
+      route,
+      { id, emoji: parsed.data.emoji, action },
+      idempotency,
+      200,
+      expectedVersion,
+    );
+    const result =
+      action === "add"
+        ? await dependencies.dataPlane.addMessageReaction(
+            mutation,
+            id,
+            expectedVersion,
+            parsed.data.emoji,
+          )
+        : await dependencies.dataPlane.removeMessageReaction(
+            mutation,
+            id,
+            expectedVersion,
+            parsed.data.emoji,
+          );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  }
+
+  api.put("/api/v1/conversations/:id/read-checkpoint", async (context) => {
+    const parsed = markConversationReadSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Choose a valid message checkpoint.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const conversationId = context.req.param("id");
+    const result = await dependencies.dataPlane.markConversationRead(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/conversations/:id/read-checkpoint",
+        { conversationId, messageId: parsed.data.messageId },
+        idempotency,
+      ),
+      conversationId,
+      parsed.data.messageId,
+    );
+    setIdempotencyHeaders(context, idempotency, result.replayed);
+    return context.json(result.value);
+  });
 
   api.get(
     "/api/v1/boards",
@@ -1543,17 +2136,53 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     return context.body(csv);
   });
 
-  api.get("/api/v1/events", (context) => {
-    if (dependencies.mode === "live")
-      throw new DataPlaneError(
-        "capability_unavailable",
-        "Live event delivery is not implemented yet.",
+  api.get("/api/v1/events", async (context) => {
+    if (dependencies.mode === "demo")
+      return context.body(
+        `event: ready\ndata: ${JSON.stringify({ requestId: context.get("requestId"), at: clock().toISOString(), fictional: true })}\n\n`,
+        200,
+        { "content-type": "text/event-stream", "cache-control": "no-cache" },
       );
-    return context.body(
-      `event: ready\ndata: ${JSON.stringify({ requestId: context.get("requestId"), at: clock().toISOString() })}\n\n`,
-      200,
-      { "content-type": "text/event-stream", "cache-control": "no-cache" },
+    const parsed = z
+      .object({
+        workspaceId: idSchema,
+        after: z.coerce.number().int().nonnegative().default(0),
+        format: z.enum(["json"]).optional(),
+      })
+      .safeParse({
+        workspaceId: context.req.query("workspaceId"),
+        after: context.req.query("after"),
+        format: context.req.query("format"),
+      });
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the collaboration event cursor.",
+        parsed.error.flatten(),
+      );
+    const batch = await dependencies.dataPlane.listCollaborationEvents(
+      requestContext(context, clock, idGenerator),
+      parsed.data.workspaceId,
+      parsed.data.after,
     );
+    if (parsed.data.format === "json") return context.json(batch);
+    const body = [
+      "retry: 2000",
+      ...batch.events.flatMap((event) => [
+        `id: ${event.cursor}`,
+        "event: collaboration",
+        `data: ${JSON.stringify(event)}`,
+        "",
+      ]),
+      `event: checkpoint`,
+      `data: ${JSON.stringify({ nextCursor: batch.nextCursor, at: clock().toISOString() })}`,
+      "",
+    ].join("\n");
+    return context.body(body, 200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "private, no-store, no-transform",
+      connection: "keep-alive",
+    });
   });
 
   api.get("/openapi.json", (context) => context.json(openApiDocument));
@@ -1653,6 +2282,7 @@ export function createUnavailableLiveDependencies(): {
   };
   const dataPlane = {
     mode: "live",
+    readiness: unavailable,
     listPortfolios: unavailable,
     getPortfolio: unavailable,
     listAttention: unavailable,
@@ -1670,6 +2300,23 @@ export function createUnavailableLiveDependencies(): {
     listWorkspaces: unavailable,
     createWorkspace: unavailable,
     getWorkspace: unavailable,
+    listTeamDirectory: unavailable,
+    getTeam: unavailable,
+    createTeam: unavailable,
+    updateTeam: unavailable,
+    setTeamMember: unavailable,
+    removeTeamMember: unavailable,
+    listConversations: unavailable,
+    getConversation: unavailable,
+    createConversation: unavailable,
+    setConversationParticipant: unavailable,
+    listConversationMessages: unavailable,
+    sendConversationMessage: unavailable,
+    updateMessageResponse: unavailable,
+    addMessageReaction: unavailable,
+    removeMessageReaction: unavailable,
+    markConversationRead: unavailable,
+    listCollaborationEvents: unavailable,
     listBoards: unavailable,
     getBoard: unavailable,
     createBoard: unavailable,
@@ -1793,6 +2440,7 @@ function sessionFromIdentity(
       timezone: resolved.organization.timezone,
     },
     availableOrganizations: resolved.availableOrganizations,
+    managedWorkspaceIds: resolved.managedWorkspaceIds,
     expiresAt: identity.expiresAt.toISOString(),
   };
 }
@@ -1890,6 +2538,8 @@ function invitationDto(row: InvitationProjection, now: Date): Invitation {
     ...(row.acceptedAt ? { acceptedAt: row.acceptedAt.toISOString() } : {}),
     ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
     ...(row.lastSentAt ? { lastSentAt: row.lastSentAt.toISOString() } : {}),
+    ...(row.workspaceId ? { workspaceId: row.workspaceId } : {}),
+    ...(row.teamId ? { teamId: row.teamId } : {}),
   };
 }
 

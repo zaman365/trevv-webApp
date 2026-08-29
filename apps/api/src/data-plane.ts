@@ -7,21 +7,34 @@ import type {
   BoardDto,
   CaptureInboxItemInput,
   ChangeRadarDto,
+  CollaborationEventBatch,
+  ConversationDto,
+  ConversationMessageDto,
+  ConversationReadCheckpointDto,
   ConvertInboxItemInput,
   ConvertedInboxItem,
   CreateBoardInput,
+  CreateConversationInput,
+  CreateConversationMessageInput,
   CreateItemInput,
+  CreateTeamInput,
   CreateWaitingInput,
   CreateWorkspaceInput,
   DecisionTransitionInput,
   InboxItemDto,
   ManagementMemoryDto,
   OperationsStatusDto,
+  PaginatedConversationMessages,
+  PaginatedConversations,
   PortfolioDto,
   PortfolioResponse,
+  Readiness,
   SearchResultDto,
   Session,
   ResolveWorkItemInput,
+  SetTeamMemberInput,
+  TeamDirectoryDto,
+  TeamDto,
   UpdateInboxItemInput,
   WaitingAction,
   WaitingStateDto,
@@ -39,6 +52,7 @@ import type {
   WorkspaceDetailDto,
   WorkspaceDto,
   UpdateItemInput,
+  UpdateTeamInput,
 } from "@founderhq/api-contract";
 import type { AccessContext } from "@founderhq/permissions";
 
@@ -93,6 +107,7 @@ export interface ImportPreviewInput {
 
 export interface DataPlane {
   readonly mode: ApiMode;
+  readiness(): Promise<Pick<Readiness, "database">>;
   listPortfolios(context: ApiRequestContext): Promise<PortfolioDto[]>;
   getPortfolio(
     context: ApiRequestContext,
@@ -141,6 +156,92 @@ export interface DataPlane {
     context: ApiRequestContext,
     slug: string,
   ): Promise<WorkspaceDetail>;
+  listTeamDirectory(
+    context: ApiRequestContext,
+    workspaceId: string,
+  ): Promise<TeamDirectoryDto>;
+  getTeam(context: ApiRequestContext, id: string): Promise<TeamDto>;
+  createTeam(
+    context: ApiMutationContext,
+    input: CreateTeamInput,
+  ): Promise<MutationResult<TeamDto>>;
+  updateTeam(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: UpdateTeamInput,
+  ): Promise<MutationResult<TeamDto>>;
+  setTeamMember(
+    context: ApiMutationContext,
+    teamId: string,
+    userId: string,
+    expectedVersion: number,
+    input: SetTeamMemberInput,
+  ): Promise<MutationResult<TeamDto>>;
+  removeTeamMember(
+    context: ApiMutationContext,
+    teamId: string,
+    userId: string,
+    expectedVersion: number,
+  ): Promise<MutationResult<TeamDto>>;
+  listConversations(
+    context: ApiRequestContext,
+    filters: { workspaceId: string; cursor?: string; limit: number },
+  ): Promise<PaginatedConversations>;
+  getConversation(
+    context: ApiRequestContext,
+    id: string,
+  ): Promise<ConversationDto>;
+  createConversation(
+    context: ApiMutationContext,
+    input: CreateConversationInput,
+  ): Promise<MutationResult<ConversationDto>>;
+  setConversationParticipant(
+    context: ApiMutationContext,
+    conversationId: string,
+    userId: string,
+    expectedVersion: number,
+    active: boolean,
+    participantRole?: "member" | "owner",
+  ): Promise<MutationResult<ConversationDto>>;
+  listConversationMessages(
+    context: ApiRequestContext,
+    conversationId: string,
+    filters: { cursor?: string; limit: number; parentMessageId?: string },
+  ): Promise<PaginatedConversationMessages>;
+  sendConversationMessage(
+    context: ApiMutationContext,
+    conversationId: string,
+    input: CreateConversationMessageInput,
+  ): Promise<MutationResult<ConversationMessageDto>>;
+  updateMessageResponse(
+    context: ApiMutationContext,
+    messageId: string,
+    expectedVersion: number,
+    responseState: "open" | "resolved",
+  ): Promise<MutationResult<ConversationMessageDto>>;
+  addMessageReaction(
+    context: ApiMutationContext,
+    messageId: string,
+    expectedVersion: number,
+    emoji: string,
+  ): Promise<MutationResult<ConversationMessageDto>>;
+  removeMessageReaction(
+    context: ApiMutationContext,
+    messageId: string,
+    expectedVersion: number,
+    emoji: string,
+  ): Promise<MutationResult<ConversationMessageDto>>;
+  markConversationRead(
+    context: ApiMutationContext,
+    conversationId: string,
+    messageId: string,
+  ): Promise<MutationResult<ConversationReadCheckpointDto>>;
+  listCollaborationEvents(
+    context: ApiRequestContext,
+    workspaceId: string,
+    after: number,
+  ): Promise<CollaborationEventBatch>;
   listBoards(
     context: ApiRequestContext,
     workspaceId: string,

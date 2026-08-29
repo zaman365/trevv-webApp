@@ -1,8 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { format } from "prettier";
 import { openApiDocument } from "./openapi.js";
 
-await writeFile(
-  resolve(process.cwd(), "../../openapi.json"),
-  `${JSON.stringify(openApiDocument, null, 2)}\n`,
-);
+const outputPath = resolve(process.cwd(), "../../openapi.json");
+const output = await format(JSON.stringify(openApiDocument), {
+  filepath: outputPath,
+});
+
+await writeFile(outputPath, output);

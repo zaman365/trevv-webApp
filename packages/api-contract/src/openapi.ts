@@ -21,6 +21,8 @@ export const openApiDocument = {
     { name: "Blueprints" },
     { name: "Commercial" },
     { name: "Workspaces" },
+    { name: "Teams" },
+    { name: "Messages" },
     { name: "Boards" },
     { name: "Inbox" },
     { name: "Items" },
@@ -41,6 +43,33 @@ export const openApiDocument = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/Health" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/v1/readyz": {
+      get: {
+        security: [],
+        tags: ["System"],
+        operationId: "readiness",
+        description:
+          "Reports whether the API can serve its configured data plane. Live mode probes PostgreSQL; demo mode explicitly reports that a database is not applicable.",
+        responses: {
+          "200": {
+            description: "The configured data plane is ready",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Readiness" },
+              },
+            },
+          },
+          "503": {
+            description: "The configured live data plane is unavailable",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Readiness" },
               },
             },
           },
@@ -1030,6 +1059,500 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/v1/workspaces/{workspaceId}/teams": {
+      get: {
+        tags: ["Teams"],
+        operationId: "listTeams",
+        parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+        responses: {
+          "200": {
+            description:
+              "Teams and assignable active members in the accessible Workspace",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TeamDirectory" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      post: {
+        tags: ["Teams"],
+        operationId: "createTeam",
+        description:
+          "Atomically creates a Team, its feature preset, members, and its single private Team room. Feature presets never grant data access.",
+        parameters: [
+          { $ref: "#/components/parameters/WorkspaceId" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateTeam" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durable Team and synchronized Team room",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Team" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/teams/{id}": {
+      get: {
+        tags: ["Teams"],
+        operationId: "getTeam",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: {
+          "200": {
+            description: "Permission-filtered Team detail",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Team" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      patch: {
+        tags: ["Teams"],
+        operationId: "updateTeam",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateTeam" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated Team and synchronized Team-room metadata",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Team" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+    },
+    "/api/v1/teams/{teamId}/members/{userId}": {
+      put: {
+        tags: ["Teams"],
+        operationId: "setTeamMember",
+        parameters: [
+          { $ref: "#/components/parameters/TeamId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SetTeamMember" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Team with Team room participation synchronized atomically",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Team" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+      delete: {
+        tags: ["Teams"],
+        operationId: "removeTeamMember",
+        parameters: [
+          { $ref: "#/components/parameters/TeamId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Team with the member removed from the Team room atomically",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Team" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+    },
+    "/api/v1/workspaces/{workspaceId}/conversations": {
+      get: {
+        tags: ["Messages"],
+        operationId: "listConversations",
+        parameters: [
+          { $ref: "#/components/parameters/WorkspaceId" },
+          { $ref: "#/components/parameters/Cursor" },
+          { $ref: "#/components/parameters/PageLimit" },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Workspace, Team, room, and direct conversations visible to the current participant",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PaginatedConversations",
+                },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      post: {
+        tags: ["Messages"],
+        operationId: "createConversation",
+        parameters: [
+          { $ref: "#/components/parameters/WorkspaceId" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateConversation" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durable contextual conversation",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Conversation" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+        },
+      },
+    },
+    "/api/v1/conversations/{id}": {
+      get: {
+        tags: ["Messages"],
+        operationId: "getConversation",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: {
+          "200": {
+            description: "Participant-authorized conversation",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Conversation" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/v1/conversations/{id}/participants/{userId}": {
+      put: {
+        tags: ["Messages"],
+        operationId: "setConversationParticipant",
+        description:
+          "Adds or restores a participant in a mutable Workspace or external room. Team-room membership is managed through Teams and direct-room membership is immutable.",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["participantRole"],
+                additionalProperties: false,
+                properties: {
+                  participantRole: {
+                    type: "string",
+                    enum: ["member", "owner"],
+                    default: "member",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Versioned participant addition",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Conversation" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+      delete: {
+        tags: ["Messages"],
+        operationId: "removeConversationParticipant",
+        description:
+          "Removes a participant from a mutable Workspace or external room without leaking inaccessible room membership.",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description: "Versioned participant removal",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Conversation" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+    },
+    "/api/v1/conversations/{id}/messages": {
+      get: {
+        tags: ["Messages"],
+        operationId: "listConversationMessages",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/Cursor" },
+          { $ref: "#/components/parameters/PageLimit" },
+          { $ref: "#/components/parameters/ParentMessageId" },
+        ],
+        responses: {
+          "200": {
+            description: "Cursor-paginated contextual messages",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PaginatedConversationMessages",
+                },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      post: {
+        tags: ["Messages"],
+        operationId: "sendConversationMessage",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateMessage" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Idempotently persisted message",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Message" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+        },
+      },
+    },
+    "/api/v1/messages/{id}/response": {
+      patch: {
+        tags: ["Messages"],
+        operationId: "updateMessageResponse",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateMessageResponse" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Versioned request or decision response",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Message" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+    },
+    "/api/v1/messages/{id}/reactions/{emoji}": {
+      put: {
+        tags: ["Messages"],
+        operationId: "addMessageReaction",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/Emoji" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description: "Versioned reaction update",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Message" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+      delete: {
+        tags: ["Messages"],
+        operationId: "removeMessageReaction",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/Emoji" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description: "Versioned reaction removal",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Message" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
+    },
+    "/api/v1/conversations/{id}/read-checkpoint": {
+      put: {
+        tags: ["Messages"],
+        operationId: "markConversationRead",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/MarkConversationRead" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Monotonic read checkpoint",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ReadCheckpoint" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+        },
+      },
+    },
     "/api/v1/boards": {
       get: {
         tags: ["Boards"],
@@ -1785,19 +2308,47 @@ export const openApiDocument = {
     "/api/v1/events": {
       get: {
         tags: ["Events"],
-        operationId: "events",
+        operationId: "collaborationEvents",
+        description:
+          "Short-lived tenant-scoped invalidation feed. `format=json` provides the reliable polling fallback; event payloads contain identifiers only, never message bodies.",
+        parameters: [
+          {
+            name: "workspaceId",
+            in: "query",
+            required: true,
+            schema: { type: "string", minLength: 3, maxLength: 128 },
+          },
+          {
+            name: "after",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 0, default: 0 },
+          },
+          {
+            name: "format",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["json"] },
+          },
+        ],
         responses: {
           "200": {
-            description: "Demo server-sent event stream",
+            description: "Collaboration invalidation events and next cursor",
             content: {
               "text/event-stream": {
                 schema: { type: "string" },
+              },
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CollaborationEventBatch",
+                },
               },
             },
           },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
-          "501": { $ref: "#/components/responses/CapabilityUnavailable" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
     },
@@ -1818,6 +2369,53 @@ export const openApiDocument = {
         in: "path",
         required: true,
         schema: { type: "string" },
+      },
+      WorkspaceId: {
+        name: "workspaceId",
+        in: "path",
+        required: true,
+        description: "Tenant-scoped Workspace identifier.",
+        schema: { type: "string", minLength: 3, maxLength: 128 },
+      },
+      TeamId: {
+        name: "teamId",
+        in: "path",
+        required: true,
+        description: "Tenant-scoped Team identifier.",
+        schema: { type: "string", minLength: 3, maxLength: 128 },
+      },
+      UserId: {
+        name: "userId",
+        in: "path",
+        required: true,
+        description: "Application user identifier in the selected tenant.",
+        schema: { type: "string", minLength: 3, maxLength: 128 },
+      },
+      Emoji: {
+        name: "emoji",
+        in: "path",
+        required: true,
+        schema: { type: "string", minLength: 1, maxLength: 32 },
+      },
+      Cursor: {
+        name: "cursor",
+        in: "query",
+        required: false,
+        schema: { type: "string", minLength: 1, maxLength: 512 },
+      },
+      PageLimit: {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+      },
+      ParentMessageId: {
+        name: "parentMessageId",
+        in: "query",
+        required: false,
+        description:
+          "Limits the result to replies in one contextual message thread.",
+        schema: { type: "string", minLength: 3, maxLength: 128 },
       },
       ItemId: {
         name: "id",
@@ -1878,6 +2476,22 @@ export const openApiDocument = {
           service: { type: "string", const: "trevv-api" },
           version: { type: "string", const: "v1" },
           mode: { type: "string", enum: ["demo", "live"] },
+          time: { type: "string", format: "date-time" },
+        },
+      },
+      Readiness: {
+        type: "object",
+        required: ["status", "service", "version", "mode", "database", "time"],
+        additionalProperties: false,
+        properties: {
+          status: { type: "string", enum: ["ready", "unavailable"] },
+          service: { type: "string", const: "trevv-api" },
+          version: { type: "string", const: "v1" },
+          mode: { type: "string", enum: ["demo", "live"] },
+          database: {
+            type: "string",
+            enum: ["ready", "not_applicable", "unavailable"],
+          },
           time: { type: "string", format: "date-time" },
         },
       },
@@ -1961,6 +2575,7 @@ export const openApiDocument = {
           "organizationId",
           "organization",
           "availableOrganizations",
+          "managedWorkspaceIds",
           "expiresAt",
         ],
         additionalProperties: false,
@@ -1979,6 +2594,11 @@ export const openApiDocument = {
             minItems: 1,
             maxItems: 100,
             items: { $ref: "#/components/schemas/OrganizationSummary" },
+          },
+          managedWorkspaceIds: {
+            type: "array",
+            maxItems: 1000,
+            items: { type: "string", minLength: 3, maxLength: 128 },
           },
           expiresAt: { type: "string", format: "date-time" },
         },
@@ -2208,6 +2828,8 @@ export const openApiDocument = {
           acceptedAt: { type: "string", format: "date-time" },
           revokedAt: { type: "string", format: "date-time" },
           lastSentAt: { type: "string", format: "date-time" },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          teamId: { type: "string", minLength: 3, maxLength: 128 },
         },
       },
       CreateInvitation: {
@@ -2220,6 +2842,8 @@ export const openApiDocument = {
             type: "string",
             enum: ["admin", "workspace_lead", "member", "guest", "viewer"],
           },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          teamId: { type: "string", minLength: 3, maxLength: 128 },
         },
       },
       AcceptInvitation: {
@@ -2245,6 +2869,8 @@ export const openApiDocument = {
             type: "string",
             enum: ["admin", "workspace_lead", "member", "guest", "viewer"],
           },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          teamId: { type: "string", minLength: 3, maxLength: 128 },
           acceptedAt: { type: "string", format: "date-time" },
         },
       },
@@ -2442,6 +3068,530 @@ export const openApiDocument = {
           },
           versionTag: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CollaborationUser: {
+        type: "object",
+        required: ["id", "email", "name", "organizationRole"],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          email: { type: "string", format: "email" },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          organizationRole: {
+            type: "string",
+            enum: [
+              "owner",
+              "admin",
+              "workspace_lead",
+              "member",
+              "guest",
+              "viewer",
+            ],
+          },
+        },
+      },
+      TeamMember: {
+        type: "object",
+        required: ["user", "role", "joinedAt"],
+        additionalProperties: false,
+        properties: {
+          user: { $ref: "#/components/schemas/CollaborationUser" },
+          role: { type: "string", enum: ["lead", "member"] },
+          joinedAt: { type: "string", format: "date-time" },
+        },
+      },
+      TeamRoom: {
+        type: "object",
+        required: ["conversationId", "title", "unreadCount"],
+        additionalProperties: false,
+        properties: {
+          conversationId: { type: "string", minLength: 3, maxLength: 128 },
+          title: { type: "string", minLength: 1, maxLength: 160 },
+          unreadCount: { type: "integer", minimum: 0 },
+        },
+      },
+      Team: {
+        type: "object",
+        required: [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "workspaceId",
+          "name",
+          "purpose",
+          "preset",
+          "featureCapabilities",
+          "featurePolicySource",
+          "members",
+          "room",
+          "version",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          organizationId: { type: "string", minLength: 3, maxLength: 128 },
+          portfolioId: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          purpose: { type: "string", maxLength: 1000 },
+          preset: {
+            type: "string",
+            enum: [
+              "leadership",
+              "marketing",
+              "technology",
+              "operations",
+              "sales",
+              "custom",
+            ],
+          },
+          featureCapabilities: {
+            type: "array",
+            maxItems: 20,
+            uniqueItems: true,
+            description:
+              "Inherited product-feature defaults only. This field is never an authorization grant.",
+            items: {
+              type: "string",
+              enum: [
+                "work",
+                "messages",
+                "decisions",
+                "approvals",
+                "resources",
+                "reporting",
+              ],
+            },
+          },
+          featurePolicySource: {
+            type: "string",
+            enum: ["preset", "override", "none"],
+            description:
+              "Provenance for the persisted feature defaults. These options never grant data access.",
+          },
+          members: {
+            type: "array",
+            maxItems: 250,
+            items: { $ref: "#/components/schemas/TeamMember" },
+          },
+          room: { $ref: "#/components/schemas/TeamRoom" },
+          version: { type: "integer", minimum: 0 },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      TeamDirectory: {
+        type: "object",
+        required: ["teams", "availableMembers"],
+        additionalProperties: false,
+        properties: {
+          teams: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Team" },
+          },
+          availableMembers: {
+            type: "array",
+            maxItems: 2000,
+            items: { $ref: "#/components/schemas/CollaborationUser" },
+          },
+        },
+      },
+      CreateTeam: {
+        type: "object",
+        required: ["workspaceId", "name"],
+        additionalProperties: false,
+        properties: {
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          purpose: { type: "string", maxLength: 1000, default: "" },
+          preset: {
+            type: "string",
+            enum: [
+              "leadership",
+              "marketing",
+              "technology",
+              "operations",
+              "sales",
+              "custom",
+            ],
+            default: "custom",
+          },
+          featureCapabilities: {
+            type: "array",
+            maxItems: 20,
+            uniqueItems: true,
+            items: {
+              type: "string",
+              enum: [
+                "work",
+                "messages",
+                "decisions",
+                "approvals",
+                "resources",
+                "reporting",
+              ],
+            },
+          },
+          memberIds: {
+            type: "array",
+            maxItems: 250,
+            uniqueItems: true,
+            items: { type: "string", minLength: 3, maxLength: 128 },
+          },
+          leadUserId: { type: "string", minLength: 3, maxLength: 128 },
+        },
+      },
+      UpdateTeam: {
+        type: "object",
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          purpose: { type: "string", maxLength: 1000 },
+          preset: {
+            type: "string",
+            enum: [
+              "leadership",
+              "marketing",
+              "technology",
+              "operations",
+              "sales",
+              "custom",
+            ],
+          },
+          featureCapabilities: {
+            type: "array",
+            maxItems: 20,
+            uniqueItems: true,
+            items: {
+              type: "string",
+              enum: [
+                "work",
+                "messages",
+                "decisions",
+                "approvals",
+                "resources",
+                "reporting",
+              ],
+            },
+          },
+        },
+      },
+      SetTeamMember: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          role: { type: "string", enum: ["lead", "member"], default: "member" },
+        },
+      },
+      ConversationParticipant: {
+        type: "object",
+        required: ["user", "participantRole", "notificationLevel", "joinedAt"],
+        additionalProperties: false,
+        properties: {
+          user: { $ref: "#/components/schemas/CollaborationUser" },
+          participantRole: {
+            type: "string",
+            enum: ["owner", "member", "guest"],
+          },
+          notificationLevel: {
+            type: "string",
+            enum: ["all", "mentions", "none"],
+          },
+          lastReadMessageId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+          lastReadAt: { type: "string", format: "date-time" },
+          joinedAt: { type: "string", format: "date-time" },
+        },
+      },
+      Conversation: {
+        type: "object",
+        required: [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "workspaceId",
+          "title",
+          "purpose",
+          "kind",
+          "visibility",
+          "participants",
+          "unreadCount",
+          "needsResponseCount",
+          "retentionDays",
+          "version",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          organizationId: { type: "string", minLength: 3, maxLength: 128 },
+          portfolioId: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          teamId: { type: "string", minLength: 3, maxLength: 128 },
+          title: { type: "string", minLength: 1, maxLength: 160 },
+          purpose: { type: "string", maxLength: 1000 },
+          kind: {
+            type: "string",
+            enum: ["workspace", "team", "direct", "external"],
+          },
+          visibility: {
+            type: "string",
+            enum: ["organization", "private", "guest_scoped"],
+          },
+          participants: {
+            type: "array",
+            maxItems: 250,
+            items: { $ref: "#/components/schemas/ConversationParticipant" },
+          },
+          unreadCount: { type: "integer", minimum: 0 },
+          needsResponseCount: { type: "integer", minimum: 0 },
+          retentionDays: { type: "integer", minimum: 1, maximum: 3650 },
+          lastMessageAt: { type: "string", format: "date-time" },
+          version: { type: "integer", minimum: 0 },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      PaginatedConversations: {
+        type: "object",
+        required: ["data", "nextCursor"],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Conversation" },
+          },
+          nextCursor: { type: ["string", "null"] },
+        },
+      },
+      CreateConversation: {
+        type: "object",
+        required: [
+          "workspaceId",
+          "title",
+          "kind",
+          "visibility",
+          "participantIds",
+        ],
+        additionalProperties: false,
+        properties: {
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          title: { type: "string", minLength: 1, maxLength: 160 },
+          purpose: { type: "string", maxLength: 1000, default: "" },
+          kind: { type: "string", enum: ["workspace", "direct", "external"] },
+          visibility: {
+            type: "string",
+            enum: ["organization", "private", "guest_scoped"],
+          },
+          participantIds: {
+            type: "array",
+            minItems: 1,
+            maxItems: 250,
+            uniqueItems: true,
+            items: { type: "string", minLength: 3, maxLength: 128 },
+          },
+          retentionDays: {
+            type: "integer",
+            minimum: 1,
+            maximum: 3650,
+            default: 365,
+          },
+        },
+      },
+      MessageReaction: {
+        type: "object",
+        required: ["emoji", "userIds", "reactedByCurrentUser"],
+        additionalProperties: false,
+        properties: {
+          emoji: { type: "string", minLength: 1, maxLength: 32 },
+          userIds: {
+            type: "array",
+            maxItems: 250,
+            items: { type: "string", minLength: 3, maxLength: 128 },
+          },
+          reactedByCurrentUser: { type: "boolean" },
+        },
+      },
+      Message: {
+        type: "object",
+        required: [
+          "id",
+          "sequence",
+          "clientMessageId",
+          "organizationId",
+          "conversationId",
+          "senderId",
+          "sender",
+          "body",
+          "intent",
+          "metadata",
+          "reactions",
+          "retainedUntil",
+          "version",
+          "createdAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          sequence: { type: "integer", minimum: 1 },
+          clientMessageId: { type: "string", format: "uuid" },
+          organizationId: { type: "string", minLength: 3, maxLength: 128 },
+          conversationId: { type: "string", minLength: 3, maxLength: 128 },
+          senderId: { type: "string", minLength: 3, maxLength: 128 },
+          sender: { $ref: "#/components/schemas/CollaborationUser" },
+          parentMessageId: { type: "string", minLength: 3, maxLength: 128 },
+          body: { type: "string", minLength: 1, maxLength: 20000 },
+          intent: {
+            type: "string",
+            enum: ["message", "request", "decision", "update"],
+          },
+          responseOwnerId: { type: "string", minLength: 3, maxLength: 128 },
+          responseDueAt: { type: "string", format: "date-time" },
+          responseState: {
+            type: "string",
+            enum: ["open", "resolved", "cancelled"],
+          },
+          linkedEntityType: { type: "string", maxLength: 80 },
+          linkedEntityId: { type: "string", minLength: 3, maxLength: 128 },
+          metadata: { type: "object", additionalProperties: true },
+          reactions: {
+            type: "array",
+            maxItems: 50,
+            items: { $ref: "#/components/schemas/MessageReaction" },
+          },
+          retainedUntil: { type: "string", format: "date-time" },
+          version: { type: "integer", minimum: 0 },
+          editedAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      PaginatedConversationMessages: {
+        type: "object",
+        required: ["data", "nextCursor"],
+        additionalProperties: false,
+        properties: {
+          data: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Message" },
+          },
+          nextCursor: { type: ["string", "null"] },
+        },
+      },
+      CreateMessage: {
+        type: "object",
+        required: ["clientMessageId", "body"],
+        additionalProperties: false,
+        properties: {
+          clientMessageId: { type: "string", format: "uuid" },
+          parentMessageId: { type: "string", minLength: 3, maxLength: 128 },
+          body: { type: "string", minLength: 1, maxLength: 20000 },
+          intent: {
+            type: "string",
+            enum: ["message", "request", "decision", "update"],
+            default: "message",
+          },
+          responseOwnerId: { type: "string", minLength: 3, maxLength: 128 },
+          responseDueAt: { type: "string", format: "date-time" },
+          linkedEntityType: { type: "string", maxLength: 80 },
+          linkedEntityId: { type: "string", minLength: 3, maxLength: 128 },
+          metadata: { type: "object", additionalProperties: true, default: {} },
+        },
+      },
+      UpdateMessageResponse: {
+        type: "object",
+        required: ["responseState"],
+        additionalProperties: false,
+        properties: {
+          responseState: { type: "string", enum: ["open", "resolved"] },
+        },
+      },
+      MarkConversationRead: {
+        type: "object",
+        required: ["messageId"],
+        additionalProperties: false,
+        properties: {
+          messageId: { type: "string", minLength: 3, maxLength: 128 },
+        },
+      },
+      ReadCheckpoint: {
+        type: "object",
+        required: [
+          "conversationId",
+          "userId",
+          "messageId",
+          "messageSequence",
+          "readAt",
+          "version",
+        ],
+        additionalProperties: false,
+        properties: {
+          conversationId: { type: "string", minLength: 3, maxLength: 128 },
+          userId: { type: "string", minLength: 3, maxLength: 128 },
+          messageId: { type: "string", minLength: 3, maxLength: 128 },
+          messageSequence: { type: "integer", minimum: 1 },
+          readAt: { type: "string", format: "date-time" },
+          version: { type: "integer", minimum: 0 },
+        },
+      },
+      CollaborationEvent: {
+        type: "object",
+        required: [
+          "cursor",
+          "organizationId",
+          "workspaceId",
+          "type",
+          "aggregateType",
+          "aggregateId",
+          "occurredAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          cursor: { type: "integer", minimum: 1 },
+          organizationId: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          type: {
+            type: "string",
+            enum: [
+              "team.created",
+              "team.updated",
+              "team.membership_changed",
+              "conversation.created",
+              "conversation.participants_changed",
+              "message.sent",
+              "message.response_changed",
+              "message.reaction_changed",
+              "conversation.read",
+            ],
+          },
+          aggregateType: {
+            type: "string",
+            enum: ["team", "conversation", "message"],
+          },
+          aggregateId: { type: "string", minLength: 3, maxLength: 128 },
+          teamId: { type: "string", minLength: 3, maxLength: 128 },
+          conversationId: { type: "string", minLength: 3, maxLength: 128 },
+          occurredAt: { type: "string", format: "date-time" },
+        },
+      },
+      CollaborationEventBatch: {
+        type: "object",
+        required: ["events", "nextCursor"],
+        additionalProperties: false,
+        properties: {
+          events: {
+            type: "array",
+            maxItems: 500,
+            items: { $ref: "#/components/schemas/CollaborationEvent" },
+          },
+          nextCursor: { type: "integer", minimum: 0 },
         },
       },
       CreateWorkspace: {

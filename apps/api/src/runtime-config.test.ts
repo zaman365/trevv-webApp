@@ -82,7 +82,16 @@ describe("live runtime configuration", () => {
         ...productionEnvironment(),
         DATABASE_URL: "postgresql://trevv:test@db.trevv.de:5432/trevv",
       }),
-    ).toThrow(/sslmode/);
+    ).toThrow(/sslmode=verify-full/);
+
+    for (const sslmode of ["require", "verify-ca"]) {
+      expect(() =>
+        readRuntimeConfiguration({
+          ...productionEnvironment(),
+          DATABASE_URL: `postgresql://trevv:test@db.trevv.de:5432/trevv?sslmode=${sslmode}`,
+        }),
+      ).toThrow(/sslmode=verify-full/);
+    }
 
     expect(() =>
       readRuntimeConfiguration({

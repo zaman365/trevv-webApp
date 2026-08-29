@@ -4,8 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./openapi": "./src/openapi.ts"
+    ".": {
+      "production": "./dist/index.js",
+      "default": "./src/index.ts"
+    },
+    "./openapi": {
+      "production": "./dist/openapi.js",
+      "default": "./src/openapi.ts"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -19,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "latest",
+    "prettier": "latest",
     "tsx": "latest",
     "typescript": "5.9.3",
     "vitest": "latest"

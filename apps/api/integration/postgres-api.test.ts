@@ -110,12 +110,334 @@ describe("PostgreSQL-backed API", () => {
     }
   });
 
+  it("preserves preset versus explicit Team feature provenance", async () => {
+    const live = createLiveHarness();
+    try {
+      const client = clientFor(
+        live.app,
+        fixture.first.ownerId,
+        fixture.first.organizationId,
+      );
+      const preset = await client.createTeam(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          name: "API preset Team",
+          purpose: "Verify preset policy provenance.",
+          preset: "technology",
+          memberIds: [fixture.first.ownerId],
+        },
+        "00000000-0000-4000-8000-000000000401",
+      );
+      expect(preset.data).toMatchObject({
+        preset: "technology",
+        featurePolicySource: "preset",
+        featureCapabilities: expect.arrayContaining(["work", "messages"]),
+      });
+      const emptyOverride = await client.createTeam(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          name: "API empty override Team",
+          purpose: "Verify explicit empty policy provenance.",
+          preset: "technology",
+          featureCapabilities: [],
+          memberIds: [fixture.first.ownerId],
+        },
+        "00000000-0000-4000-8000-000000000402",
+      );
+      expect(emptyOverride.data).toMatchObject({
+        preset: "technology",
+        featurePolicySource: "override",
+        featureCapabilities: [],
+      });
+    } finally {
+      await live.close();
+    }
+  });
+
+  it("enforces the composed collaboration authorization matrix through live HTTP", async () => {
+    const identities = {
+      owner: fixture.first.ownerId,
+      admin: "user-api-authz-admin",
+      lead: "user-api-authz-lead",
+      member: fixture.first.memberId,
+      guest: "user-api-authz-guest",
+      viewer: "user-api-authz-viewer",
+      removed: "user-api-authz-removed",
+    } as const;
+    for (const [role, userId] of [
+      ["admin", identities.admin],
+      ["workspace_lead", identities.lead],
+      ["guest", identities.guest],
+      ["viewer", identities.viewer],
+    ] as const) {
+      await seedMappedIdentity({
+        id: userId,
+        email: `api-authz-${role}@example.test`,
+        name: `API Authz ${role}`,
+        memberships: [
+          {
+            organizationId: fixture.first.organizationId,
+            role,
+          },
+        ],
+        selectedOrganizationId: fixture.first.organizationId,
+      });
+    }
+    await seedMappedIdentity({
+      id: identities.removed,
+      email: "api-authz-removed@example.test",
+      name: "API Authz Removed",
+      memberships: [
+        { organizationId: fixture.first.organizationId, role: "member" },
+      ],
+      selectedOrganizationId: fixture.first.organizationId,
+    });
+    await seedConnection.db.insert(workspaceMembers).values([
+      {
+        organizationId: fixture.first.organizationId,
+        workspaceId: fixture.first.visibleWorkspaceId,
+        userId: identities.lead,
+        canManage: true,
+      },
+      ...[identities.guest, identities.viewer, identities.removed].map(
+        (userId) => ({
+          organizationId: fixture.first.organizationId,
+          workspaceId: fixture.first.visibleWorkspaceId,
+          userId,
+          canManage: false,
+        }),
+      ),
+    ]);
+
+    const live = createLiveHarness();
+    try {
+      const ownerClient = clientFor(
+        live.app,
+        identities.owner,
+        fixture.first.organizationId,
+      );
+      const team = await ownerClient.createTeam(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          name: "HTTP authorization Team",
+          purpose: "Exercise the complete live HTTP authorization chain.",
+          preset: "technology",
+          leadUserId: identities.lead,
+          memberIds: [
+            identities.owner,
+            identities.lead,
+            identities.member,
+            identities.viewer,
+          ],
+        },
+        "00000000-0000-4000-8000-000000000411",
+      );
+      const teamRoomId = team.data.room?.conversationId;
+      if (!teamRoomId)
+        throw new Error("The authorization Team did not create its room.");
+
+      const createConversation = (
+        input: Parameters<typeof ownerClient.createConversation>[0],
+        idempotencyKey: string,
+      ) => ownerClient.createConversation(input, idempotencyKey);
+      const workspaceRoom = await createConversation(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          title: "HTTP organization room",
+          purpose: "Organization-visible authorization coverage.",
+          kind: "workspace",
+          visibility: "organization",
+          participantIds: [identities.owner],
+          retentionDays: 365,
+        },
+        "00000000-0000-4000-8000-000000000412",
+      );
+      const privateRoom = await createConversation(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          title: "HTTP private room",
+          purpose: "Private participant authorization coverage.",
+          kind: "workspace",
+          visibility: "private",
+          participantIds: [
+            identities.owner,
+            identities.lead,
+            identities.member,
+            identities.viewer,
+            identities.removed,
+          ],
+          retentionDays: 365,
+        },
+        "00000000-0000-4000-8000-000000000413",
+      );
+      const directRoom = await createConversation(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          title: "HTTP direct room",
+          purpose: "Direct participant authorization coverage.",
+          kind: "direct",
+          visibility: "private",
+          participantIds: [identities.owner, identities.member],
+          retentionDays: 365,
+        },
+        "00000000-0000-4000-8000-000000000414",
+      );
+      const externalRoom = await createConversation(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          title: "HTTP external room",
+          purpose: "Guest-scoped authorization coverage.",
+          kind: "external",
+          visibility: "guest_scoped",
+          participantIds: [identities.owner, identities.guest],
+          retentionDays: 365,
+        },
+        "00000000-0000-4000-8000-000000000415",
+      );
+
+      const roomIds = {
+        workspace: workspaceRoom.data.id,
+        team: teamRoomId,
+        private: privateRoom.data.id,
+        direct: directRoom.data.id,
+        external: externalRoom.data.id,
+      } as const;
+      const readMatrix = {
+        owner: ["workspace", "team", "private", "direct", "external"],
+        admin: ["workspace"],
+        lead: ["workspace", "team", "private"],
+        member: ["workspace", "team", "private", "direct"],
+        guest: ["external"],
+        viewer: ["workspace", "team", "private"],
+      } as const;
+      for (const [role, userId] of Object.entries(identities)) {
+        if (role === "removed") continue;
+        const allowed = new Set<string>(
+          readMatrix[role as keyof typeof readMatrix],
+        );
+        for (const [roomKind, conversationId] of Object.entries(roomIds)) {
+          const response = await live.app.request(
+            `/api/v1/conversations/${conversationId}`,
+            { headers: authorization(userId) },
+          );
+          const expectedStatus = allowed.has(roomKind) ? 200 : 404;
+          expect(
+            response.status,
+            `${role} read status for ${roomKind} room`,
+          ).toBe(expectedStatus);
+          if (expectedStatus === 404)
+            await expect(errorCode(response)).resolves.toBe(
+              "resource_not_found",
+            );
+        }
+      }
+
+      const internalTeamForAdmin = await live.app.request(
+        `/api/v1/teams/${team.data.id}`,
+        { headers: authorization(identities.admin) },
+      );
+      expect(internalTeamForAdmin.status).toBe(200);
+      const internalTeamForGuest = await live.app.request(
+        `/api/v1/teams/${team.data.id}`,
+        { headers: authorization(identities.guest) },
+      );
+      expect(internalTeamForGuest.status).toBe(404);
+      await expect(errorCode(internalTeamForGuest)).resolves.toBe(
+        "resource_not_found",
+      );
+
+      for (const [label, userId, conversationId, expectedStatus] of [
+        ["member direct send", identities.member, roomIds.direct, 201],
+        ["guest external send", identities.guest, roomIds.external, 201],
+        ["viewer Team send", identities.viewer, roomIds.team, 404],
+        ["admin private send", identities.admin, roomIds.private, 404],
+      ] as const) {
+        const response = await live.app.request(
+          `/api/v1/conversations/${conversationId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              ...authorization(userId),
+              "content-type": "application/json",
+              "idempotency-key": crypto.randomUUID(),
+            },
+            body: JSON.stringify({
+              clientMessageId: crypto.randomUUID(),
+              body: `Authorization matrix: ${label}`,
+              intent: "message",
+              metadata: {},
+            }),
+          },
+        );
+        expect(response.status, label).toBe(expectedStatus);
+        if (expectedStatus === 404)
+          await expect(errorCode(response)).resolves.toBe("resource_not_found");
+      }
+
+      const removed = await ownerClient.removeConversationParticipant(
+        privateRoom.data.id,
+        identities.removed,
+        privateRoom.data.version,
+        "00000000-0000-4000-8000-000000000416",
+      );
+      expect(removed.data.participants).not.toContainEqual(
+        expect.objectContaining({ user: { id: identities.removed } }),
+      );
+      const removedRead = await live.app.request(
+        `/api/v1/conversations/${privateRoom.data.id}`,
+        { headers: authorization(identities.removed) },
+      );
+      expect(removedRead.status).toBe(404);
+      await expect(errorCode(removedRead)).resolves.toBe("resource_not_found");
+
+      const secondOwnerClient = clientFor(
+        live.app,
+        fixture.second.ownerId,
+        fixture.second.organizationId,
+      );
+      const foreignTeam = await secondOwnerClient.createTeam(
+        {
+          workspaceId: fixture.second.workspaceId,
+          name: "Foreign authorization Team",
+          purpose: "Cross-tenant non-leaking authorization coverage.",
+          preset: "custom",
+          memberIds: [fixture.second.ownerId],
+        },
+        "00000000-0000-4000-8000-000000000417",
+      );
+      const foreignRoomId = foreignTeam.data.room?.conversationId;
+      if (!foreignRoomId)
+        throw new Error("The foreign authorization Team has no room.");
+      for (const [userId, resourcePath] of [
+        [identities.owner, `/api/v1/teams/${foreignTeam.data.id}`],
+        [identities.owner, `/api/v1/conversations/${foreignRoomId}`],
+        [fixture.second.ownerId, `/api/v1/teams/${team.data.id}`],
+        [fixture.second.ownerId, `/api/v1/conversations/${roomIds.workspace}`],
+      ] as const) {
+        const response = await live.app.request(resourcePath, {
+          headers: authorization(userId),
+        });
+        expect(response.status).toBe(404);
+        await expect(errorCode(response)).resolves.toBe("resource_not_found");
+      }
+    } finally {
+      await live.close();
+    }
+  });
+
   it("resolves server-owned organization context without leaking membership or Workspace access", async () => {
     const live = createLiveHarness();
     try {
       const health = await live.app.request("/api/v1/health");
       expect(health.status).toBe(200);
       await expect(health.json()).resolves.toMatchObject({ mode: "live" });
+      const readiness = await live.app.request("/api/v1/readyz");
+      expect(readiness.status).toBe(200);
+      await expect(readiness.json()).resolves.toMatchObject({
+        status: "ready",
+        mode: "live",
+        database: "ready",
+      });
 
       const unauthenticated = await live.app.request("/api/v1/session");
       expect(unauthenticated.status).toBe(401);
@@ -245,12 +567,23 @@ describe("PostgreSQL-backed API", () => {
 
       const anonymousEvents = await live.app.request("/api/v1/events");
       expect(anonymousEvents.status).toBe(401);
-      const authenticatedEvents = await live.app.request("/api/v1/events", {
-        headers: authorization(fixture.first.ownerId),
+      const authenticatedEvents = await live.app.request(
+        `/api/v1/events?workspaceId=${fixture.first.visibleWorkspaceId}&format=json`,
+        { headers: authorization(fixture.first.ownerId) },
+      );
+      expect(authenticatedEvents.status).toBe(200);
+      await expect(authenticatedEvents.json()).resolves.toMatchObject({
+        events: expect.any(Array),
+        nextCursor: expect.any(Number),
       });
-      expect(authenticatedEvents.status).toBe(501);
-      await expect(errorCode(authenticatedEvents)).resolves.toBe(
-        "capability_unavailable",
+
+      const crossTenantEvents = await live.app.request(
+        `/api/v1/events?workspaceId=${fixture.second.workspaceId}&format=json`,
+        { headers: authorization(fixture.first.ownerId) },
+      );
+      expect(crossTenantEvents.status).toBe(404);
+      await expect(errorCode(crossTenantEvents)).resolves.toBe(
+        "resource_not_found",
       );
     } finally {
       await live.close();
@@ -423,24 +756,24 @@ describe("PostgreSQL-backed API", () => {
       fixture.second.organizationId,
     );
     const keys = {
-      workspace: "00000000-0000-4000-8000-000000000401",
-      capturedDone: "00000000-0000-4000-8000-000000000402",
-      updateCaptured: "00000000-0000-4000-8000-000000000403",
-      capturedConvert: "00000000-0000-4000-8000-000000000404",
-      convert: "00000000-0000-4000-8000-000000000405",
-      assign: "00000000-0000-4000-8000-000000000406",
-      block: "00000000-0000-4000-8000-000000000407",
-      evidence: "00000000-0000-4000-8000-000000000408",
-      waiting: "00000000-0000-4000-8000-000000000409",
-      resolve: "00000000-0000-4000-8000-000000000410",
-      resolveWaiting: "00000000-0000-4000-8000-000000000411",
-      decision: "00000000-0000-4000-8000-000000000412",
-      approval: "00000000-0000-4000-8000-000000000413",
-      review: "00000000-0000-4000-8000-000000000414",
-      stale: "00000000-0000-4000-8000-000000000415",
-      invalid: "00000000-0000-4000-8000-000000000416",
-      decisionItem: "00000000-0000-4000-8000-000000000417",
-      approvalItem: "00000000-0000-4000-8000-000000000418",
+      workspace: "00000000-0000-4000-8000-000000000501",
+      capturedDone: "00000000-0000-4000-8000-000000000502",
+      updateCaptured: "00000000-0000-4000-8000-000000000503",
+      capturedConvert: "00000000-0000-4000-8000-000000000504",
+      convert: "00000000-0000-4000-8000-000000000505",
+      assign: "00000000-0000-4000-8000-000000000506",
+      block: "00000000-0000-4000-8000-000000000507",
+      evidence: "00000000-0000-4000-8000-000000000508",
+      waiting: "00000000-0000-4000-8000-000000000509",
+      resolve: "00000000-0000-4000-8000-000000000510",
+      resolveWaiting: "00000000-0000-4000-8000-000000000511",
+      decision: "00000000-0000-4000-8000-000000000512",
+      approval: "00000000-0000-4000-8000-000000000513",
+      review: "00000000-0000-4000-8000-000000000514",
+      stale: "00000000-0000-4000-8000-000000000515",
+      invalid: "00000000-0000-4000-8000-000000000516",
+      decisionItem: "00000000-0000-4000-8000-000000000517",
+      approvalItem: "00000000-0000-4000-8000-000000000518",
     } as const;
     const workspaceInput = {
       portfolioId: fixture.first.portfolioId,

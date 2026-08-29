@@ -10,6 +10,14 @@ export const roleSchema = z.enum([
   "guest",
   "viewer",
 ]);
+export const readinessSchema = z.object({
+  status: z.enum(["ready", "unavailable"]),
+  service: z.literal("trevv-api"),
+  version: z.literal("v1"),
+  mode: z.enum(["demo", "live"]),
+  database: z.enum(["ready", "not_applicable", "unavailable"]),
+  time: z.iso.datetime(),
+});
 export const workspaceHealthSchema = z.enum([
   "on_track",
   "watch",
@@ -90,6 +98,7 @@ export const sessionSchema = z.object({
   organizationId: idSchema,
   organization: organizationContextSchema,
   availableOrganizations: z.array(organizationSummarySchema).min(1).max(100),
+  managedWorkspaceIds: z.array(idSchema).max(1_000),
   expiresAt: z.iso.datetime(),
 });
 
@@ -181,14 +190,26 @@ export const invitationSchema = z.object({
   acceptedAt: z.iso.datetime().optional(),
   revokedAt: z.iso.datetime().optional(),
   lastSentAt: z.iso.datetime().optional(),
+  workspaceId: idSchema.optional(),
+  teamId: idSchema.optional(),
 });
 
 export const createInvitationSchema = z
   .object({
     email: z.email().transform((value) => value.trim().toLowerCase()),
     role: invitationRoleSchema,
+    workspaceId: idSchema.optional(),
+    teamId: idSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.teamId && !value.workspaceId)
+      context.addIssue({
+        code: "custom",
+        path: ["workspaceId"],
+        message: "A Team invitation must name its Workspace.",
+      });
+  });
 
 export const acceptInvitationSchema = z
   .object({ token: z.string().min(32).max(1_024) })
@@ -198,6 +219,8 @@ export const invitationAcceptanceSchema = z.object({
   invitationId: idSchema,
   organizationId: idSchema,
   role: invitationRoleSchema,
+  workspaceId: idSchema.optional(),
+  teamId: idSchema.optional(),
   acceptedAt: z.iso.datetime(),
 });
 
@@ -703,6 +726,152 @@ export const searchResultSchema = z.object({
   items: z.array(workItemSchema),
 });
 
+export const teamFeatureCapabilitySchema = z.enum([
+  "work",
+  "messages",
+  "decisions",
+  "approvals",
+  "resources",
+  "reporting",
+]);
+export const teamPresetSchema = z.enum([
+  "leadership",
+  "marketing",
+  "technology",
+  "operations",
+  "sales",
+  "custom",
+]);
+export const teamFeaturePolicySourceSchema = z.enum([
+  "preset",
+  "override",
+  "none",
+]);
+
+const teamPresetFeatureCapabilities = {
+  leadership: [
+    "work",
+    "messages",
+    "decisions",
+    "approvals",
+    "resources",
+    "reporting",
+  ],
+  marketing: ["work", "messages", "decisions", "resources", "reporting"],
+  technology: [
+    "work",
+    "messages",
+    "decisions",
+    "approvals",
+    "resources",
+    "reporting",
+  ],
+  operations: [
+    "work",
+    "messages",
+    "decisions",
+    "approvals",
+    "resources",
+    "reporting",
+  ],
+  sales: ["work", "messages", "approvals", "resources", "reporting"],
+  custom: [],
+} as const satisfies Record<TeamPreset, readonly TeamFeatureCapability[]>;
+
+/** Canonical product-feature defaults; these values never grant data access. */
+export function teamFeatureCapabilitiesForPreset(
+  preset: TeamPreset,
+): TeamFeatureCapability[] {
+  return [...teamPresetFeatureCapabilities[preset]];
+}
+export const teamMemberRoleSchema = z.enum(["lead", "member"]);
+export const collaborationUserSchema = z.object({
+  id: idSchema,
+  email: z.email(),
+  name: z.string().min(1).max(160),
+  organizationRole: roleSchema,
+});
+export const teamMemberSchema = z.object({
+  user: collaborationUserSchema,
+  role: teamMemberRoleSchema,
+  joinedAt: z.iso.datetime(),
+});
+export const teamRoomSchema = z.object({
+  conversationId: idSchema,
+  title: z.string().trim().min(1).max(160),
+  unreadCount: z.number().int().nonnegative(),
+});
+
+const messageMetadataSchema = z
+  .record(z.string().max(64), z.unknown())
+  .superRefine((value, context) => {
+    const issue = messageMetadataIssue(value);
+    if (issue) context.addIssue({ code: "custom", message: issue });
+  });
+export const teamSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  portfolioId: idSchema,
+  workspaceId: idSchema,
+  name: z.string().trim().min(1).max(160),
+  purpose: z.string().trim().max(1_000),
+  preset: teamPresetSchema,
+  featureCapabilities: z.array(teamFeatureCapabilitySchema).max(20),
+  featurePolicySource: teamFeaturePolicySourceSchema,
+  members: z.array(teamMemberSchema).max(250),
+  room: teamRoomSchema.nullable(),
+  version: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const teamDirectorySchema = z.object({
+  teams: z.array(teamSchema),
+  availableMembers: z.array(collaborationUserSchema).max(2_000),
+});
+export const createTeamSchema = z
+  .object({
+    workspaceId: idSchema,
+    name: z.string().trim().min(1).max(160),
+    purpose: z.string().trim().max(1_000).default(""),
+    preset: teamPresetSchema.default("custom"),
+    featureCapabilities: z
+      .array(teamFeatureCapabilitySchema)
+      .max(20)
+      .optional(),
+    memberIds: z.array(idSchema).max(250).default([]),
+    leadUserId: idSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.leadUserId && !value.memberIds.includes(value.leadUserId))
+      context.addIssue({
+        code: "custom",
+        path: ["leadUserId"],
+        message: "The Team lead must also be a Team member.",
+      });
+  });
+export const updateTeamSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160).optional(),
+    purpose: z.string().trim().max(1_000).optional(),
+    preset: teamPresetSchema.optional(),
+    featureCapabilities: z
+      .array(teamFeatureCapabilitySchema)
+      .max(20)
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (value) => Object.values(value).some((entry) => entry !== undefined),
+    "Change at least one Team field.",
+  );
+export const setTeamMemberSchema = z
+  .object({ role: teamMemberRoleSchema.default("member") })
+  .strict();
+export const setConversationParticipantSchema = z
+  .object({ participantRole: z.enum(["member", "owner"]).default("member") })
+  .strict();
+
 export const conversationKindSchema = z.enum([
   "workspace",
   "team",
@@ -714,33 +883,64 @@ export const conversationVisibilitySchema = z.enum([
   "private",
   "guest_scoped",
 ]);
+export const conversationParticipantRoleSchema = z.enum([
+  "owner",
+  "member",
+  "guest",
+]);
 export const messageIntentSchema = z.enum([
   "message",
   "request",
   "decision",
   "update",
 ]);
-export const messageResponseStateSchema = z.enum(["open", "resolved"]);
+export const messageResponseStateSchema = z.enum([
+  "open",
+  "resolved",
+  "cancelled",
+]);
+export const conversationParticipantSchema = z.object({
+  user: collaborationUserSchema,
+  participantRole: conversationParticipantRoleSchema,
+  notificationLevel: z.enum(["all", "mentions", "none"]),
+  lastReadMessageId: idSchema.optional(),
+  lastReadAt: z.iso.datetime().optional(),
+  joinedAt: z.iso.datetime(),
+});
+export const messageReactionSchema = z.object({
+  emoji: z.string().trim().min(1).max(32),
+  userIds: z.array(idSchema).max(250),
+  reactedByCurrentUser: z.boolean(),
+});
 
 export const conversationSchema = z.object({
   id: idSchema,
   organizationId: idSchema,
   portfolioId: idSchema,
   workspaceId: idSchema,
+  teamId: idSchema.optional(),
   title: z.string().trim().min(1).max(160),
   purpose: z.string().trim().max(1_000),
   kind: conversationKindSchema,
   visibility: conversationVisibilitySchema,
-  participantIds: z.array(idSchema).min(1).max(250),
-  lastMessageAt: z.iso.datetime(),
+  participants: z.array(conversationParticipantSchema).max(250),
+  unreadCount: z.number().int().nonnegative(),
+  needsResponseCount: z.number().int().nonnegative(),
+  retentionDays: z.number().int().min(1).max(3_650),
+  lastMessageAt: z.iso.datetime().optional(),
+  version: z.number().int().nonnegative(),
   createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export const conversationMessageSchema = z.object({
   id: idSchema,
+  sequence: z.number().int().positive(),
+  clientMessageId: z.string().uuid(),
   organizationId: idSchema,
   conversationId: idSchema,
   senderId: idSchema,
+  sender: collaborationUserSchema,
   parentMessageId: idSchema.optional(),
   body: z.string().trim().min(1).max(20_000),
   intent: messageIntentSchema,
@@ -749,24 +949,46 @@ export const conversationMessageSchema = z.object({
   responseState: messageResponseStateSchema.optional(),
   linkedEntityType: z.string().trim().max(80).optional(),
   linkedEntityId: idSchema.optional(),
-  metadata: z.record(z.string(), z.unknown()),
+  metadata: messageMetadataSchema,
+  reactions: z.array(messageReactionSchema).max(50),
+  retainedUntil: z.iso.datetime(),
+  version: z.number().int().nonnegative(),
   editedAt: z.iso.datetime().optional(),
   createdAt: z.iso.datetime(),
 });
 
-export const createConversationSchema = conversationSchema
-  .omit({
-    id: true,
-    organizationId: true,
-    lastMessageAt: true,
-    createdAt: true,
+export const paginatedConversationsSchema = z.object({
+  data: z.array(conversationSchema),
+  nextCursor: z.string().nullable(),
+});
+export const paginatedConversationMessagesSchema = z.object({
+  data: z.array(conversationMessageSchema),
+  nextCursor: z.string().nullable(),
+});
+
+export const createConversationSchema = z
+  .object({
+    workspaceId: idSchema,
+    title: z.string().trim().min(1).max(160),
+    purpose: z.string().trim().max(1_000).default(""),
+    kind: conversationKindSchema.exclude(["team"]),
+    visibility: conversationVisibilitySchema,
+    participantIds: z.array(idSchema).min(1).max(250),
+    retentionDays: z.number().int().min(1).max(3_650).default(365),
   })
+  .strict()
   .superRefine((value, context) => {
     if (value.kind === "direct" && value.participantIds.length !== 2)
       context.addIssue({
         code: "custom",
         path: ["participantIds"],
         message: "A direct conversation must have exactly two participants.",
+      });
+    if (value.kind === "direct" && value.visibility !== "private")
+      context.addIssue({
+        code: "custom",
+        path: ["visibility"],
+        message: "A direct conversation must be private.",
       });
     if (value.kind === "external" && value.visibility !== "guest_scoped")
       context.addIssue({
@@ -776,15 +998,17 @@ export const createConversationSchema = conversationSchema
       });
   });
 
-export const createConversationMessageSchema = conversationMessageSchema
-  .omit({
-    id: true,
-    organizationId: true,
-    senderId: true,
-    responseState: true,
-    editedAt: true,
-    createdAt: true,
+export const createConversationMessageSchema = z
+  .object({
+    clientMessageId: z.string().uuid(),
+    parentMessageId: idSchema.optional(),
+    body: z.string().trim().min(1).max(20_000),
+    intent: messageIntentSchema.default("message"),
+    responseOwnerId: idSchema.optional(),
+    responseDueAt: z.iso.datetime().optional(),
+    metadata: messageMetadataSchema.default({}),
   })
+  .strict()
   .superRefine((value, context) => {
     if (
       ["request", "decision"].includes(value.intent) &&
@@ -797,8 +1021,99 @@ export const createConversationMessageSchema = conversationMessageSchema
       });
   });
 
-export const updateMessageResponseSchema = z.object({
-  responseState: messageResponseStateSchema,
+function messageMetadataIssue(value: Record<string, unknown>): string | null {
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return "Metadata must be valid JSON.";
+  }
+  if (
+    serialized === undefined ||
+    new TextEncoder().encode(serialized).byteLength > 8 * 1024
+  )
+    return "Metadata cannot exceed 8 KiB.";
+  let keyCount = 0;
+  const inspect = (entry: unknown, depth: number): string | null => {
+    if (typeof entry === "string")
+      return entry.length <= 1_000
+        ? null
+        : "Metadata strings cannot exceed 1,000 characters.";
+    if (
+      entry === null ||
+      typeof entry === "boolean" ||
+      (typeof entry === "number" && Number.isFinite(entry))
+    )
+      return null;
+    if (depth >= 4) return "Metadata cannot exceed four levels of nesting.";
+    if (Array.isArray(entry)) {
+      if (entry.length > 50) return "Metadata arrays cannot exceed 50 items.";
+      for (const item of entry) {
+        const issue = inspect(item, depth + 1);
+        if (issue) return issue;
+      }
+      return null;
+    }
+    if (
+      typeof entry !== "object" ||
+      entry === undefined ||
+      Object.getPrototypeOf(entry) !== Object.prototype
+    )
+      return "Metadata may contain JSON values only.";
+    for (const [key, child] of Object.entries(entry)) {
+      keyCount += 1;
+      if (key.length > 64) return "Metadata keys cannot exceed 64 characters.";
+      if (keyCount > 32) return "Metadata cannot contain more than 32 keys.";
+      const issue = inspect(child, depth + 1);
+      if (issue) return issue;
+    }
+    return null;
+  };
+  return inspect(value, 0);
+}
+
+export const updateMessageResponseSchema = z
+  .object({ responseState: messageResponseStateSchema.exclude(["cancelled"]) })
+  .strict();
+export const markConversationReadSchema = z
+  .object({ messageId: idSchema })
+  .strict();
+export const messageReactionInputSchema = z
+  .object({ emoji: z.string().trim().min(1).max(32) })
+  .strict();
+export const conversationReadCheckpointSchema = z.object({
+  conversationId: idSchema,
+  userId: idSchema,
+  messageId: idSchema,
+  messageSequence: z.number().int().positive(),
+  readAt: z.iso.datetime(),
+  version: z.number().int().nonnegative(),
+});
+export const collaborationEventTypeSchema = z.enum([
+  "team.created",
+  "team.updated",
+  "team.membership_changed",
+  "conversation.created",
+  "conversation.participants_changed",
+  "message.sent",
+  "message.response_changed",
+  "message.reaction_changed",
+  "conversation.read",
+]);
+export const collaborationEventSchema = z.object({
+  cursor: z.number().int().positive(),
+  organizationId: idSchema,
+  workspaceId: idSchema,
+  type: collaborationEventTypeSchema,
+  aggregateType: z.enum(["team", "conversation", "message"]),
+  aggregateId: idSchema,
+  teamId: idSchema.optional(),
+  conversationId: idSchema.optional(),
+  occurredAt: z.iso.datetime(),
+});
+export const collaborationEventBatchSchema = z.object({
+  events: z.array(collaborationEventSchema).max(500),
+  nextCursor: z.number().int().nonnegative(),
 });
 
 export const inboxItemSchema = z.object({
@@ -1053,6 +1368,7 @@ export const apiErrorSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export type Readiness = z.infer<typeof readinessSchema>;
 export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
 export type OrganizationContext = z.infer<typeof organizationContextSchema>;
 export type OnboardingDraft = z.infer<typeof onboardingDraftSchema>;
@@ -1089,8 +1405,44 @@ export type ReviewRitualDto = z.infer<typeof reviewRitualSchema>;
 export type DecisionOutcomeDto = z.infer<typeof decisionOutcomeSchema>;
 export type ManagementMemoryDto = z.infer<typeof managementMemorySchema>;
 export type SearchResultDto = z.infer<typeof searchResultSchema>;
+export type TeamFeatureCapability = z.infer<typeof teamFeatureCapabilitySchema>;
+export type TeamPreset = z.infer<typeof teamPresetSchema>;
+export type TeamFeaturePolicySource = z.infer<
+  typeof teamFeaturePolicySourceSchema
+>;
+export type TeamMemberRole = z.infer<typeof teamMemberRoleSchema>;
+export type CollaborationUserDto = z.infer<typeof collaborationUserSchema>;
+export type TeamMemberDto = z.infer<typeof teamMemberSchema>;
+export type TeamDto = z.infer<typeof teamSchema>;
+export type TeamDirectoryDto = z.infer<typeof teamDirectorySchema>;
+export type CreateTeamInput = z.infer<typeof createTeamSchema>;
+export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
+export type SetTeamMemberInput = z.infer<typeof setTeamMemberSchema>;
+export type SetConversationParticipantInput = z.infer<
+  typeof setConversationParticipantSchema
+>;
 export type ConversationDto = z.infer<typeof conversationSchema>;
 export type ConversationMessageDto = z.infer<typeof conversationMessageSchema>;
+export type ConversationParticipantDto = z.infer<
+  typeof conversationParticipantSchema
+>;
+export type CreateConversationInput = z.infer<typeof createConversationSchema>;
+export type CreateConversationMessageInput = z.infer<
+  typeof createConversationMessageSchema
+>;
+export type ConversationReadCheckpointDto = z.infer<
+  typeof conversationReadCheckpointSchema
+>;
+export type PaginatedConversations = z.infer<
+  typeof paginatedConversationsSchema
+>;
+export type PaginatedConversationMessages = z.infer<
+  typeof paginatedConversationMessagesSchema
+>;
+export type CollaborationEventDto = z.infer<typeof collaborationEventSchema>;
+export type CollaborationEventBatch = z.infer<
+  typeof collaborationEventBatchSchema
+>;
 export type InboxItemDto = z.infer<typeof inboxItemSchema>;
 export type CaptureInboxItemInput = z.infer<typeof captureInboxItemSchema>;
 export type UpdateInboxItemInput = z.infer<typeof updateInboxItemSchema>;

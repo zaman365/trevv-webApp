@@ -228,3 +228,206 @@ describe("Phase 3 API client", () => {
     });
   });
 });
+
+describe("Phase 4 collaboration API client", () => {
+  const collaborationUser = {
+    id: "user-1",
+    email: "owner@example.test",
+    name: "Owner",
+    organizationRole: "owner" as const,
+  };
+  const team = {
+    id: "team-1",
+    organizationId: "org-1",
+    portfolioId: workspace.portfolioId,
+    workspaceId: workspace.id,
+    name: "Technology",
+    purpose: "Ship the product",
+    preset: "technology" as const,
+    featureCapabilities: ["work", "messages"] as const,
+    featurePolicySource: "preset" as const,
+    members: [
+      { user: collaborationUser, role: "lead" as const, joinedAt: timestamp },
+    ],
+    room: {
+      conversationId: "conversation-1",
+      title: "Technology",
+      unreadCount: 0,
+    },
+    version: 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  it("binds Team membership changes to Team ETags", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        { ...team, version: 2 },
+        {
+          headers: {
+            etag: '"2"',
+            "idempotency-key": idempotencyKey,
+            "idempotency-replayed": "false",
+          },
+        },
+      ),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(
+      client.setTeamMember(
+        team.id,
+        "user-2",
+        { role: "member" },
+        team.version,
+        idempotencyKey,
+      ),
+    ).resolves.toMatchObject({ data: { version: 2 }, etag: '"2"' });
+    const [url, init] =
+      (fetchMock.mock.calls as unknown as Parameters<typeof fetch>[])[0] ?? [];
+    expect(String(url)).toContain("/teams/team-1/members/user-2");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("if-match")).toBe('"1"');
+    expect(headers.get("idempotency-key")).toBe(idempotencyKey);
+  });
+
+  it("binds room participant changes to the Conversation ETag", async () => {
+    const conversation = {
+      id: "conversation-1",
+      organizationId: "org-1",
+      portfolioId: workspace.portfolioId,
+      workspaceId: workspace.id,
+      title: "Launch room",
+      purpose: "Coordinate the launch",
+      kind: "workspace" as const,
+      visibility: "private" as const,
+      participants: [
+        {
+          user: collaborationUser,
+          participantRole: "owner" as const,
+          notificationLevel: "all" as const,
+          joinedAt: timestamp,
+        },
+      ],
+      unreadCount: 0,
+      needsResponseCount: 0,
+      retentionDays: 365,
+      lastMessageAt: timestamp,
+      version: 2,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const fetchMock = vi.fn(async () =>
+      Response.json(conversation, {
+        headers: {
+          etag: '"2"',
+          "idempotency-key": idempotencyKey,
+          "idempotency-replayed": "false",
+        },
+      }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(
+      client.setConversationParticipant(
+        conversation.id,
+        "user-2",
+        1,
+        idempotencyKey,
+        "owner",
+      ),
+    ).resolves.toMatchObject({ data: { version: 2 }, etag: '"2"' });
+    const [url, init] =
+      (fetchMock.mock.calls as unknown as Parameters<typeof fetch>[])[0] ?? [];
+    expect(String(url)).toContain(
+      "/conversations/conversation-1/participants/user-2",
+    );
+    expect(init?.method).toBe("PUT");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      participantRole: "owner",
+    });
+    const headers = new Headers(init?.headers);
+    expect(headers.get("if-match")).toBe('"1"');
+    expect(headers.get("idempotency-key")).toBe(idempotencyKey);
+  });
+
+  it("sends a client-identified message for exact retry", async () => {
+    const message = {
+      id: "message-1",
+      sequence: 1,
+      clientMessageId: "71111111-1111-4111-8111-111111111111",
+      organizationId: "org-1",
+      conversationId: team.room.conversationId,
+      senderId: collaborationUser.id,
+      sender: collaborationUser,
+      body: "Coordinate the release.",
+      intent: "message" as const,
+      metadata: {},
+      reactions: [],
+      retainedUntil: "2027-08-29T12:00:00.000Z",
+      version: 1,
+      createdAt: timestamp,
+    };
+    const fetchMock = vi.fn(async () =>
+      Response.json(message, {
+        status: 201,
+        headers: {
+          etag: '"1"',
+          "idempotency-key": idempotencyKey,
+          "idempotency-replayed": "true",
+        },
+      }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(
+      client.sendConversationMessage(
+        team.room.conversationId,
+        {
+          clientMessageId: message.clientMessageId,
+          body: message.body,
+          intent: "message",
+          metadata: {},
+        },
+        idempotencyKey,
+      ),
+    ).resolves.toMatchObject({
+      replayed: true,
+      data: { clientMessageId: message.clientMessageId },
+    });
+  });
+
+  it("requests an authoritative page for one message thread", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ data: [], nextCursor: null }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(
+      client.conversationMessages("conversation-1", {
+        cursor: "older-page",
+        limit: 25,
+        parentMessageId: "message-root",
+      }),
+    ).resolves.toEqual({ data: [], nextCursor: null });
+    const [requested] =
+      (fetchMock.mock.calls as unknown as Parameters<typeof fetch>[])[0] ?? [];
+    const url = new URL(String(requested));
+    expect(url.pathname).toBe("/api/v1/conversations/conversation-1/messages");
+    expect(url.searchParams.get("cursor")).toBe("older-page");
+    expect(url.searchParams.get("limit")).toBe("25");
+    expect(url.searchParams.get("parentMessageId")).toBe("message-root");
+  });
+});

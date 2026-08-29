@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CreateItemInput } from "@founderhq/api-contract";
+import type {
+  ConversationDto,
+  ConversationMessageDto,
+  CreateItemInput,
+  TeamDto,
+} from "@founderhq/api-contract";
 import {
   createApiApp,
   createDemoApiApp,
   createRuntimeApi,
   createUnavailableLiveDependencies,
 } from "./app";
-import { DataPlaneError } from "./data-plane";
+import { DataPlaneError, type AccessResolver } from "./data-plane";
 
 const fixedNow = new Date("2026-08-24T12:00:00.000Z");
 
@@ -29,6 +34,113 @@ const itemInput: CreateItemInput = {
   assigneeIds: ["user-owner"],
 };
 
+const liveAccessResolver: AccessResolver = {
+  mode: "live",
+  async resolve() {
+    return {
+      access: {
+        userId: "user-live",
+        organizationId: "org-live",
+        role: "owner",
+        accessiblePortfolioIds: new Set(["portfolio-live"]),
+        managedPortfolioIds: new Set(["portfolio-live"]),
+        accessibleWorkspaceIds: new Set(["workspace-live"]),
+        managedWorkspaceIds: new Set(["workspace-live"]),
+      },
+      session: {
+        user: {
+          id: "user-live",
+          email: "live@example.test",
+          name: "Live User",
+          role: "owner",
+          locale: "en",
+        },
+        organizationId: "org-live",
+        organization: {
+          id: "org-live",
+          name: "Live Org",
+          slug: "live-org",
+          role: "owner",
+          timezone: "Europe/Berlin",
+        },
+        availableOrganizations: [
+          {
+            id: "org-live",
+            name: "Live Org",
+            slug: "live-org",
+            role: "owner",
+          },
+        ],
+        managedWorkspaceIds: ["workspace-live"],
+        expiresAt: "2026-08-30T12:00:00.000Z",
+      },
+    };
+  },
+};
+
+const liveTeam: TeamDto = {
+  id: "team-live",
+  organizationId: "org-live",
+  portfolioId: "portfolio-live",
+  workspaceId: "workspace-live",
+  name: "Technology",
+  purpose: "Ship the product",
+  preset: "technology",
+  featureCapabilities: ["work", "messages"],
+  featurePolicySource: "preset",
+  members: [
+    {
+      user: {
+        id: "user-live",
+        email: "live@example.test",
+        name: "Live User",
+        organizationRole: "owner",
+      },
+      role: "lead",
+      joinedAt: fixedNow.toISOString(),
+    },
+  ],
+  room: {
+    conversationId: "conversation-live",
+    title: "Technology",
+    unreadCount: 0,
+  },
+  version: 1,
+  createdAt: fixedNow.toISOString(),
+  updatedAt: fixedNow.toISOString(),
+};
+
+const liveConversation: ConversationDto = {
+  id: "conversation-live",
+  organizationId: "org-live",
+  portfolioId: "portfolio-live",
+  workspaceId: "workspace-live",
+  title: "Launch room",
+  purpose: "Coordinate launch work",
+  kind: "workspace",
+  visibility: "private",
+  participants: [
+    {
+      user: {
+        id: "user-live",
+        email: "live@example.test",
+        name: "Live User",
+        organizationRole: "owner",
+      },
+      participantRole: "owner",
+      notificationLevel: "all",
+      joinedAt: fixedNow.toISOString(),
+    },
+  ],
+  unreadCount: 0,
+  needsResponseCount: 0,
+  retentionDays: 365,
+  lastMessageAt: fixedNow.toISOString(),
+  version: 2,
+  createdAt: fixedNow.toISOString(),
+  updatedAt: fixedNow.toISOString(),
+};
+
 afterEach(() => vi.unstubAllEnvs());
 
 describe("TREVV API v1 dependency boundaries", () => {
@@ -49,6 +161,54 @@ describe("TREVV API v1 dependency boundaries", () => {
     const health = await runtime.app.request("/api/v1/health");
     expect(await health.json()).toMatchObject({ mode: "demo", status: "ok" });
     await runtime.close();
+  });
+
+  it("reports content-free data-plane readiness and fails closed", async () => {
+    const demo = freshDemoApp();
+    const demoReadiness = await demo.request("/api/v1/readyz");
+    expect(demoReadiness.status).toBe(200);
+    await expect(demoReadiness.json()).resolves.toMatchObject({
+      status: "ready",
+      mode: "demo",
+      database: "not_applicable",
+    });
+
+    const live = createUnavailableLiveDependencies();
+    const ready = createApiApp({
+      mode: "live",
+      accessResolver: live.accessResolver,
+      dataPlane: {
+        ...live.dataPlane,
+        readiness: async () => ({ database: "ready" as const }),
+      },
+      clock: () => new Date(fixedNow),
+    });
+    const readyResponse = await ready.request("/api/v1/readyz");
+    expect(readyResponse.status).toBe(200);
+    await expect(readyResponse.json()).resolves.toEqual({
+      status: "ready",
+      service: "trevv-api",
+      version: "v1",
+      mode: "live",
+      database: "ready",
+      time: fixedNow.toISOString(),
+    });
+
+    const unavailable = createApiApp({
+      mode: "live",
+      ...live,
+      clock: () => new Date(fixedNow),
+    });
+    const unavailableResponse = await unavailable.request("/api/v1/readyz");
+    expect(unavailableResponse.status).toBe(503);
+    await expect(unavailableResponse.json()).resolves.toEqual({
+      status: "unavailable",
+      service: "trevv-api",
+      version: "v1",
+      mode: "live",
+      database: "unavailable",
+      time: fixedNow.toISOString(),
+    });
   });
 
   it("creates isolated demo adapters for each app instance", async () => {
@@ -182,6 +342,7 @@ describe("TREVV API v1 dependency boundaries", () => {
                 role: "owner" as const,
               },
             ],
+            managedWorkspaceIds: ["workspace-live"],
             expiresAt: "2026-08-30T12:00:00.000Z",
           },
         };
@@ -871,6 +1032,276 @@ describe("TREVV API v1 demo contract", () => {
     expect(boardExport.status).toBe(200);
     expect(boardExport.headers.get("content-type")).toContain("text/csv");
     expect(await boardExport.text()).toContain("Approve packaging");
+  });
+});
+
+describe("Phase 4 collaboration routes", () => {
+  it("creates a Team and returns its synchronized room version", async () => {
+    const live = createUnavailableLiveDependencies();
+    const createTeam = vi.fn(async () => ({
+      value: liveTeam,
+      replayed: false,
+    }));
+    const app = createApiApp({
+      mode: "live",
+      accessResolver: liveAccessResolver,
+      dataPlane: { ...live.dataPlane, createTeam },
+      clock: () => new Date(fixedNow),
+    });
+    const response = await app.request(
+      "/api/v1/workspaces/workspace-live/teams",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "51111111-1111-4111-8111-111111111111",
+        },
+        body: JSON.stringify({
+          workspaceId: "workspace-live",
+          name: "Technology",
+          purpose: "Ship the product",
+          preset: "technology",
+          memberIds: ["user-live"],
+          leadUserId: "user-live",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("etag")).toBe('"1"');
+    expect(response.headers.get("idempotency-replayed")).toBe("false");
+    expect(await response.json()).toMatchObject({
+      id: "team-live",
+      room: { conversationId: "conversation-live" },
+    });
+    expect(createTeam).toHaveBeenCalledOnce();
+  });
+
+  it("requires a Conversation ETag and idempotency key for participant removal", async () => {
+    const live = createUnavailableLiveDependencies();
+    const setConversationParticipant = vi.fn(async () => ({
+      value: liveConversation,
+      replayed: false,
+    }));
+    const app = createApiApp({
+      mode: "live",
+      accessResolver: liveAccessResolver,
+      dataPlane: { ...live.dataPlane, setConversationParticipant },
+      clock: () => new Date(fixedNow),
+    });
+
+    const missingPrecondition = await app.request(
+      "/api/v1/conversations/conversation-live/participants/user-member",
+      {
+        method: "DELETE",
+        headers: {
+          "idempotency-key": "52111111-1111-4111-8111-111111111111",
+        },
+      },
+    );
+    expect(missingPrecondition.status).toBe(428);
+
+    const response = await app.request(
+      "/api/v1/conversations/conversation-live/participants/user-member",
+      {
+        method: "DELETE",
+        headers: {
+          "if-match": '"1"',
+          "idempotency-key": "52222222-2222-4222-8222-222222222222",
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("etag")).toBe('"2"');
+    expect(setConversationParticipant).toHaveBeenCalledWith(
+      expect.any(Object),
+      "conversation-live",
+      "user-member",
+      1,
+      false,
+      "member",
+    );
+
+    const transfer = await app.request(
+      "/api/v1/conversations/conversation-live/participants/user-member",
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          "if-match": '"1"',
+          "idempotency-key": "52333333-3333-4333-8333-333333333333",
+        },
+        body: JSON.stringify({ participantRole: "owner" }),
+      },
+    );
+    expect(transfer.status).toBe(200);
+    expect(setConversationParticipant).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      "conversation-live",
+      "user-member",
+      1,
+      true,
+      "owner",
+    );
+  });
+
+  it("bounds collaboration request bodies and rejects unsafe message metadata and response states", async () => {
+    const live = createUnavailableLiveDependencies();
+    const app = createApiApp({
+      mode: "live",
+      accessResolver: liveAccessResolver,
+      dataPlane: live.dataPlane,
+      clock: () => new Date(fixedNow),
+    });
+    const oversized = await app.request(
+      "/api/v1/conversations/conversation-live/messages",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "53111111-1111-4111-8111-111111111111",
+        },
+        body: JSON.stringify({
+          clientMessageId: "53111111-1111-4111-8111-111111111112",
+          body: "x".repeat(129 * 1024),
+        }),
+      },
+    );
+    expect(oversized.status).toBe(413);
+    await expect(errorCode(oversized)).resolves.toBe("payload_too_large");
+
+    const metadata = await app.request(
+      "/api/v1/conversations/conversation-live/messages",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "53222222-2222-4222-8222-222222222222",
+        },
+        body: JSON.stringify({
+          clientMessageId: "53222222-2222-4222-8222-222222222223",
+          body: "Bounded metadata",
+          metadata: Object.fromEntries(
+            Array.from({ length: 33 }, (_, index) => [`key-${index}`, true]),
+          ),
+        }),
+      },
+    );
+    expect(metadata.status).toBe(422);
+    await expect(errorCode(metadata)).resolves.toBe("validation_error");
+
+    const cancelled = await app.request(
+      "/api/v1/messages/message-live/response",
+      {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          "if-match": '"1"',
+          "idempotency-key": "53333333-3333-4333-8333-333333333333",
+        },
+        body: JSON.stringify({ responseState: "cancelled" }),
+      },
+    );
+    expect(cancelled.status).toBe(422);
+    await expect(errorCode(cancelled)).resolves.toBe("validation_error");
+  });
+
+  it("requires message idempotency and exposes filtered event polling", async () => {
+    const live = createUnavailableLiveDependencies();
+    const message: ConversationMessageDto = {
+      id: "message-live",
+      sequence: 1,
+      clientMessageId: "61111111-1111-4111-8111-111111111111",
+      organizationId: "org-live",
+      conversationId: "conversation-live",
+      senderId: "user-live",
+      sender: {
+        id: "user-live",
+        email: "live@example.test",
+        name: "Live User",
+        organizationRole: "owner",
+      },
+      body: "Coordinate the release.",
+      intent: "message",
+      metadata: {},
+      reactions: [],
+      retainedUntil: "2027-08-29T12:00:00.000Z",
+      version: 1,
+      createdAt: fixedNow.toISOString(),
+    };
+    const sendConversationMessage = vi.fn(async () => ({
+      value: message,
+      replayed: false,
+    }));
+    const listConversationMessages = vi.fn(async () => ({
+      data: [message],
+      nextCursor: null,
+    }));
+    const listCollaborationEvents = vi.fn(async () => ({
+      events: [
+        {
+          cursor: 9,
+          organizationId: "org-live",
+          workspaceId: "workspace-live",
+          type: "message.sent" as const,
+          aggregateType: "message" as const,
+          aggregateId: "message-live",
+          conversationId: "conversation-live",
+          occurredAt: fixedNow.toISOString(),
+        },
+      ],
+      nextCursor: 9,
+    }));
+    const app = createApiApp({
+      mode: "live",
+      accessResolver: liveAccessResolver,
+      dataPlane: {
+        ...live.dataPlane,
+        sendConversationMessage,
+        listConversationMessages,
+        listCollaborationEvents,
+      },
+      clock: () => new Date(fixedNow),
+    });
+
+    const missingKey = await app.request(
+      "/api/v1/conversations/conversation-live/messages",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientMessageId: "61111111-1111-4111-8111-111111111111",
+          body: "Coordinate the release.",
+        }),
+      },
+    );
+    expect(missingKey.status).toBe(422);
+    expect(sendConversationMessage).not.toHaveBeenCalled();
+
+    const thread = await app.request(
+      "/api/v1/conversations/conversation-live/messages?parentMessageId=message-root&limit=20",
+    );
+    expect(thread.status).toBe(200);
+    expect(await thread.json()).toMatchObject({
+      data: [{ id: "message-live" }],
+      nextCursor: null,
+    });
+    expect(listConversationMessages).toHaveBeenCalledWith(
+      expect.any(Object),
+      "conversation-live",
+      { limit: 20, parentMessageId: "message-root" },
+    );
+
+    const events = await app.request(
+      "/api/v1/events?workspaceId=workspace-live&after=8&format=json",
+    );
+    expect(events.status).toBe(200);
+    expect(await events.json()).toMatchObject({ nextCursor: 9 });
+    expect(listCollaborationEvents).toHaveBeenCalledWith(
+      expect.any(Object),
+      "workspace-live",
+      8,
+    );
   });
 });
 

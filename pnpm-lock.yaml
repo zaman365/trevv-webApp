@@ -333,6 +333,9 @@ importers:
       '@types/node':
         specifier: latest
         version: 26.2.0
+      prettier:
+        specifier: latest
+        version: 3.9.6
       tsx:
         specifier: latest
         version: 4.23.12

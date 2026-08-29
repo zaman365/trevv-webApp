@@ -120,6 +120,11 @@ export function createDemoAdapter(): DemoAdapter {
     ]),
   );
   const idempotencyStore = new Map<string, StoredIdempotency<unknown>>();
+  const collaborationUnavailable = async (): Promise<never> => {
+    throw demoUnavailable(
+      "Persistent Teams and Messages require a live account. The fictional demo keeps its separate, non-persistent collaboration preview.",
+    );
+  };
 
   const accessResolver: AccessResolver = {
     mode: "demo",
@@ -130,6 +135,9 @@ export function createDemoAdapter(): DemoAdapter {
 
   const dataPlane: DataPlane = {
     mode: "demo",
+    async readiness() {
+      return { database: "not_applicable" };
+    },
     async listPortfolios(context) {
       requireAccess(context.access, "read", "portfolio", {
         organizationId: "org-demo",
@@ -415,6 +423,24 @@ export function createDemoAdapter(): DemoAdapter {
         items,
       };
     },
+
+    listTeamDirectory: collaborationUnavailable,
+    getTeam: collaborationUnavailable,
+    createTeam: collaborationUnavailable,
+    updateTeam: collaborationUnavailable,
+    setTeamMember: collaborationUnavailable,
+    removeTeamMember: collaborationUnavailable,
+    listConversations: collaborationUnavailable,
+    getConversation: collaborationUnavailable,
+    createConversation: collaborationUnavailable,
+    setConversationParticipant: collaborationUnavailable,
+    listConversationMessages: collaborationUnavailable,
+    sendConversationMessage: collaborationUnavailable,
+    updateMessageResponse: collaborationUnavailable,
+    addMessageReaction: collaborationUnavailable,
+    removeMessageReaction: collaborationUnavailable,
+    markConversationRead: collaborationUnavailable,
+    listCollaborationEvents: collaborationUnavailable,
 
     async listBoards(context, workspaceId) {
       requireAccess(context.access, "read", "workspace", {
@@ -920,6 +946,7 @@ function demoSession(): Session {
         role: "owner",
       },
     ],
+    managedWorkspaceIds: demoWorkspaces.map((workspace) => workspace.id),
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   };
 }
