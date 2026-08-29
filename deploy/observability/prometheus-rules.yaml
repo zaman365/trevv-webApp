@@ -1,0 +1,87 @@
+groups:
+  - name: trevv-slo
+    interval: 30s
+    rules:
+      - record: trevv:api_request_rate5m
+        expr: sum(rate(trevv_api_http_requests_total[5m]))
+      - record: trevv:api_5xx_ratio5m
+        expr: sum(rate(trevv_api_http_requests_total{status_class="5xx"}[5m])) / clamp_min(sum(rate(trevv_api_http_requests_total[5m])), 0.001)
+      - record: trevv:api_latency_p95_ms5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(trevv_api_http_request_duration_milliseconds_bucket[5m])))
+      - alert: TrevvApiAvailabilityBelowSlo
+        expr: trevv:api_request_rate5m > 0 and trevv:api_5xx_ratio5m > 0.005
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: TREVV API availability is below the 99.5% five-minute SLO.
+      - alert: TrevvApiErrorRateHigh
+        expr: trevv:api_request_rate5m > 0 and trevv:api_5xx_ratio5m > 0.02
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: TREVV API 5xx responses exceed 2%.
+      - alert: TrevvApiLatencyHigh
+        expr: trevv:api_request_rate5m > 0 and trevv:api_latency_p95_ms5m > 1000
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: TREVV API p95 latency exceeds one second.
+      - alert: TrevvRateLimitStoreUnavailable
+        expr: increase(trevv_api_rate_limit_store_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: The shared API rate-limit store failed closed.
+      - alert: TrevvApiTargetMissing
+        expr: min(up{job="trevv-api"}) < 1 or absent(up{job="trevv-api"})
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: No healthy TREVV API telemetry target is available.
+      - alert: TrevvWorkerNotReady
+        expr: min(trevv_worker_ready) < 1
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: A TREVV worker is not ready.
+      - alert: TrevvWorkerTargetMissing
+        expr: min(up{job="trevv-worker"}) < 1 or absent(up{job="trevv-worker"})
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: No healthy TREVV worker telemetry target is available.
+      - alert: TrevvOutboxLagHigh
+        expr: max(trevv_worker_queue_oldest_ready_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Oldest ready outbox work exceeds five minutes.
+      - alert: TrevvDeadLetterPresent
+        expr: max(trevv_worker_queue_events{state="dead_lettered"}) > 0
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: A TREVV outbox event entered dead-letter state.
+      - alert: TrevvUnsupportedOutboxEventAged
+        expr: max(trevv_worker_queue_events{state="unsupported"}) > 0 and max(trevv_worker_queue_oldest_unsupported_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Unsupported outbox work has exceeded its ownership grace period.
+      - alert: TrevvPausedOutboxBacklogPresent
+        expr: max(trevv_worker_queue_events{state="paused"}) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Outbox work is waiting behind a disabled handler.

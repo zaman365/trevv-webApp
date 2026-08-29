@@ -14,24 +14,31 @@ Better Auth owns credential hashing, HTTP-only session cookies, session expiry, 
 - SHA-256-only invitation-token storage, normalized email binding, expiry/revocation/resend rotation, one-time acceptance, and atomic membership/audit/outbox creation
 - request validation with Zod; consistent non-leaking error envelopes and request IDs
 - optimistic concurrency through `If-Match` versions and idempotency keys for retryable creates
+- structured redacted API/worker logs, normalized telemetry routes, bounded Prometheus metrics, and request-ID propagation through the same-origin Web/API boundary
+- production-fail-closed shared PostgreSQL rate limiting with HMAC-SHA-256 client-key digests, explicit trusted edge headers, request-size limits, and standard retry headers
+- Web/API security headers plus sanitized CSP/client-error reporting; CSP supports report-only and enforcing builds, while the current private local topology remains report-only and the production policy still permits inline scripts until Next-compatible nonces or hashes are implemented
 - signed/private object-storage design; MIME, size, tenant, and authorization checks are required before an upload is accepted
 - application-level encryption boundary for OAuth tokens; secrets and full provider payloads are excluded from logs
 - webhook delivery IDs and payload hashes for replay prevention; provider signature verification is mandatory before processing
-- organization export and soft-delete/archive fields; destructive organization deletion is an auditable background job
+- durable tenant-scoped privacy request and retention-policy records that truthfully stop at review/cancellation; no export, erasure, provider-revocation, or retention-enforcement processor exists
 - dependency audit in CI and least-privilege GitHub Actions permissions
 
-The audit gate fails on every high/critical advisory except two exact `image-size` advisories currently confined to Expo/Metro tooling (`GHSA-w3rx-r6r6-pgpr`, `GHSA-5p2g-fcmc-qvqq`). On 2026-08-24 the registry declared `>=2.0.3` patched but had not published that version. `scripts/audit.mjs` verifies both advisory identity and the Expo/Metro-only dependency path; any changed path or additional high finding fails CI. Remove the exception as soon as Expo/Metro resolves to a patched release.
+The current privacy ledger is not deletion-safe. Account-level requests require an active selected organization, so a user who loses their final membership cannot use the authenticated route. Direct organization/user/membership foreign keys also mean a physical deletion can be blocked by the ledger or cascade away its proof. Public beta requires a reviewed identity-scoped request path and a pseudonymized, non-cascading evidence design before any destructive processor is enabled. The public privacy and terms pages remain engineering previews pending legal review.
+
+The 2026-08-29 dependency audit reports zero advisories and no allowlisted exceptions. The gate continues to fail on any high or critical finding.
 
 ## Production hardening checklist
 
 1. Set `DEMO_MODE=false`; reject startup if auth, database, HTTPS origins, verified database TLS (`sslmode=verify-full`, never identity-unverified `sslmode=require`), cookie topology, or authenticated TLS mail configuration is absent.
 2. Terminate TLS at the edge and keep API/database/storage in EU regions where offered.
-3. Apply edge rate limits to auth, invitation, search, export, and webhook endpoints.
+3. Validate edge plus shared PostgreSQL rate limits for auth and API traffic under multiple replicas; add independently scheduled expired-window pruning and provider-specific export/webhook policies before those routes are enabled.
 4. Rotate database, auth, mail, storage, and integration credentials; test session and invitation revocation.
 5. Configure private object storage, signed URL TTLs, malware scanning, and upload limits.
-6. Enable structured log redaction, Sentry source maps, alerting, and immutable audit-log retention.
+6. Connect the implemented redacted logs, metrics, dashboards, and rules to a reviewed collector, pager, and error tracker; upload source maps privately and establish immutable audit-log retention. Repository assets alone are not monitoring.
 7. Run permission/IDOR, Playwright, axe, dependency audit, and restore-drill gates before release.
 
 ## Threats deliberately deferred
 
 The V1 integration adapters expose safe mocks and smart links. Live Drive OAuth/picker plumbing has configuration seams but should not be enabled until token encryption, provider verification, rate limiting, and revocation jobs are deployed together. MFA/passkey/login-alert controls are omitted rather than simulated. Exactly-once mail delivery across the SMTP/transaction boundary still needs provider idempotency or a dedicated mail outbox. See `known-limitations.md`.
+
+Phase 5/public beta remains **NO-GO**: privacy effects and deletion-safe evidence, reviewed legal terms, remote production-mode staging, managed backup/restore, active telemetry/error reporting/source maps, a nonce/hash CSP without `unsafe-inline`, dead-letter redrive, scheduled limiter cleanup, and pilot/pricing approval are unresolved. No provider, AI external action, private-file service, or billing flow is enabled.

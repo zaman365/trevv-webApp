@@ -3,6 +3,8 @@ x-runtime-build: &runtime-build
   dockerfile: Dockerfile.staging
   args:
     STAGING_PUBLIC_ORIGIN: https://127.0.0.1:8443
+    STAGING_CSP_MODE: report-only
+    STAGING_HSTS_ENABLED: "false"
 
 x-api-environment: &api-environment
   NODE_ENV: test
@@ -14,6 +16,10 @@ x-api-environment: &api-environment
   WEB_ORIGIN: https://127.0.0.1:8443
   MAIL_FROM: no-reply@trevv.test
   MAIL_SINK_FILE: /tmp/trevv-staging/mail.jsonl
+  RATE_LIMIT_BACKEND: postgres
+  RATE_LIMIT_HASH_SECRET: staging-rate-limit-hmac-material-only
+  TRUSTED_CLIENT_IP_HEADER: x-trevv-client-ip
+  ERROR_REPORTING_MODE: disabled
 
 x-api-service: &api-service
   build:
@@ -47,6 +53,8 @@ x-worker-environment: &worker-environment
   WORKER_POLL_INTERVAL_MS: "250"
   WORKER_TELEMETRY_INTERVAL_MS: "1000"
   WORKER_READINESS_MAX_UNSUPPORTED_AGE_MS: "5000"
+  WORKER_READINESS_MAX_READY_AGE_MS: "300000"
+  WORKER_READINESS_MAX_DEAD_LETTERS: "0"
 
 x-worker-service: &worker-service
   build:
@@ -155,8 +163,9 @@ services:
       DEMO_MODE: "false"
       PORT: "3000"
       HOSTNAME: 0.0.0.0
-      API_ORIGIN: https://proxy:8443
+      API_ORIGIN: https://proxy:8444
       NEXT_PUBLIC_APP_URL: https://127.0.0.1:8443
+      TRUSTED_CLIENT_IP_HEADER: x-trevv-client-ip
     volumes:
       - staging-tls:/etc/trevv-local-tls:ro
     healthcheck:

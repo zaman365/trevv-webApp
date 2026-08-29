@@ -1,0 +1,107 @@
+{
+  "title": "TREVV private beta operations",
+  "uid": "trevv-private-beta",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "tags": ["trevv", "private-beta"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API availability (5m)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - trevv:api_5xx_ratio5m",
+          "legendFormat": "availability"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "API p95 latency (ms)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "trevv:api_latency_p95_ms5m",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Request rate by status class",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status_class) (rate(trevv_api_http_requests_total[5m]))",
+          "legendFormat": "{{status_class}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Outbox queue by state",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (state) (trevv_worker_queue_events)",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Oldest ready outbox work (seconds)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(trevv_worker_queue_oldest_ready_age_seconds)",
+          "legendFormat": "oldest ready"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Worker readiness",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(trevv_worker_ready)",
+          "legendFormat": "minimum"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Request protection events",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (bucket) (rate(trevv_api_rate_limit_rejections_total[5m]))",
+          "legendFormat": "rejected {{bucket}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(trevv_api_rate_limit_store_errors_total[5m])",
+          "legendFormat": "store errors"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
+    }
+  ]
+}

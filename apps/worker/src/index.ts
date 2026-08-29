@@ -336,7 +336,9 @@ async function main(): Promise<void> {
     activeHandlerNames: handlerRegistry.activeHandlers.map(({ name }) => name),
     disabledHandlerNames: handlerRegistry.disabledHandlerNames,
     readinessMaxStalenessMs: configuration.readinessMaxStalenessMs,
+    readinessMaxReadyAgeMs: configuration.readinessMaxReadyAgeMs,
     readinessMaxUnsupportedAgeMs: configuration.readinessMaxUnsupportedAgeMs,
+    readinessMaxDeadLetters: configuration.readinessMaxDeadLetters,
   });
   const abortController = new AbortController();
   const stop = () => {

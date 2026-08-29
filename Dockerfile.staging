@@ -11,12 +11,16 @@ ENTRYPOINT ["sh", "/usr/local/bin/create-local-tls.sh"]
 FROM node:${NODE_VERSION}-alpine AS build
 ARG PNPM_VERSION
 ARG STAGING_PUBLIC_ORIGIN=https://127.0.0.1:8443
+ARG STAGING_CSP_MODE=report-only
+ARG STAGING_HSTS_ENABLED=false
 ENV PNPM_HOME=/pnpm
 ENV PATH=${PNPM_HOME}:${PATH}
 ENV CI=true
 ENV DEMO_MODE=false
 ENV NEXT_PUBLIC_APP_URL=${STAGING_PUBLIC_ORIGIN}
-ENV API_ORIGIN=https://proxy:8443
+ENV API_ORIGIN=https://proxy:8444
+ENV CSP_MODE=${STAGING_CSP_MODE}
+ENV HSTS_ENABLED=${STAGING_HSTS_ENABLED}
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 COPY . .

@@ -7,7 +7,9 @@ export interface WorkerHealthStateOptions {
   activeHandlerNames: readonly string[];
   disabledHandlerNames: readonly string[];
   readinessMaxStalenessMs: number;
+  readinessMaxReadyAgeMs?: number;
   readinessMaxUnsupportedAgeMs: number;
+  readinessMaxDeadLetters?: number;
   clock?: () => Date;
 }
 
@@ -21,6 +23,13 @@ export interface WorkerHealthSnapshot {
   lastSuccessfulSweepAt: string | null;
   lastFailedSweepAt: string | null;
   queue: WorkerQueueTelemetry | null;
+  checks: {
+    sweepFresh: boolean;
+    latestSweepSucceeded: boolean;
+    readyBacklogWithinLimit: boolean;
+    unsupportedBacklogWithinGrace: boolean;
+    deadLettersWithinLimit: boolean;
+  };
 }
 
 export interface WorkerHealthState {
@@ -72,18 +81,46 @@ export function createWorkerHealthState(
         queue?.oldestUnsupportedAgeMs === undefined
           ? null
           : queue.oldestUnsupportedAgeMs + unsupportedObservationAgeMs;
+      const effectiveOldestReadyAgeMs =
+        queue?.oldestReadyAgeMs === null ||
+        queue?.oldestReadyAgeMs === undefined
+          ? null
+          : queue.oldestReadyAgeMs + unsupportedObservationAgeMs;
+      const effectiveQueue = queue
+        ? {
+            ...queue,
+            oldestReadyAgeMs: effectiveOldestReadyAgeMs,
+            oldestUnsupportedAgeMs: effectiveOldestUnsupportedAgeMs,
+          }
+        : null;
       const unsupportedBacklogWithinGrace =
         queue !== null &&
         (queue.unsupported === 0 ||
           (effectiveOldestUnsupportedAgeMs !== null &&
             effectiveOldestUnsupportedAgeMs <
               options.readinessMaxUnsupportedAgeMs));
+      const readyBacklogWithinLimit =
+        queue !== null &&
+        (queue.ready === 0 ||
+          (effectiveOldestReadyAgeMs !== null &&
+            effectiveOldestReadyAgeMs <
+              (options.readinessMaxReadyAgeMs ?? 300_000)));
+      const deadLettersWithinLimit =
+        queue !== null &&
+        queue.deadLettered <= (options.readinessMaxDeadLetters ?? 0);
+      const latestSweepSucceeded =
+        lastFailedSweepAt === null ||
+        (lastSuccessfulSweepAt !== null &&
+          lastSuccessfulSweepAt.getTime() >= lastFailedSweepAt.getTime());
       const ready =
         options.enabled &&
         options.activeHandlerNames.length > 0 &&
         !stopping &&
         fresh &&
-        unsupportedBacklogWithinGrace;
+        latestSweepSucceeded &&
+        readyBacklogWithinLimit &&
+        unsupportedBacklogWithinGrace &&
+        deadLettersWithinLimit;
       return {
         status: ready ? "ready" : "not_ready",
         service: "trevv-worker",
@@ -93,7 +130,14 @@ export function createWorkerHealthState(
         disabledHandlers: [...options.disabledHandlerNames],
         lastSuccessfulSweepAt: lastSuccessfulSweepAt?.toISOString() ?? null,
         lastFailedSweepAt: lastFailedSweepAt?.toISOString() ?? null,
-        queue,
+        queue: effectiveQueue,
+        checks: {
+          sweepFresh: fresh,
+          latestSweepSucceeded,
+          readyBacklogWithinLimit,
+          unsupportedBacklogWithinGrace,
+          deadLettersWithinLimit,
+        },
       };
     },
   };
@@ -140,6 +184,17 @@ export async function startWorkerHealthServer(input: {
       return;
     }
     if (path === "/metrics") {
+      response.setHeader(
+        "content-type",
+        "text/plain; version=0.0.4; charset=utf-8",
+      );
+      response.statusCode = 200;
+      response.end(
+        request.method === "HEAD" ? undefined : renderWorkerMetrics(snapshot),
+      );
+      return;
+    }
+    if (path === "/metrics.json") {
       writeJson(
         response,
         200,
@@ -168,6 +223,53 @@ export async function startWorkerHealthServer(input: {
     origin: `http://${host}:${address.port}`,
     close: () => closeServer(server),
   };
+}
+
+export function renderWorkerMetrics(snapshot: WorkerHealthSnapshot): string {
+  const queue = snapshot.queue;
+  const lines = [
+    "# HELP trevv_worker_up Worker process scrape health.",
+    "# TYPE trevv_worker_up gauge",
+    "trevv_worker_up 1",
+    "# HELP trevv_worker_ready Worker readiness after dependency and queue checks.",
+    "# TYPE trevv_worker_ready gauge",
+    `trevv_worker_ready ${snapshot.status === "ready" ? 1 : 0}`,
+    "# HELP trevv_worker_enabled Worker processing kill-switch state.",
+    "# TYPE trevv_worker_enabled gauge",
+    `trevv_worker_enabled ${snapshot.enabled ? 1 : 0}`,
+    "# HELP trevv_worker_stopping Worker graceful shutdown state.",
+    "# TYPE trevv_worker_stopping gauge",
+    `trevv_worker_stopping ${snapshot.stopping ? 1 : 0}`,
+    "# HELP trevv_worker_queue_events Durable outbox events by current state.",
+    "# TYPE trevv_worker_queue_events gauge",
+  ];
+  for (const [state, value] of [
+    ["ready", queue?.ready ?? 0],
+    ["delayed", queue?.delayed ?? 0],
+    ["leased", queue?.leased ?? 0],
+    ["dead_lettered", queue?.deadLettered ?? 0],
+    ["paused", queue?.paused ?? 0],
+    ["unsupported", queue?.unsupported ?? 0],
+  ] as const)
+    lines.push(`trevv_worker_queue_events{state="${state}"} ${value}`);
+  lines.push(
+    "# HELP trevv_worker_queue_oldest_ready_age_seconds Age of the oldest ready outbox event.",
+    "# TYPE trevv_worker_queue_oldest_ready_age_seconds gauge",
+    `trevv_worker_queue_oldest_ready_age_seconds ${(queue?.oldestReadyAgeMs ?? 0) / 1_000}`,
+    "# HELP trevv_worker_queue_oldest_unsupported_age_seconds Age of the oldest unsupported outbox event.",
+    "# TYPE trevv_worker_queue_oldest_unsupported_age_seconds gauge",
+    `trevv_worker_queue_oldest_unsupported_age_seconds ${(queue?.oldestUnsupportedAgeMs ?? 0) / 1_000}`,
+    "# HELP trevv_worker_attempts Durable attempt records by current outcome.",
+    "# TYPE trevv_worker_attempts gauge",
+  );
+  for (const [outcome, value] of [
+    ["leased", queue?.attempts.leased ?? 0],
+    ["succeeded", queue?.attempts.succeeded ?? 0],
+    ["failed", queue?.attempts.failed ?? 0],
+    ["dead_lettered", queue?.attempts.deadLettered ?? 0],
+  ] as const)
+    lines.push(`trevv_worker_attempts{outcome="${outcome}"} ${value}`);
+  return `${lines.join("\n")}\n`;
 }
 
 function writeJson(

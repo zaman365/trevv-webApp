@@ -10,7 +10,9 @@ export interface WorkerRuntimeConfiguration {
   attentionSweepIntervalMs: number;
   telemetryIntervalMs: number;
   readinessMaxStalenessMs: number;
+  readinessMaxReadyAgeMs: number;
   readinessMaxUnsupportedAgeMs: number;
+  readinessMaxDeadLetters: number;
   batchSize: number;
   concurrency: number;
   leaseMs: number;
@@ -75,12 +77,26 @@ export function readWorkerRuntimeConfiguration(
       7_200_000,
       "WORKER_READINESS_MAX_STALENESS_MS",
     ),
+    readinessMaxReadyAgeMs: environmentInteger(
+      environment.WORKER_READINESS_MAX_READY_AGE_MS,
+      300_000,
+      1_000,
+      86_400_000,
+      "WORKER_READINESS_MAX_READY_AGE_MS",
+    ),
     readinessMaxUnsupportedAgeMs: environmentInteger(
       environment.WORKER_READINESS_MAX_UNSUPPORTED_AGE_MS,
       300_000,
       1_000,
       86_400_000,
       "WORKER_READINESS_MAX_UNSUPPORTED_AGE_MS",
+    ),
+    readinessMaxDeadLetters: environmentInteger(
+      environment.WORKER_READINESS_MAX_DEAD_LETTERS,
+      0,
+      0,
+      1_000_000,
+      "WORKER_READINESS_MAX_DEAD_LETTERS",
     ),
     batchSize: environmentInteger(
       environment.WORKER_BATCH_SIZE,

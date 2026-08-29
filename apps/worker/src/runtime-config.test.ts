@@ -26,7 +26,9 @@ describe("worker runtime configuration", () => {
       concurrency: 5,
       healthHost: "127.0.0.1",
       healthPort: 9090,
+      readinessMaxReadyAgeMs: 300_000,
       readinessMaxUnsupportedAgeMs: 300_000,
+      readinessMaxDeadLetters: 0,
     });
   });
 
@@ -49,6 +51,18 @@ describe("worker runtime configuration", () => {
         WORKER_READINESS_MAX_UNSUPPORTED_AGE_MS: "999",
       }),
     ).toThrow(/1000 to 86400000/);
+    expect(() =>
+      readWorkerRuntimeConfiguration({
+        ...validEnvironment,
+        WORKER_READINESS_MAX_READY_AGE_MS: "999",
+      }),
+    ).toThrow(/1000 to 86400000/);
+    expect(() =>
+      readWorkerRuntimeConfiguration({
+        ...validEnvironment,
+        WORKER_READINESS_MAX_DEAD_LETTERS: "-1",
+      }),
+    ).toThrow(/0 to 1000000/);
     expect(() =>
       readWorkerRuntimeConfiguration({
         ...validEnvironment,

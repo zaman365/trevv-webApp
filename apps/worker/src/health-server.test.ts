@@ -46,12 +46,20 @@ describe("worker health server", () => {
         queue: { ready: 2, unsupported: 1 },
       });
       await expect(
-        fetch(`${server.origin}/metrics`).then((response) => response.json()),
+        fetch(`${server.origin}/metrics.json`).then((response) =>
+          response.json(),
+        ),
       ).resolves.toMatchObject({
         status: "ready",
         lastSuccessfulSweepAt: observedAt.toISOString(),
         queue: { attempts: { failed: 1 } },
       });
+      const metrics = await fetch(`${server.origin}/metrics`).then((response) =>
+        response.text(),
+      );
+      expect(metrics).toContain("trevv_worker_ready 1");
+      expect(metrics).toContain('trevv_worker_queue_events{state="ready"} 2');
+      expect(metrics).toContain('trevv_worker_attempts{outcome="failed"} 1');
 
       current = new Date("2026-08-29T10:00:01.001Z");
       expect((await fetch(`${server.origin}/readyz`)).status).toBe(503);
@@ -114,7 +122,7 @@ describe("worker health server", () => {
       queue: {
         observedAt,
         unsupported: 1,
-        oldestUnsupportedAgeMs: 0,
+        oldestUnsupportedAgeMs: unsupportedGraceMs,
       },
     });
   });
@@ -132,6 +140,57 @@ describe("worker health server", () => {
     expect(state.snapshot()).toMatchObject({
       status: "not_ready",
       enabled: false,
+    });
+  });
+
+  it("fails readiness on dead letters, stale ready work, or a latest failed sweep", () => {
+    let current = observedAt;
+    const state = createWorkerHealthState({
+      enabled: true,
+      activeHandlerNames: ["attention"],
+      disabledHandlerNames: [],
+      readinessMaxStalenessMs: 30_000,
+      readinessMaxReadyAgeMs: 120_000,
+      readinessMaxUnsupportedAgeMs: 300_000,
+      readinessMaxDeadLetters: 0,
+      clock: () => current,
+    });
+    state.recordSuccessfulSweep(observedAt, {
+      ...queue,
+      unsupported: 0,
+      oldestUnsupportedAgeMs: null,
+      deadLettered: 1,
+    });
+    expect(state.snapshot()).toMatchObject({
+      status: "not_ready",
+      checks: { deadLettersWithinLimit: false },
+    });
+
+    state.recordSuccessfulSweep(observedAt, {
+      ...queue,
+      unsupported: 0,
+      oldestUnsupportedAgeMs: null,
+      deadLettered: 0,
+      oldestReadyAgeMs: 120_000,
+    });
+    expect(state.snapshot()).toMatchObject({
+      status: "not_ready",
+      checks: { readyBacklogWithinLimit: false },
+    });
+
+    current = new Date(observedAt.getTime() + 1);
+    state.recordSuccessfulSweep(current, {
+      ...queue,
+      ready: 0,
+      oldestReadyAgeMs: null,
+      unsupported: 0,
+      oldestUnsupportedAgeMs: null,
+      deadLettered: 0,
+    });
+    state.recordFailedSweep(new Date(current.getTime() + 1));
+    expect(state.snapshot()).toMatchObject({
+      status: "not_ready",
+      checks: { latestSweepSucceeded: false },
     });
   });
 });

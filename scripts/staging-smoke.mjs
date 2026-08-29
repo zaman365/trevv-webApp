@@ -37,6 +37,7 @@ try {
   await verifyAnonymousBoundary();
   await signUpAndVerify();
   await signIn();
+  await verifyAuthProxyBoundary();
   await verifyCrossOriginBoundary();
 
   const onboarding = await apiJson("/api/v1/onboarding");
@@ -141,6 +142,7 @@ try {
         "auth",
         "trusted-tls",
         "secure-cookie",
+        "auth-response-boundary",
         "cross-origin-rejection",
         "two-api-routing",
         "query-free-log-sentinel",
@@ -383,6 +385,16 @@ async function verifyCrossOriginBoundary() {
     apiErrorCode(body) !== "invalid_request_origin"
   )
     throw new Error("A cross-origin cookie mutation was not rejected.");
+}
+
+async function verifyAuthProxyBoundary() {
+  const response = await apiJson("/api/auth/list-sessions");
+  if (response.status !== 404 || apiErrorCode(response.body) !== "not_found")
+    throw new Error(
+      "The public edge exposed a Better Auth operation outside the Web allowlist.",
+    );
+  if (JSON.stringify(response.body).toLowerCase().includes("token"))
+    throw new Error("The denied auth response exposed session token data.");
 }
 
 async function verifyOutboxAndWorkers({

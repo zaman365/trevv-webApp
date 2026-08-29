@@ -2,14 +2,23 @@
 
 Provider interfaces isolate external services from domain workflows. The core product remains useful with every provider disconnected.
 
-## V1
+## Current private-beta decision
 
-- Google Drive: optional OAuth/Picker, least-privilege scope, references rather than copied Drive files, encrypted credentials, explicit disconnect. A safe mocked picker is available in development and CI.
+No provider is approved for implementation or activation because the
+repository contains no recorded pilot evidence selecting one. The provider
+order in the release plan is a hypothesis to validate, not an enablement
+decision. Live runtime gates therefore default every provider to
+`disabled_no_pilot_evidence`; no OAuth credential, webhook, synchronization,
+or provider write is active.
+
+## Safe preview behavior
+
+- Google Drive: a safe mocked picker/configuration seam is available in the fictional demo. It stores no production OAuth token and cannot claim to revoke provider access.
 - Smart links: validated cards for Figma, GitHub, Canva, Google Docs/Sheets, Slack, and Shopify URLs. Embeds use an allowlist and safe sandboxing.
-- Files: a storage interface with local development and S3-compatible production adapters; private objects and signed URLs.
+- Files: no upload endpoint or production object-storage adapter is enabled. Private objects, scanning, quarantine, deletion, and signed TTL downloads remain requirements for any approved file workflow.
 - Email inbox: a complete safe demo client with Email as the primary Inbox tab and the original Actionable Inbox preserved beside it. The account setup normalizes Gmail/Workspace through the Gmail API, Outlook/Hotmail/Microsoft 365 through Microsoft Graph, Yahoo/AOL through OAuth-capable IMAP/SMTP, and iCloud, Zoho, and custom domains through secure IMAP/SMTP. Demo mode stores account labels and non-secret server metadata only; it never stores mailbox credentials in the browser.
 
-## Production email adapter contract
+## Production email adapter target (not implemented or approved)
 
 - Google uses OAuth authorization-code flow with offline access, the narrowest Gmail scopes needed for read/organize/send, Gmail history synchronization, and Pub/Sub mailbox watches renewed before expiry.
 - Microsoft uses the multi-tenant and personal-account authorization-code flow with PKCE, `offline_access`, delegated `Mail.ReadWrite` and `Mail.Send`, Graph delta synchronization, and renewable Graph change-notification subscriptions.

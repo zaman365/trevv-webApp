@@ -6,7 +6,9 @@
 - API and Worker: separate long-running Node 22 services in the same private EU network
 - Database: managed PostgreSQL 17 with point-in-time recovery and encrypted connections
 - Files: not required for the current alpha because no upload API accepts attachment bytes; add a private S3-compatible EU bucket, scanning, quotas, signed downloads, and lifecycle rules before enabling attachments
-- Observability: EU-project Sentry/log destination with payload redaction
+- Observability: a reviewed EU-region metrics, structured-log, error-tracking,
+  dashboard, and alert-routing stack with enforced redaction and retention. No
+  vendor or destination is currently selected or provisioned.
 
 Web, Mobile, and Desktop point to one public HTTPS API. Only the API and private Worker receive database credentials; Web and the client bundles do not. The Worker exposes health/telemetry only on the private service network and is not internet-facing.
 
@@ -25,6 +27,14 @@ The repository now defines a production-shaped local/CI topology in `compose.sta
 
 This topology deliberately uses self-signed TLS at its local edge, plaintext private service/database links, local database credentials, `NODE_ENV=test` transport allowances, and a file mail sink. It is suitable for repeatable CI validation, not public staging. A real staging environment still requires a trusted TLS edge, managed PostgreSQL with encrypted transport and tested restore, authenticated SMTP on a test domain, secret-manager injection, private service networking, and an external telemetry/alert destination.
 
+Phase 5 adds repository-owned operational foundations: bounded request bodies,
+shared PostgreSQL rate-limit windows with keyed client identifiers, sanitized
+correlation IDs, redacted structured logs, private API/Worker metrics, explicit
+readiness thresholds, CSP reporting, and vendor-neutral Prometheus/Grafana
+assets. These are contracts and local evidence, not a running operations
+service. No external log or error collector, source-map upload, metrics scraper,
+dashboard import, alert route, or on-call destination has been provisioned.
+
 ## Build commands
 
 | Service | Build                                    | Start                                          |
@@ -35,7 +45,9 @@ This topology deliberately uses self-signed TLS at its local edge, plaintext pri
 | Mobile  | `pnpm --filter @founderhq/mobile build`  | EAS/native pipeline                            |
 | Desktop | `pnpm --filter @founderhq/desktop build` | `pnpm --filter @founderhq/desktop tauri build` |
 
-Run `pnpm install --frozen-lockfile`, `pnpm contracts:generate`, and all quality gates before producing artifacts. Apply `NODE_ENV=production DATABASE_URL='postgresql://…?sslmode=verify-full' pnpm db:migrate` as a one-off release job before API rollout; the migration entry point rejects an unspecified environment and unverified production database transport. Run `pnpm db:seed` only against a new, disposable fictional-demo database; never seed a pilot, alpha, staging, production, or other real-data database.
+Run `pnpm install --frozen-lockfile`, `pnpm contracts:generate`, and all quality gates before producing artifacts. Set `CSP_MODE` and `HSTS_ENABLED` before the Web build: Next.js compiles both into the artifact, so changing only the running container environment does nothing. Keep CSP in `report-only` until reports are reviewed and the policy passes the browser suite; enable HSTS only on a trusted HTTPS host. Every promotion requires a new artifact with the intended values recorded in its release manifest.
+
+Apply `NODE_ENV=production DATABASE_URL='postgresql://…?sslmode=verify-full' pnpm db:migrate` as a one-off release job before API rollout; the migration entry point rejects an unspecified environment and unverified production database transport. Run `pnpm db:seed` only against a new, disposable fictional-demo database; never seed a pilot, alpha, staging, production, or other real-data database.
 
 The root `pnpm build` validates every workspace through Turborepo. A Sites environment that deliberately launches the root script through npm compiles the same Web/PWA through the official Vinext/Cloudflare adapter and stages its Worker artifact at the repository root. This deployment-only target does not change the normal Next.js development or production build.
 
@@ -45,23 +57,61 @@ CI's `staging-topology` gate builds the production-shaped images, starts the Web
 
 1. Snapshot/verify PostgreSQL and validate backup restore recency.
 2. Run migrations with a dedicated migration identity.
-3. Deploy API; verify process liveness separately, `/api/v1/readyz` for PostgreSQL-backed readiness, an authenticated tenant read/write smoke, auth cookie policy, and one permission-scoped request.
+3. Deploy API with the shared limiter and trusted-edge contract; verify process liveness separately, `/api/v1/readyz` for PostgreSQL-backed readiness, an authenticated tenant read/write smoke, auth cookie policy, one permission-scoped request, two distinct client-limit identities, and one correlated Web-to-API request.
 4. Deploy at least two Worker instances and confirm `/livez`, `/readyz`, queue-age/attempt metrics, handler ownership, lease recovery, and one-worker-only acknowledgement.
-5. Deploy Web with server-only `API_ORIGIN` set to the private API load balancer, `NEXT_PUBLIC_APP_URL` set to the canonical public HTTPS origin, and `DEMO_MODE=false`. Better Auth URL and secrets belong to the API, not Web.
+5. Build and deploy Web with server-only `API_ORIGIN` set to the private API load balancer, `NEXT_PUBLIC_APP_URL` set to the canonical public HTTPS origin, `DEMO_MODE=false`, and reviewed build-time `CSP_MODE`/`HSTS_ENABLED` values. Better Auth URL and secrets belong to the API, not Web.
 6. Run Web smoke, Playwright, axe, tenant/Team/message/outbox smoke, retention, export, and rollback tests.
 7. Point Expo/Tauri builds at the same API only after API compatibility is confirmed.
 
 Use rolling API/Worker deploys. Database changes must be backwards-compatible for one release. Roll Web back independently; never roll database state back by applying destructive SQL. Create a forward fix instead.
 
-Before closed-alpha traffic, configure alert thresholds for readiness staleness, oldest ready queue age, failed attempts, dead-letter count, unsupported events, and handler-paused events. Provide a reviewed dead-letter inspection/replay procedure; the worker records these states but the repository does not yet include an operator replay console. Exercise SIGTERM draining and a worker replacement while messages continue to be accepted.
+Before closed-alpha traffic, connect the private metric endpoints to a selected collector, validate the repository-owned rules, import the dashboard, and route test alerts to named responders. Configure alert thresholds for readiness staleness, oldest ready queue age, failed attempts, dead-letter count, unsupported events, handler-paused events, missing scrape targets, and request-protection failure. Provide a reviewed dead-letter inspection/replay procedure; the worker records these states but the repository does not yet include an operator replay console. Exercise SIGTERM draining and a worker replacement while messages continue to be accepted.
 
 ## Required production variables
 
-Use `.env.example` as the catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database or integration credentials to Next.js, Expo, or Vite bundles. The API, Worker, and migration job require a production `DATABASE_URL` with exactly one `sslmode=verify-full`; `sslmode=require` encrypts transport but does not verify the server identity in the pinned driver and is rejected. The runtime trust store must contain the managed database CA. The API also requires a non-placeholder 32+ character `BETTER_AUTH_SECRET`, HTTPS `BETTER_AUTH_URL` and `WEB_ORIGIN`, `MAIL_FROM`, authenticated TLS SMTP settings, and `AUTH_COOKIE_DOMAIN` when the Web and auth hosts differ. Production refuses the test mail sink.
+Use `.env.example` as the implemented catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database, request-protection, mail, or future provider credentials to Next.js, Expo, or Vite bundles. The API, Worker, and migration job require a production `DATABASE_URL` with exactly one `sslmode=verify-full`; `sslmode=require` encrypts transport but does not verify the server identity in the pinned driver and is rejected. The runtime trust store must contain the managed database CA. The API also requires a non-placeholder 32+ character `BETTER_AUTH_SECRET`, HTTPS `BETTER_AUTH_URL` and `WEB_ORIGIN`, `MAIL_FROM`, authenticated TLS SMTP settings, and `AUTH_COOKIE_DOMAIN` when the Web and auth hosts differ. Production refuses the test mail sink.
 
-Each Worker additionally requires a unique `WORKER_ID` and explicit `DEMO_MODE=false`. Operational controls include `WORKER_ENABLED`, `WORKER_DISABLED_HANDLERS`, poll/Attention/telemetry intervals, readiness staleness, batch size, concurrency, lease duration, maximum attempts, and the private health host/port. Disabling a handler is a kill switch: its owned events remain visible as paused backlog and are not silently acknowledged. Never expose the Worker health server to the public internet.
+Production API request protection requires:
+
+- `RATE_LIMIT_BACKEND=postgres` for cross-replica enforcement;
+- a non-placeholder 32+ character `RATE_LIMIT_HASH_SECRET`, stored only in the
+  secret manager and identical across the active API cohort; and
+- `TRUSTED_CLIENT_IP_HEADER` naming an explicit `X-` header that the public edge
+  always strips and overwrites. Never trust a caller-supplied forwarding value.
+
+Changing the hash secret changes limiter identities and requires a coordinated
+rotation plan. The process-local memory backend is development/test only.
+`ERROR_REPORTING_MODE=external` fails closed unless the application is built
+with a reporter adapter. No external collector or adapter is provisioned, so
+deployed artifacts must keep `ERROR_REPORTING_MODE=disabled` until provider,
+privacy, retention, source-map, secret, and failure-isolation reviews pass.
+
+`CSP_MODE` and `HSTS_ENABLED` are Web build-time inputs, not runtime toggles.
+Record them with the artifact. Use `report-only`/`false` for local self-signed
+staging. A public trusted-HTTPS release may use HSTS only after host and rollback
+review, and may use enforced CSP only after violation reports and browser tests
+show that required application behavior is covered.
+
+Each Worker additionally requires a unique `WORKER_ID` and explicit `DEMO_MODE=false`. Operational controls include `WORKER_ENABLED`, `WORKER_DISABLED_HANDLERS`, poll/Attention/telemetry intervals, `WORKER_READINESS_MAX_STALENESS_MS`, `WORKER_READINESS_MAX_READY_AGE_MS`, `WORKER_READINESS_MAX_UNSUPPORTED_AGE_MS`, `WORKER_READINESS_MAX_DEAD_LETTERS`, batch size, concurrency, lease duration, maximum attempts, and the private health host/port. Disabling a handler is a kill switch: its owned events remain visible as paused backlog and are not silently acknowledged. A threshold does not replace dead-letter inspection/redrive or incident response. Never expose the Worker health server to the public internet.
+
+Provider OAuth, imports, private object storage, billing, analytics, AI/model
+access, and automated external effects remain disabled and have no supported
+production environment variables. Do not add credentials speculatively. A
+provider may be introduced only after pilot evidence, privacy/subprocessor
+review, implementation, isolation tests, and explicit enablement approval.
 
 GitHub Actions intentionally has no production deploy job, and the Web package intentionally has no deploy command. The former Web-only Cloudflare promotion could publish a client without a matching API, worker, database migration, mail service, or rollback cohort. Reintroduce production automation only after remote staging proves the complete topology and one reviewed release manifest can promote database migration, API, workers, Web, SMTP/secret configuration, health checks, synthetic smoke, and rollback together. Production should keep the `trevv.de` custom domain only; `workers_dev` remains explicitly disabled in `apps/web/wrangler.jsonc`.
+
+## Public-beta gate
+
+The repository is currently **no-go for public beta and Phase 6**. The local
+compose API and Worker use `NODE_ENV=test`; therefore the topology does not
+prove production-mode startup. Remote production-shaped staging, managed
+backup/restore, trusted TLS and mail, private networking, external telemetry
+and alert routing, source-map/error tracking, dead-letter operations, reviewed
+privacy/terms and data-lifecycle drills, and real pilot/pricing evidence remain
+unresolved. No provider, storage, billing, AI, production migration, or public
+deployment is authorized by this guide.
 
 ## Deep links
 
