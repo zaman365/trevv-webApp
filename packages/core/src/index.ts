@@ -1,5 +1,5 @@
-import type { ProgressMode } from "./commercial";
-import { demoPortfolios } from "./commercial-demo";
+import type { ProgressMode } from "./commercial.js";
+import { demoPortfolios } from "./commercial-demo.js";
 
 export type WorkspaceHealth = "on_track" | "watch" | "critical" | "parked";
 export type LifecycleStage =
@@ -1016,5 +1016,5 @@ export function validateDemoRelationships(): string[] {
   return errors;
 }
 
-export * from "./commercial";
-export * from "./commercial-demo";
+export * from "./commercial.js";
+export * from "./commercial-demo.js";

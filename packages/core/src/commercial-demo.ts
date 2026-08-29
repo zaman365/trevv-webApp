@@ -14,7 +14,7 @@ import type {
   UserSeenCheckpoint,
   WaitingState,
   WorkItemDependency,
-} from "./commercial";
+} from "./commercial.js";
 
 export const demoPortfolios: Portfolio[] = [
   {

@@ -2,7 +2,7 @@ name: TREVV CI
 
 on:
   push:
-    branches: [main, "feat/**", "codex/**"]
+    branches: ["**"]
   pull_request:
 
 permissions:
@@ -25,6 +25,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      NODE_ENV: test
       DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_test
       BETTER_AUTH_SECRET: ci-only-secret-ci-only-secret-1234
       BETTER_AUTH_URL: http://127.0.0.1:8787
@@ -60,8 +61,7 @@ jobs:
         env:
           DEMO_MODE: "false"
           NEXT_PUBLIC_APP_URL: https://trevv.test
-          API_ORIGIN: https://api.trevv.test
-          BETTER_AUTH_URL: https://api.trevv.test/api/auth
+          API_ORIGIN: https://api.service.internal
         run: pnpm build
       - name: Dependency security scan
         run: pnpm security:audit
@@ -129,6 +129,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      NODE_ENV: test
       DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
       LIVE_E2E_DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
     steps:
@@ -152,56 +153,54 @@ jobs:
           path: playwright-report
           retention-days: 14
 
-  # Production deploys only from main, and only once every gate is green.
-  # Requires the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets on
-  # a protected "production" environment; without them this job cannot run.
-  #
-  # Rollback: pnpm --filter @founderhq/web exec wrangler rollback
-  # or target a specific version:
-  #   pnpm --filter @founderhq/web exec wrangler rollback <version-id>
-  # List candidates with:
-  #   pnpm --filter @founderhq/web exec wrangler deployments list
-  deploy:
+  staging-topology:
     runs-on: ubuntu-latest
-    needs: [quality, e2e, accessibility, live-identity]
-    if: >-
-      github.event_name == 'push' && github.ref == 'refs/heads/main'
-      && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
-    environment:
-      name: production
-      url: https://trevv.de
-    concurrency:
-      group: production-deploy
-      cancel-in-progress: false
+    needs: quality
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.22.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build and deploy the Worker
-        run: pnpm --filter @founderhq/web deploy:cloudflare
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DEMO_MODE: "false"
-          NEXT_PUBLIC_APP_URL: https://trevv.de
-          API_ORIGIN: ${{ vars.PRODUCTION_API_ORIGIN }}
-          BETTER_AUTH_URL: ${{ vars.PRODUCTION_AUTH_URL }}
-      - name: Verify production responds
+      - name: Build production-shaped service artifacts
+        run: docker compose -f compose.staging.yaml --profile smoke build
+      - name: Start the live-mode topology
+        run: >-
+          docker compose -f compose.staging.yaml --profile smoke
+          up --wait --wait-timeout 180 -d proxy worker-1 worker-2
+      - name: Verify the host-published trusted TLS boundary
         run: |
-          code=$(curl -sS -D /tmp/trevv-response-headers -o /tmp/trevv-response-body -w '%{http_code}' https://trevv.de/app/portfolio)
-          echo "trevv.de/app/portfolio -> $code"
-          case "$code" in 302|303|307|308) ;; *) exit 1 ;; esac
-          grep -Eiq '^location: .*/sign-in' /tmp/trevv-response-headers
-          ! grep -q 'Northstar Apparel' /tmp/trevv-response-body
-      - name: Report failure
+          docker compose -f compose.staging.yaml cp proxy:/etc/trevv-local-tls/ca.crt /tmp/trevv-staging-ca.crt
+          curl --fail --silent --show-error --cacert /tmp/trevv-staging-ca.crt https://127.0.0.1:8443/readyz
+      - name: Prove failed upgrades clean their isolated database
+        run: |
+          if docker compose -f compose.staging.yaml --profile smoke run --rm -e STAGING_UPGRADE_FAILURE_INJECTION=after_previous_fixture upgrade-smoke; then
+            echo "::error::The injected migration failure unexpectedly succeeded."
+            exit 1
+          fi
+          remaining=$(docker compose -f compose.staging.yaml exec -T postgres psql -U founderhq -d postgres -Atc "select count(*) from pg_database where datname = 'trevv_previous_release_upgrade'")
+          test "$remaining" = "0"
+      - name: Verify previous-release database upgrade
+        run: >-
+          docker compose -f compose.staging.yaml --profile smoke
+          run --rm upgrade-smoke
+      - name: Smoke the complete topology
+        run: >-
+          docker compose -f compose.staging.yaml --profile smoke
+          run --rm smoke
+      - name: Prove proxy logs exclude query values
+        run: |
+          docker compose -f compose.staging.yaml --profile smoke logs --no-color proxy > /tmp/trevv-proxy.log
+          node scripts/staging-proxy-log-check.mjs /tmp/trevv-proxy.log
+      - name: Report topology state
         if: failure()
         run: |
-          echo "::error::Production deploy failed. Roll back with:" \
-            "pnpm --filter @founderhq/web exec wrangler rollback"
-          exit 1
+          docker compose -f compose.staging.yaml --profile smoke ps --all
+          docker compose -f compose.staging.yaml --profile smoke logs --no-color --tail=250
+      - name: Remove topology resources (cleanup failures fail loudly)
+        if: always()
+        run: >-
+          docker compose -f compose.staging.yaml --profile smoke
+          down --volumes --remove-orphans
+
+  # Production promotion is intentionally absent. The previous Web-only
+  # Cloudflare deploy could publish a client without its API, worker, database,
+  # mail, migration, and rollback cohort. Reintroduce automation only for one
+  # reviewed release manifest that promotes and smokes the complete topology.
