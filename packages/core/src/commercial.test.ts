@@ -14,6 +14,7 @@ import {
   demoWaitingStates,
   generateAttentionSignals,
   opportunityScore,
+  privateBetaFoundationEntitlements,
   previewBlueprintUpdate,
   unrestrictedDevelopmentEntitlements,
 } from "./index";
@@ -36,6 +37,62 @@ describe("TREVV commercial domain", () => {
         3,
       ).allowed,
     ).toBe(false);
+  });
+
+  it("keeps the private-beta foundation free of prices and external effects", () => {
+    expect(privateBetaFoundationEntitlements.planKey).toBe(
+      "private-beta-foundation",
+    );
+    expect(privateBetaFoundationEntitlements.values).toMatchObject({
+      "automations.monthly": 0,
+      "ai.actions": 0,
+      "automation.external_effects": false,
+      "billing.checkout": false,
+      "files.private_storage": false,
+      "integration.google_calendar": false,
+      "integration.github": false,
+      "integration.drive": false,
+      "integration.figma": false,
+      "integration.slack": false,
+    });
+    expect(JSON.stringify(privateBetaFoundationEntitlements)).not.toMatch(
+      /price|amount|currency/i,
+    );
+  });
+
+  it("fails closed for invalid entitlement usage and numeric limits", () => {
+    for (const [currentUsage, requested] of [
+      [-1, 1],
+      [0, -1],
+      [0, 0],
+      [Number.NaN, 1],
+      [0, Number.POSITIVE_INFINITY],
+      [0.5, 1],
+    ] as const) {
+      expect(
+        checkEntitlement(
+          privateBetaFoundationEntitlements,
+          "ai.actions",
+          currentUsage,
+          requested,
+        ),
+      ).toMatchObject({
+        allowed: false,
+        reason: "The entitlement usage request is invalid.",
+      });
+    }
+    expect(
+      checkEntitlement(
+        {
+          planKey: "invalid",
+          values: { "ai.actions": Number.POSITIVE_INFINITY },
+        },
+        "ai.actions",
+      ),
+    ).toMatchObject({
+      allowed: false,
+      reason: "The entitlement usage request is invalid.",
+    });
   });
 
   it("derives and ranks explainable signals from operational evidence", () => {

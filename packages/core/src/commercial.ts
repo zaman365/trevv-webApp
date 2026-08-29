@@ -22,9 +22,14 @@ export type EntitlementKey =
   | "storage.bytes"
   | "automations.monthly"
   | "ai.actions"
+  | "automation.external_effects"
+  | "billing.checkout"
+  | "files.private_storage"
+  | "integration.google_calendar"
   | "integration.github"
   | "integration.drive"
-  | "integration.figma";
+  | "integration.figma"
+  | "integration.slack";
 
 export type EntitlementValue = number | boolean | "unlimited";
 
@@ -48,17 +53,31 @@ export function checkEntitlement(
   requested = 1,
 ): EntitlementResult {
   const limit = entitlements.values[key] ?? false;
+  const validUsage =
+    Number.isSafeInteger(currentUsage) &&
+    currentUsage >= 0 &&
+    Number.isSafeInteger(requested) &&
+    requested >= 1;
+  const validLimit =
+    typeof limit !== "number" || (Number.isSafeInteger(limit) && limit >= 0);
   const allowed =
-    limit === true ||
-    limit === "unlimited" ||
-    (typeof limit === "number" && currentUsage + requested <= limit);
+    validUsage &&
+    validLimit &&
+    (limit === true ||
+      limit === "unlimited" ||
+      (typeof limit === "number" && currentUsage + requested <= limit));
   return {
     allowed,
     key,
     currentUsage,
     limit,
     ...(!allowed
-      ? { reason: `This workspace has reached its ${key} entitlement.` }
+      ? {
+          reason:
+            !validUsage || !validLimit
+              ? "The entitlement usage request is invalid."
+              : `This workspace has reached its ${key} entitlement.`,
+        }
       : {}),
   };
 }
@@ -76,6 +95,31 @@ export const unrestrictedDevelopmentEntitlements: EntitlementSet = {
     "integration.github": true,
     "integration.drive": true,
     "integration.figma": true,
+  },
+};
+
+/**
+ * Safe commercial baseline while private-beta evidence and pricing approval
+ * are absent. It contains no price and enables no paid or external effect.
+ */
+export const privateBetaFoundationEntitlements: EntitlementSet = {
+  planKey: "private-beta-foundation",
+  values: {
+    "portfolios.max": "unlimited",
+    "workspaces.max": "unlimited",
+    "members.max": "unlimited",
+    "guests.max": "unlimited",
+    "storage.bytes": 0,
+    "automations.monthly": 0,
+    "ai.actions": 0,
+    "automation.external_effects": false,
+    "billing.checkout": false,
+    "files.private_storage": false,
+    "integration.google_calendar": false,
+    "integration.github": false,
+    "integration.drive": false,
+    "integration.figma": false,
+    "integration.slack": false,
   },
 };
 
