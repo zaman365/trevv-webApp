@@ -24,12 +24,15 @@ export interface AccessContext {
   userId: string;
   organizationId: string;
   role: Role;
+  accessiblePortfolioIds: ReadonlySet<string>;
+  managedPortfolioIds: ReadonlySet<string>;
   accessibleWorkspaceIds: ReadonlySet<string>;
   managedWorkspaceIds: ReadonlySet<string>;
 }
 
 export interface ResourceScope {
   organizationId: string;
+  portfolioId?: string;
   workspaceId?: string;
   explicitlyShared?: boolean;
 }
@@ -70,11 +73,13 @@ export function can(
       ? ["read", "comment"].includes(action)
       : action === "read";
   }
-  if (
-    resource === "portfolio" ||
-    resource === "search" ||
-    resource === "notification"
-  )
+  if (resource === "portfolio")
+    return Boolean(
+      action === "read" &&
+      scope.portfolioId &&
+      context.accessiblePortfolioIds.has(scope.portfolioId),
+    );
+  if (resource === "search" || resource === "notification")
     return action === "read";
   if (
     !scope.workspaceId ||

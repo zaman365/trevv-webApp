@@ -147,9 +147,12 @@ function DesktopPortfolio() {
                   </div>
                   <footer>
                     <span className="desktop-avatar">
-                      {workspace.lead.initials}
+                      {workspace.lead?.initials ?? "—"}
                     </span>
-                    <small>{workspace.nextMilestone.title}</small>
+                    <small>
+                      {workspace.nextMilestone?.title ??
+                        "No milestone scheduled"}
+                    </small>
                     <b>→</b>
                   </footer>
                 </article>

@@ -56,12 +56,18 @@ export default function WorkspaceScreen() {
         </View>
         <View style={styles.card}>
           <Text style={styles.label}>NEXT MILESTONE</Text>
-          <Text style={styles.value}>{workspace.nextMilestone.title}</Text>
-          <Text style={styles.note}>{workspace.nextMilestone.date}</Text>
+          <Text style={styles.value}>
+            {workspace.nextMilestone?.title ?? "No milestone scheduled"}
+          </Text>
+          {workspace.nextMilestone ? (
+            <Text style={styles.note}>{workspace.nextMilestone.date}</Text>
+          ) : null}
         </View>
         <View style={styles.card}>
           <Text style={styles.label}>LATEST UPDATE</Text>
-          <Text style={styles.note}>{workspace.latestUpdate.text}</Text>
+          <Text style={styles.note}>
+            {workspace.latestUpdate?.text ?? "No update published yet."}
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>

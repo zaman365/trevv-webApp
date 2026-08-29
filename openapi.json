@@ -3,12 +3,18 @@
   "info": {
     "title": "TREVV API",
     "version": "2.0.0",
-    "description": "Versioned, permission-scoped contracts shared by the TREVV Web, Mobile, and Desktop clients."
+    "description": "Versioned, permission-scoped contracts shared by the TREVV Web, Mobile, and Desktop clients. Health, this OpenAPI document, and provider-managed /api/auth/* endpoints are public; product routes require both a Better Auth session and X-Organization-Id in live mode."
   },
   "servers": [
     {
       "url": "http://localhost:8787",
       "description": "Local API"
+    }
+  ],
+  "security": [
+    {
+      "SessionCookie": [],
+      "OrganizationContext": []
     }
   ],
   "tags": [
@@ -26,6 +32,9 @@
     },
     {
       "name": "Management Memory"
+    },
+    {
+      "name": "Reviews"
     },
     {
       "name": "Insights"
@@ -55,13 +64,42 @@
   "paths": {
     "/api/v1/health": {
       "get": {
+        "security": [],
         "tags": [
           "System"
         ],
         "operationId": "health",
         "responses": {
           "200": {
-            "description": "Service health"
+            "description": "Service health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "security": [],
+        "tags": [
+          "System"
+        ],
+        "operationId": "getOpenApiDocument",
+        "responses": {
+          "200": {
+            "description": "This public OpenAPI document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenApiDocument"
+                }
+              }
+            }
           }
         }
       }
@@ -74,10 +112,26 @@
         "operationId": "getSession",
         "responses": {
           "200": {
-            "description": "Current session"
+            "description": "Current session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -88,12 +142,40 @@
           "Portfolio"
         ],
         "operationId": "getPortfolio",
+        "parameters": [
+          {
+            "name": "portfolioId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Accessible Portfolio roll-up"
+            "description": "Accessible Portfolio roll-up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -106,7 +188,29 @@
         "operationId": "listPortfolios",
         "responses": {
           "200": {
-            "description": "Accessible Portfolios"
+            "description": "Accessible Portfolios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Portfolio"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -136,7 +240,29 @@
         ],
         "responses": {
           "200": {
-            "description": "Active explainable Attention signals"
+            "description": "Active explainable Attention signals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AttentionSignal"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -150,14 +276,66 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ItemId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/OptionalIdempotencyKey"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttentionAction"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Resolved, dismissed, or snoozed signal"
+            "description": "Resolved, dismissed, or snoozed signal",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Idempotency-Key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "Idempotency-Replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionSignal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "422": {
             "$ref": "#/components/responses/Validation"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -170,7 +348,29 @@
         "operationId": "listWaitingStates",
         "responses": {
           "200": {
-            "description": "Accessible active waiting states"
+            "description": "Accessible active waiting states",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WaitingState"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -184,11 +384,66 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ItemId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/OptionalIdempotencyKey"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaitingAction"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Updated waiting state"
+            "description": "Updated waiting state",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Idempotency-Key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "Idempotency-Replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitingState"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -201,7 +456,26 @@
         "operationId": "getChangeRadar",
         "responses": {
           "200": {
-            "description": "Meaningful changes since the user checkpoint"
+            "description": "Meaningful changes since the user checkpoint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeRadar"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -214,7 +488,87 @@
         "operationId": "getManagementMemory",
         "responses": {
           "200": {
-            "description": "Snapshots, review rituals, and decision outcomes"
+            "description": "Snapshots, review rituals, and decision outcomes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagementMemory"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/weekly": {
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "operationId": "submitWeeklyReview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeeklyReviewInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Durably recorded weekly review",
+            "headers": {
+              "Idempotency-Key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "Idempotency-Replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -227,7 +581,29 @@
         "operationId": "listInsights",
         "responses": {
           "200": {
-            "description": "Permission-filtered operational evidence"
+            "description": "Permission-filtered demo operational evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Insight"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
@@ -240,7 +616,26 @@
         "operationId": "listBlueprints",
         "responses": {
           "200": {
-            "description": "Blueprint versions, instances, and safe update preview"
+            "description": "Demo Blueprint versions, instances, and safe update preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlueprintResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
@@ -253,7 +648,29 @@
         "operationId": "getTeamPressure",
         "responses": {
           "200": {
-            "description": "Cross-Workspace capacity evidence"
+            "description": "Demo cross-Workspace capacity evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResourcePressure"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
@@ -266,7 +683,26 @@
         "operationId": "getEntitlements",
         "responses": {
           "200": {
-            "description": "Central capability entitlement set"
+            "description": "Demo capability entitlement set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementSet"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
@@ -277,9 +713,41 @@
           "Commercial"
         ],
         "operationId": "previewImport",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportPreviewInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Dry-run mapping and unsupported-data report"
+            "description": "Demo dry-run mapping and unsupported-data report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
@@ -292,7 +760,29 @@
         "operationId": "listWorkspaces",
         "responses": {
           "200": {
-            "description": "Accessible Workspaces"
+            "description": "Accessible Workspaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Workspace"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -310,10 +800,26 @@
         ],
         "responses": {
           "200": {
-            "description": "Workspace overview and accessible work"
+            "description": "Workspace overview and accessible work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -340,7 +846,7 @@
             }
           },
           {
-            "name": "assignee",
+            "name": "assigneeId",
             "in": "query",
             "schema": {
               "type": "string"
@@ -359,7 +865,29 @@
         ],
         "responses": {
           "200": {
-            "description": "Permission-filtered, cursor-paginated work items"
+            "description": "Permission-filtered, cursor-paginated work items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedItems"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       },
@@ -385,10 +913,43 @@
         },
         "responses": {
           "201": {
-            "description": "Created work item"
+            "description": "Created work item or exact replay of the original create",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Idempotency-Key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "Idempotency-Replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "422": {
             "$ref": "#/components/responses/Validation"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -404,13 +965,10 @@
             "$ref": "#/components/parameters/ItemId"
           },
           {
-            "name": "If-Match",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 0
-            }
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/OptionalIdempotencyKey"
           }
         ],
         "requestBody": {
@@ -418,21 +976,53 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": false
+                "$ref": "#/components/schemas/WorkItemPatch"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Updated work item"
+            "description": "Updated work item",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Idempotency-Key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "Idempotency-Replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "Version conflict"
+            "$ref": "#/components/responses/Conflict"
           },
           "422": {
             "$ref": "#/components/responses/Validation"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -457,7 +1047,29 @@
         ],
         "responses": {
           "200": {
-            "description": "Permission-filtered Workspace and item results"
+            "description": "Permission-filtered Workspace and item results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "503": {
+            "$ref": "#/components/responses/RepositoryUnavailable"
           }
         }
       }
@@ -470,10 +1082,26 @@
         "operationId": "exportOrganization",
         "responses": {
           "200": {
-            "description": "Organization JSON export"
+            "description": "Demo organization JSON export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationExport"
+                }
+              }
+            }
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
@@ -490,19 +1118,34 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Board CSV export",
+            "description": "Demo Board CSV export",
             "content": {
-              "text/csv": {}
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
@@ -515,16 +1158,46 @@
         "operationId": "events",
         "responses": {
           "200": {
-            "description": "Server-sent event stream",
+            "description": "Demo server-sent event stream",
             "content": {
-              "text/event-stream": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/OrganizationContextRequired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/CapabilityUnavailable"
           }
         }
       }
     }
   },
   "components": {
+    "securitySchemes": {
+      "SessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "better-auth.session_token",
+        "description": "Better Auth session cookie. Production may apply the standard __Secure- cookie prefix; clients must obtain the cookie through the public /api/auth/* endpoints."
+      },
+      "OrganizationContext": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Organization-Id",
+        "description": "Required in live mode. The server verifies this selection against the authenticated user's active membership."
+      }
+    },
     "parameters": {
       "WorkspaceSlug": {
         "name": "slug",
@@ -538,38 +1211,1792 @@
         "name": "id",
         "in": "path",
         "required": true,
+        "description": "Tenant-scoped resource identifier.",
         "schema": {
-          "type": "string"
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128
         }
       },
       "IdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
-        "required": false,
+        "required": true,
+        "description": "A UUID scoped to the selected organization and authenticated user. Reusing it with the same request returns the original status and body; reusing it with a different request returns 409.",
         "schema": {
           "type": "string",
           "format": "uuid"
         }
+      },
+      "OptionalIdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Optional UUID for exact replay. When supplied, the key also binds the current If-Match value.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": true,
+        "description": "Strong numeric ETag returned by the resource, from \"0\" through \"2147483647\"; for example \"3\".",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"[0-9]+\"$"
+        }
+      }
+    },
+    "headers": {
+      "ETag": {
+        "description": "Strong quoted PostgreSQL integer resource version, from \"0\" through \"2147483647\".",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"[0-9]+\"$"
+        }
+      },
+      "IdempotencyKey": {
+        "description": "The validated idempotency key used for this mutation. Present when a key was supplied.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "IdempotencyReplayed": {
+        "description": "Whether this status and body are an exact replay of a previously committed mutation. Present when an idempotency key was supplied.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false"
+          ]
+        }
       }
     },
     "schemas": {
-      "WorkItemInput": {
+      "Health": {
         "type": "object",
         "required": [
+          "status",
+          "service",
+          "version",
+          "mode",
+          "time"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "service": {
+            "type": "string",
+            "const": "trevv-api"
+          },
+          "version": {
+            "type": "string",
+            "const": "v1"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "demo",
+              "live"
+            ]
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OpenApiDocument": {
+        "type": "object",
+        "required": [
+          "openapi",
+          "info",
+          "paths",
+          "components"
+        ],
+        "properties": {
+          "openapi": {
+            "type": "string",
+            "const": "3.1.0"
+          },
+          "info": {
+            "type": "object",
+            "required": [
+              "title",
+              "version"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          },
+          "paths": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "components": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "locale"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "workspace_lead",
+              "member",
+              "guest",
+              "viewer"
+            ]
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "en",
+              "de"
+            ]
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "required": [
+          "user",
+          "organizationId",
+          "expiresAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Portfolio": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "name",
+          "slug",
+          "description",
+          "isDefault"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkspaceMetric": {
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "trend": {
+            "type": "string"
+          }
+        }
+      },
+      "Workspace": {
+        "type": "object",
+        "required": [
+          "id",
+          "portfolioId",
+          "slug",
+          "name",
+          "icon",
+          "accent",
+          "type",
+          "stage",
+          "health",
+          "healthNote",
+          "priority",
+          "metrics"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "icon": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12
+          },
+          "accent": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "business",
+              "brand",
+              "client",
+              "product",
+              "department",
+              "venture",
+              "initiative",
+              "investment",
+              "campaign",
+              "program",
+              "project",
+              "shared_function",
+              "client_program",
+              "journey",
+              "other"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "idea",
+              "validate",
+              "build",
+              "launch",
+              "grow",
+              "operate",
+              "paused",
+              "archived"
+            ]
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "on_track",
+              "watch",
+              "critical",
+              "parked"
+            ]
+          },
+          "healthNote": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "priority": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "lead": {
+            "type": "object",
+            "required": [
+              "name",
+              "initials",
+              "color"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "initials": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string"
+              }
+            }
+          },
+          "nextMilestone": {
+            "type": "object",
+            "required": [
+              "title",
+              "date"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "latestUpdate": {
+            "type": "object",
+            "required": [
+              "text",
+              "date"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceMetric"
+            }
+          }
+        }
+      },
+      "WorkspaceRollup": {
+        "type": "object",
+        "required": [
+          "open",
+          "overdue",
+          "blocked",
+          "decisions",
+          "approvals",
+          "score"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "open": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blocked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "decisions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "approvals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "PortfolioSignals": {
+        "type": "object",
+        "required": [
+          "decisions",
+          "approvals",
+          "blocked",
+          "overdueMilestones",
+          "staleUpdates",
+          "unassignedUrgent"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "decisions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "approvals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blocked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "overdueMilestones": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "staleUpdates": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unassignedUrgent": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "PortfolioWorkspaceRollup": {
+        "type": "object",
+        "required": [
+          "workspace",
+          "rollup"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "workspace": {
+            "$ref": "#/components/schemas/Workspace"
+          },
+          "rollup": {
+            "$ref": "#/components/schemas/WorkspaceRollup"
+          }
+        }
+      },
+      "PortfolioResponse": {
+        "type": "object",
+        "required": [
+          "asOf",
+          "portfolio",
+          "signals",
+          "workspaces"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "portfolio": {
+            "$ref": "#/components/schemas/Portfolio"
+          },
+          "signals": {
+            "$ref": "#/components/schemas/PortfolioSignals"
+          },
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortfolioWorkspaceRollup"
+            }
+          }
+        }
+      },
+      "WorkspaceDetail": {
+        "type": "object",
+        "required": [
+          "workspace",
+          "rollup",
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "workspace": {
+            "$ref": "#/components/schemas/Workspace"
+          },
+          "rollup": {
+            "$ref": "#/components/schemas/WorkspaceRollup"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          }
+        }
+      },
+      "MeaningfulChange": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "workspaceId",
+          "entityType",
+          "entityId",
+          "type",
+          "summary",
+          "occurredAt",
+          "importance",
+          "metadata"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "entityType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "health_changed",
+              "milestone_changed",
+              "priority_changed",
+              "decision_requested",
+              "decision_resolved",
+              "blocker_added",
+              "blocker_resolved",
+              "update_published",
+              "update_became_stale",
+              "major_work_completed",
+              "due_date_materially_changed",
+              "ownership_changed"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "importance": {
+            "type": "number",
+            "minimum": 0
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ChangeRadar": {
+        "type": "object",
+        "required": [
+          "checkpoint",
+          "changes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint": {
+            "type": "object",
+            "required": [
+              "userId",
+              "portfolioId",
+              "lastSeenAt"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "userId": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "portfolioId": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "lastSeenAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeaningfulChange"
+            }
+          }
+        }
+      },
+      "WorkspaceSnapshot": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "workspaceId",
+          "capturedAt",
+          "health",
+          "openCount",
+          "overdueCount",
+          "blockedCount",
+          "decisionCount",
+          "attentionCount",
+          "source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "on_track",
+              "watch",
+              "critical",
+              "parked"
+            ]
+          },
+          "progress": {
+            "type": "number"
+          },
+          "openCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "overdueCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blockedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "decisionCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "attentionCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextMilestoneId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "nextMilestoneStatus": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "latestUpdateAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "weekly_review",
+              "monthly_review",
+              "manual"
+            ]
+          }
+        }
+      },
+      "ReviewRitual": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "type",
+          "cadence",
+          "enabled",
+          "reminderEnabled"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "daily_focus",
+              "weekly_workspace",
+              "monthly_portfolio"
+            ]
+          },
+          "cadence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextDueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reminderEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DecisionOutcome": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "decisionItemId",
+          "outcome",
+          "learning",
+          "recordedBy",
+          "recordedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "decisionItemId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "better_than_expected",
+              "as_expected",
+              "worse_than_expected",
+              "too_early"
+            ]
+          },
+          "learning": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "wouldRepeat": {
+            "type": "boolean"
+          },
+          "recordedBy": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ManagementMemory": {
+        "type": "object",
+        "required": [
+          "workspaceSnapshots",
+          "reviewRituals",
+          "decisionOutcomes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "workspaceSnapshots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSnapshot"
+            }
+          },
+          "reviewRituals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewRitual"
+            }
+          },
+          "decisionOutcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionOutcome"
+            }
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "required": [
+          "workspaces",
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Workspace"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          }
+        }
+      },
+      "Insight": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "title",
+          "description",
+          "sourceType",
+          "labels",
+          "capturedBy",
+          "capturedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "customer_feedback",
+              "research",
+              "analytics",
+              "quote",
+              "url",
+              "screenshot",
+              "file",
+              "email",
+              "slack",
+              "figma",
+              "github",
+              "other"
+            ]
+          },
+          "sourceUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capturedBy": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BlueprintInstance": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "blueprintId",
+          "blueprintVersionId",
+          "workspaceId",
+          "boardId",
+          "localOverrides"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "blueprintId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "blueprintVersionId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "boardId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "detachedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "localOverrides": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BlueprintVersion": {
+        "type": "object",
+        "required": [
+          "id",
+          "blueprintId",
+          "version",
+          "summary",
+          "definition",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "blueprintId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "summary": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "object",
+            "required": [
+              "groups",
+              "statuses",
+              "customFields",
+              "views",
+              "updateCadence",
+              "defaultRoles",
+              "automationRules",
+              "reviewRitual"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "statuses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "customFields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "views": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "updateCadence": {
+                "type": "string"
+              },
+              "defaultRoles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "automationRules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reviewRitual": {
+                "type": "string"
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BlueprintDiff": {
+        "type": "object",
+        "required": [
+          "additions",
+          "changes",
+          "conflicts",
+          "preservedOverrides"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "additions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preservedOverrides": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BlueprintResponse": {
+        "type": "object",
+        "required": [
+          "instances",
+          "versions",
+          "preview"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "instances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlueprintInstance"
+            }
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlueprintVersion"
+            }
+          },
+          "preview": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BlueprintDiff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ResourcePressure": {
+        "type": "object",
+        "required": [
+          "userId",
+          "userName",
+          "urgentHighActive",
+          "dueThisWeek",
+          "blockedResponsibilities",
+          "criticalWorkspaceResponsibilities",
+          "milestonesOwned",
+          "workspaceIds",
+          "pressure"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "userName": {
+            "type": "string"
+          },
+          "urgentHighActive": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "dueThisWeek": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blockedResponsibilities": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "criticalWorkspaceResponsibilities": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "milestonesOwned": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "workspaceIds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128
+            }
+          },
+          "pressure": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "elevated",
+              "critical"
+            ]
+          }
+        }
+      },
+      "EntitlementSet": {
+        "type": "object",
+        "required": [
+          "planKey",
+          "values"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "planKey": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "portfolios.max",
+                "workspaces.max",
+                "members.max",
+                "guests.max",
+                "storage.bytes",
+                "automations.monthly",
+                "ai.actions",
+                "integration.github",
+                "integration.drive",
+                "integration.figma"
+              ]
+            },
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "unlimited"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "ImportPreviewInput": {
+        "type": "object",
+        "required": [
+          "preset",
+          "headers",
+          "rowCount"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "generic_csv",
+              "monday",
+              "clickup",
+              "asana"
+            ]
+          },
+          "headers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string"
+            }
+          },
+          "rowCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        }
+      },
+      "ImportPreview": {
+        "type": "object",
+        "required": [
+          "preset",
+          "rowsDetected",
+          "rowsReady",
+          "warnings",
+          "unsupportedFields",
+          "mapping",
+          "dryRun"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "generic_csv",
+              "monday",
+              "clickup",
+              "asana"
+            ]
+          },
+          "rowsDetected": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rowsReady": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unsupportedFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mapping": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "dryRun": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "WorkItemDependency": {
+        "type": "object",
+        "required": [
+          "itemId",
+          "dependsOnItemId",
+          "relation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "dependsOnItemId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "depends_on",
+              "blocks",
+              "related"
+            ]
+          }
+        }
+      },
+      "OrganizationExport": {
+        "type": "object",
+        "required": [
+          "exportedAt",
+          "organization",
+          "portfolios",
+          "workspaces",
+          "boards",
+          "items",
+          "milestones",
+          "ideas",
+          "decisions",
+          "decisionOutcomes",
+          "approvals",
+          "updates",
+          "insights",
+          "snapshots",
+          "waiting",
+          "attention",
+          "dependencies",
+          "commentMetadata",
+          "smartLinks"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "portfolios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Portfolio"
+            }
+          },
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Workspace"
+            }
+          },
+          "boards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 128
+                },
+                "workspaceId": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 128
+                }
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "milestones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "ideas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "decisionOutcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionOutcome"
+            }
+          },
+          "approvals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "workspaceId",
+                "text",
+                "date"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "workspaceId": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 128
+                },
+                "text": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          },
+          "insights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Insight"
+            }
+          },
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSnapshot"
+            }
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingState"
+            }
+          },
+          "attention": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttentionSignal"
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItemDependency"
+            }
+          },
+          "commentMetadata": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "smartLinks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "Assignee": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      },
+      "WorkItem": {
+        "type": "object",
+        "required": [
+          "id",
           "workspaceId",
           "boardId",
           "title",
           "type",
           "priority",
-          "status"
+          "status",
+          "assignees",
+          "version"
         ],
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "approval"
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "required": [
+                "approvalState"
+              ],
+              "not": {
+                "required": [
+                  "decisionState"
+                ]
+              }
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "approvalState"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "decision"
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "required": [
+                "decisionState"
+              ],
+              "not": {
+                "required": [
+                  "approvalState"
+                ]
+              }
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "decisionState"
+                ]
+              }
+            }
+          }
+        ],
         "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
           "workspaceId": {
-            "type": "string"
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
           },
           "boardId": {
-            "type": "string"
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
           },
           "title": {
             "type": "string",
@@ -611,8 +3038,724 @@
             "type": "string",
             "format": "date"
           },
-          "assignee": {
+          "assignees": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Assignee"
+            }
+          },
+          "approvalState": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "changes_requested",
+              "approved",
+              "rejected"
+            ]
+          },
+          "decisionState": {
+            "type": "string",
+            "enum": [
+              "needed",
+              "analyzing",
+              "delegated",
+              "deferred",
+              "decided"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          }
+        }
+      },
+      "PaginatedItems": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AttentionSignal": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "entityType",
+          "entityId",
+          "signalType",
+          "severity",
+          "impact",
+          "urgency",
+          "responsibility",
+          "reason",
+          "createdAt",
+          "metadata",
+          "version"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "entityType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "signalType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "impact": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "urgency": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "responsibility": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "recommendedAction": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dismissedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "snoozedUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actionReason": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          }
+        }
+      },
+      "WaitingState": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "portfolioId",
+          "workspaceId",
+          "entityType",
+          "entityId",
+          "title",
+          "waitingType",
+          "waitingSince",
+          "followUpOwnerId",
+          "followUpOwnerName",
+          "version"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "organizationId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "portfolioId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "entityType": {
+            "type": "string",
+            "enum": [
+              "work_item",
+              "decision",
+              "approval"
+            ]
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "waitingType": {
+            "type": "string",
+            "enum": [
+              "person",
+              "team",
+              "external_partner",
+              "client",
+              "vendor",
+              "decision",
+              "document",
+              "dependency",
+              "other"
+            ]
+          },
+          "waitingReferenceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "waitingLabel": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "waitingSince": {
+            "type": "string",
+            "format": "date"
+          },
+          "expectedBy": {
+            "type": "string",
+            "format": "date"
+          },
+          "followUpOwnerId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "followUpOwnerName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "nextFollowUp": {
+            "type": "string",
+            "format": "date"
+          },
+          "waitingNote": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          }
+        }
+      },
+      "WorkItemInput": {
+        "type": "object",
+        "required": [
+          "workspaceId",
+          "boardId",
+          "title",
+          "type",
+          "priority",
+          "status"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "approval"
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "required": [
+                "approvalState"
+              ],
+              "not": {
+                "required": [
+                  "decisionState"
+                ]
+              }
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "approvalState"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "decision"
+                }
+              },
+              "required": [
+                "type"
+              ]
+            },
+            "then": {
+              "required": [
+                "decisionState"
+              ],
+              "not": {
+                "required": [
+                  "approvalState"
+                ]
+              }
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "decisionState"
+                ]
+              }
+            }
+          }
+        ],
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "boardId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "task",
+              "decision",
+              "approval",
+              "milestone",
+              "idea",
+              "request"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "urgent",
+              "high",
+              "normal",
+              "low",
+              "none"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "working",
+              "blocked",
+              "review",
+              "done"
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "assigneeIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128
+            }
+          },
+          "approvalState": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "changes_requested",
+              "approved",
+              "rejected"
+            ]
+          },
+          "decisionState": {
+            "type": "string",
+            "enum": [
+              "needed",
+              "analyzing",
+              "delegated",
+              "deferred",
+              "decided"
+            ]
+          }
+        }
+      },
+      "WorkItemPatch": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "urgent",
+              "high",
+              "normal",
+              "low",
+              "none"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "working",
+              "blocked",
+              "review",
+              "done"
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "assigneeIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128
+            }
+          }
+        }
+      },
+      "AttentionAction": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "resolve",
+              "dismiss",
+              "snooze"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1000
+          },
+          "snoozedUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WaitingAction": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "reschedule"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "nextFollowUp"
+              ]
+            }
+          }
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "resolve",
+              "nudge",
+              "reschedule"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "nextFollowUp": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "WeeklyReviewInput": {
+        "type": "object",
+        "required": [
+          "workspaceId",
+          "health",
+          "progress",
+          "blocker",
+          "nextMilestone",
+          "priorityNextWeek"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "on_track",
+              "watch",
+              "critical",
+              "parked"
+            ]
+          },
+          "progress": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blocker": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nextMilestone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decisionNeeded": {
             "type": "string"
+          },
+          "priorityNextWeek": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "WeeklyReviewResponse": {
+        "type": "object",
+        "required": [
+          "update",
+          "snapshot",
+          "attentionRefreshQueued"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "update": {
+            "type": "object",
+            "required": [
+              "id",
+              "workspaceId",
+              "health",
+              "progress",
+              "blocker",
+              "nextMilestone",
+              "priorityNextWeek",
+              "publishedAt"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "workspaceId": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "health": {
+                "type": "string",
+                "enum": [
+                  "on_track",
+                  "watch",
+                  "critical",
+                  "parked"
+                ]
+              },
+              "progress": {
+                "type": "string"
+              },
+              "blocker": {
+                "type": "string"
+              },
+              "nextMilestone": {
+                "type": "string"
+              },
+              "decisionNeeded": {
+                "type": "string"
+              },
+              "priorityNextWeek": {
+                "type": "string"
+              },
+              "publishedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "snapshot": {
+            "type": "object",
+            "required": [
+              "id",
+              "organizationId",
+              "portfolioId",
+              "workspaceId",
+              "capturedAt",
+              "health",
+              "source"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "organizationId": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "portfolioId": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "workspaceId": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 128
+              },
+              "capturedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "health": {
+                "type": "string",
+                "enum": [
+                  "on_track",
+                  "watch",
+                  "critical",
+                  "parked"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "const": "weekly_review"
+              }
+            }
+          },
+          "attentionRefreshQueued": {
+            "type": "boolean"
           }
         }
       },
@@ -687,7 +3830,15 @@
                 "type": "string"
               },
               "details": {
-                "type": "object"
+                "type": "object",
+                "properties": {
+                  "currentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  }
+                },
+                "additionalProperties": true
               }
             }
           }
@@ -697,6 +3848,16 @@
     "responses": {
       "Unauthenticated": {
         "description": "Authentication required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "OrganizationContextRequired": {
+        "description": "X-Organization-Id is required in live mode and must select an organization in which the authenticated user has an active membership.",
         "content": {
           "application/json": {
             "schema": {
@@ -725,8 +3886,53 @@
           }
         }
       },
+      "Conflict": {
+        "description": "The resource version is stale, or an idempotency key was reused for a different request.",
+        "headers": {
+          "ETag": {
+            "$ref": "#/components/headers/ETag"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
       "Validation": {
         "description": "Validation failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PreconditionRequired": {
+        "description": "A current quoted ETag is required in If-Match.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RepositoryUnavailable": {
+        "description": "The live PostgreSQL repository is unavailable.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "CapabilityUnavailable": {
+        "description": "This capability is deliberately unavailable in live mode during Phase 1.",
         "content": {
           "application/json": {
             "schema": {

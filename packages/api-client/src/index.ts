@@ -2,17 +2,38 @@ import {
   apiErrorSchema,
   attentionActionSchema,
   attentionSignalSchema,
-  workspaceSchema,
+  changeRadarSchema,
+  createItemSchema,
+  entityTagSchema,
+  idempotencyKeySchema,
+  managementMemorySchema,
   paginatedItemsSchema,
   portfolioResponseSchema,
   portfolioSchema,
+  searchResultSchema,
   sessionSchema,
-  workItemSchema,
+  updateItemSchema,
+  waitingActionSchema,
   waitingStateSchema,
+  weeklyReviewInputSchema,
+  weeklyReviewResponseSchema,
+  workItemSchema,
+  workspaceDetailSchema,
+  workspaceSchema,
   type AttentionSignalDto,
+  type ChangeRadarDto,
+  type CreateItemInput,
   type PortfolioResponse,
+  type ManagementMemoryDto,
+  type SearchResultDto,
   type Session,
+  type UpdateItemInput,
+  type WaitingAction,
+  type WaitingStateDto,
+  type WeeklyReviewInput,
+  type WeeklyReviewResponse,
   type WorkItemDto,
+  type WorkspaceDetailDto,
 } from "@founderhq/api-contract";
 
 export class TrevvApiError extends Error {
@@ -21,6 +42,8 @@ export class TrevvApiError extends Error {
     message: string,
     readonly requestId: string,
     readonly status: number,
+    readonly details?: Record<string, unknown>,
+    readonly etag?: string,
   ) {
     super(message);
     this.name = "TrevvApiError";
@@ -30,23 +53,44 @@ export class TrevvApiError extends Error {
 export interface ApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => Promise<string | null>;
+  getOrganizationId?: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
+}
+
+export interface MutationResponse<T> {
+  data: T;
+  idempotencyKey?: string;
+  replayed: boolean;
+}
+
+export interface VersionedMutationResponse<T> extends MutationResponse<T> {
+  etag: string;
+}
+
+interface RawResponse {
+  body: unknown;
+  response: Response;
 }
 
 export function createApiClient({
   baseUrl,
   getAccessToken,
+  getOrganizationId,
   fetchImpl = fetch,
 }: ApiClientOptions) {
   const request = async (
     path: string,
     init?: RequestInit,
-  ): Promise<unknown> => {
-    const token = await getAccessToken?.();
+  ): Promise<RawResponse> => {
+    const [token, organizationId] = await Promise.all([
+      getAccessToken?.(),
+      getOrganizationId?.(),
+    ]);
     const headers = new Headers(init?.headers);
     headers.set("accept", "application/json");
     if (init?.body) headers.set("content-type", "application/json");
     if (token) headers.set("authorization", `Bearer ${token}`);
+    if (organizationId) headers.set("x-organization-id", organizationId);
     const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
       headers,
@@ -61,6 +105,8 @@ export function createApiClient({
           parsed.data.error.message,
           parsed.data.error.requestId,
           response.status,
+          parsed.data.error.details,
+          responseEntityTag(response),
         );
       throw new TrevvApiError(
         "unexpected_response",
@@ -69,28 +115,41 @@ export function createApiClient({
         response.status,
       );
     }
-    return body;
+    return { body, response };
   };
 
   return {
     session: async (): Promise<Session> =>
-      sessionSchema.parse(await request("/session")),
+      sessionSchema.parse((await request("/session")).body),
+
     portfolio: async (portfolioId?: string): Promise<PortfolioResponse> =>
       portfolioResponseSchema.parse(
-        await request(
-          `/portfolio${portfolioId ? `?portfolioId=${encodeURIComponent(portfolioId)}` : ""}`,
-        ),
+        (
+          await request(
+            `/portfolio${portfolioId ? `?portfolioId=${encodeURIComponent(portfolioId)}` : ""}`,
+          )
+        ).body,
       ),
+
     portfolios: async () =>
-      portfolioSchema.array().parse(await request("/portfolios")),
-    attention: async (portfolioId?: string) =>
-      attentionSignalSchema
+      portfolioSchema.array().parse((await request("/portfolios")).body),
+
+    attention: async (
+      filters: {
+        portfolioId?: string;
+        workspaceId?: string;
+      } = {},
+    ) => {
+      const query = new URLSearchParams();
+      if (filters.portfolioId) query.set("portfolioId", filters.portfolioId);
+      if (filters.workspaceId) query.set("workspaceId", filters.workspaceId);
+      return attentionSignalSchema
         .array()
         .parse(
-          await request(
-            `/attention${portfolioId ? `?portfolioId=${encodeURIComponent(portfolioId)}` : ""}`,
-          ),
-        ),
+          (await request(`/attention${query.size ? `?${query}` : ""}`)).body,
+        );
+    },
+
     actOnAttention: async (
       id: string,
       input: {
@@ -98,49 +157,161 @@ export function createApiClient({
         reason?: string;
         snoozedUntil?: string;
       },
-    ): Promise<AttentionSignalDto> => {
+      version: number,
+      idempotencyKey?: string,
+    ): Promise<VersionedMutationResponse<AttentionSignalDto>> => {
       const body = attentionActionSchema.parse(input);
-      return attentionSignalSchema.parse(
-        await request(`/attention/${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          body: JSON.stringify(body),
-        }),
+      const response = await request(`/attention/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: mutationHeaders(version, idempotencyKey),
+        body: JSON.stringify(body),
+      });
+      return parseVersionedMutation(response, attentionSignalSchema);
+    },
+
+    waiting: async () =>
+      waitingStateSchema.array().parse((await request("/waiting")).body),
+
+    actOnWaiting: async (
+      id: string,
+      input: WaitingAction,
+      version: number,
+      idempotencyKey?: string,
+    ): Promise<VersionedMutationResponse<WaitingStateDto>> => {
+      const body = waitingActionSchema.parse(input);
+      const response = await request(`/waiting/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: mutationHeaders(version, idempotencyKey),
+        body: JSON.stringify(body),
+      });
+      return parseVersionedMutation(response, waitingStateSchema);
+    },
+
+    workspaces: async () =>
+      workspaceSchema.array().parse((await request("/workspaces")).body),
+
+    workspace: async (slug: string): Promise<WorkspaceDetailDto> =>
+      workspaceDetailSchema.parse(
+        (await request(`/workspaces/${encodeURIComponent(slug)}`)).body,
+      ),
+
+    changeRadar: async (): Promise<ChangeRadarDto> =>
+      changeRadarSchema.parse((await request("/change-radar")).body),
+
+    managementMemory: async (): Promise<ManagementMemoryDto> =>
+      managementMemorySchema.parse((await request("/management-memory")).body),
+
+    search: async (query: string): Promise<SearchResultDto> =>
+      searchResultSchema.parse(
+        (await request(`/search?q=${encodeURIComponent(query)}`)).body,
+      ),
+
+    items: async (
+      filters: {
+        cursor?: string;
+        workspaceId?: string;
+        assigneeId?: string;
+        limit?: number;
+      } = {},
+    ) => {
+      const query = new URLSearchParams();
+      if (filters.cursor) query.set("cursor", filters.cursor);
+      if (filters.workspaceId) query.set("workspaceId", filters.workspaceId);
+      if (filters.assigneeId) query.set("assigneeId", filters.assigneeId);
+      if (filters.limit) query.set("limit", String(filters.limit));
+      return paginatedItemsSchema.parse(
+        (await request(`/items${query.size ? `?${query}` : ""}`)).body,
       );
     },
-    waiting: async () =>
-      waitingStateSchema.array().parse(await request("/waiting")),
-    workspaces: async () =>
-      workspaceSchema.array().parse(await request("/workspaces")),
-    items: async (cursor?: string) =>
-      paginatedItemsSchema.parse(
-        await request(
-          `/items${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
-        ),
-      ),
+
     createItem: async (
-      input: Omit<WorkItemDto, "id">,
+      input: CreateItemInput,
       idempotencyKey: string,
-    ) =>
-      workItemSchema.parse(
-        await request("/items", {
-          method: "POST",
-          headers: { "idempotency-key": idempotencyKey },
-          body: JSON.stringify(input),
-        }),
-      ),
+    ): Promise<VersionedMutationResponse<WorkItemDto>> => {
+      const body = createItemSchema.parse(input);
+      const key = idempotencyKeySchema.parse(idempotencyKey);
+      const response = await request("/items", {
+        method: "POST",
+        headers: { "idempotency-key": key },
+        body: JSON.stringify(body),
+      });
+      return parseVersionedMutation(response, workItemSchema);
+    },
+
     updateItem: async (
       id: string,
-      patch: Partial<WorkItemDto>,
+      patch: UpdateItemInput,
       version: number,
-    ) =>
-      workItemSchema.parse(
-        await request(`/items/${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          headers: { "if-match": String(version) },
-          body: JSON.stringify(patch),
-        }),
-      ),
+      idempotencyKey?: string,
+    ): Promise<VersionedMutationResponse<WorkItemDto>> => {
+      const body = updateItemSchema.parse(patch);
+      const response = await request(`/items/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: mutationHeaders(version, idempotencyKey),
+        body: JSON.stringify(body),
+      });
+      return parseVersionedMutation(response, workItemSchema);
+    },
+
+    submitWeeklyReview: async (
+      input: WeeklyReviewInput,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<WeeklyReviewResponse>> => {
+      const body = weeklyReviewInputSchema.parse(input);
+      const key = idempotencyKeySchema.parse(idempotencyKey);
+      const response = await request("/reviews/weekly", {
+        method: "POST",
+        headers: { "idempotency-key": key },
+        body: JSON.stringify(body),
+      });
+      return {
+        data: weeklyReviewResponseSchema.parse(response.body),
+        ...mutationMetadata(response.response),
+      };
+    },
   };
+}
+
+function mutationHeaders(
+  version: number,
+  idempotencyKey?: string,
+): HeadersInit {
+  const headers = new Headers({ "if-match": `"${version}"` });
+  if (idempotencyKey)
+    headers.set("idempotency-key", idempotencyKeySchema.parse(idempotencyKey));
+  return headers;
+}
+
+function parseVersionedMutation<T>(
+  result: RawResponse,
+  schema: { parse(value: unknown): T & { version: number } },
+): VersionedMutationResponse<T> {
+  const data = schema.parse(result.body);
+  const etag = entityTagSchema.parse(result.response.headers.get("etag"));
+  if (Number.parseInt(etag.slice(1, -1), 10) !== data.version)
+    throw new TrevvApiError(
+      "unexpected_response",
+      "The response ETag did not match the resource version.",
+      result.response.headers.get("x-request-id") ?? "unknown",
+      result.response.status,
+    );
+  return { data, etag, ...mutationMetadata(result.response) };
+}
+
+function mutationMetadata(response: Response): {
+  idempotencyKey?: string;
+  replayed: boolean;
+} {
+  const idempotencyKey = response.headers.get("idempotency-key") ?? undefined;
+  return {
+    ...(idempotencyKey ? { idempotencyKey } : {}),
+    replayed: response.headers.get("idempotency-replayed") === "true",
+  };
+}
+
+function responseEntityTag(response: Response): string | undefined {
+  const parsed = entityTagSchema.safeParse(response.headers.get("etag"));
+  return parsed.success ? parsed.data : undefined;
 }
 
 export type TrevvApiClient = ReturnType<typeof createApiClient>;

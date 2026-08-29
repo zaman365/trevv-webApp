@@ -10,6 +10,8 @@ const context = (role: AccessContext["role"]): AccessContext => ({
   userId: "user-a",
   organizationId: "org-a",
   role,
+  accessiblePortfolioIds: new Set(["portfolio-a"]),
+  managedPortfolioIds: new Set(["portfolio-a"]),
   accessibleWorkspaceIds: new Set(["workspace-a"]),
   managedWorkspaceIds: new Set(["workspace-a"]),
 });
@@ -45,6 +47,20 @@ describe("tenant authorization", () => {
         workspaceId: "workspace-unrelated",
       }),
     ).toThrow(PermissionError);
+  });
+  it("requires explicit Portfolio membership outside organization-management roles", () => {
+    expect(
+      can(context("member"), "read", "portfolio", {
+        organizationId: "org-a",
+        portfolioId: "portfolio-a",
+      }),
+    ).toBe(true);
+    expect(
+      can(context("member"), "read", "portfolio", {
+        organizationId: "org-a",
+        portfolioId: "portfolio-unrelated",
+      }),
+    ).toBe(false);
   });
   it("keeps viewers read-only and allows Workspace Leads to manage their Workspace", () => {
     expect(
