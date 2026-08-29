@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -366,7 +366,7 @@ describe("PostgreSQL repositories", () => {
     ).rejects.toMatchObject({ code: "idempotency_key_reused" });
   });
 
-  it("never reuses or deletes an expired idempotency record during a request", async () => {
+  it("atomically replaces an expired idempotency record and safely reuses its key", async () => {
     const fixture = await seedTenant("expired-key");
     const scoped = createPostgresRepositories(connection.db).forOrganization(
       fixture.scope,
@@ -387,22 +387,58 @@ describe("PostgreSQL repositories", () => {
           eq(idempotencyRecords.key, key),
         ),
       );
-    const replay = await scoped.workItems.create(
-      input,
-      mutation(key, "/items/create", new Date("2030-01-01T00:00:00.000Z")),
+    const replacementInput = {
+      ...input,
+      title: "Reused safely after expiry",
+    };
+    const replacementContext = mutation(
+      key,
+      "/items/create",
+      new Date("2030-01-01T00:00:00.000Z"),
     );
-    expect(replay).toEqual({ value: first.value, replayed: true });
-    expect(
-      await connection.db
-        .select()
-        .from(idempotencyRecords)
-        .where(
-          and(
-            eq(idempotencyRecords.organizationId, fixture.organizationId),
-            eq(idempotencyRecords.key, key),
-          ),
+    const firstConnection = createDatabase(temporary.url);
+    const secondConnection = createDatabase(temporary.url);
+    let replacements: Awaited<ReturnType<typeof scoped.workItems.create>>[];
+    try {
+      replacements = await Promise.all([
+        createPostgresRepositories(firstConnection.db)
+          .forOrganization(fixture.scope)
+          .workItems.create(replacementInput, replacementContext),
+        createPostgresRepositories(secondConnection.db)
+          .forOrganization(fixture.scope)
+          .workItems.create(replacementInput, replacementContext),
+      ]);
+    } finally {
+      await firstConnection.close();
+      await secondConnection.close();
+    }
+    expect(new Set(replacements.map(({ value }) => value.id)).size).toBe(1);
+    expect(replacements.filter(({ replayed }) => replayed)).toHaveLength(1);
+    const replacement = replacements[0]!;
+    expect(replacement.value).toMatchObject({
+      title: replacementInput.title,
+    });
+    expect(replacement.value.id).not.toBe(first.value.id);
+    await expect(
+      scoped.workItems.create(replacementInput, replacementContext),
+    ).resolves.toEqual({ ...replacement, replayed: true });
+    const records = await connection.db
+      .select()
+      .from(idempotencyRecords)
+      .where(
+        and(
+          eq(idempotencyRecords.organizationId, fixture.organizationId),
+          eq(idempotencyRecords.userId, fixture.userId),
+          eq(idempotencyRecords.key, key),
         ),
-    ).toHaveLength(1);
+      );
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      method: "POST",
+      route: "/items/create",
+      state: "completed",
+      expiresAt: new Date("2030-01-02T00:00:00.000Z"),
+    });
   });
 
   it("serializes concurrent callers on one idempotency key", async () => {
@@ -843,9 +879,18 @@ describe("PostgreSQL repositories", () => {
       version: 1,
     });
     expect(conversion.value.workItem).toMatchObject({
+      id: captured.value.id,
       title: "Turn this into work",
       description: "Captured details",
     });
+    expect(await scoped.workItems.history(captured.value.id)).toMatchObject([
+      {
+        type: "item_created",
+        reasonCode: "item_created",
+        itemVersion: 0,
+        snapshot: { id: captured.value.id },
+      },
+    ]);
     const [storedCapture] = await connection.db
       .select()
       .from(inboxItems)
@@ -857,18 +902,28 @@ describe("PostgreSQL repositories", () => {
         .from(workItems)
         .where(eq(workItems.id, conversion.value.workItem.id)),
     ).toHaveLength(1);
-    expect(
-      await connection.db
-        .select()
-        .from(outboxEvents)
-        .where(
-          and(
-            eq(outboxEvents.organizationId, fixture.organizationId),
-            eq(outboxEvents.requestId, fixture.scope.requestId),
-            eq(outboxEvents.aggregateId, captured.value.id),
-          ),
+    const canonicalEvents = await connection.db
+      .select({
+        eventType: outboxEvents.eventType,
+        aggregateType: outboxEvents.aggregateType,
+      })
+      .from(outboxEvents)
+      .where(
+        and(
+          eq(outboxEvents.organizationId, fixture.organizationId),
+          eq(outboxEvents.requestId, fixture.scope.requestId),
+          eq(outboxEvents.aggregateId, captured.value.id),
         ),
-    ).toHaveLength(2);
+      );
+    expect(
+      canonicalEvents.sort((left, right) =>
+        left.eventType.localeCompare(right.eventType),
+      ),
+    ).toEqual([
+      { aggregateType: "inbox_item", eventType: "inbox_item.captured" },
+      { aggregateType: "inbox_item", eventType: "inbox_item.converted" },
+      { aggregateType: "work_item", eventType: "item.created" },
+    ]);
 
     const rejected = await scoped.inbox.capture(
       { category: "capture", title: "Must stay captured" },
@@ -894,6 +949,134 @@ describe("PostgreSQL repositories", () => {
         .from(idempotencyRecords)
         .where(eq(idempotencyRecords.key, rejectedKey)),
     ).toHaveLength(0);
+  });
+
+  it("persists idempotent WorkItem transitions, Waiting, evidence, and history atomically", async () => {
+    const fixture = await seedTenant("founder-loop");
+    const foreign = await seedTenant("founder-loop-foreign");
+    const scoped = createPostgresRepositories(connection.db).forOrganization(
+      fixture.scope,
+    );
+    const foreignScoped = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(foreign.scope);
+    const item = await scoped.workItems.create(
+      createInput(fixture, "Resolve the launch blocker"),
+      mutation(crypto.randomUUID(), "/items/create"),
+    );
+    const transitionContext = mutation(
+      crypto.randomUUID(),
+      `/items/${item.value.id}/transition`,
+    );
+    const transitionInput = {
+      status: "blocked" as const,
+      reasonCode: "launch_dependency",
+      rationale: "The launch depends on a signed partner agreement.",
+      evidence: {
+        references: [
+          { type: "contract", id: "partner-agreement", label: "Agreement" },
+        ],
+      },
+    };
+    const transitioned = await scoped.workItems.transition(
+      item.value.id,
+      item.value.version,
+      transitionInput,
+      transitionContext,
+    );
+    const replay = await scoped.workItems.transition(
+      item.value.id,
+      item.value.version,
+      transitionInput,
+      transitionContext,
+    );
+    expect(replay).toEqual({ value: transitioned.value, replayed: true });
+    expect(
+      await connection.db
+        .select({ id: outboxEvents.id })
+        .from(outboxEvents)
+        .where(
+          and(
+            eq(outboxEvents.organizationId, fixture.organizationId),
+            eq(outboxEvents.aggregateId, item.value.id),
+            eq(outboxEvents.eventType, "item.updated"),
+            sql`${outboxEvents.payload}->>'version' = '1'`,
+          ),
+        ),
+    ).toHaveLength(1);
+    expect(transitioned.value).toMatchObject({
+      item: { id: item.value.id, status: "blocked", version: 1 },
+      evidence: {
+        type: "item_transitioned",
+        reasonCode: "launch_dependency",
+        itemVersion: 1,
+      },
+    });
+    const waiting = await scoped.waiting.create(
+      {
+        workspaceId: fixture.workspaceA,
+        entityType: "work_item",
+        entityId: item.value.id,
+        expectedItemVersion: 1,
+        waitingType: "external_response",
+        waitingReferenceId: "partner-agreement",
+        waitingLabel: "Partner legal",
+        followUpOwnerId: fixture.userId,
+        nextFollowUp: "2026-09-02",
+        reasonCode: "partner_signature_pending",
+        evidence: {
+          references: [{ type: "contract", id: "partner-agreement" }],
+        },
+      },
+      mutation(crypto.randomUUID(), "/waiting/create"),
+    );
+    expect(waiting.value).toMatchObject({
+      entityId: item.value.id,
+      nextFollowUp: "2026-09-02",
+      version: 0,
+    });
+    const resolved = await scoped.waiting.act(
+      waiting.value.id,
+      waiting.value.version,
+      {
+        action: "resolve",
+        expectedItemVersion: 2,
+        itemStatus: "done",
+        note: "The agreement was signed.",
+        reasonCode: "partner_agreement_signed",
+        evidence: {
+          references: [{ type: "contract", id: "signed-agreement" }],
+        },
+      },
+      mutation(crypto.randomUUID(), `/waiting/${waiting.value.id}`),
+    );
+    expect(resolved.value.resolvedAt).toBeDefined();
+    expect(await scoped.workItems.get(item.value.id)).toMatchObject({
+      status: "done",
+      version: 3,
+    });
+    const history = await scoped.workItems.history(item.value.id);
+    expect(history.map(({ type }) => type)).toEqual([
+      "item_created",
+      "item_transitioned",
+      "waiting_started",
+      "item_transitioned",
+      "waiting_resolved",
+    ]);
+    expect(history.at(-1)).toMatchObject({
+      reasonCode: "partner_agreement_signed",
+      evidence: {
+        references: [{ type: "contract", id: "signed-agreement" }],
+      },
+      snapshot: { status: "done", version: 3 },
+    });
+    await expect(
+      foreignScoped.workItems.history(item.value.id),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    expect(await scoped.operations.status()).toMatchObject({
+      pendingOutbox: expect.any(Number),
+      failedCount: 0,
+    });
   });
 
   it("persists scoped item relationships, updates, decisions, approvals, reviews, and snapshots", async () => {
@@ -1571,6 +1754,10 @@ describe("PostgreSQL repositories", () => {
       impact: 4,
       urgency: 4,
       reason: "Integration test",
+      reasonCode: "test.integration",
+      sourceFingerprint: `test:${fixture.organizationId}`,
+      sourceOccurredAt: new Date("2026-08-29T10:00:00.000Z"),
+      computedAt: new Date("2026-08-29T10:00:00.000Z"),
       metadata: {},
     });
     await connection.db.insert(waitingStates).values({

@@ -14,6 +14,9 @@ const persistentDataPlaneMigrationPath = fileURLToPath(
 const normalizedIdentityEmailMigrationPath = fileURLToPath(
   new URL("../migrations/0007_normalized_app_user_email.sql", import.meta.url),
 );
+const persistentWorkerMigrationPath = fileURLToPath(
+  new URL("../migrations/0008_lumpy_sasquatch.sql", import.meta.url),
+);
 
 describe("TREVV commercial migration", () => {
   const migration = readFileSync(migrationPath, "utf8");
@@ -145,5 +148,37 @@ describe("Normalized identity email migration", () => {
     expect(normalizedIndex).toBeGreaterThan(collisionCheck);
     expect(migration).toContain('GROUP BY lower("email")');
     expect(migration).not.toContain('DELETE FROM "app_users"');
+  });
+});
+
+describe("Persistent worker migration", () => {
+  const migration = readFileSync(persistentWorkerMigrationPath, "utf8");
+
+  it("backfills truthful legacy Attention provenance before requiring it", () => {
+    const backfill = migration.indexOf('UPDATE "attention_signals"');
+    const requireReason = migration.indexOf(
+      'ALTER TABLE "attention_signals" ALTER COLUMN "reason_code" SET NOT NULL',
+    );
+    const uniqueReason = migration.indexOf(
+      'CREATE UNIQUE INDEX "attention_active_reason_unique"',
+    );
+
+    expect(backfill).toBeGreaterThan(-1);
+    expect(requireReason).toBeGreaterThan(backfill);
+    expect(uniqueReason).toBeGreaterThan(requireReason);
+    expect(migration).toContain("'legacy.imported.' || \"id\"");
+    expect(migration).toContain("'legacy:' || \"id\"");
+  });
+
+  it("creates the outbox composite key before its attempt foreign key", () => {
+    const outboxKey = migration.indexOf(
+      'CREATE UNIQUE INDEX "outbox_events_org_id_unique"',
+    );
+    const attemptForeignKey = migration.indexOf(
+      'ADD CONSTRAINT "outbox_attempts_org_event_fk"',
+    );
+
+    expect(outboxKey).toBeGreaterThan(-1);
+    expect(attemptForeignKey).toBeGreaterThan(outboxKey);
   });
 });

@@ -146,6 +146,9 @@ export const organizations = pgTable(
     slug: text("slug").notNull(),
     locale: text("locale").notNull().default("en"),
     timezone: text("timezone").notNull().default("Europe/Berlin"),
+    attentionComputedAt: timestamp("attention_computed_at", {
+      withTimezone: true,
+    }),
     ...timestamps,
   },
   (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)],
@@ -663,6 +666,69 @@ export const itemDependencies = pgTable(
   ],
 );
 
+// Immutable founder-loop history. Each entry retains the canonical WorkItem
+// identity and the item snapshot/version that was acknowledged by PostgreSQL.
+// `sourceType`/`sourceId` let comments, Waiting, decisions, approvals, and
+// worker-derived outcomes cite the durable record that caused the change.
+export const workItemEvents = pgTable(
+  "work_item_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").references(() => users.id),
+    eventType: text("event_type").notNull(),
+    summary: text("summary").notNull(),
+    reasonCode: text("reason_code").notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id").notNull(),
+    sourceOccurredAt: timestamp("source_occurred_at", {
+      withTimezone: true,
+    }).notNull(),
+    itemVersion: integer("item_version").notNull(),
+    snapshot: jsonb("snapshot").notNull().default({}),
+    evidence: jsonb("evidence").notNull().default({}),
+    metadata: jsonb("metadata").notNull().default({}),
+    requestId: text("request_id").notNull(),
+    dedupKey: text("dedup_key").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.itemId],
+      foreignColumns: [
+        workItems.organizationId,
+        workItems.workspaceId,
+        workItems.id,
+      ],
+      name: "work_item_events_org_workspace_item_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.actorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "work_item_events_org_actor_membership_fk",
+    }),
+    uniqueIndex("work_item_events_org_dedup_unique").on(
+      table.organizationId,
+      table.dedupKey,
+    ),
+    index("work_item_events_org_item_time_idx").on(
+      table.organizationId,
+      table.itemId,
+      table.occurredAt,
+    ),
+  ],
+);
+
 export const customFields = pgTable(
   "custom_fields",
   {
@@ -874,17 +940,26 @@ export const notifications = pgTable(
     title: text("title").notNull(),
     body: text("body").notNull(),
     resource: jsonb("resource").notNull().default({}),
+    dedupKey: text("dedup_key"),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "notifications_org_membership_fk",
+    }).onDelete("cascade"),
     index("notifications_user_unread_idx").on(
       table.organizationId,
       table.userId,
       table.readAt,
     ),
+    uniqueIndex("notifications_org_user_dedup_unique")
+      .on(table.organizationId, table.userId, table.dedupKey)
+      .where(sql`${table.dedupKey} is not null`),
   ],
 );
 export const activityEvents = pgTable(
@@ -1016,6 +1091,13 @@ export const outboxEvents = pgTable(
       .defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockedBy: text("locked_by"),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
+    processedBy: text("processed_by"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1030,7 +1112,58 @@ export const outboxEvents = pgTable(
       table.organizationId,
       table.dedupKey,
     ),
+    uniqueIndex("outbox_events_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
     index("outbox_pending_idx").on(table.processedAt, table.availableAt),
+    index("outbox_lease_expiry_idx").on(
+      table.processedAt,
+      table.deadLetteredAt,
+      table.leaseExpiresAt,
+    ),
+  ],
+);
+
+export const outboxAttempts = pgTable(
+  "outbox_attempts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => outboxEvents.id, { onDelete: "cascade" }),
+    attempt: integer("attempt").notNull(),
+    workerId: text("worker_id").notNull(),
+    leaseToken: text("lease_token").notNull(),
+    status: text("status").notNull(),
+    errorCode: text("error_code"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.eventId],
+      foreignColumns: [outboxEvents.organizationId, outboxEvents.id],
+      name: "outbox_attempts_org_event_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("outbox_attempts_event_attempt_unique").on(
+      table.eventId,
+      table.attempt,
+    ),
+    index("outbox_attempts_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.startedAt,
+    ),
+    check(
+      "outbox_attempts_status_check",
+      sql`${table.status} in ('leased', 'succeeded', 'failed', 'dead_lettered')`,
+    ),
   ],
 );
 
@@ -1177,7 +1310,14 @@ export const attentionSignals = pgTable(
     urgency: integer("urgency").notNull(),
     responsibility: real("responsibility").notNull().default(1),
     reason: text("reason").notNull(),
+    reasonCode: text("reason_code").notNull(),
     recommendedAction: text("recommended_action"),
+    evidence: jsonb("evidence").notNull().default({}),
+    sourceFingerprint: text("source_fingerprint").notNull(),
+    sourceOccurredAt: timestamp("source_occurred_at", {
+      withTimezone: true,
+    }).notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull(),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
     snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
@@ -1217,6 +1357,16 @@ export const attentionSignals = pgTable(
       table.entityType,
       table.entityId,
     ),
+    uniqueIndex("attention_active_reason_unique")
+      .on(
+        table.organizationId,
+        table.entityType,
+        table.entityId,
+        table.reasonCode,
+      )
+      .where(
+        sql`${table.reasonCode} is not null and ${table.resolvedAt} is null and ${table.dismissedAt} is null`,
+      ),
   ],
 );
 

@@ -235,7 +235,12 @@ for (const signal of generatedSignals)
       urgency: signal.urgency,
       responsibility: signal.responsibility,
       reason: signal.reason,
+      reasonCode: `demo.${signal.signalType}`,
       recommendedAction: signal.recommendedAction,
+      evidence: { source: "fictional_demo_fixture" },
+      sourceFingerprint: `demo:${signal.id}`,
+      sourceOccurredAt: new Date(signal.createdAt),
+      computedAt: new Date("2026-08-24T12:00:00.000Z"),
       metadata: signal.metadata,
       createdAt: new Date(signal.createdAt),
     })

@@ -57,6 +57,13 @@
       "when": 1788012040118,
       "tag": "0007_normalized_app_user_email",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788013050162,
+      "tag": "0008_lumpy_sasquatch",
+      "breakpoints": true
     }
   ]
 }

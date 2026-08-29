@@ -10,3 +10,4 @@ export function createDatabase(databaseUrl: string) {
 export * from "./schema.js";
 export * from "./repositories.js";
 export * from "./identity-repositories.js";
+export * from "./worker-repositories.js";

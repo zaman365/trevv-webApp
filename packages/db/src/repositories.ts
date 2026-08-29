@@ -19,6 +19,7 @@ import {
   gt,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lte,
   or,
@@ -48,6 +49,7 @@ import {
   users,
   userSeenCheckpoints,
   waitingStates,
+  workItemEvents,
   workItems,
   workspaceSnapshots,
   workspaceUpdates,
@@ -292,6 +294,61 @@ export interface UpdateWorkItemInput {
   assigneeIds?: string[];
   approvalState?: NonNullable<CoreWorkItem["approvalState"]> | null;
   decisionState?: NonNullable<CoreWorkItem["decisionState"]> | null;
+  reasonCode?: string;
+  rationale?: string;
+  evidence?: WorkItemEvidenceInput;
+}
+
+export type WorkItemHistoryType =
+  | "item_created"
+  | "item_updated"
+  | "item_transitioned"
+  | "assignment_changed"
+  | "dependency_added"
+  | "dependency_removed"
+  | "comment_added"
+  | "comment_updated"
+  | "decision_recorded"
+  | "decision_state_changed"
+  | "approval_state_changed"
+  | "waiting_started"
+  | "waiting_nudged"
+  | "waiting_rescheduled"
+  | "waiting_resolved";
+
+export interface WorkItemEvidenceInput {
+  summary?: string;
+  references?: Array<{
+    type: string;
+    id: string;
+    label?: string;
+    url?: string;
+  }>;
+  data?: Record<string, unknown>;
+}
+
+export interface WorkItemHistoryProjection {
+  id: string;
+  type: WorkItemHistoryType;
+  summary: string;
+  reasonCode: string;
+  actorId?: string;
+  source: { type: string; id: string; occurredAt: string };
+  itemVersion: number;
+  snapshot: WorkItemProjection;
+  evidence: WorkItemEvidenceInput;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface WorkItemTransitionInput {
+  status?: (typeof workItems.$inferInsert)["status"];
+  decisionState?: NonNullable<CoreWorkItem["decisionState"]>;
+  approvalState?: NonNullable<CoreWorkItem["approvalState"]>;
+  assigneeIds?: string[];
+  reasonCode?: string;
+  rationale?: string;
+  evidence?: WorkItemEvidenceInput;
 }
 
 export interface AttentionActionInput {
@@ -304,6 +361,27 @@ export interface WaitingActionInput {
   action: "resolve" | "nudge" | "reschedule";
   note?: string;
   nextFollowUp?: string;
+  reasonCode?: string;
+  evidence?: WorkItemEvidenceInput;
+  expectedItemVersion?: number;
+  itemStatus?: (typeof workItems.$inferInsert)["status"];
+}
+
+export interface CreateWaitingInput {
+  workspaceId: string;
+  entityType: "work_item";
+  entityId: string;
+  expectedItemVersion: number;
+  title?: string;
+  waitingType: string;
+  waitingReferenceId?: string;
+  waitingLabel?: string;
+  expectedBy?: string;
+  followUpOwnerId: string;
+  nextFollowUp?: string;
+  note?: string;
+  reasonCode?: string;
+  evidence?: WorkItemEvidenceInput;
 }
 
 export interface WeeklyReviewInput {
@@ -372,6 +450,7 @@ export interface CreateDecisionOutcomeInput {
   learning: string;
   wouldRepeat?: boolean;
   recordedAt?: Date;
+  evidence?: WorkItemEvidenceInput;
 }
 
 export interface CreateReviewRitualInput {
@@ -555,6 +634,7 @@ export interface OrganizationScopedRepositories {
       offset?: number;
     }) => Promise<WorkItemProjection[]>;
     get: (id: string) => Promise<WorkItemProjection>;
+    history: (id: string) => Promise<WorkItemHistoryProjection[]>;
     create: (
       input: CreateWorkItemInput,
       context: MutationContext,
@@ -565,6 +645,17 @@ export interface OrganizationScopedRepositories {
       input: UpdateWorkItemInput,
       context: MutationContext,
     ) => Promise<MutationResult<WorkItemProjection>>;
+    transition: (
+      id: string,
+      expectedVersion: number,
+      input: WorkItemTransitionInput,
+      context: MutationContext,
+    ) => Promise<
+      MutationResult<{
+        item: WorkItemProjection;
+        evidence: WorkItemHistoryProjection;
+      }>
+    >;
   };
   itemAssignees: {
     list: (
@@ -696,12 +787,24 @@ export interface OrganizationScopedRepositories {
   waiting: {
     listActive: (workspaceId?: string) => Promise<WaitingProjection[]>;
     get: (id: string) => Promise<WaitingProjection>;
+    create: (
+      input: CreateWaitingInput,
+      context: MutationContext,
+    ) => Promise<MutationResult<WaitingProjection>>;
     act: (
       id: string,
       expectedVersion: number,
       input: WaitingActionInput,
       context: MutationContext,
     ) => Promise<MutationResult<WaitingProjection>>;
+  };
+  operations: {
+    status: () => Promise<{
+      pendingOutbox: number;
+      oldestPendingAt?: Date;
+      lastProcessedAt?: Date;
+      failedCount: number;
+    }>;
   };
   inbox: {
     list: () => Promise<InboxItemProjection[]>;
@@ -1123,6 +1226,7 @@ function createScopedRepositories(
     workItems: {
       list: listWorkItemRecords,
       get: getWorkItem,
+      history: (id) => listWorkItemHistory(database, scope, id),
       create: (input, context) =>
         runInTransaction((transaction) =>
           createWorkItem(transaction, scope, input, context),
@@ -1130,6 +1234,17 @@ function createScopedRepositories(
       update: (id, expectedVersion, input, context) =>
         runInTransaction((transaction) =>
           updateWorkItem(
+            transaction,
+            scope,
+            id,
+            expectedVersion,
+            input,
+            context,
+          ),
+        ),
+      transition: (id, expectedVersion, input, context) =>
+        runInTransaction((transaction) =>
+          transitionWorkItem(
             transaction,
             scope,
             id,
@@ -1303,10 +1418,17 @@ function createScopedRepositories(
       listActive: (workspaceId) =>
         listActiveWaiting(database, scope, workspaceId),
       get: (id) => getWaiting(database, scope, id),
+      create: (input, context) =>
+        runInTransaction((transaction) =>
+          createWaiting(transaction, scope, input, context),
+        ),
       act: (id, expectedVersion, input, context) =>
         runInTransaction((transaction) =>
           actOnWaiting(transaction, scope, id, expectedVersion, input, context),
         ),
+    },
+    operations: {
+      status: () => getOperationsStatus(database, scope),
     },
     inbox: {
       list: () => listInbox(database, scope),
@@ -2949,6 +3071,25 @@ async function addItemDependency(
         },
         now,
       });
+      const updatedItem = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        itemId,
+      );
+      await appendWorkItemHistory(transaction, scope, {
+        item: updatedItem,
+        type: "dependency_added",
+        summary: `Added ${relation} dependency`,
+        reasonCode: "dependency_added",
+        sourceType: "work_item",
+        sourceId: dependsOnItemId,
+        sourceOccurredAt: now,
+        evidence: {
+          references: [{ type: "work_item", id: dependsOnItemId }],
+        },
+        metadata: { relation },
+        now,
+      });
       return created;
     },
   );
@@ -3008,6 +3149,24 @@ async function removeItemDependency(
           dependsOnItemId,
           previousVersion: expectedVersion,
           version: expectedVersion + 1,
+        },
+        now,
+      });
+      const updatedItem = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        itemId,
+      );
+      await appendWorkItemHistory(transaction, scope, {
+        item: updatedItem,
+        type: "dependency_removed",
+        summary: "Removed WorkItem dependency",
+        reasonCode: "dependency_removed",
+        sourceType: "work_item",
+        sourceId: dependsOnItemId,
+        sourceOccurredAt: now,
+        evidence: {
+          references: [{ type: "work_item", id: dependsOnItemId }],
         },
         now,
       });
@@ -3121,6 +3280,24 @@ async function createComment(
         },
         now,
       });
+      const updatedItem = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        input.itemId,
+      );
+      await appendWorkItemHistory(transaction, scope, {
+        item: updatedItem,
+        type: "comment_added",
+        summary: "Added evidence comment",
+        reasonCode: "comment_added",
+        sourceType: "comment",
+        sourceId: created.id,
+        sourceOccurredAt: created.createdAt,
+        evidence: {
+          references: [{ type: "comment", id: created.id }],
+        },
+        now,
+      });
       return created;
     },
     (value) => restoreRowWithDates(value, standardDateFields),
@@ -3184,6 +3361,24 @@ async function updateComment(
           commentId: id,
           previousVersion: expectedItemVersion,
           version: expectedItemVersion + 1,
+        },
+        now,
+      });
+      const updatedItem = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        updated.itemId,
+      );
+      await appendWorkItemHistory(transaction, scope, {
+        item: updatedItem,
+        type: "comment_updated",
+        summary: "Updated evidence comment",
+        reasonCode: "comment_updated",
+        sourceType: "comment",
+        sourceId: updated.id,
+        sourceOccurredAt: updated.editedAt ?? now,
+        evidence: {
+          references: [{ type: "comment", id: updated.id }],
         },
         now,
       });
@@ -3489,6 +3684,31 @@ async function recordDecisionOutcome(
           portfolioId: input.portfolioId,
           workspaceId: item.workspaceId,
         },
+        now,
+      });
+      const decisionItem = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        input.decisionItemId,
+      );
+      await appendWorkItemHistory(transaction, scope, {
+        item: decisionItem,
+        type: "decision_recorded",
+        summary: input.learning,
+        reasonCode: "decision_outcome_recorded",
+        sourceType: "decision_outcome",
+        sourceId: created.id,
+        sourceOccurredAt: created.recordedAt,
+        evidence: {
+          ...(input.evidence ?? {}),
+          summary: input.evidence?.summary ?? input.learning,
+          data: {
+            ...(input.evidence?.data ?? {}),
+            outcome: input.outcome,
+            wouldRepeat: input.wouldRepeat ?? null,
+          },
+        },
+        metadata: { portfolioId: input.portfolioId },
         now,
       });
       return created;
@@ -4143,6 +4363,278 @@ async function hydrateWorkItems(
   });
 }
 
+const workItemHistoryTypes = new Set<WorkItemHistoryType>([
+  "item_created",
+  "item_updated",
+  "item_transitioned",
+  "assignment_changed",
+  "dependency_added",
+  "dependency_removed",
+  "comment_added",
+  "comment_updated",
+  "decision_recorded",
+  "decision_state_changed",
+  "approval_state_changed",
+  "waiting_started",
+  "waiting_nudged",
+  "waiting_rescheduled",
+  "waiting_resolved",
+]);
+
+async function listWorkItemHistory(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  itemId: string,
+): Promise<WorkItemHistoryProjection[]> {
+  await requireScopedWorkItem(database, scope.organizationId, itemId);
+  const rows = await database
+    .select()
+    .from(workItemEvents)
+    .where(
+      and(
+        eq(workItemEvents.organizationId, scope.organizationId),
+        eq(workItemEvents.itemId, itemId),
+      ),
+    )
+    .orderBy(
+      asc(workItemEvents.itemVersion),
+      asc(workItemEvents.occurredAt),
+      sql`case ${workItemEvents.eventType}
+        when 'item_created' then 10
+        when 'item_updated' then 20
+        when 'item_transitioned' then 20
+        when 'assignment_changed' then 20
+        when 'decision_state_changed' then 20
+        when 'approval_state_changed' then 20
+        when 'dependency_added' then 25
+        when 'dependency_removed' then 25
+        when 'comment_added' then 25
+        when 'comment_updated' then 25
+        when 'decision_recorded' then 25
+        when 'waiting_started' then 30
+        when 'waiting_nudged' then 30
+        when 'waiting_rescheduled' then 30
+        when 'waiting_resolved' then 30
+        else 40
+      end`,
+      asc(workItemEvents.id),
+    );
+  return rows.map(projectWorkItemHistory);
+}
+
+async function appendWorkItemHistory(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  input: {
+    item: WorkItemProjection;
+    type: WorkItemHistoryType;
+    summary: string;
+    reasonCode: string;
+    sourceType: string;
+    sourceId: string;
+    sourceOccurredAt: Date;
+    evidence?: WorkItemEvidenceInput;
+    metadata?: Record<string, unknown>;
+    now: Date;
+  },
+): Promise<WorkItemHistoryProjection> {
+  const dedupKey = fingerprintRequest({
+    organizationId: scope.organizationId,
+    requestId: scope.requestId,
+    itemId: input.item.id,
+    itemVersion: input.item.version,
+    type: input.type,
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+  });
+  const [inserted] = await database
+    .insert(workItemEvents)
+    .values({
+      id: crypto.randomUUID(),
+      organizationId: scope.organizationId,
+      workspaceId: input.item.workspaceId,
+      itemId: input.item.id,
+      actorId: scope.userId,
+      eventType: input.type,
+      summary: normalizeHistorySummary(input.summary),
+      reasonCode: normalizeHistoryCode(input.reasonCode),
+      sourceType: normalizeHistoryCode(input.sourceType),
+      sourceId: input.sourceId,
+      sourceOccurredAt: input.sourceOccurredAt,
+      itemVersion: input.item.version,
+      snapshot: input.item,
+      evidence: normalizeEvidence(input.evidence),
+      metadata: input.metadata ?? {},
+      requestId: scope.requestId,
+      dedupKey,
+      occurredAt: input.now,
+    })
+    .onConflictDoNothing({
+      target: [workItemEvents.organizationId, workItemEvents.dedupKey],
+    })
+    .returning();
+  const row =
+    inserted ??
+    (
+      await database
+        .select()
+        .from(workItemEvents)
+        .where(
+          and(
+            eq(workItemEvents.organizationId, scope.organizationId),
+            eq(workItemEvents.dedupKey, dedupKey),
+          ),
+        )
+        .limit(1)
+    )[0];
+  if (!row)
+    throw new RepositoryError(
+      "repository_unavailable",
+      "The WorkItem history entry could not be persisted.",
+    );
+  return projectWorkItemHistory(row);
+}
+
+function projectWorkItemHistory(
+  row: typeof workItemEvents.$inferSelect,
+): WorkItemHistoryProjection {
+  if (!workItemHistoryTypes.has(row.eventType as WorkItemHistoryType))
+    throw new RepositoryError(
+      "repository_unavailable",
+      "A persisted WorkItem history type is invalid.",
+    );
+  const snapshot = restoreWorkItemSnapshot(row.snapshot);
+  const evidence = isRecord(row.evidence)
+    ? (row.evidence as WorkItemEvidenceInput)
+    : {};
+  return {
+    id: row.id,
+    type: row.eventType as WorkItemHistoryType,
+    summary: row.summary,
+    reasonCode: row.reasonCode,
+    ...(row.actorId ? { actorId: row.actorId } : {}),
+    source: {
+      type: row.sourceType,
+      id: row.sourceId,
+      occurredAt: row.sourceOccurredAt.toISOString(),
+    },
+    itemVersion: row.itemVersion,
+    snapshot,
+    evidence,
+    metadata: isRecord(row.metadata) ? row.metadata : {},
+    occurredAt: row.occurredAt.toISOString(),
+  };
+}
+
+function restoreWorkItemSnapshot(value: unknown): WorkItemProjection {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.workspaceId !== "string" ||
+    typeof value.boardId !== "string" ||
+    typeof value.title !== "string" ||
+    typeof value.description !== "string" ||
+    typeof value.type !== "string" ||
+    typeof value.priority !== "string" ||
+    typeof value.status !== "string" ||
+    !Array.isArray(value.assigneeIds) ||
+    !Array.isArray(value.assignees) ||
+    typeof value.version !== "number" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  )
+    throw invalidStoredIdempotency();
+  return value as unknown as WorkItemProjection;
+}
+
+function normalizeEvidence(
+  input?: WorkItemEvidenceInput,
+): WorkItemEvidenceInput {
+  if (!input) return {};
+  const summary = input.summary?.trim();
+  const references = input.references?.map((reference) => ({
+    type: normalizeHistoryCode(reference.type),
+    id: reference.id.trim(),
+    ...(reference.label?.trim() ? { label: reference.label.trim() } : {}),
+    ...(reference.url?.trim() ? { url: reference.url.trim() } : {}),
+  }));
+  if (references?.some(({ id }) => !id))
+    throw new RepositoryError(
+      "repository_unavailable",
+      "Evidence references require an identifier.",
+    );
+  return {
+    ...(summary ? { summary } : {}),
+    ...(references?.length ? { references } : {}),
+    ...(input.data ? { data: input.data } : {}),
+  };
+}
+
+function normalizeHistorySummary(value: string): string {
+  const summary = value.trim();
+  if (!summary || summary.length > 500)
+    throw new RepositoryError(
+      "repository_unavailable",
+      "A concise WorkItem history summary is required.",
+    );
+  return summary;
+}
+
+function normalizeHistoryCode(value: string | undefined): string {
+  const code = value?.trim().toLocaleLowerCase("en-US");
+  if (!code || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(code))
+    throw new RepositoryError(
+      "repository_unavailable",
+      "A stable WorkItem history code is required.",
+    );
+  return code;
+}
+
+function normalizeDateOnly(value: string): string {
+  const normalized = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(normalized))
+    throw new RepositoryError(
+      "repository_unavailable",
+      "Dates must use the YYYY-MM-DD format.",
+    );
+  const [year, month, day] = normalized.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year ?? 0, (month ?? 0) - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  )
+    throw new RepositoryError(
+      "repository_unavailable",
+      "The supplied calendar date is invalid.",
+    );
+  return normalized;
+}
+
+function dateInTimezone(value: Date, timezone: string): string {
+  try {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+        .formatToParts(value)
+        .filter(({ type }) => type !== "literal")
+        .map(({ type, value: partValue }) => [type, partValue]),
+    );
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  } catch (cause) {
+    throw new RepositoryError(
+      "repository_unavailable",
+      "The organization timezone is invalid.",
+      { timezone },
+      cause,
+    );
+  }
+}
+
 async function createWorkItem(
   transaction: TrevvDatabase,
   scope: OrganizationScope,
@@ -4210,7 +4702,19 @@ async function createWorkItem(
       },
       now,
     });
-    return getScopedWorkItem(transaction, scope.organizationId, id);
+    const item = await getScopedWorkItem(transaction, scope.organizationId, id);
+    await appendWorkItemHistory(transaction, scope, {
+      item,
+      type: "item_created",
+      summary: `Created ${item.title}`,
+      reasonCode: "item_created",
+      sourceType: "work_item",
+      sourceId: item.id,
+      sourceOccurredAt: now,
+      metadata: { fields: Object.keys(input).sort() },
+      now,
+    });
+    return item;
   });
 }
 
@@ -4320,12 +4824,160 @@ async function updateWorkItem(
           previousVersion: expectedVersion,
           version: expectedVersion + 1,
           fields: Object.keys(input).sort(),
+          status: input.status ?? existing.status,
+          decisionState:
+            input.decisionState === undefined ? null : input.decisionState,
+          approvalState:
+            input.approvalState === undefined ? null : input.approvalState,
+          reasonCode: input.reasonCode ?? null,
         },
         now,
       });
-      return getScopedWorkItem(transaction, scope.organizationId, id);
+      const item = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        id,
+      );
+      const history = classifyWorkItemUpdate(existing, item, input);
+      await appendWorkItemHistory(transaction, scope, {
+        item,
+        type: history.type,
+        summary: input.rationale?.trim() || history.summary,
+        reasonCode: input.reasonCode ?? history.reasonCode,
+        sourceType: "work_item",
+        sourceId: id,
+        sourceOccurredAt: now,
+        ...(input.evidence ? { evidence: input.evidence } : {}),
+        metadata: {
+          fields: Object.keys(input).sort(),
+          previousVersion: expectedVersion,
+        },
+        now,
+      });
+      return item;
     },
   );
+}
+
+function classifyWorkItemUpdate(
+  existing: typeof workItems.$inferSelect,
+  item: WorkItemProjection,
+  input: UpdateWorkItemInput,
+): {
+  type: WorkItemHistoryType;
+  reasonCode: string;
+  summary: string;
+} {
+  if (input.decisionState !== undefined)
+    return {
+      type: "decision_state_changed",
+      reasonCode: `decision_${input.decisionState ?? "cleared"}`,
+      summary: `Decision state changed to ${input.decisionState ?? "unset"}`,
+    };
+  if (input.approvalState !== undefined)
+    return {
+      type: "approval_state_changed",
+      reasonCode: `approval_${input.approvalState ?? "cleared"}`,
+      summary: `Approval state changed to ${input.approvalState ?? "unset"}`,
+    };
+  if (input.status !== undefined && input.status !== existing.status)
+    return {
+      type: "item_transitioned",
+      reasonCode:
+        input.status === "blocked"
+          ? "item_blocked"
+          : input.status === "done"
+            ? "item_resolved"
+            : `status_${input.status}`,
+      summary: `${item.title} moved from ${existing.status} to ${input.status}`,
+    };
+  if (input.assigneeIds !== undefined)
+    return {
+      type: "assignment_changed",
+      reasonCode: "assignment_changed",
+      summary: `${item.title} assignment changed`,
+    };
+  return {
+    type: "item_updated",
+    reasonCode: "item_updated",
+    summary: `Updated ${item.title}`,
+  };
+}
+
+async function transitionWorkItem(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  id: string,
+  expectedVersion: number,
+  input: WorkItemTransitionInput,
+  context: MutationContext,
+) {
+  return withIdempotency(
+    transaction,
+    scope,
+    context,
+    { id, expectedVersion, ...input },
+    async () => {
+      const {
+        idempotencyKey: _idempotencyKey,
+        requestFingerprint: _requestFingerprint,
+        responseStatus: _responseStatus,
+        ...nestedContext
+      } = context;
+      const updated = await updateWorkItem(
+        transaction,
+        scope,
+        id,
+        expectedVersion,
+        input,
+        nestedContext,
+      );
+      const [event] = await transaction
+        .select()
+        .from(workItemEvents)
+        .where(
+          and(
+            eq(workItemEvents.organizationId, scope.organizationId),
+            eq(workItemEvents.itemId, id),
+            eq(workItemEvents.requestId, scope.requestId),
+            eq(workItemEvents.itemVersion, updated.value.version),
+          ),
+        )
+        .orderBy(desc(workItemEvents.occurredAt), desc(workItemEvents.id))
+        .limit(1);
+      if (!event)
+        throw new RepositoryError(
+          "repository_unavailable",
+          "The WorkItem transition evidence could not be resolved.",
+        );
+      return {
+        item: updated.value,
+        evidence: projectWorkItemHistory(event),
+      };
+    },
+    restoreWorkItemTransition,
+  );
+}
+
+function restoreWorkItemTransition(value: unknown): {
+  item: WorkItemProjection;
+  evidence: WorkItemHistoryProjection;
+} {
+  if (!isRecord(value) || !isRecord(value.evidence))
+    throw invalidStoredIdempotency();
+  const evidence = value.evidence;
+  if (
+    typeof evidence.id !== "string" ||
+    typeof evidence.type !== "string" ||
+    !workItemHistoryTypes.has(evidence.type as WorkItemHistoryType) ||
+    typeof evidence.summary !== "string" ||
+    typeof evidence.occurredAt !== "string"
+  )
+    throw invalidStoredIdempotency();
+  return {
+    item: restoreWorkItemSnapshot(value.item),
+    evidence: evidence as unknown as WorkItemHistoryProjection,
+  };
 }
 
 async function listActiveAttention(
@@ -4494,6 +5146,113 @@ async function getWaiting(
   return getWaitingProjection(database, scope.organizationId, waiting);
 }
 
+async function createWaiting(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  input: CreateWaitingInput,
+  context: MutationContext,
+) {
+  return withIdempotency(transaction, scope, context, input, async () => {
+    await assertActorMembership(transaction, scope);
+    const workspace = await assertWorkspace(
+      transaction,
+      scope.organizationId,
+      input.workspaceId,
+    );
+    await assertOrganizationUsers(transaction, scope.organizationId, [
+      input.followUpOwnerId,
+    ]);
+    const locked = await lockScopedWorkItems(transaction, scope, [
+      input.entityId,
+    ]);
+    const item = locked.get(input.entityId);
+    if (!item || item.workspaceId !== input.workspaceId) throw notFound();
+    if (item.version !== input.expectedItemVersion)
+      throw versionConflict(item.version);
+    const now = context.now ?? new Date();
+    const id = crypto.randomUUID();
+    const [created] = await transaction
+      .insert(waitingStates)
+      .values({
+        id,
+        organizationId: scope.organizationId,
+        portfolioId: workspace.portfolioId,
+        workspaceId: workspace.id,
+        entityType: input.entityType,
+        entityId: item.id,
+        waitingType: normalizeHistoryCode(input.waitingType),
+        waitingReferenceId: input.waitingReferenceId?.trim(),
+        waitingLabel: input.waitingLabel?.trim(),
+        waitingSince: now,
+        expectedBy:
+          input.expectedBy === undefined
+            ? undefined
+            : normalizeDateOnly(input.expectedBy),
+        followUpOwnerId: input.followUpOwnerId,
+        nextFollowUp:
+          input.nextFollowUp === undefined
+            ? undefined
+            : normalizeDateOnly(input.nextFollowUp),
+        waitingNote: input.note?.trim(),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!created)
+      throw new RepositoryError(
+        "constraint_conflict",
+        "This WorkItem already has an active Waiting state.",
+      );
+    await bumpLockedWorkItemVersion(
+      transaction,
+      scope.organizationId,
+      item.id,
+      input.expectedItemVersion,
+      now,
+    );
+    await writeAuditAndOutbox(transaction, scope, {
+      action: "waiting.created",
+      aggregateType: "waiting_state",
+      aggregateId: id,
+      eventType: "waiting.created",
+      payload: {
+        workspaceId: workspace.id,
+        itemId: item.id,
+        previousItemVersion: input.expectedItemVersion,
+        itemVersion: input.expectedItemVersion + 1,
+        nextFollowUp: input.nextFollowUp ?? null,
+        expectedBy: input.expectedBy ?? null,
+      },
+      now,
+    });
+    const itemProjection = await getScopedWorkItem(
+      transaction,
+      scope.organizationId,
+      item.id,
+    );
+    await appendWorkItemHistory(transaction, scope, {
+      item: itemProjection,
+      type: "waiting_started",
+      summary:
+        input.title?.trim() || `Waiting started for ${itemProjection.title}`,
+      reasonCode: input.reasonCode ?? "waiting_started",
+      sourceType: "waiting_state",
+      sourceId: id,
+      sourceOccurredAt: now,
+      ...(input.evidence ? { evidence: input.evidence } : {}),
+      metadata: {
+        waitingType: input.waitingType,
+        followUpOwnerId: input.followUpOwnerId,
+        expectedBy: input.expectedBy ?? null,
+        nextFollowUp: input.nextFollowUp ?? null,
+      },
+      now,
+    });
+    return getWaitingProjection(transaction, scope.organizationId, created);
+  });
+}
+
 async function actOnWaiting(
   transaction: TrevvDatabase,
   scope: OrganizationScope,
@@ -4509,6 +5268,14 @@ async function actOnWaiting(
     throw new RepositoryError(
       "repository_unavailable",
       "Rescheduling requires the next follow-up date.",
+    );
+  if (
+    (input.itemStatus === undefined) !==
+    (input.expectedItemVersion === undefined)
+  )
+    throw new RepositoryError(
+      "repository_unavailable",
+      "Changing the Waiting WorkItem requires its expected version and status.",
     );
   return withIdempotency(
     transaction,
@@ -4531,11 +5298,37 @@ async function actOnWaiting(
         .limit(1);
       if (!existing) throw notFound();
       const now = context.now ?? new Date();
+      if (
+        input.itemStatus !== undefined &&
+        input.expectedItemVersion !== undefined
+      ) {
+        const {
+          idempotencyKey: _idempotencyKey,
+          requestFingerprint: _requestFingerprint,
+          responseStatus: _responseStatus,
+          ...nestedContext
+        } = context;
+        await updateWorkItem(
+          transaction,
+          scope,
+          existing.entityId,
+          input.expectedItemVersion,
+          {
+            status: input.itemStatus,
+            ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
+            ...(input.note ? { rationale: input.note } : {}),
+            ...(input.evidence ? { evidence: input.evidence } : {}),
+          },
+          nestedContext,
+        );
+      }
       const changed = await transaction
         .update(waitingStates)
         .set({
           ...(input.action === "resolve" ? { resolvedAt: now } : {}),
-          ...(input.nextFollowUp ? { nextFollowUp: input.nextFollowUp } : {}),
+          ...(input.nextFollowUp
+            ? { nextFollowUp: normalizeDateOnly(input.nextFollowUp) }
+            : {}),
           ...(input.note ? { waitingNote: input.note } : {}),
           updatedAt: now,
           version: sql`${waitingStates.version} + 1`,
@@ -4577,8 +5370,41 @@ async function actOnWaiting(
         eventType: "waiting.actioned",
         payload: {
           action: input.action,
+          itemId: existing.entityId,
           previousVersion: expectedVersion,
           version: expectedVersion + 1,
+        },
+        now,
+      });
+      const item = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        existing.entityId,
+      );
+      const historyType: WorkItemHistoryType =
+        input.action === "resolve"
+          ? "waiting_resolved"
+          : input.action === "reschedule"
+            ? "waiting_rescheduled"
+            : "waiting_nudged";
+      await appendWorkItemHistory(transaction, scope, {
+        item,
+        type: historyType,
+        summary:
+          input.note?.trim() ||
+          (input.action === "resolve"
+            ? `Resolved Waiting for ${item.title}`
+            : input.action === "reschedule"
+              ? `Rescheduled Waiting for ${item.title}`
+              : `Recorded follow-up for ${item.title}`),
+        reasonCode: input.reasonCode ?? `waiting_${input.action}`,
+        sourceType: "waiting_state",
+        sourceId: id,
+        sourceOccurredAt: now,
+        ...(input.evidence ? { evidence: input.evidence } : {}),
+        metadata: {
+          waitingVersion: expectedVersion + 1,
+          nextFollowUp: input.nextFollowUp ?? null,
         },
         now,
       });
@@ -4838,6 +5664,7 @@ async function convertInboxToWorkItem(
         transaction,
         scope,
         {
+          id: captured.id,
           workspaceId: input.workspaceId,
           boardId: input.boardId,
           title: input.title ?? captured.title,
@@ -4918,6 +5745,57 @@ function projectInboxItem(
     convertedAt: row.convertedAt?.toISOString() ?? null,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function getOperationsStatus(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+): Promise<{
+  pendingOutbox: number;
+  oldestPendingAt?: Date;
+  lastProcessedAt?: Date;
+  failedCount: number;
+}> {
+  await assertActorMembership(database, scope);
+  const [pending, processed, failed] = await Promise.all([
+    database
+      .select({
+        count: sql<number>`count(*)::int`,
+        oldestAt: sql<Date | null>`min(${outboxEvents.createdAt})`,
+      })
+      .from(outboxEvents)
+      .where(
+        and(
+          eq(outboxEvents.organizationId, scope.organizationId),
+          isNull(outboxEvents.processedAt),
+          isNull(outboxEvents.deadLetteredAt),
+        ),
+      ),
+    database
+      .select({
+        lastAt: sql<Date | null>`max(${outboxEvents.processedAt})`,
+      })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.organizationId, scope.organizationId)),
+    database
+      .select({ count: sql<number>`count(*)::int` })
+      .from(outboxEvents)
+      .where(
+        and(
+          eq(outboxEvents.organizationId, scope.organizationId),
+          isNull(outboxEvents.processedAt),
+          isNotNull(outboxEvents.lastErrorAt),
+        ),
+      ),
+  ]);
+  const oldestPendingAt = pending[0]?.oldestAt ?? undefined;
+  const lastProcessedAt = processed[0]?.lastAt ?? undefined;
+  return {
+    pendingOutbox: pending[0]?.count ?? 0,
+    ...(oldestPendingAt ? { oldestPendingAt } : {}),
+    ...(lastProcessedAt ? { lastProcessedAt } : {}),
+    failedCount: failed[0]?.count ?? 0,
   };
 }
 
@@ -5131,6 +6009,35 @@ async function submitWeeklyReview(
           ),
         );
       const now = context.now ?? new Date();
+      const [organization, attentionSummary] = await Promise.all([
+        transaction
+          .select({ timezone: organizations.timezone })
+          .from(organizations)
+          .where(eq(organizations.id, scope.organizationId))
+          .limit(1),
+        transaction
+          .select({ count: sql<number>`count(*)::int` })
+          .from(attentionSignals)
+          .where(
+            and(
+              eq(attentionSignals.organizationId, scope.organizationId),
+              eq(attentionSignals.workspaceId, input.workspaceId),
+              isNull(attentionSignals.resolvedAt),
+              isNull(attentionSignals.dismissedAt),
+              or(
+                isNull(attentionSignals.snoozedUntil),
+                lte(attentionSignals.snoozedUntil, now),
+              ),
+            ),
+          ),
+      ]);
+      const timezone = organization[0]?.timezone;
+      if (!timezone)
+        throw new RepositoryError(
+          "resource_not_found",
+          "The organization could not be resolved.",
+        );
+      const organizationDate = dateInTimezone(now, timezone);
       const updateId = crypto.randomUUID();
       const snapshotId = crypto.randomUUID();
       const [update] = await transaction
@@ -5166,7 +6073,7 @@ async function submitWeeklyReview(
             ({ dueDate, status }) =>
               status !== "done" &&
               Boolean(dueDate) &&
-              dueDate! < now.toISOString().slice(0, 10),
+              dueDate! < organizationDate,
           ).length,
           blockedCount: currentItems.filter(
             ({ status }) => status === "blocked",
@@ -5175,7 +6082,7 @@ async function submitWeeklyReview(
             ({ itemType, status }) =>
               itemType === "decision" && status !== "done",
           ).length,
-          attentionCount: 0,
+          attentionCount: attentionSummary[0]?.count ?? 0,
           latestUpdateAt: now,
           source: "weekly_review",
           createdAt: now,
@@ -5501,9 +6408,11 @@ async function writeAuditAndOutbox(
   const payload = { requestId: scope.requestId, ...input.payload };
   const dedupKey = fingerprintRequest({
     requestId: scope.requestId,
+    action: input.action,
     eventType: input.eventType,
     aggregateType: input.aggregateType,
     aggregateId: input.aggregateId,
+    payload: input.payload,
   });
   await database.insert(auditLogs).values({
     id: crypto.randomUUID(),
@@ -5549,6 +6458,16 @@ async function withIdempotency<T>(
   const fingerprint =
     context.requestFingerprint ??
     fingerprintRequest({ method, route, request });
+  await database
+    .delete(idempotencyRecords)
+    .where(
+      and(
+        eq(idempotencyRecords.organizationId, scope.organizationId),
+        eq(idempotencyRecords.userId, scope.userId),
+        eq(idempotencyRecords.key, key),
+        lte(idempotencyRecords.expiresAt, now),
+      ),
+    );
   const inserted = await database
     .insert(idempotencyRecords)
     .values({
@@ -5695,9 +6614,20 @@ async function finalizeIdempotencyResponse(
 function restoreAttention(
   value: unknown,
 ): typeof attentionSignals.$inferSelect {
-  if (!isRecord(value)) throw invalidStoredIdempotency();
+  if (
+    !isRecord(value) ||
+    typeof value.reasonCode !== "string" ||
+    typeof value.sourceFingerprint !== "string" ||
+    !isRecord(value.evidence)
+  )
+    throw invalidStoredIdempotency();
   return {
     ...(value as unknown as typeof attentionSignals.$inferSelect),
+    reasonCode: value.reasonCode,
+    evidence: value.evidence,
+    sourceFingerprint: value.sourceFingerprint,
+    sourceOccurredAt: requiredDate(value.sourceOccurredAt),
+    computedAt: requiredDate(value.computedAt),
     createdAt: requiredDate(value.createdAt),
     updatedAt: requiredDate(value.updatedAt),
     resolvedAt: optionalDate(value.resolvedAt),

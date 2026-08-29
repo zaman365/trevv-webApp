@@ -28,6 +28,8 @@ describe("tenant schema", () => {
       "integrationConnections",
       "webhookDeliveries",
       "outboxEvents",
+      "outboxAttempts",
+      "workItemEvents",
       "attentionSignals",
       "waitingStates",
       "workspaceSnapshots",
