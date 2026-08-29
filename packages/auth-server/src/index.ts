@@ -9,11 +9,26 @@ export interface AuthEnvironment {
 }
 
 export function createTrevvAuth(environment: AuthEnvironment) {
+  return createTrevvAuthWithPool(
+    environment,
+    new Pool({ connectionString: environment.databaseUrl, max: 10 }),
+  );
+}
+
+export function createTrevvAuthRuntime(environment: AuthEnvironment) {
+  const pool = new Pool({ connectionString: environment.databaseUrl, max: 10 });
+  return {
+    auth: createTrevvAuthWithPool(environment, pool),
+    close: () => pool.end(),
+  };
+}
+
+function createTrevvAuthWithPool(environment: AuthEnvironment, pool: Pool) {
   return betterAuth({
     appName: process.env.APP_NAME ?? "TREVV",
     baseURL: environment.baseUrl,
     secret: environment.secret,
-    database: new Pool({ connectionString: environment.databaseUrl, max: 10 }),
+    database: pool,
     emailAndPassword: { enabled: true, requireEmailVerification: false },
     trustedOrigins: environment.trustedOrigins,
     advanced: {

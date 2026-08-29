@@ -1,779 +1,884 @@
 import {
   attentionActionSchema,
   createItemSchema,
+  idSchema,
+  idempotencyKeySchema,
   updateItemSchema,
+  waitingActionSchema,
+  weeklyReviewInputSchema,
+  type Session,
 } from "@founderhq/api-contract";
 import { openApiDocument } from "@founderhq/api-contract/openapi";
-import { createTrevvAuth, type TrevvAuth } from "@founderhq/auth-server";
-import {
-  calculateResourcePressure,
-  changesSinceCheckpoint,
-  demoBlueprintInstances,
-  demoBlueprintVersions,
-  demoChangeCheckpoint,
-  demoDecisionOutcomes,
-  demoDependencies,
-  demoWorkspaceSnapshots,
-  demoWorkspaces,
-  demoInsights,
-  demoItems,
-  demoMeaningfulChanges,
-  demoPortfolios,
-  demoReviewRituals,
-  demoStakeholderExposure,
-  demoWaitingStates,
-  generateAttentionSignals,
-  workspacesForPortfolio,
-  portfolioSignals,
-  previewBlueprintUpdate,
-  rollupWorkspace,
-  unrestrictedDevelopmentEntitlements,
-  type AttentionSignal,
-  type WaitingState,
-  type WorkItem,
-} from "@founderhq/core";
-import { requireAccess, type AccessContext } from "@founderhq/permissions";
+import { createTrevvAuthRuntime } from "@founderhq/auth-server";
+import { createDatabase, createPostgresRepositories } from "@founderhq/db";
+import { PermissionError, type AccessContext } from "@founderhq/permissions";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
+import {
+  DataPlaneError,
+  dataPlaneErrorCode,
+  type AccessResolver,
+  type ApiMode,
+  type ApiMutationContext,
+  type ApiRequestContext,
+  type DataPlane,
+} from "./data-plane.js";
+import { createDemoAdapter } from "./demo-adapter.js";
+import { createPostgresAdapter } from "./postgres-adapter.js";
 
-type Variables = { requestId: string; access: AccessContext };
-export const app = new Hono<{ Variables: Variables }>();
-const now = new Date("2026-08-24T12:00:00.000Z");
-const itemStore = new Map(
-  demoItems.map((item) => [item.id, { ...item, version: 0 }]),
-);
-const idempotencyStore = new Map<string, string>();
-let trevvAuth: TrevvAuth | null | undefined;
-const attentionStore = new Map<string, AttentionSignal>(
-  generateAttentionSignals(
-    "org-demo",
-    demoWorkspaces,
-    demoItems,
-    demoWaitingStates,
-    now,
-    demoDependencies,
-  ).map((signal) => [signal.id, signal]),
-);
-const waitingStore = new Map<string, WaitingState>(
-  demoWaitingStates.map((waiting) => [waiting.id, waiting]),
-);
+type Variables = {
+  requestId: string;
+  access: AccessContext;
+  session: Session;
+};
 
-app.use("*", secureHeaders());
-app.use(
-  "*",
-  cors({
-    origin: process.env.WEB_ORIGIN ?? "http://localhost:3000",
-    credentials: true,
-    allowHeaders: [
-      "content-type",
-      "authorization",
-      "idempotency-key",
-      "if-match",
-    ],
-    exposeHeaders: ["x-request-id"],
-  }),
-);
-app.use("*", async (context, next) => {
-  const requestId = context.req.header("x-request-id") ?? crypto.randomUUID();
-  context.set("requestId", requestId);
-  context.header("x-request-id", requestId);
-  await next();
-});
+export interface ApiAppDependencies {
+  mode: ApiMode;
+  dataPlane: DataPlane;
+  accessResolver: AccessResolver;
+  clock?: () => Date;
+  idGenerator?: () => string;
+  authHandler?: (request: Request) => Promise<Response>;
+  corsOrigin?: string;
+}
 
-app.on(["GET", "POST"], "/api/auth/*", async (context) => {
-  const auth = getAuth();
-  if (!auth)
-    return failure(
-      context,
-      503,
-      "auth_not_configured",
-      "Authentication requires DATABASE_URL, BETTER_AUTH_SECRET, and BETTER_AUTH_URL.",
-    );
-  return auth.handler(context.req.raw);
-});
+export function createApiApp(dependencies: ApiAppDependencies) {
+  assertCoherentMode(dependencies);
+  const clock = dependencies.clock ?? (() => new Date());
+  const idGenerator = dependencies.idGenerator ?? (() => crypto.randomUUID());
+  const api = new Hono<{ Variables: Variables }>();
 
-app.use("/api/v1/*", async (context, next) => {
-  const demoMode = process.env.DEMO_MODE !== "false";
-  if (!demoMode && context.req.path !== "/api/v1/health") {
-    const auth = getAuth();
-    if (!auth)
+  api.use("*", secureHeaders());
+  api.use(
+    "*",
+    cors({
+      origin:
+        dependencies.corsOrigin ??
+        process.env.WEB_ORIGIN ??
+        "http://localhost:3000",
+      credentials: true,
+      allowHeaders: [
+        "content-type",
+        "authorization",
+        "idempotency-key",
+        "if-match",
+        "x-organization-id",
+      ],
+      exposeHeaders: [
+        "x-request-id",
+        "etag",
+        "idempotency-key",
+        "idempotency-replayed",
+      ],
+    }),
+  );
+  api.use("*", async (context, next) => {
+    const requestId = context.req.header("x-request-id") ?? idGenerator();
+    context.set("requestId", requestId);
+    context.header("x-request-id", requestId);
+    await next();
+  });
+
+  api.on(["GET", "POST"], "/api/auth/*", async (context) => {
+    if (!dependencies.authHandler)
       return failure(
         context,
         503,
         "auth_not_configured",
         "Authentication is not configured.",
       );
-    const session = await auth.api.getSession({
-      headers: context.req.raw.headers,
-    });
-    if (!session?.user)
-      return failure(context, 401, "unauthenticated", "Sign in to continue.");
-  }
-  context.set("access", demoAccess());
-  await next();
-});
-
-app.get("/api/v1/health", (context) =>
-  context.json({
-    status: "ok",
-    service: "trevv-api",
-    version: "v1",
-    time: new Date().toISOString(),
-  }),
-);
-
-app.get("/api/v1/session", (context) =>
-  context.json({
-    user: {
-      id: "user-owner",
-      email: "owner@trevv.local",
-      name: "Mohammed Zaman",
-      role: "owner",
-      locale: "en",
-    },
-    organizationId: "org-demo",
-    expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
-  }),
-);
-
-app.get("/api/v1/portfolios", (context) => {
-  const access = context.get("access");
-  requireAccess(access, "read", "portfolio", {
-    organizationId: "org-demo",
+    return dependencies.authHandler(context.req.raw);
   });
-  const accessiblePortfolioIds = new Set(
-    demoWorkspaces
-      .filter((workspace) => access.accessibleWorkspaceIds.has(workspace.id))
-      .map((workspace) => workspace.portfolioId),
+
+  api.use("/api/v1/*", async (context, next) => {
+    if (context.req.path === "/api/v1/health") {
+      await next();
+      return;
+    }
+    const resolved = await dependencies.accessResolver.resolve(
+      context.req.raw,
+      context.get("requestId"),
+    );
+    if (!resolved) {
+      context.res = failure(
+        context,
+        401,
+        "unauthenticated",
+        "Sign in to continue.",
+      );
+      return;
+    }
+    context.set("access", resolved.access);
+    context.set("session", resolved.session);
+    await next();
+  });
+
+  api.get("/api/v1/health", (context) =>
+    context.json({
+      status: "ok",
+      service: "trevv-api",
+      version: "v1",
+      mode: dependencies.mode,
+      time: clock().toISOString(),
+    }),
   );
-  return context.json(
-    demoPortfolios.filter((portfolio) =>
-      accessiblePortfolioIds.has(portfolio.id),
+
+  api.get("/api/v1/session", (context) => context.json(context.get("session")));
+
+  api.get("/api/v1/portfolios", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listPortfolios(
+        requestContext(context, clock, idGenerator),
+      ),
     ),
   );
-});
 
-app.get("/api/v1/portfolio", (context) => {
-  requireAccess(context.get("access"), "read", "portfolio", {
-    organizationId: "org-demo",
-  });
-  const portfolioId = context.req.query("portfolioId") ?? "portfolio-demo";
-  const portfolio = demoPortfolios.find(
-    (candidate) => candidate.id === portfolioId,
+  api.get("/api/v1/portfolio", async (context) =>
+    context.json(
+      await dependencies.dataPlane.getPortfolio(
+        requestContext(context, clock, idGenerator),
+        context.req.query("portfolioId"),
+      ),
+    ),
   );
-  if (!portfolio)
-    return failure(
-      context,
-      404,
-      "resource_not_found",
-      "The requested Portfolio is unavailable.",
+
+  api.get("/api/v1/attention", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listAttention(
+        requestContext(context, clock, idGenerator),
+        {
+          ...(context.req.query("portfolioId")
+            ? { portfolioId: context.req.query("portfolioId") }
+            : {}),
+          ...(context.req.query("workspaceId")
+            ? { workspaceId: context.req.query("workspaceId") }
+            : {}),
+        },
+      ),
+    ),
+  );
+
+  api.patch("/api/v1/attention/:id", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = attentionActionSchema.safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the signal action.",
+        { issues: parsed.error.flatten() },
+      );
+    const idempotency = readIdempotencyKey(context, false);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.actOnAttention(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/attention/:id",
+        { id: context.req.param("id"), action: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      context.req.param("id"),
+      expectedVersion,
+      parsed.data,
     );
-  const access = context.get("access");
-  const workspaces = workspacesForPortfolio(portfolio.id).filter((workspace) =>
-    access.accessibleWorkspaceIds.has(workspace.id),
-  );
-  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id));
-  const items = currentItems().filter((item) =>
-    workspaceIds.has(item.workspaceId),
-  );
-  return context.json({
-    asOf: now.toISOString(),
-    portfolio,
-    signals: portfolioSignals(workspaces, items, now),
-    workspaces: workspaces
-      .map((workspace) => ({
-        workspace,
-        rollup: rollupWorkspace(workspace, items, now),
-      }))
-      .sort((a, b) => b.rollup.score - a.rollup.score),
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
   });
-});
 
-app.get("/api/v1/attention", (context) => {
-  const access = context.get("access");
-  requireAccess(access, "read", "portfolio", {
-    organizationId: "org-demo",
+  api.get("/api/v1/waiting", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listWaiting(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.patch("/api/v1/waiting/:id", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = waitingActionSchema.safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the follow-up action.",
+        { issues: parsed.error.flatten() },
+      );
+    const idempotency = readIdempotencyKey(context, false);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.actOnWaiting(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/waiting/:id",
+        { id: context.req.param("id"), action: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      context.req.param("id"),
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
   });
-  const portfolioId = context.req.query("portfolioId");
-  const workspaceId = context.req.query("workspaceId");
-  if (workspaceId) {
-    const workspace = workspaceForId(workspaceId);
-    if (!workspace)
+
+  api.get("/api/v1/change-radar", async (context) =>
+    jsonUnknown(
+      context,
+      await dependencies.dataPlane.getChangeRadar(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.get("/api/v1/management-memory", async (context) =>
+    jsonUnknown(
+      context,
+      await dependencies.dataPlane.getManagementMemory(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.post("/api/v1/reviews/weekly", async (context) => {
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = weeklyReviewInputSchema.safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the weekly update.",
+        { issues: parsed.error.flatten() },
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.submitWeeklyReview(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/reviews/weekly",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setIdempotencyHeaders(context, idempotency, result.replayed);
+    return context.json(result.value, 201);
+  });
+
+  api.get("/api/v1/insights", async (context) =>
+    jsonUnknown(
+      context,
+      await dependencies.dataPlane.listInsights(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.get("/api/v1/blueprints", async (context) =>
+    jsonUnknown(
+      context,
+      await dependencies.dataPlane.listBlueprints(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.get("/api/v1/team/pressure", async (context) =>
+    jsonUnknown(
+      context,
+      await dependencies.dataPlane.getTeamPressure(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.get("/api/v1/entitlements", async (context) =>
+    jsonUnknown(
+      context,
+      await dependencies.dataPlane.getEntitlements(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.post("/api/v1/import/preview", async (context) => {
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = z
+      .object({
+        preset: z.enum(["generic_csv", "monday", "clickup", "asana"]),
+        headers: z.array(z.string()).min(1).max(200),
+        rowCount: z.number().int().min(1).max(100_000),
+      })
+      .safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the import source.",
+        { issues: parsed.error.flatten() },
+      );
+    return jsonUnknown(
+      context,
+      await dependencies.dataPlane.previewImport(
+        requestContext(context, clock, idGenerator),
+        parsed.data,
+      ),
+    );
+  });
+
+  api.get("/api/v1/workspaces", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listWorkspaces(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.get("/api/v1/workspaces/:slug", async (context) =>
+    context.json(
+      await dependencies.dataPlane.getWorkspace(
+        requestContext(context, clock, idGenerator),
+        context.req.param("slug"),
+      ),
+    ),
+  );
+
+  api.get(
+    "/api/v1/items",
+    zValidator(
+      "query",
+      z.object({
+        cursor: z.string().optional(),
+        workspaceId: z.string().optional(),
+        assigneeId: z.string().optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      }),
+      (result, context) =>
+        result.success
+          ? undefined
+          : failure(
+              context,
+              422,
+              "validation_error",
+              "Review the item filters.",
+              { issues: result.error.issues },
+            ),
+    ),
+    async (context) => {
+      const filters = context.req.valid("query");
+      return context.json(
+        await dependencies.dataPlane.listItems(
+          requestContext(context, clock, idGenerator),
+          filters,
+        ),
+      );
+    },
+  );
+
+  api.post("/api/v1/items", async (context) => {
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = createItemSchema.safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the highlighted work-item fields.",
+        { issues: parsed.error.flatten() },
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createItem(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
+
+  api.patch("/api/v1/items/:id", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = updateItemSchema.safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the work-item changes.",
+        { issues: parsed.error.flatten() },
+      );
+    const idempotency = readIdempotencyKey(context, false);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.updateItem(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id",
+        { id: context.req.param("id"), patch: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      context.req.param("id"),
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.get(
+    "/api/v1/search",
+    zValidator(
+      "query",
+      z.object({ q: z.string().trim().min(2).max(200) }),
+      (result, context) =>
+        result.success
+          ? undefined
+          : failure(
+              context,
+              422,
+              "validation_error",
+              "Enter a search query between 2 and 200 characters.",
+              { issues: result.error.issues },
+            ),
+    ),
+    async (context) =>
+      context.json(
+        await dependencies.dataPlane.search(
+          requestContext(context, clock, idGenerator),
+          context.req.valid("query").q,
+        ),
+      ),
+  );
+
+  api.get("/api/v1/export/organization.json", async (context) => {
+    context.header(
+      "content-disposition",
+      "attachment; filename=trevv-organization-export.json",
+    );
+    return jsonUnknown(
+      context,
+      await dependencies.dataPlane.exportOrganization(
+        requestContext(context, clock, idGenerator),
+      ),
+    );
+  });
+
+  api.get("/api/v1/export/board/:filename", async (context) => {
+    const filename = context.req.param("filename");
+    if (!filename.endsWith(".csv") || filename.length <= 4)
       return failure(
         context,
         404,
         "resource_not_found",
-        "The requested workspace is unavailable.",
+        "The requested resource is unavailable.",
       );
-    requireAccess(access, "read", "workspace", {
-      organizationId: "org-demo",
-      workspaceId: workspace.id,
-    });
-    if (portfolioId && workspace.portfolioId !== portfolioId)
+    const parsedBoardId = idSchema.safeParse(filename.slice(0, -4));
+    if (!parsedBoardId.success)
       return failure(
         context,
-        422,
-        "scope_mismatch",
-        "The workspace does not belong to the requested Portfolio.",
+        404,
+        "resource_not_found",
+        "The requested resource is unavailable.",
       );
-  }
-  const signals = [...attentionStore.values()]
-    .filter((signal) => !portfolioId || signal.portfolioId === portfolioId)
-    .filter((signal) => !workspaceId || signal.workspaceId === workspaceId)
-    .filter(
-      (signal) =>
-        !signal.workspaceId ||
-        access.accessibleWorkspaceIds.has(signal.workspaceId),
-    )
-    .filter((signal) => !signal.resolvedAt && !signal.dismissedAt)
-    .filter(
-      (signal) =>
-        !signal.snoozedUntil ||
-        new Date(signal.snoozedUntil).getTime() <= Date.now(),
-    )
-    .sort((left, right) => {
-      const weight = { info: 1, low: 2, medium: 3, high: 4, critical: 5 };
-      return weight[right.severity] - weight[left.severity];
-    });
-  return context.json(signals);
-});
+    const boardId = parsedBoardId.data;
+    const csv = await dependencies.dataPlane.exportBoardCsv(
+      requestContext(context, clock, idGenerator),
+      boardId,
+    );
+    context.header("content-type", "text/csv; charset=utf-8");
+    context.header(
+      "content-disposition",
+      `attachment; filename=trevv-board.csv; filename*=UTF-8''${encodeURIComponent(boardId)}.csv`,
+    );
+    return context.body(csv);
+  });
 
-app.patch("/api/v1/attention/:id", async (context) => {
-  const signal = attentionStore.get(context.req.param("id"));
-  if (!signal)
-    return failure(
+  api.get("/api/v1/events", (context) => {
+    if (dependencies.mode === "live")
+      throw new DataPlaneError(
+        "capability_unavailable",
+        "Live event delivery is not implemented yet.",
+      );
+    return context.body(
+      `event: ready\ndata: ${JSON.stringify({ requestId: context.get("requestId"), at: clock().toISOString() })}\n\n`,
+      200,
+      { "content-type": "text/event-stream", "cache-control": "no-cache" },
+    );
+  });
+
+  api.get("/openapi.json", (context) => context.json(openApiDocument));
+
+  api.notFound((context) =>
+    failure(
       context,
       404,
-      "resource_not_found",
-      "The requested attention signal is unavailable.",
-    );
-  requireAccess(context.get("access"), "update", "item", {
-    organizationId: signal.organizationId,
-    ...(signal.workspaceId ? { workspaceId: signal.workspaceId } : {}),
-  });
-  const raw: unknown = await context.req.json();
-  const parsed = attentionActionSchema.safeParse(raw);
-  if (!parsed.success)
-    return failure(
-      context,
-      422,
-      "validation_error",
-      "Review the signal action.",
-      { issues: parsed.error.flatten() },
-    );
-  const changedAt = new Date().toISOString();
-  const updated: AttentionSignal = {
-    ...signal,
-    ...(parsed.data.action === "resolve" ? { resolvedAt: changedAt } : {}),
-    ...(parsed.data.action === "dismiss" ? { dismissedAt: changedAt } : {}),
-    ...(parsed.data.action === "snooze" && parsed.data.snoozedUntil
-      ? { snoozedUntil: parsed.data.snoozedUntil }
-      : {}),
-    ...(parsed.data.reason ? { actionReason: parsed.data.reason } : {}),
-  };
-  attentionStore.set(updated.id, updated);
-  return context.json(updated);
-});
-
-app.get("/api/v1/waiting", (context) => {
-  const access = context.get("access");
-  return context.json(
-    [...waitingStore.values()].filter(
-      (waiting) =>
-        !waiting.resolvedAt &&
-        access.accessibleWorkspaceIds.has(waiting.workspaceId),
+      "not_found",
+      "The requested endpoint does not exist.",
     ),
   );
-});
+  api.onError((error, context) => mapError(error, context));
 
-app.patch("/api/v1/waiting/:id", async (context) => {
-  const waiting = waitingStore.get(context.req.param("id"));
-  if (!waiting)
-    return failure(
-      context,
-      404,
-      "resource_not_found",
-      "The requested waiting state is unavailable.",
-    );
-  requireAccess(context.get("access"), "update", "item", {
-    organizationId: waiting.organizationId,
-    workspaceId: waiting.workspaceId,
-  });
-  const raw: unknown = await context.req.json();
-  const parsed = z
-    .object({
-      action: z.enum(["resolve", "nudge", "reschedule"]),
-      note: z.string().trim().max(1_000).optional(),
-      nextFollowUp: z.iso.date().optional(),
-    })
-    .safeParse(raw);
-  if (!parsed.success)
-    return failure(
-      context,
-      422,
-      "validation_error",
-      "Review the follow-up action.",
-      {
-        issues: parsed.error.flatten(),
-      },
-    );
-  const updated: WaitingState = {
-    ...waiting,
-    ...(parsed.data.action === "resolve"
-      ? { resolvedAt: new Date().toISOString() }
-      : {}),
-    ...(parsed.data.nextFollowUp
-      ? { nextFollowUp: parsed.data.nextFollowUp }
-      : {}),
-    ...(parsed.data.note ? { waitingNote: parsed.data.note } : {}),
-  };
-  waitingStore.set(updated.id, updated);
-  return context.json(updated);
-});
+  return api;
+}
 
-app.get("/api/v1/change-radar", (context) => {
-  requireAccess(context.get("access"), "read", "portfolio", {
-    organizationId: "org-demo",
-  });
-  return context.json({
-    checkpoint: demoChangeCheckpoint,
-    changes: changesSinceCheckpoint(
-      demoMeaningfulChanges,
-      demoChangeCheckpoint,
-    ),
-  });
-});
+export function createDemoApiApp(
+  overrides: Pick<
+    ApiAppDependencies,
+    "clock" | "idGenerator" | "corsOrigin"
+  > = {},
+) {
+  const demo = createDemoAdapter();
+  return createApiApp({ mode: "demo", ...demo, ...overrides });
+}
 
-app.get("/api/v1/management-memory", (context) => {
-  requireAccess(context.get("access"), "read", "portfolio", {
-    organizationId: "org-demo",
+export function createRuntimeApi(): {
+  app: ReturnType<typeof createApiApp>;
+  close(): Promise<void>;
+} {
+  if (process.env.DEMO_MODE === "true")
+    return { app: createDemoApiApp(), close: async () => undefined };
+  if (process.env.DEMO_MODE !== "false")
+    throw new Error("DEMO_MODE must be explicitly set to true or false.");
+  const databaseUrl = requiredEnvironment("DATABASE_URL");
+  const authBaseUrl = requiredEnvironment("BETTER_AUTH_URL");
+  const authSecret = requiredEnvironment("BETTER_AUTH_SECRET");
+  const webOrigin = requiredEnvironment("WEB_ORIGIN");
+  const database = createDatabase(databaseUrl);
+  const repositories = createPostgresRepositories(database.db);
+  const authRuntime = createTrevvAuthRuntime({
+    databaseUrl,
+    baseUrl: authBaseUrl,
+    secret: authSecret,
+    trustedOrigins: [webOrigin],
   });
-  return context.json({
-    workspaceSnapshots: demoWorkspaceSnapshots,
-    reviewRituals: demoReviewRituals,
-    decisionOutcomes: demoDecisionOutcomes,
-  });
-});
-
-app.post("/api/v1/reviews/weekly", async (context) => {
-  const raw: unknown = await context.req.json();
-  const parsed = z
-    .object({
-      workspaceId: z.string().min(3),
-      health: z.enum(["on_track", "watch", "critical", "parked"]),
-      progress: z.string().trim().min(1),
-      blocker: z.string().trim().min(1),
-      nextMilestone: z.string().trim().min(1),
-      decisionNeeded: z.string().trim().optional(),
-      priorityNextWeek: z.string().trim().min(1),
-    })
-    .safeParse(raw);
-  if (!parsed.success)
-    return failure(
-      context,
-      422,
-      "validation_error",
-      "Review the weekly update.",
-      {
-        issues: parsed.error.flatten(),
-      },
-    );
-  requireAccess(context.get("access"), "update", "workspace", {
-    organizationId: "org-demo",
-    workspaceId: parsed.data.workspaceId,
-  });
-  return context.json(
-    {
-      update: {
-        id: crypto.randomUUID(),
-        ...parsed.data,
-        publishedAt: new Date().toISOString(),
-      },
-      snapshot: {
-        id: crypto.randomUUID(),
-        organizationId: "org-demo",
-        portfolioId:
-          workspaceForId(parsed.data.workspaceId)?.portfolioId ??
-          "portfolio-demo",
-        workspaceId: parsed.data.workspaceId,
-        capturedAt: new Date().toISOString(),
-        health: parsed.data.health,
-        source: "weekly_review",
-      },
-      attentionRefreshed: true,
+  const live = createPostgresAdapter({
+    repositories,
+    async resolveIdentity(request) {
+      const session = await authRuntime.auth.api.getSession({
+        headers: request.headers,
+        query: { disableCookieCache: true, disableRefresh: true },
+      });
+      if (!session) return null;
+      return {
+        userId: session.user.id,
+        expiresAt: session.session.expiresAt,
+      };
     },
-    201,
-  );
-});
-
-app.get("/api/v1/insights", (context) => {
-  const access = context.get("access");
-  return context.json(
-    demoInsights.filter(
-      (insight) =>
-        !insight.workspaceId ||
-        access.accessibleWorkspaceIds.has(insight.workspaceId),
-    ),
-  );
-});
-
-app.get("/api/v1/blueprints", (context) => {
-  requireAccess(context.get("access"), "read", "portfolio", {
-    organizationId: "org-demo",
   });
-  const instance = demoBlueprintInstances[0];
-  const current = demoBlueprintVersions[0];
-  const next = demoBlueprintVersions[1];
-  return context.json({
-    instances: demoBlueprintInstances,
-    versions: demoBlueprintVersions,
-    preview:
-      instance && current && next
-        ? previewBlueprintUpdate(instance, current, next)
-        : null,
-  });
-});
-
-app.get("/api/v1/team/pressure", (context) => {
-  requireAccess(context.get("access"), "read", "portfolio", {
-    organizationId: "org-demo",
-  });
-  return context.json(
-    calculateResourcePressure(demoWorkspaces, currentItems(), now),
-  );
-});
-
-app.get("/api/v1/entitlements", (context) => {
-  requireAccess(context.get("access"), "read", "settings", {
-    organizationId: "org-demo",
-  });
-  return context.json(unrestrictedDevelopmentEntitlements);
-});
-
-app.post("/api/v1/import/preview", async (context) => {
-  requireAccess(context.get("access"), "update", "settings", {
-    organizationId: "org-demo",
-  });
-  const raw: unknown = await context.req.json();
-  const parsed = z
-    .object({
-      preset: z.enum(["generic_csv", "monday", "clickup", "asana"]),
-      headers: z.array(z.string()).min(1).max(200),
-      rowCount: z.number().int().min(1).max(100_000),
-    })
-    .safeParse(raw);
-  if (!parsed.success)
-    return failure(
-      context,
-      422,
-      "validation_error",
-      "Review the import source.",
-      {
-        issues: parsed.error.flatten(),
-      },
-    );
-  const unsupportedFields = parsed.data.headers.filter((header) =>
-    /time track|formula|mirror/i.test(header),
-  );
-  return context.json({
-    preset: parsed.data.preset,
-    rowsDetected: parsed.data.rowCount,
-    rowsReady: parsed.data.rowCount,
-    warnings: unsupportedFields.length
-      ? ["Unsupported values will be preserved in the import report."]
-      : [],
-    unsupportedFields,
-    mapping: Object.fromEntries(
-      parsed.data.headers.map((header) => [header, header.toLocaleLowerCase()]),
-    ),
-    dryRun: true,
-  });
-});
-
-app.get("/api/v1/workspaces", (context) => {
-  const access = context.get("access");
-  return context.json(
-    demoWorkspaces.filter((workspace) =>
-      access.accessibleWorkspaceIds.has(workspace.id),
-    ),
-  );
-});
-
-app.get("/api/v1/workspaces/:slug", (context) => {
-  const workspace = demoWorkspaces.find(
-    (candidate) => candidate.slug === context.req.param("slug"),
-  );
-  if (!workspace)
-    return failure(
-      context,
-      404,
-      "resource_not_found",
-      "The requested Workspace is unavailable.",
-    );
-  requireAccess(context.get("access"), "read", "workspace", {
-    organizationId: "org-demo",
-    workspaceId: workspace.id,
-  });
-  return context.json({
-    workspace,
-    rollup: rollupWorkspace(workspace, currentItems(), now),
-    items: currentItems().filter((item) => item.workspaceId === workspace.id),
-  });
-});
-
-app.get(
-  "/api/v1/items",
-  zValidator(
-    "query",
-    z.object({
-      cursor: z.string().optional(),
-      workspaceId: z.string().optional(),
-      assignee: z.string().optional(),
-      limit: z.coerce.number().int().min(1).max(100).default(50),
+  return {
+    app: createApiApp({
+      mode: "live",
+      ...live,
+      authHandler: (request) => authRuntime.auth.handler(request),
+      corsOrigin: webOrigin,
     }),
-  ),
-  (context) => {
-    const { cursor, workspaceId, assignee, limit } = context.req.valid("query");
-    const access = context.get("access");
-    let items = currentItems().filter((item) =>
-      access.accessibleWorkspaceIds.has(item.workspaceId),
-    );
-    if (workspaceId)
-      items = items.filter((item) => item.workspaceId === workspaceId);
-    if (assignee) items = items.filter((item) => item.assignee === assignee);
-    const offset = cursor
-      ? Number.parseInt(
-          Buffer.from(cursor, "base64url").toString("utf8"),
-          10,
-        ) || 0
-      : 0;
-    const data = items.slice(offset, offset + limit);
-    const nextOffset = offset + data.length;
-    return context.json({
-      data,
-      nextCursor:
-        nextOffset < items.length
-          ? Buffer.from(String(nextOffset)).toString("base64url")
-          : null,
-    });
-  },
-);
+    async close() {
+      await Promise.all([database.close(), authRuntime.close()]);
+    },
+  };
+}
 
-app.post("/api/v1/items", async (context) => {
-  const raw: unknown = await context.req.json();
-  const parsed = createItemSchema.safeParse(raw);
+export function createUnavailableLiveDependencies(): {
+  dataPlane: DataPlane;
+  accessResolver: AccessResolver;
+} {
+  const unavailable = async (): Promise<never> => {
+    throw new DataPlaneError(
+      "repository_unavailable",
+      "The live PostgreSQL data plane is not configured.",
+    );
+  };
+  const dataPlane = {
+    mode: "live",
+    listPortfolios: unavailable,
+    getPortfolio: unavailable,
+    listAttention: unavailable,
+    actOnAttention: unavailable,
+    listWaiting: unavailable,
+    actOnWaiting: unavailable,
+    getChangeRadar: unavailable,
+    getManagementMemory: unavailable,
+    submitWeeklyReview: unavailable,
+    listInsights: unavailable,
+    listBlueprints: unavailable,
+    getTeamPressure: unavailable,
+    getEntitlements: unavailable,
+    previewImport: unavailable,
+    listWorkspaces: unavailable,
+    getWorkspace: unavailable,
+    listItems: unavailable,
+    createItem: unavailable,
+    updateItem: unavailable,
+    search: unavailable,
+    exportOrganization: unavailable,
+    exportBoardCsv: unavailable,
+  } satisfies DataPlane;
+  const accessResolver: AccessResolver = {
+    mode: "live",
+    async resolve(request) {
+      if (!request.headers.get("x-organization-id"))
+        throw new DataPlaneError(
+          "organization_context_required",
+          "Choose an organization before accessing live data.",
+        );
+      return unavailable();
+    },
+  };
+  return { dataPlane, accessResolver };
+}
+
+function assertCoherentMode(dependencies: ApiAppDependencies): void {
+  if (
+    dependencies.dataPlane.mode !== dependencies.mode ||
+    dependencies.accessResolver.mode !== dependencies.mode
+  )
+    throw new Error(
+      "API mode, data-plane mode, and access-resolver mode must match.",
+    );
+}
+
+function requiredEnvironment(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required when DEMO_MODE=false.`);
+  return value;
+}
+
+function requestContext(
+  context: {
+    get(name: "access"): AccessContext;
+    get(name: "requestId"): string;
+  },
+  clock: () => Date,
+  idGenerator: () => string,
+): ApiRequestContext {
+  return {
+    access: context.get("access"),
+    requestId: context.get("requestId"),
+    now: clock(),
+    newId: idGenerator,
+  };
+}
+
+async function mutationContext(
+  context: {
+    req: { method: string };
+    get(name: "access"): AccessContext;
+    get(name: "requestId"): string;
+  },
+  clock: () => Date,
+  idGenerator: () => string,
+  route: string,
+  body: unknown,
+  idempotencyKey?: string,
+  responseStatus = 200,
+  expectedVersion?: number,
+): Promise<ApiMutationContext> {
+  return {
+    ...requestContext(context, clock, idGenerator),
+    method: context.req.method.toUpperCase(),
+    route,
+    requestFingerprint: await fingerprint({
+      body,
+      ...(expectedVersion === undefined ? {} : { expectedVersion }),
+    }),
+    responseStatus,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
+  };
+}
+
+async function fingerprint(value: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalize(value)));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, field]) => [key, canonicalize(field)]),
+    );
+  return value;
+}
+
+function readIfMatch(context: {
+  req: { header(name: string): string | undefined };
+  get(name: "requestId"): string;
+}): number | Response {
+  const header = context.req.header("if-match");
+  if (!header)
+    return failure(
+      context,
+      428,
+      "precondition_required",
+      "Provide the current quoted ETag in If-Match.",
+    );
+  const matched = /^"(\d+)"$/.exec(header.trim());
+  if (!matched?.[1])
+    return failure(
+      context,
+      422,
+      "invalid_etag",
+      'If-Match must be a quoted numeric ETag such as "3".',
+    );
+  const version = Number(matched[1]);
+  if (!Number.isSafeInteger(version) || version > 2_147_483_647)
+    return failure(
+      context,
+      422,
+      "invalid_etag",
+      "If-Match contains an unsupported resource version.",
+    );
+  return version;
+}
+
+function readIdempotencyKey(
+  context: {
+    req: { header(name: string): string | undefined };
+    get(name: "requestId"): string;
+  },
+  required: boolean,
+): string | undefined | Response {
+  const header = context.req.header("idempotency-key");
+  if (!header)
+    return required
+      ? failure(
+          context,
+          422,
+          "idempotency_key_required",
+          "Provide a UUID Idempotency-Key for this mutation.",
+        )
+      : undefined;
+  const parsed = idempotencyKeySchema.safeParse(header);
   if (!parsed.success)
     return failure(
       context,
       422,
-      "validation_error",
-      "Review the highlighted work-item fields.",
-      { issues: parsed.error.flatten() },
+      "invalid_idempotency_key",
+      "Idempotency-Key must be a UUID.",
     );
-  requireAccess(context.get("access"), "create", "item", {
-    organizationId: "org-demo",
-    workspaceId: parsed.data.workspaceId,
-  });
-  const idempotencyKey = context.req.header("idempotency-key");
-  if (idempotencyKey && idempotencyStore.has(idempotencyKey)) {
-    const existing = itemStore.get(idempotencyStore.get(idempotencyKey) ?? "");
-    if (existing) return context.json(existing, 200);
+  return parsed.data;
+}
+
+function setMutationHeaders(
+  context: { header(name: string, value: string): void },
+  version: number,
+  idempotencyKey?: string,
+  replayed?: boolean,
+): void {
+  context.header("etag", `"${version}"`);
+  setIdempotencyHeaders(context, idempotencyKey, replayed);
+}
+
+function setIdempotencyHeaders(
+  context: { header(name: string, value: string): void },
+  idempotencyKey?: string,
+  replayed?: boolean,
+): void {
+  if (idempotencyKey) context.header("idempotency-key", idempotencyKey);
+  if (idempotencyKey)
+    context.header("idempotency-replayed", replayed ? "true" : "false");
+}
+
+function mapError(
+  error: Error,
+  context: { get(name: "requestId"): string },
+): Response {
+  const code = dataPlaneErrorCode(error);
+  if (error instanceof PermissionError || code === "resource_not_found")
+    return failure(
+      context,
+      404,
+      "resource_not_found",
+      "The requested resource is unavailable.",
+    );
+  if (code === "scope_mismatch")
+    return failure(
+      context,
+      404,
+      "resource_not_found",
+      "The requested resource is unavailable.",
+    );
+  if (code === "version_conflict") {
+    const details = dataPlaneErrorDetails(error);
+    const response = failure(context, 409, code, error.message, details);
+    const currentVersion = details?.currentVersion;
+    if (Number.isSafeInteger(currentVersion) && Number(currentVersion) >= 0)
+      response.headers.set("etag", `"${String(currentVersion)}"`);
+    return response;
   }
-  const id = crypto.randomUUID();
-  const input = parsed.data;
-  const item: WorkItem & { version: number } = {
-    id,
-    workspaceId: input.workspaceId,
-    boardId: input.boardId,
-    title: input.title,
-    type: input.type,
-    priority: input.priority,
-    status: input.status,
-    ...(input.dueDate ? { dueDate: input.dueDate } : {}),
-    ...(input.assignee ? { assignee: input.assignee } : {}),
-    ...(input.approvalState ? { approvalState: input.approvalState } : {}),
-    ...(input.decisionState ? { decisionState: input.decisionState } : {}),
-    version: 0,
-  };
-  itemStore.set(id, item);
-  if (idempotencyKey) idempotencyStore.set(idempotencyKey, id);
-  return context.json(item, 201);
-});
-
-app.patch("/api/v1/items/:id", async (context) => {
-  const existing = itemStore.get(context.req.param("id"));
-  if (!existing)
+  if (code === "idempotency_key_reused")
+    return failure(context, 409, code, error.message);
+  if (code === "organization_context_required")
+    return failure(context, 400, code, error.message);
+  if (code === "repository_unavailable")
+    return failure(context, 503, code, error.message);
+  if (isDatabaseUnavailable(error))
     return failure(
       context,
-      404,
-      "resource_not_found",
-      "The requested resource is unavailable.",
+      503,
+      "repository_unavailable",
+      "The live data service is temporarily unavailable.",
     );
-  requireAccess(context.get("access"), "update", "item", {
-    organizationId: "org-demo",
-    workspaceId: existing.workspaceId,
-  });
-  const version = Number.parseInt(context.req.header("if-match") ?? "-1", 10);
-  const raw: unknown = await context.req.json();
-  const parsed = updateItemSchema.safeParse({
-    ...(typeof raw === "object" && raw ? raw : {}),
-    version,
-  });
-  if (!parsed.success)
-    return failure(
-      context,
-      422,
-      "validation_error",
-      "Review the work-item changes.",
-      { issues: parsed.error.flatten() },
-    );
-  if (version !== existing.version)
-    return failure(
-      context,
-      409,
-      "version_conflict",
-      "This item changed elsewhere. Refresh and retry.",
-    );
-  const updated: WorkItem & { version: number } = {
-    ...existing,
-    version: existing.version + 1,
-  };
-  if (parsed.data.title !== undefined) updated.title = parsed.data.title;
-  if (parsed.data.status !== undefined) updated.status = parsed.data.status;
-  if (parsed.data.priority !== undefined)
-    updated.priority = parsed.data.priority;
-  if (parsed.data.dueDate !== undefined) updated.dueDate = parsed.data.dueDate;
-  if (parsed.data.assignee !== undefined)
-    updated.assignee = parsed.data.assignee;
-  itemStore.set(existing.id, updated);
-  return context.json(updated);
-});
-
-app.get(
-  "/api/v1/search",
-  zValidator("query", z.object({ q: z.string().trim().min(2).max(200) })),
-  (context) => {
-    const query = context.req.valid("query").q.toLocaleLowerCase();
-    const access = context.get("access");
-    const workspaces = demoWorkspaces.filter(
-      (workspace) =>
-        access.accessibleWorkspaceIds.has(workspace.id) &&
-        `${workspace.name} ${workspace.priority} ${workspace.healthNote}`
-          .toLocaleLowerCase()
-          .includes(query),
-    );
-    const items = currentItems().filter(
-      (item) =>
-        access.accessibleWorkspaceIds.has(item.workspaceId) &&
-        item.title.toLocaleLowerCase().includes(query),
-    );
-    return context.json({ workspaces: workspaces, items: items.slice(0, 50) });
-  },
-);
-
-app.get("/api/v1/export/organization.json", (context) => {
-  requireAccess(context.get("access"), "export", "settings", {
-    organizationId: "org-demo",
-  });
-  context.header(
-    "content-disposition",
-    "attachment; filename=trevv-demo-export.json",
-  );
-  return context.json({
-    exportedAt: new Date().toISOString(),
-    organization: { id: "org-demo", name: "TREVV Demo" },
-    portfolios: demoPortfolios,
-    workspaces: demoWorkspaces,
-    boards: [...new Set(currentItems().map((item) => item.boardId))].map(
-      (boardId) => ({
-        id: boardId,
-        workspaceId: currentItems().find((item) => item.boardId === boardId)
-          ?.workspaceId,
-      }),
-    ),
-    items: currentItems(),
-    milestones: currentItems().filter((item) => item.type === "milestone"),
-    ideas: currentItems().filter((item) => item.type === "idea"),
-    decisions: currentItems().filter((item) => item.type === "decision"),
-    decisionOutcomes: demoDecisionOutcomes,
-    approvals: currentItems().filter((item) => item.type === "approval"),
-    updates: demoWorkspaces.map((workspace) => ({
-      workspaceId: workspace.id,
-      text: workspace.latestUpdate.text,
-      date: workspace.latestUpdate.date,
-    })),
-    insights: demoInsights,
-    snapshots: demoWorkspaceSnapshots,
-    waiting: [...waitingStore.values()],
-    attention: [...attentionStore.values()],
-    dependencies: demoDependencies,
-    commentMetadata: [],
-    smartLinks: [],
-  });
-});
-
-app.get("/api/v1/export/board/:boardId.csv", (context) => {
-  const items = currentItems().filter(
-    (item) => item.boardId === context.req.param("boardId"),
-  );
-  if (!items.length)
-    return failure(
-      context,
-      404,
-      "resource_not_found",
-      "The requested resource is unavailable.",
-    );
-  const first = items[0];
-  if (!first)
-    return failure(
-      context,
-      404,
-      "resource_not_found",
-      "The requested resource is unavailable.",
-    );
-  requireAccess(context.get("access"), "read", "board", {
-    organizationId: "org-demo",
-    workspaceId: first.workspaceId,
-  });
-  const csv = [
-    "id,title,type,status,priority,due_date,assignee",
-    ...items.map((item) =>
-      [
-        item.id,
-        quote(item.title),
-        item.type,
-        item.status,
-        item.priority,
-        item.dueDate ?? "",
-        quote(item.assignee ?? ""),
-      ].join(","),
-    ),
-  ].join("\n");
-  context.header("content-type", "text/csv; charset=utf-8");
-  context.header(
-    "content-disposition",
-    `attachment; filename=${context.req.param("boardId")}.csv`,
-  );
-  return context.body(csv);
-});
-
-app.get("/api/v1/events", (context) => {
-  return context.body(
-    `event: ready\ndata: ${JSON.stringify({ requestId: context.get("requestId"), at: new Date().toISOString() })}\n\n`,
-    200,
-    { "content-type": "text/event-stream", "cache-control": "no-cache" },
-  );
-});
-
-app.get("/openapi.json", (context) => context.json(openApiDocument));
-
-app.notFound((context) =>
-  failure(context, 404, "not_found", "The requested endpoint does not exist."),
-);
-app.onError((error, context) => {
+  if (code === "capability_unavailable")
+    return failure(context, 501, code, error.message);
   console.error(
     JSON.stringify({
       level: "error",
@@ -787,46 +892,40 @@ app.onError((error, context) => {
     "internal_error",
     "TREVV could not complete that request.",
   );
-});
+}
 
-function currentItems(): WorkItem[] {
-  return [...itemStore.values()].map(({ version: _version, ...item }) => item);
+function isDatabaseUnavailable(error: Error): boolean {
+  const code =
+    "code" in error && typeof error.code === "string" ? error.code : "";
+  return (
+    error.name === "PostgresConnectionError" ||
+    code === "ECONNREFUSED" ||
+    code === "ECONNRESET" ||
+    code === "ETIMEDOUT" ||
+    code.startsWith("08") ||
+    code === "57P01" ||
+    code === "57P02" ||
+    code === "57P03"
+  );
 }
-function workspaceForId(id: string) {
-  return demoWorkspaces.find((workspace) => workspace.id === id);
+
+function dataPlaneErrorDetails(
+  error: Error,
+): Record<string, unknown> | undefined {
+  if (!("details" in error)) return undefined;
+  const details = error.details;
+  return details && typeof details === "object" && !Array.isArray(details)
+    ? (details as Record<string, unknown>)
+    : undefined;
 }
-function demoAccess(): AccessContext {
-  return {
-    userId: "user-owner",
-    organizationId: "org-demo",
-    role: "owner",
-    accessibleWorkspaceIds: new Set(
-      demoWorkspaces.map((workspace) => workspace.id),
-    ),
-    managedWorkspaceIds: new Set(
-      demoWorkspaces.map((workspace) => workspace.id),
-    ),
-  };
+
+function jsonUnknown(
+  context: { json(value: never): Response },
+  value: unknown,
+): Response {
+  return context.json(value as never);
 }
-function getAuth(): TrevvAuth | null {
-  if (trevvAuth !== undefined) return trevvAuth;
-  const databaseUrl = process.env.DATABASE_URL;
-  const secret = process.env.BETTER_AUTH_SECRET;
-  const baseUrl = process.env.BETTER_AUTH_URL;
-  trevvAuth =
-    databaseUrl && secret && baseUrl
-      ? createTrevvAuth({
-          databaseUrl,
-          secret,
-          baseUrl,
-          trustedOrigins: [process.env.WEB_ORIGIN ?? "http://localhost:3000"],
-        })
-      : null;
-  return trevvAuth;
-}
-function quote(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
-}
+
 function failure(
   context: { get(name: "requestId"): string },
   status: number,

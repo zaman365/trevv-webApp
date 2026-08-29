@@ -12,12 +12,14 @@
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run src",
+    "test:integration": "tsc -p tsconfig.integration.json --noEmit && vitest run integration"
   },
   "dependencies": {
     "@founderhq/api-contract": "workspace:*",
     "@founderhq/auth-server": "workspace:*",
     "@founderhq/core": "workspace:*",
+    "@founderhq/db": "workspace:*",
     "@founderhq/permissions": "workspace:*",
     "@hono/node-server": "latest",
     "@hono/zod-validator": "latest",

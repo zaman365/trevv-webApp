@@ -38,6 +38,9 @@ importers:
       '@founderhq/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@founderhq/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@founderhq/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
