@@ -12,6 +12,7 @@ import {
   createConversationSchema,
   createInvitationSchema,
   createItemSchema,
+  createPrivacyRequestSchema,
   createTeamSchema,
   createWaitingSchema,
   createWorkspaceSchema,
@@ -29,6 +30,7 @@ import {
   updateItemSchema,
   updateMessageResponseSchema,
   updateMembershipSchema,
+  updateRetentionPolicySchema,
   updateTeamSchema,
   waitingActionSchema,
   weeklyReviewInputSchema,
@@ -52,6 +54,7 @@ import {
   createIdentityScope,
   createOrganizationScope,
   createPostgresRepositories,
+  createRateLimitRepository,
   hashInvitationToken,
   type IdentityResolution,
   type InvitationProjection,
@@ -82,6 +85,22 @@ import {
   type DataPlane,
 } from "./data-plane.js";
 import { createDemoAdapter } from "./demo-adapter.js";
+import {
+  acceptedRequestId,
+  createApiMetrics,
+  createJsonLogger,
+  createMemoryRateLimitStore,
+  createPostgresRateLimitStore,
+  isOperationalTelemetryPath,
+  rateLimitPolicy,
+  telemetryPath,
+  trustedClientKey,
+  type ApiOperations,
+  type ApiErrorReporter,
+  type ApiLogger,
+  type ApiMetrics,
+  type ApiRateLimitStore,
+} from "./operations.js";
 import { createPostgresAdapter } from "./postgres-adapter.js";
 import { readRuntimeConfiguration } from "./runtime-config.js";
 
@@ -109,14 +128,54 @@ export interface ApiAppDependencies {
   webOrigin?: string;
   invitationTtlMs?: number;
   corsOrigin?: string;
+  operations?: ApiOperations;
 }
 
 export function createApiApp(dependencies: ApiAppDependencies) {
   assertCoherentMode(dependencies);
   const clock = dependencies.clock ?? (() => new Date());
   const idGenerator = dependencies.idGenerator ?? (() => crypto.randomUUID());
+  const operations: ApiOperations = {
+    ...dependencies.operations,
+    metrics: dependencies.operations?.metrics ?? createApiMetrics(),
+  };
   const api = new Hono<{ Variables: Variables }>();
 
+  api.use("*", async (context, next) => {
+    const requestId = acceptedRequestId(
+      context.req.header("x-request-id"),
+      idGenerator,
+    );
+    const started = performance.now();
+    context.set("requestId", requestId);
+    context.header("x-request-id", requestId);
+    try {
+      await next();
+    } finally {
+      const durationMs = Math.max(0, Math.round(performance.now() - started));
+      observe(() =>
+        operations.logger?.write({
+          level: context.res.status >= 500 ? "error" : "info",
+          service: "trevv-api",
+          event: "request_completed",
+          requestId,
+          method: context.req.method,
+          path: telemetryPath(context.req.path),
+          status: context.res.status,
+          durationMs,
+        }),
+      );
+      if (!isOperationalTelemetryPath(context.req.path))
+        observe(() =>
+          operations.metrics?.recordRequest({
+            method: context.req.method,
+            path: telemetryPath(context.req.path),
+            status: context.res.status,
+            durationMs,
+          }),
+        );
+    }
+  });
   api.use("*", secureHeaders());
   api.use(
     "/api/v1/*",
@@ -140,10 +199,80 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       ],
     }),
   );
-  api.use("*", async (context, next) => {
-    const requestId = context.req.header("x-request-id") ?? idGenerator();
-    context.set("requestId", requestId);
-    context.header("x-request-id", requestId);
+  api.use(
+    "/api/auth/*",
+    bodyLimit({
+      maxSize: 64 * 1024,
+      onError: (context) =>
+        failure(
+          context as unknown as ApiContext,
+          413,
+          "payload_too_large",
+          "The authentication request cannot exceed 64 KiB.",
+        ),
+    }),
+  );
+  api.use("/api/*", async (context, next) => {
+    const store = operations.rateLimitStore;
+    const policy = rateLimitPolicy(context.req.method, context.req.path);
+    if (!store || !policy) {
+      await next();
+      return;
+    }
+    let decision;
+    try {
+      decision = await store.consume({
+        ...policy,
+        key: trustedClientKey(
+          context.req.raw.headers,
+          operations.trustedClientIpHeader,
+        ),
+        now: clock(),
+      });
+    } catch (error) {
+      observe(() => operations.metrics?.recordRateLimitStoreError());
+      observe(() =>
+        operations.logger?.write({
+          level: "error",
+          service: "trevv-api",
+          event: "rate_limit_store_unavailable",
+          requestId: context.get("requestId"),
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      context.res = failure(
+        context,
+        503,
+        "operations_unavailable",
+        "Request protection is temporarily unavailable.",
+      );
+      return;
+    }
+    const resetSeconds = Math.max(
+      1,
+      Math.ceil((decision.resetAt.getTime() - clock().getTime()) / 1_000),
+    );
+    context.header("ratelimit-limit", String(decision.limit));
+    context.header("ratelimit-remaining", String(decision.remaining));
+    context.header("ratelimit-reset", String(resetSeconds));
+    if (!decision.allowed) {
+      observe(() =>
+        operations.metrics?.recordRateLimitRejection(policy.bucket),
+      );
+      const response = failure(
+        context,
+        429,
+        "rate_limited",
+        "Retry this request later.",
+        { retryAfterSeconds: resetSeconds },
+      );
+      response.headers.set("retry-after", String(resetSeconds));
+      response.headers.set("ratelimit-limit", String(decision.limit));
+      response.headers.set("ratelimit-remaining", "0");
+      response.headers.set("ratelimit-reset", String(resetSeconds));
+      context.res = response;
+      return;
+    }
     await next();
   });
   api.use(
@@ -170,6 +299,17 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       );
     return dependencies.authHandler(context.req.raw);
   });
+
+  api.get("/internal/livez", (context) =>
+    context.json({ status: "ok", service: "trevv-api" }),
+  );
+
+  api.get("/internal/metrics", (context) =>
+    context.text(operations.metrics?.render() ?? "", 200, {
+      "cache-control": "no-store",
+      "content-type": "text/plain; version=0.0.4; charset=utf-8",
+    }),
+  );
 
   api.use("/api/v1/*", async (context, next) => {
     if (
@@ -2093,6 +2233,132 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       ),
   );
 
+  // Privacy effects are intentionally request-driven. These endpoints never
+  // claim that an export, erasure, or provider revocation happened inline.
+  api.get("/api/v1/privacy", async (context) =>
+    context.json(
+      await dependencies.dataPlane.getPrivacyProgram(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.get("/api/v1/privacy/requests", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listPrivacyRequests(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.post("/api/v1/privacy/requests", async (context) => {
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = createPrivacyRequestSchema.safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the privacy request kind and scope.",
+        { issues: parsed.error.flatten() },
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createPrivacyRequest(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/privacy/requests",
+        parsed.data,
+        idempotency,
+        202,
+      ),
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 202);
+  });
+
+  api.delete("/api/v1/privacy/requests/:id", async (context) => {
+    const parsedId = idSchema.safeParse(context.req.param("id"));
+    if (!parsedId.success)
+      return failure(
+        context,
+        404,
+        "resource_not_found",
+        "The requested resource is unavailable.",
+      );
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.cancelPrivacyRequest(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/privacy/requests/:id",
+        { id: parsedId.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      parsedId.data,
+      expectedVersion,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.put("/api/v1/privacy/retention", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const raw: unknown = await context.req.json().catch(() => undefined);
+    const parsed = updateRetentionPolicySchema.safeParse(raw);
+    if (!parsed.success)
+      return failure(
+        context,
+        422,
+        "validation_error",
+        "Review the retention category and policy.",
+        { issues: parsed.error.flatten() },
+      );
+    const result = await dependencies.dataPlane.updateRetentionPolicy(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/privacy/retention",
+        parsed.data,
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.policyVersion,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
   api.get("/api/v1/export/organization.json", async (context) => {
     context.header(
       "content-disposition",
@@ -2195,7 +2461,7 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       "The requested endpoint does not exist.",
     ),
   );
-  api.onError((error, context) => mapError(error, context));
+  api.onError((error, context) => mapError(error, context, operations));
 
   return api;
 }
@@ -2210,18 +2476,67 @@ export function createDemoApiApp(
   return createApiApp({ mode: "demo", ...demo, ...overrides });
 }
 
-export function createRuntimeApi(): {
+export function createRuntimeApi(
+  runtimeOperations: {
+    rateLimitStore?: ApiRateLimitStore;
+    logger?: ApiLogger;
+    errorReporter?: ApiErrorReporter;
+    metrics?: ApiMetrics;
+  } = {},
+): {
   app: ReturnType<typeof createApiApp>;
   close(): Promise<void>;
 } {
   const configuration = readRuntimeConfiguration();
   if (configuration.mode === "demo")
-    return { app: createDemoApiApp(), close: async () => undefined };
+    return {
+      app: createApiApp({
+        mode: "demo",
+        ...createDemoAdapter(),
+        operations: {
+          rateLimitStore: createMemoryRateLimitStore(),
+          ...(runtimeOperations.logger
+            ? { logger: runtimeOperations.logger }
+            : {}),
+          ...(runtimeOperations.metrics
+            ? { metrics: runtimeOperations.metrics }
+            : {}),
+        },
+      }),
+      close: async () => undefined,
+    };
+  if (
+    configuration.errorReportingMode === "external" &&
+    !runtimeOperations.errorReporter
+  )
+    throw new Error(
+      "ERROR_REPORTING_MODE=external requires an error reporter adapter.",
+    );
+  if (
+    configuration.rateLimitBackend === "postgres" &&
+    runtimeOperations.rateLimitStore &&
+    runtimeOperations.rateLimitStore.scope !== "shared"
+  )
+    throw new Error(
+      "RATE_LIMIT_BACKEND=postgres requires a shared rate-limit store.",
+    );
   const mailDelivery =
     configuration.mailTransport.kind === "test_file"
       ? createFileMailSink(configuration.mailTransport.filePath)
       : createSmtpMailDelivery(configuration.mailTransport.configuration);
   const database = createDatabase(configuration.databaseUrl);
+  const metrics = runtimeOperations.metrics ?? createApiMetrics();
+  const rateLimitStore =
+    configuration.rateLimitBackend === "memory"
+      ? createMemoryRateLimitStore()
+      : (runtimeOperations.rateLimitStore ??
+        createPostgresRateLimitStore(
+          createRateLimitRepository(
+            database.db,
+            configuration.rateLimitHashSecret ?? missingRateLimitHashSecret(),
+          ),
+          { onCleanupError: () => metrics.recordRateLimitStoreError() },
+        ));
   const repositories = createPostgresRepositories(database.db);
   const authRuntime = createTrevvAuthRuntime({
     databaseUrl: configuration.databaseUrl,
@@ -2263,11 +2578,28 @@ export function createRuntimeApi(): {
       mailFrom: configuration.mailFrom,
       webOrigin: configuration.webOrigin,
       corsOrigin: configuration.webOrigin,
+      operations: {
+        ...(rateLimitStore ? { rateLimitStore } : {}),
+        ...(configuration.trustedClientIpHeader
+          ? { trustedClientIpHeader: configuration.trustedClientIpHeader }
+          : {}),
+        logger: runtimeOperations.logger ?? createJsonLogger(),
+        ...(runtimeOperations.errorReporter
+          ? { errorReporter: runtimeOperations.errorReporter }
+          : {}),
+        metrics,
+      },
     }),
     async close() {
       await Promise.all([database.close(), authRuntime.close()]);
     },
   };
+}
+
+function missingRateLimitHashSecret(): never {
+  throw new Error(
+    "RATE_LIMIT_HASH_SECRET is required for the PostgreSQL rate limiter.",
+  );
 }
 
 export function createUnavailableLiveDependencies(): {
@@ -2340,6 +2672,11 @@ export function createUnavailableLiveDependencies(): {
     listWeeklyReviews: unavailable,
     listSnapshots: unavailable,
     getOperationsStatus: unavailable,
+    getPrivacyProgram: unavailable,
+    listPrivacyRequests: unavailable,
+    createPrivacyRequest: unavailable,
+    cancelPrivacyRequest: unavailable,
+    updateRetentionPolicy: unavailable,
     search: unavailable,
     exportOrganization: unavailable,
     exportBoardCsv: unavailable,
@@ -2803,6 +3140,7 @@ function setIdempotencyHeaders(
 function mapError(
   error: Error,
   context: { get(name: "requestId"): string },
+  operations?: ApiOperations,
 ): Response {
   const code = dataPlaneErrorCode(error);
   if (error instanceof PermissionError || code === "resource_not_found")
@@ -2879,11 +3217,24 @@ function mapError(
     );
   if (code === "capability_unavailable")
     return failure(context, 501, code, error.message);
-  console.error(
-    JSON.stringify({
+  const requestId = context.get("requestId");
+  observe(() => operations?.metrics?.recordUnhandledError());
+  observe(() =>
+    operations?.logger?.write({
       level: "error",
-      requestId: context.get("requestId"),
-      message: error.message,
+      service: "trevv-api",
+      event: "unhandled_error",
+      requestId,
+      errorCode: code || "internal_error",
+      errorName: error.name,
+    }),
+  );
+  observe(() =>
+    operations?.errorReporter?.capture({
+      service: "trevv-api",
+      requestId,
+      errorCode: code || "internal_error",
+      errorName: error.name,
     }),
   );
   return failure(
@@ -2969,4 +3320,12 @@ function failure(
       },
     },
   );
+}
+
+function observe(operation: () => void): void {
+  try {
+    operation();
+  } catch {
+    // Telemetry is deliberately best-effort and cannot change product state.
+  }
 }

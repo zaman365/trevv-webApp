@@ -42,6 +42,8 @@ describe("live runtime configuration", () => {
           requireTls: false,
         },
       },
+      rateLimitBackend: "memory",
+      errorReportingMode: "disabled",
     });
   });
 
@@ -126,6 +128,9 @@ describe("live runtime configuration", () => {
     expect(readRuntimeConfiguration(productionEnvironment())).toMatchObject({
       mode: "live",
       cookieDomain: "trevv.de",
+      rateLimitBackend: "postgres",
+      rateLimitHashSecret: "private-rate-limit-hmac-material-2026",
+      trustedClientIpHeader: "x-trevv-client-ip",
     });
   });
 
@@ -154,6 +159,39 @@ describe("live runtime configuration", () => {
         MAIL_FROM: "not-an-email-address",
       }),
     ).toThrow(/plain email address/);
+  });
+
+  it("requires shared request protection in production", () => {
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        RATE_LIMIT_BACKEND: "memory",
+      }),
+    ).toThrow(/cross-instance enforcement/);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        TRUSTED_CLIENT_IP_HEADER: undefined,
+      }),
+    ).toThrow(/TRUSTED_CLIENT_IP_HEADER is required/);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        RATE_LIMIT_HASH_SECRET: undefined,
+      }),
+    ).toThrow(/RATE_LIMIT_HASH_SECRET is required/);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        RATE_LIMIT_HASH_SECRET: "short",
+      }),
+    ).toThrow(/at least 32/);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        ERROR_REPORTING_MODE: "sometimes",
+      }),
+    ).toThrow(/ERROR_REPORTING_MODE/);
   });
 
   it("permits only an explicit private temporary mail sink outside production", () => {
@@ -209,5 +247,9 @@ function productionEnvironment() {
     SMTP_REQUIRE_TLS: "true",
     SMTP_USERNAME: "trevv-mailer",
     SMTP_PASSWORD: "not-a-real-credential",
+    RATE_LIMIT_BACKEND: "postgres",
+    RATE_LIMIT_HASH_SECRET: "private-rate-limit-hmac-material-2026",
+    TRUSTED_CLIENT_IP_HEADER: "x-trevv-client-ip",
+    ERROR_REPORTING_MODE: "disabled",
   } as const;
 }

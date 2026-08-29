@@ -16,6 +16,7 @@ import type {
   CreateBoardInput,
   CreateConversationInput,
   CreateConversationMessageInput,
+  CreatePrivacyRequestInput,
   CreateItemInput,
   CreateTeamInput,
   CreateWaitingInput,
@@ -24,6 +25,9 @@ import type {
   InboxItemDto,
   ManagementMemoryDto,
   OperationsStatusDto,
+  DataLifecycleRequestDto,
+  PrivacyProgramStatusDto,
+  RetentionPolicyDto,
   PaginatedConversationMessages,
   PaginatedConversations,
   PortfolioDto,
@@ -53,6 +57,7 @@ import type {
   WorkspaceDto,
   UpdateItemInput,
   UpdateTeamInput,
+  UpdateRetentionPolicyInput,
 } from "@founderhq/api-contract";
 import type { AccessContext } from "@founderhq/permissions";
 
@@ -346,6 +351,26 @@ export interface DataPlane {
     filters: { portfolioId?: string; workspaceId?: string },
   ): Promise<WorkspaceSnapshotDto[]>;
   getOperationsStatus(context: ApiRequestContext): Promise<OperationsStatusDto>;
+  getPrivacyProgram(
+    context: ApiRequestContext,
+  ): Promise<PrivacyProgramStatusDto>;
+  listPrivacyRequests(
+    context: ApiRequestContext,
+  ): Promise<DataLifecycleRequestDto[]>;
+  createPrivacyRequest(
+    context: ApiMutationContext,
+    input: CreatePrivacyRequestInput,
+  ): Promise<MutationResult<DataLifecycleRequestDto>>;
+  cancelPrivacyRequest(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+  ): Promise<MutationResult<DataLifecycleRequestDto>>;
+  updateRetentionPolicy(
+    context: ApiMutationContext,
+    expectedVersion: number,
+    input: UpdateRetentionPolicyInput,
+  ): Promise<MutationResult<RetentionPolicyDto>>;
   search(context: ApiRequestContext, query: string): Promise<SearchResult>;
   exportOrganization(context: ApiRequestContext): Promise<unknown>;
   exportBoardCsv(context: ApiRequestContext, boardId: string): Promise<string>;

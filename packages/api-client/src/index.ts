@@ -16,6 +16,7 @@ import {
   conversationSchema,
   convertInboxItemSchema,
   convertedInboxItemSchema,
+  createPrivacyRequestSchema,
   createBoardSchema,
   createConversationMessageSchema,
   createConversationSchema,
@@ -37,6 +38,7 @@ import {
   onboardingDraftSchema,
   onboardingStateSchema,
   operationsStatusSchema,
+  dataLifecycleRequestSchema,
   organizationSummarySchema,
   organizationSelectionSchema,
   paginatedItemsSchema,
@@ -45,6 +47,8 @@ import {
   portfolioResponseSchema,
   portfolioSchema,
   searchResultSchema,
+  privacyProgramStatusSchema,
+  retentionPolicySchema,
   sessionSchema,
   setConversationParticipantSchema,
   setTeamMemberSchema,
@@ -54,6 +58,7 @@ import {
   updateInboxItemSchema,
   updateItemSchema,
   updateMembershipSchema,
+  updateRetentionPolicySchema,
   updateMessageResponseSchema,
   updateTeamSchema,
   waitingActionSchema,
@@ -83,6 +88,7 @@ import {
   type ConversationDto,
   type ConversationMessageDto,
   type ConversationReadCheckpointDto,
+  type CreatePrivacyRequestInput,
   type ConvertInboxItemInput,
   type ConvertedInboxItem,
   type CreateInvitationInput,
@@ -103,10 +109,13 @@ import {
   type OnboardingDraft,
   type OnboardingState,
   type OperationsStatusDto,
+  type DataLifecycleRequestDto,
   type OrganizationSummary,
   type PaginatedConversationMessages,
   type PaginatedConversations,
   type SearchResultDto,
+  type PrivacyProgramStatusDto,
+  type RetentionPolicyDto,
   type Session,
   type SetTeamMemberInput,
   type TeamDirectoryDto,
@@ -115,6 +124,7 @@ import {
   type UpdateInboxItemInput,
   type UpdateItemInput,
   type UpdateMembershipInput,
+  type UpdateRetentionPolicyInput,
   type UpdateTeamInput,
   type WaitingAction,
   type WaitingStateDto,
@@ -1024,6 +1034,62 @@ export function createApiClient({
 
     operationStatus: async (): Promise<OperationsStatusDto> =>
       operationsStatusSchema.parse((await request("/operations/status")).body),
+
+    privacyProgram: async (): Promise<PrivacyProgramStatusDto> =>
+      privacyProgramStatusSchema.parse((await request("/privacy")).body),
+
+    privacyRequests: async (): Promise<DataLifecycleRequestDto[]> =>
+      dataLifecycleRequestSchema
+        .array()
+        .parse((await request("/privacy/requests")).body),
+
+    createPrivacyRequest: async (
+      input: CreatePrivacyRequestInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<DataLifecycleRequestDto>> => {
+      const body = createPrivacyRequestSchema.parse(input);
+      return parseVersionedMutation(
+        await request("/privacy/requests", {
+          method: "POST",
+          headers: {
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(body),
+        }),
+        dataLifecycleRequestSchema,
+      );
+    },
+
+    cancelPrivacyRequest: async (
+      id: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<DataLifecycleRequestDto>> =>
+      parseVersionedMutation(
+        await request(`/privacy/requests/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: mutationHeaders(version, idempotencyKey),
+        }),
+        dataLifecycleRequestSchema,
+      ),
+
+    updateRetentionPolicy: async (
+      input: UpdateRetentionPolicyInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<RetentionPolicyDto> & { etag: string }> => {
+      const body = updateRetentionPolicySchema.parse(input);
+      const result = await request("/privacy/retention", {
+        method: "PUT",
+        headers: mutationHeaders(version, idempotencyKey),
+        body: JSON.stringify(body),
+      });
+      return {
+        data: retentionPolicySchema.parse(result.body),
+        etag: entityTagSchema.parse(result.response.headers.get("etag")),
+        ...mutationMetadata(result.response),
+      };
+    },
   };
 }
 

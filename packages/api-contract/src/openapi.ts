@@ -27,6 +27,7 @@ export const openApiDocument = {
     { name: "Inbox" },
     { name: "Items" },
     { name: "Operations" },
+    { name: "Privacy" },
     { name: "Search" },
     { name: "Exports" },
     { name: "Events" },
@@ -866,6 +867,190 @@ export const openApiDocument = {
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
           "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/privacy": {
+      get: {
+        tags: ["Privacy"],
+        operationId: "getPrivacyProgram",
+        description:
+          "Returns the versioned data inventory, effective retention policies, pending legal-review status, and an explicit no-provider posture.",
+        responses: {
+          "200": {
+            description: "Tenant privacy program and effective policy metadata",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PrivacyProgramStatus" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/privacy/requests": {
+      get: {
+        tags: ["Privacy"],
+        operationId: "listPrivacyRequests",
+        description:
+          "Members see their own requests; organization managers see all tenant requests. No response implies that an external or destructive effect has completed.",
+        responses: {
+          "200": {
+            description: "Visible privacy and data-lifecycle requests",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    $ref: "#/components/schemas/DataLifecycleRequest",
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      post: {
+        tags: ["Privacy"],
+        operationId: "createPrivacyRequest",
+        description:
+          "Submits a reviewed workflow request. HTTP 202 means accepted for review, not exported, erased, revoked, or otherwise completed.",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePrivacyRequest" },
+            },
+          },
+        },
+        responses: {
+          "202": {
+            description: "Submitted for review; no effect has yet been applied",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/DataLifecycleRequest",
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "501": { $ref: "#/components/responses/CapabilityUnavailable" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/privacy/requests/{id}": {
+      delete: {
+        tags: ["Privacy"],
+        operationId: "cancelPrivacyRequest",
+        description:
+          "Cancels the current user's submitted or under-review request before processing starts.",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description: "Request cancellation recorded durably",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/DataLifecycleRequest",
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "501": { $ref: "#/components/responses/CapabilityUnavailable" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/privacy/retention": {
+      put: {
+        tags: ["Privacy"],
+        operationId: "updateRetentionPolicy",
+        description:
+          "Records a versioned, currently unenforced tenant retention policy. It does not alter the separate message-level expiry workflow. Any future destructive processor must enforce legal holds before acting.",
+        parameters: [
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/UpdateRetentionPolicy",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Versioned organization retention policy record; no disposition is currently enforced",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/RetentionPolicy" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "501": { $ref: "#/components/responses/CapabilityUnavailable" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -5255,6 +5440,287 @@ export const openApiDocument = {
           failedCount: { type: "integer", minimum: 0 },
           oldestPendingAt: { type: "string", format: "date-time" },
           lastProcessedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CreatePrivacyRequest: {
+        oneOf: [
+          {
+            type: "object",
+            required: ["kind", "scope"],
+            additionalProperties: false,
+            properties: {
+              kind: {
+                type: "string",
+                enum: [
+                  "access",
+                  "portability",
+                  "erasure",
+                  "rectification",
+                  "restriction",
+                  "objection",
+                ],
+              },
+              scope: { type: "string", const: "user" },
+            },
+          },
+          {
+            type: "object",
+            required: ["kind", "scope"],
+            additionalProperties: false,
+            properties: {
+              kind: {
+                type: "string",
+                enum: ["access", "portability", "erasure", "restriction"],
+              },
+              scope: { type: "string", const: "organization" },
+            },
+          },
+        ],
+      },
+      DataLifecycleRequest: {
+        type: "object",
+        required: [
+          "id",
+          "organizationId",
+          "requestedBy",
+          "kind",
+          "scope",
+          "status",
+          "dueAt",
+          "version",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          organizationId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+          requestedBy: { type: "string", minLength: 3, maxLength: 128 },
+          subjectUserId: {
+            type: "string",
+            minLength: 3,
+            maxLength: 128,
+          },
+          kind: {
+            type: "string",
+            enum: [
+              "access",
+              "portability",
+              "erasure",
+              "rectification",
+              "restriction",
+              "objection",
+            ],
+          },
+          scope: { type: "string", enum: ["user", "organization"] },
+          status: {
+            type: "string",
+            enum: [
+              "submitted",
+              "under_review",
+              "approved",
+              "processing",
+              "completed",
+              "rejected",
+              "cancelled",
+              "failed",
+            ],
+          },
+          dueAt: { type: "string", format: "date-time" },
+          processingStartedAt: { type: "string", format: "date-time" },
+          completedAt: { type: "string", format: "date-time" },
+          cancelledAt: { type: "string", format: "date-time" },
+          failureCode: { type: "string", maxLength: 128 },
+          version: { type: "integer", minimum: 1 },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      RetentionPolicy: {
+        type: "object",
+        required: [
+          "category",
+          "retentionDays",
+          "disposition",
+          "legalHold",
+          "policyVersion",
+          "source",
+          "effectiveAt",
+          "enforcementStatus",
+        ],
+        additionalProperties: false,
+        properties: {
+          category: {
+            type: "string",
+            enum: [
+              "identity",
+              "organization",
+              "work",
+              "collaboration",
+              "audit",
+              "operations",
+              "integrations",
+              "billing",
+            ],
+          },
+          retentionDays: { type: "integer", minimum: 1, maximum: 3650 },
+          disposition: {
+            type: "string",
+            enum: ["delete", "anonymize", "archive", "manual_review"],
+          },
+          legalHold: { type: "boolean" },
+          policyVersion: { type: "integer", minimum: 1 },
+          source: {
+            type: "string",
+            enum: ["default", "organization_override"],
+          },
+          effectiveAt: { type: "string", format: "date-time" },
+          enforcementStatus: { type: "string", const: "not_implemented" },
+        },
+      },
+      UpdateRetentionPolicy: {
+        type: "object",
+        required: ["category", "retentionDays", "disposition", "legalHold"],
+        additionalProperties: false,
+        properties: {
+          category: {
+            type: "string",
+            enum: [
+              "identity",
+              "organization",
+              "work",
+              "collaboration",
+              "audit",
+              "operations",
+              "integrations",
+              "billing",
+            ],
+          },
+          retentionDays: { type: "integer", minimum: 1, maximum: 3650 },
+          disposition: {
+            type: "string",
+            enum: ["delete", "anonymize", "archive", "manual_review"],
+          },
+          legalHold: { type: "boolean" },
+        },
+      },
+      PrivacyInventoryEntry: {
+        type: "object",
+        required: [
+          "category",
+          "examples",
+          "purpose",
+          "classification",
+          "defaultRetentionDays",
+          "defaultDisposition",
+        ],
+        additionalProperties: false,
+        properties: {
+          category: {
+            type: "string",
+            enum: [
+              "identity",
+              "organization",
+              "work",
+              "collaboration",
+              "audit",
+              "operations",
+              "integrations",
+              "billing",
+            ],
+          },
+          examples: {
+            type: "array",
+            maxItems: 12,
+            items: { type: "string", minLength: 1, maxLength: 120 },
+          },
+          purpose: { type: "string", minLength: 1, maxLength: 300 },
+          classification: {
+            type: "string",
+            enum: ["personal", "customer_content", "security", "commercial"],
+          },
+          defaultRetentionDays: {
+            type: "integer",
+            minimum: 1,
+            maximum: 3650,
+          },
+          defaultDisposition: {
+            type: "string",
+            enum: ["delete", "anonymize", "archive", "manual_review"],
+          },
+        },
+      },
+      PrivacyProgramStatus: {
+        type: "object",
+        required: [
+          "inventoryVersion",
+          "policyVersion",
+          "legalDocuments",
+          "externalProviders",
+          "requestsAreReviewedBeforeEffects",
+          "inventory",
+          "retention",
+        ],
+        additionalProperties: false,
+        properties: {
+          inventoryVersion: { type: "string", minLength: 1, maxLength: 64 },
+          policyVersion: { type: "string", minLength: 1, maxLength: 64 },
+          legalDocuments: {
+            type: "object",
+            required: ["privacyNotice", "terms"],
+            additionalProperties: false,
+            properties: {
+              privacyNotice: {
+                type: "object",
+                required: ["version", "reviewStatus"],
+                additionalProperties: false,
+                properties: {
+                  version: { type: "string" },
+                  reviewStatus: { type: "string", const: "pending" },
+                },
+              },
+              terms: {
+                type: "object",
+                required: ["version", "reviewStatus"],
+                additionalProperties: false,
+                properties: {
+                  version: { type: "string" },
+                  reviewStatus: { type: "string", const: "pending" },
+                },
+              },
+            },
+          },
+          externalProviders: {
+            type: "object",
+            required: ["enabled", "configured", "revocationAutomation"],
+            additionalProperties: false,
+            properties: {
+              enabled: { type: "boolean", const: false },
+              configured: {
+                type: "array",
+                minItems: 0,
+                maxItems: 0,
+                items: { type: "string" },
+              },
+              revocationAutomation: {
+                type: "string",
+                const: "unavailable",
+              },
+            },
+          },
+          requestsAreReviewedBeforeEffects: { type: "boolean", const: true },
+          inventory: {
+            type: "array",
+            items: { $ref: "#/components/schemas/PrivacyInventoryEntry" },
+          },
+          retention: {
+            type: "array",
+            items: { $ref: "#/components/schemas/RetentionPolicy" },
+          },
         },
       },
       WorkspaceInput: {

@@ -3,6 +3,7 @@ import type {
   BoardDto,
   CollaborationEventBatch,
   CollaborationUserDto,
+  DataLifecycleRequestDto,
   ConversationDto,
   ConversationMessageDto,
   InboxItemDto,
@@ -27,13 +28,20 @@ import type {
   OrganizationScopedRepositories,
   PostgresRepositories,
   TeamProjection,
+  RetentionPolicyProjection,
   WaitingProjection,
   WorkItemHistoryProjection,
   WorkItemProjection,
   WorkItemTransitionInput,
   WorkspaceProjection,
 } from "@founderhq/db";
-import { createIdentityScope, createOrganizationScope } from "@founderhq/db";
+import {
+  createIdentityScope,
+  createOrganizationScope,
+  privacyDataInventory,
+  privacyInventoryVersion,
+  privacyPolicyVersion,
+} from "@founderhq/db";
 import {
   canCollaborate,
   requireAccess,
@@ -1325,6 +1333,96 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       );
     },
 
+    async getPrivacyProgram(context) {
+      const retention = await scoped(
+        options.repositories,
+        context,
+      ).privacy.listRetentionPolicies();
+      return {
+        inventoryVersion: privacyInventoryVersion,
+        policyVersion: privacyPolicyVersion,
+        legalDocuments: {
+          privacyNotice: {
+            version: privacyPolicyVersion,
+            reviewStatus: "pending",
+          },
+          terms: { version: privacyPolicyVersion, reviewStatus: "pending" },
+        },
+        externalProviders: {
+          enabled: false,
+          configured: [],
+          revocationAutomation: "unavailable",
+        },
+        requestsAreReviewedBeforeEffects: true,
+        inventory: privacyDataInventory.map((entry) => ({
+          ...entry,
+          examples: [...entry.examples],
+        })),
+        retention: retention.map(toRetentionPolicyDto),
+      };
+    },
+
+    async listPrivacyRequests(context) {
+      const organizationManager = isOrganizationManager(context.access);
+      const requests = await scoped(
+        options.repositories,
+        context,
+      ).privacy.listRequests(
+        organizationManager
+          ? undefined
+          : { requestedBy: context.access.userId },
+      );
+      return requests.map(toDataLifecycleRequestDto);
+    },
+
+    async createPrivacyRequest(context, input) {
+      if (input.scope === "organization") {
+        requireAccess(
+          context.access,
+          input.kind === "erasure" ? "delete" : "export",
+          "settings",
+          { organizationId: context.access.organizationId },
+        );
+      }
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).privacy.createRequest(input, mutation(context));
+      return {
+        value: toDataLifecycleRequestDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
+    async cancelPrivacyRequest(context, id, expectedVersion) {
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).privacy.cancelRequest(id, expectedVersion, mutation(context));
+      return {
+        value: toDataLifecycleRequestDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
+    async updateRetentionPolicy(context, expectedVersion, input) {
+      requireAccess(context.access, "manage_settings", "settings", {
+        organizationId: context.access.organizationId,
+      });
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).privacy.updateRetentionPolicy(
+        expectedVersion,
+        input,
+        mutation(context),
+      );
+      return {
+        value: toRetentionPolicyDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
     async search(context, query) {
       const result = await scoped(options.repositories, context).search(query);
       return {
@@ -1346,6 +1444,86 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
   };
 
   return { dataPlane, accessResolver };
+}
+
+function toDataLifecycleRequestDto(request: {
+  id: string;
+  organizationId: string;
+  requestedBy: string;
+  subjectUserId: string | null;
+  kind: string;
+  requestScope: string;
+  status: string;
+  dueAt: Date;
+  processingStartedAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+  failureCode: string | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): DataLifecycleRequestDto {
+  if (
+    ![
+      "access",
+      "portability",
+      "erasure",
+      "rectification",
+      "restriction",
+      "objection",
+    ].includes(request.kind) ||
+    !["user", "organization"].includes(request.requestScope) ||
+    ![
+      "submitted",
+      "under_review",
+      "approved",
+      "processing",
+      "completed",
+      "rejected",
+      "cancelled",
+      "failed",
+    ].includes(request.status)
+  )
+    throw new DataPlaneError(
+      "repository_unavailable",
+      "A persisted privacy request has an invalid state.",
+    );
+  return {
+    id: request.id,
+    organizationId: request.organizationId,
+    requestedBy: request.requestedBy,
+    ...(request.subjectUserId ? { subjectUserId: request.subjectUserId } : {}),
+    kind: request.kind as DataLifecycleRequestDto["kind"],
+    scope: request.requestScope as DataLifecycleRequestDto["scope"],
+    status: request.status as DataLifecycleRequestDto["status"],
+    dueAt: request.dueAt.toISOString(),
+    ...(request.processingStartedAt
+      ? { processingStartedAt: request.processingStartedAt.toISOString() }
+      : {}),
+    ...(request.completedAt
+      ? { completedAt: request.completedAt.toISOString() }
+      : {}),
+    ...(request.cancelledAt
+      ? { cancelledAt: request.cancelledAt.toISOString() }
+      : {}),
+    ...(request.failureCode ? { failureCode: request.failureCode } : {}),
+    version: request.version,
+    createdAt: request.createdAt.toISOString(),
+    updatedAt: request.updatedAt.toISOString(),
+  };
+}
+
+function toRetentionPolicyDto(policy: RetentionPolicyProjection) {
+  return {
+    category: policy.category,
+    retentionDays: policy.retentionDays,
+    disposition: policy.disposition,
+    legalHold: policy.legalHold,
+    policyVersion: policy.policyVersion,
+    source: policy.source,
+    effectiveAt: policy.effectiveAt.toISOString(),
+    enforcementStatus: policy.enforcementStatus,
+  };
 }
 
 function identityResolutionError(

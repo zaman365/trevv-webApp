@@ -229,6 +229,90 @@ describe("Phase 3 API client", () => {
   });
 });
 
+describe("Phase 5 privacy API client", () => {
+  it("submits a reviewed request without claiming completion", async () => {
+    const request = {
+      id: "privacy-request-1",
+      organizationId: "org-1",
+      requestedBy: "user-1",
+      subjectUserId: "user-1",
+      kind: "portability" as const,
+      scope: "user" as const,
+      status: "submitted" as const,
+      dueAt: "2026-09-28T12:00:00.000Z",
+      version: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const fetchMock = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+        Response.json(request, {
+          status: 202,
+          headers: {
+            etag: '"1"',
+            "idempotency-key": idempotencyKey,
+            "idempotency-replayed": "false",
+          },
+        }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    const result = await client.createPrivacyRequest(
+      { kind: "portability", scope: "user" },
+      idempotencyKey,
+    );
+    expect(result).toMatchObject({
+      data: { status: "submitted" },
+      etag: '"1"',
+      replayed: false,
+    });
+    expect("completedAt" in result.data).toBe(false);
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(headers.get("idempotency-key")).toBe(idempotencyKey);
+  });
+
+  it("binds cancellation to both ETag and an idempotency key", async () => {
+    const fetchMock = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+        Response.json(
+          {
+            id: "privacy-request-1",
+            organizationId: "org-1",
+            requestedBy: "user-1",
+            subjectUserId: "user-1",
+            kind: "access",
+            scope: "user",
+            status: "cancelled",
+            dueAt: "2026-09-28T12:00:00.000Z",
+            cancelledAt: timestamp,
+            version: 2,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+          {
+            headers: {
+              etag: '"2"',
+              "idempotency-key": idempotencyKey,
+              "idempotency-replayed": "false",
+            },
+          },
+        ),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await client.cancelPrivacyRequest("privacy-request-1", 1, idempotencyKey);
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(headers.get("if-match")).toBe('"1"');
+    expect(headers.get("idempotency-key")).toBe(idempotencyKey);
+  });
+});
+
 describe("Phase 4 collaboration API client", () => {
   const collaborationUser = {
     id: "user-1",

@@ -16,6 +16,10 @@ export type RuntimeConfiguration =
         | { kind: "smtp"; configuration: SmtpMailConfiguration }
         | { kind: "test_file"; filePath: string };
       cookieDomain?: string;
+      rateLimitBackend: "memory" | "postgres";
+      rateLimitHashSecret?: string;
+      trustedClientIpHeader?: string;
+      errorReportingMode: "disabled" | "external";
     };
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>;
@@ -98,6 +102,39 @@ export function readRuntimeConfiguration(
   if (!/^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/u.test(mailFrom))
     throw new Error("MAIL_FROM must be a plain email address.");
 
+  const rateLimitBackend = enumValue(
+    environment,
+    "RATE_LIMIT_BACKEND",
+    ["memory", "postgres"] as const,
+    production ? undefined : "memory",
+  );
+  if (production && rateLimitBackend !== "postgres")
+    throw new Error(
+      "Production requires RATE_LIMIT_BACKEND=postgres for cross-instance enforcement.",
+    );
+  const rateLimitHashSecret =
+    rateLimitBackend === "postgres"
+      ? required(environment, "RATE_LIMIT_HASH_SECRET")
+      : undefined;
+  if (rateLimitHashSecret) validateRateLimitHashSecret(rateLimitHashSecret);
+  const trustedClientIpHeader = optional(
+    environment,
+    "TRUSTED_CLIENT_IP_HEADER",
+  )?.toLowerCase();
+  if (production && !trustedClientIpHeader)
+    throw new Error("TRUSTED_CLIENT_IP_HEADER is required in production.");
+  if (
+    trustedClientIpHeader &&
+    !/^x-[a-z0-9-]{1,62}$/u.test(trustedClientIpHeader)
+  )
+    throw new Error("TRUSTED_CLIENT_IP_HEADER must be an explicit X- header.");
+  const errorReportingMode = enumValue(
+    environment,
+    "ERROR_REPORTING_MODE",
+    ["disabled", "external"] as const,
+    "disabled",
+  );
+
   return {
     mode: "live",
     databaseUrl,
@@ -120,6 +157,10 @@ export function readRuntimeConfiguration(
           },
         },
     ...(cookieDomain ? { cookieDomain } : {}),
+    rateLimitBackend,
+    ...(rateLimitHashSecret ? { rateLimitHashSecret } : {}),
+    ...(trustedClientIpHeader ? { trustedClientIpHeader } : {}),
+    errorReportingMode,
   };
 }
 
@@ -154,6 +195,18 @@ function positiveInteger(
   return parsed;
 }
 
+function enumValue<const T extends readonly string[]>(
+  environment: RuntimeEnvironment,
+  name: string,
+  choices: T,
+  fallback?: T[number],
+): T[number] {
+  const value = optional(environment, name) ?? fallback;
+  if (!value || !choices.includes(value))
+    throw new Error(`${name} must be one of: ${choices.join(", ")}.`);
+  return value;
+}
+
 function canonicalOrigin(
   name: string,
   value: string,
@@ -185,6 +238,15 @@ function validateAuthSecret(secret: string): void {
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters.");
   if (/replace-with|change-me|example|password/i.test(secret))
     throw new Error("BETTER_AUTH_SECRET must not be a placeholder value.");
+}
+
+function validateRateLimitHashSecret(secret: string): void {
+  if (secret.length < 32)
+    throw new Error(
+      "RATE_LIMIT_HASH_SECRET must contain at least 32 characters.",
+    );
+  if (/replace-with|change-me|example|password/i.test(secret))
+    throw new Error("RATE_LIMIT_HASH_SECRET must not be a placeholder value.");
 }
 
 function validateCookieTopology(

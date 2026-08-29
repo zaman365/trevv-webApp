@@ -3,11 +3,13 @@ import {
   attentionSignalSchema,
   collaborationEventBatchSchema,
   conversationSchema,
+  createPrivacyRequestSchema,
   createConversationMessageSchema,
   createConversationSchema,
   createTeamSchema,
   createWaitingSchema,
   readinessSchema,
+  privacyProgramStatusSchema,
   sessionSchema,
   setConversationParticipantSchema,
   teamSchema,
@@ -178,6 +180,81 @@ describe("Phase 3 API contract", () => {
       "/api/v1/operations/status",
     ] as const)
       expect(openApiDocument.paths).toHaveProperty(path);
+  });
+});
+
+describe("Phase 5 privacy contract", () => {
+  it("keeps external providers disabled and legal review visibly pending", () => {
+    expect(
+      privacyProgramStatusSchema.parse({
+        inventoryVersion: "2026-08-29.1",
+        policyVersion: "2026-08-29.1",
+        legalDocuments: {
+          privacyNotice: {
+            version: "2026-08-29.1",
+            reviewStatus: "pending",
+          },
+          terms: { version: "2026-08-29.1", reviewStatus: "pending" },
+        },
+        externalProviders: {
+          enabled: false,
+          configured: [],
+          revocationAutomation: "unavailable",
+        },
+        requestsAreReviewedBeforeEffects: true,
+        inventory: [],
+        retention: [],
+      }),
+    ).toMatchObject({
+      legalDocuments: { privacyNotice: { reviewStatus: "pending" } },
+      externalProviders: { enabled: false, configured: [] },
+    });
+
+    expect(
+      privacyProgramStatusSchema.safeParse({
+        inventoryVersion: "2026-08-29.1",
+        policyVersion: "2026-08-29.1",
+        legalDocuments: {
+          privacyNotice: {
+            version: "2026-08-29.1",
+            reviewStatus: "pending",
+          },
+          terms: { version: "2026-08-29.1", reviewStatus: "pending" },
+        },
+        externalProviders: {
+          enabled: true,
+          configured: ["invented-provider"],
+          revocationAutomation: "available",
+        },
+        requestsAreReviewedBeforeEffects: true,
+        inventory: [],
+        retention: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects organization-scoped correction requests", () => {
+    expect(
+      createPrivacyRequestSchema.safeParse({
+        kind: "rectification",
+        scope: "organization",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("publishes the reviewed-request lifecycle endpoints", () => {
+    for (const path of [
+      "/api/v1/privacy",
+      "/api/v1/privacy/requests",
+      "/api/v1/privacy/requests/{id}",
+      "/api/v1/privacy/retention",
+    ] as const)
+      expect(openApiDocument.paths).toHaveProperty(path);
+
+    expect(
+      openApiDocument.paths["/api/v1/privacy/requests"].post.responses["202"]
+        .description,
+    ).toContain("no effect");
   });
 });
 

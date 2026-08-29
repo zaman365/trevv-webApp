@@ -1294,6 +1294,130 @@ export const operationsStatusSchema = z.object({
   lastProcessedAt: z.iso.datetime().optional(),
 });
 
+export const privacyRequestKindSchema = z.enum([
+  "access",
+  "portability",
+  "erasure",
+  "rectification",
+  "restriction",
+  "objection",
+]);
+export const privacyRequestScopeSchema = z.enum(["user", "organization"]);
+export const privacyRequestStatusSchema = z.enum([
+  "submitted",
+  "under_review",
+  "approved",
+  "processing",
+  "completed",
+  "rejected",
+  "cancelled",
+  "failed",
+]);
+export const privacyDataCategorySchema = z.enum([
+  "identity",
+  "organization",
+  "work",
+  "collaboration",
+  "audit",
+  "operations",
+  "integrations",
+  "billing",
+]);
+export const privacyDispositionSchema = z.enum([
+  "delete",
+  "anonymize",
+  "archive",
+  "manual_review",
+]);
+
+export const createPrivacyRequestSchema = z.discriminatedUnion("scope", [
+  z
+    .object({
+      kind: privacyRequestKindSchema,
+      scope: z.literal("user"),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.enum(["access", "portability", "erasure", "restriction"]),
+      scope: z.literal("organization"),
+    })
+    .strict(),
+]);
+
+export const dataLifecycleRequestSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  requestedBy: idSchema,
+  subjectUserId: idSchema.optional(),
+  kind: privacyRequestKindSchema,
+  scope: privacyRequestScopeSchema,
+  status: privacyRequestStatusSchema,
+  dueAt: z.iso.datetime(),
+  processingStartedAt: z.iso.datetime().optional(),
+  completedAt: z.iso.datetime().optional(),
+  cancelledAt: z.iso.datetime().optional(),
+  failureCode: z.string().max(128).optional(),
+  version: z.number().int().positive(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const retentionPolicySchema = z.object({
+  category: privacyDataCategorySchema,
+  retentionDays: z.number().int().min(1).max(3_650),
+  disposition: privacyDispositionSchema,
+  legalHold: z.boolean(),
+  policyVersion: z.number().int().positive(),
+  source: z.enum(["default", "organization_override"]),
+  effectiveAt: z.iso.datetime(),
+  enforcementStatus: z.literal("not_implemented"),
+});
+
+export const updateRetentionPolicySchema = retentionPolicySchema.pick({
+  category: true,
+  retentionDays: true,
+  disposition: true,
+  legalHold: true,
+});
+
+export const privacyInventoryEntrySchema = z.object({
+  category: privacyDataCategorySchema,
+  examples: z.array(z.string().min(1).max(120)).max(12),
+  purpose: z.string().min(1).max(300),
+  classification: z.enum([
+    "personal",
+    "customer_content",
+    "security",
+    "commercial",
+  ]),
+  defaultRetentionDays: z.number().int().min(1).max(3_650),
+  defaultDisposition: privacyDispositionSchema,
+});
+
+export const privacyProgramStatusSchema = z.object({
+  inventoryVersion: z.string().min(1).max(64),
+  policyVersion: z.string().min(1).max(64),
+  legalDocuments: z.object({
+    privacyNotice: z.object({
+      version: z.string(),
+      reviewStatus: z.literal("pending"),
+    }),
+    terms: z.object({
+      version: z.string(),
+      reviewStatus: z.literal("pending"),
+    }),
+  }),
+  externalProviders: z.object({
+    enabled: z.literal(false),
+    configured: z.array(z.string()).length(0),
+    revocationAutomation: z.literal("unavailable"),
+  }),
+  requestsAreReviewedBeforeEffects: z.literal(true),
+  inventory: z.array(privacyInventoryEntrySchema),
+  retention: z.array(retentionPolicySchema),
+});
+
 export const paginatedItemsSchema = z.object({
   data: z.array(workItemSchema),
   nextCursor: z.string().nullable(),
@@ -1465,6 +1589,24 @@ export type WorkItemTransitionResponse = z.infer<
   typeof workItemTransitionResponseSchema
 >;
 export type OperationsStatusDto = z.infer<typeof operationsStatusSchema>;
+export type PrivacyRequestKind = z.infer<typeof privacyRequestKindSchema>;
+export type PrivacyRequestScope = z.infer<typeof privacyRequestScopeSchema>;
+export type PrivacyRequestStatus = z.infer<typeof privacyRequestStatusSchema>;
+export type PrivacyDataCategory = z.infer<typeof privacyDataCategorySchema>;
+export type PrivacyDisposition = z.infer<typeof privacyDispositionSchema>;
+export type CreatePrivacyRequestInput = z.infer<
+  typeof createPrivacyRequestSchema
+>;
+export type DataLifecycleRequestDto = z.infer<
+  typeof dataLifecycleRequestSchema
+>;
+export type RetentionPolicyDto = z.infer<typeof retentionPolicySchema>;
+export type UpdateRetentionPolicyInput = z.infer<
+  typeof updateRetentionPolicySchema
+>;
+export type PrivacyProgramStatusDto = z.infer<
+  typeof privacyProgramStatusSchema
+>;
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
 export const eventSchema = z.discriminatedUnion("type", [

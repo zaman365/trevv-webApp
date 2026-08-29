@@ -32,10 +32,16 @@ import {
   portfolioSignals,
   previewBlueprintUpdate,
   rollupWorkspace,
+  safeCsvCell,
   unrestrictedDevelopmentEntitlements,
   workspacesForPortfolio,
   type WorkItem,
 } from "@founderhq/core";
+import {
+  privacyDataInventory,
+  privacyInventoryVersion,
+  privacyPolicyVersion,
+} from "@founderhq/db";
 import { requireAccess, type AccessContext } from "@founderhq/permissions";
 import {
   DataPlaneError,
@@ -817,6 +823,62 @@ export function createDemoAdapter(): DemoAdapter {
       return { pendingOutbox: 0, failedCount: 0 };
     },
 
+    async getPrivacyProgram() {
+      return {
+        inventoryVersion: privacyInventoryVersion,
+        policyVersion: privacyPolicyVersion,
+        legalDocuments: {
+          privacyNotice: {
+            version: privacyPolicyVersion,
+            reviewStatus: "pending",
+          },
+          terms: { version: privacyPolicyVersion, reviewStatus: "pending" },
+        },
+        externalProviders: {
+          enabled: false,
+          configured: [],
+          revocationAutomation: "unavailable",
+        },
+        requestsAreReviewedBeforeEffects: true,
+        inventory: privacyDataInventory.map((entry) => ({
+          ...entry,
+          examples: [...entry.examples],
+        })),
+        retention: privacyDataInventory.map((entry) => ({
+          category: entry.category,
+          retentionDays: entry.defaultRetentionDays,
+          disposition: entry.defaultDisposition,
+          legalHold: false,
+          policyVersion: 1,
+          source: "default",
+          effectiveAt: "2026-08-29T00:00:00.000Z",
+          enforcementStatus: "not_implemented",
+        })),
+      };
+    },
+
+    async listPrivacyRequests() {
+      return [];
+    },
+
+    async createPrivacyRequest() {
+      throw demoUnavailable(
+        "Privacy requests are unavailable in the fictional-data preview because it stores no user data durably.",
+      );
+    },
+
+    async cancelPrivacyRequest() {
+      throw demoUnavailable(
+        "Privacy requests are unavailable in the fictional-data preview.",
+      );
+    },
+
+    async updateRetentionPolicy() {
+      throw demoUnavailable(
+        "Retention settings are unavailable in the fictional-data preview.",
+      );
+    },
+
     async search(context, query) {
       const normalized = query.toLocaleLowerCase();
       const workspaces = demoWorkspaces
@@ -889,12 +951,14 @@ export function createDemoAdapter(): DemoAdapter {
         ...items.map((item) =>
           [
             item.id,
-            quote(item.title),
+            safeCsvCell(item.title),
             item.type,
             item.status,
             item.priority,
             item.dueDate ?? "",
-            quote(item.assignees.map((assignee) => assignee.name).join("; ")),
+            safeCsvCell(
+              item.assignees.map((assignee) => assignee.name).join("; "),
+            ),
             item.version,
           ].join(","),
         ),
@@ -1191,8 +1255,4 @@ function versionConflict(currentVersion: number): DataPlaneError {
     "This resource changed elsewhere. Refresh and retry.",
     { currentVersion },
   );
-}
-
-function quote(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
 }

@@ -1026,12 +1026,27 @@ describe("TREVV API v1 demo contract", () => {
       expect(body).toHaveProperty(key);
     expect(body).not.toHaveProperty("hubs");
 
+    const formulaTitle = '=HYPERLINK("https://example.invalid","open")';
+    const createdFormulaItem = await app.request("/api/v1/items", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "89999999-9999-4999-8999-999999999999",
+      },
+      body: JSON.stringify({ ...itemInput, title: formulaTitle }),
+    });
+    expect(createdFormulaItem.status).toBe(201);
+
     const boardExport = await app.request(
       "/api/v1/export/board/b-northstar-launch.csv",
     );
     expect(boardExport.status).toBe(200);
     expect(boardExport.headers.get("content-type")).toContain("text/csv");
-    expect(await boardExport.text()).toContain("Approve packaging");
+    const boardCsv = await boardExport.text();
+    expect(boardCsv).toContain("Approve packaging");
+    expect(boardCsv).toContain(
+      `"'=HYPERLINK(""https://example.invalid"",""open"")"`,
+    );
   });
 });
 
@@ -1302,6 +1317,49 @@ describe("Phase 4 collaboration routes", () => {
       "workspace-live",
       8,
     );
+  });
+});
+
+describe("Phase 5 privacy truth boundary", () => {
+  it("reports pending legal review and no configured providers", async () => {
+    const response = await freshDemoApp().request("/api/v1/privacy");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      legalDocuments: {
+        privacyNotice: { reviewStatus: "pending" },
+        terms: { reviewStatus: "pending" },
+      },
+      externalProviders: {
+        enabled: false,
+        configured: [],
+        revocationAutomation: "unavailable",
+      },
+      requestsAreReviewedBeforeEffects: true,
+    });
+  });
+
+  it("never simulates a completed privacy effect in demo mode", async () => {
+    const app = freshDemoApp();
+    const missingKey = await app.request("/api/v1/privacy/requests", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "erasure", scope: "user" }),
+    });
+    expect(missingKey.status).toBe(422);
+    expect(await errorCode(missingKey)).toBe("idempotency_key_required");
+
+    const response = await app.request("/api/v1/privacy/requests", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "81111111-1111-4111-8111-111111111111",
+      },
+      body: JSON.stringify({ kind: "erasure", scope: "user" }),
+    });
+    expect(response.status).toBe(501);
+    expect(await errorCode(response)).toBe("capability_unavailable");
+    const requests = await app.request("/api/v1/privacy/requests");
+    await expect(requests.json()).resolves.toEqual([]);
   });
 });
 
