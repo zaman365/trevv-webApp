@@ -225,11 +225,11 @@ export function AttentionCenter() {
     const workspace = workspaceFor(group);
     logActivity(
       group,
-      "Structured update requested",
-      `Sent to ${itemFor(group)?.assignee ?? workspace?.lead.name ?? "the Workspace lead"}.`,
+      "Structured update draft prepared",
+      `Local preview for ${itemFor(group)?.assignee ?? workspace?.lead.name ?? "the Workspace lead"}; nothing was sent.`,
     );
     setToast({
-      message: `Update request sent for “${group.title}”. The signal stays visible until evidence changes.`,
+      message: `Local update-request draft prepared for “${group.title}”; nothing was sent.`,
     });
   }
 
@@ -1071,7 +1071,7 @@ function AttentionDetailPanel({
             <Pause size={13} /> Snooze
           </button>
           <button onClick={onRequestUpdate}>
-            <Send size={13} /> Request update
+            <Send size={13} /> Draft update request
           </button>
           <button className="primary-button" onClick={() => onAct("resolve")}>
             <Check size={13} /> Resolve signal
@@ -1284,9 +1284,9 @@ function actionLabel(group: GroupedSignal) {
   const types = group.signals.map((signal) => signal.signalType);
   if (types.includes("missing_owner")) return "Assign owner";
   if (types.some((type) => type.includes("stale") || type === "missing_update"))
-    return "Request update";
+    return "Draft update request";
   if (types.includes("waiting_too_long") || types.includes("follow_up_overdue"))
-    return "Send follow-up";
+    return "Draft follow-up";
   if (types.some((type) => type.includes("decision"))) return "Review decision";
   if (types.some((type) => type.includes("approval"))) return "Review approval";
   if (
@@ -1319,13 +1319,13 @@ function resolutionSteps(group: GroupedSignal) {
     ];
   if (types.some((type) => type.includes("stale") || type === "missing_update"))
     return [
-      "Request a structured update from the Workspace lead.",
+      "Draft a structured update request for the Workspace lead.",
       "Reassess health against the new evidence.",
-      "Publish the next milestone and resolve the stale signal.",
+      "Record the next milestone locally and resolve the stale signal.",
     ];
   if (types.includes("waiting_too_long"))
     return [
-      "Send the planned follow-up to the waiting party.",
+      "Draft the planned follow-up for the waiting party.",
       "Reset the expected response date and follow-up owner.",
       "Escalate or choose an alternative path if no response arrives.",
     ];

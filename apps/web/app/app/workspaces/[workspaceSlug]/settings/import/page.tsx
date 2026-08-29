@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { ImportExperience } from "@/components/management-experience";
 
 export const metadata: Metadata = {
-  title: "Import",
+  title: "Import preview",
   description:
-    "Preset-aware CSV migration with mapping, dry run, and complete reporting.",
+    "A fictional CSV mapping and dry-run walkthrough that uploads no file and creates no record.",
 };
 
 export default async function WorkspaceImportPage({

@@ -62,8 +62,9 @@ import {
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
+import { CapabilityNotice } from "./capability-status";
 import { productCopy } from "@/lib/product-copy";
 import { Hint } from "./learning-center";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
@@ -979,9 +980,13 @@ function BoardWorkspace({
                   <X size={17} />
                 </button>
               </header>
+              <CapabilityNotice capability="automation" />
               <div className="automation-rule-preview">
-                <strong>When an item moves to Done</strong>
-                <span>Record a completion update and notify followers.</span>
+                <strong>Sample rule: when an item moves to Done</strong>
+                <span>
+                  A future live version could record a completion update and
+                  notify followers. This preview runs no background action.
+                </span>
                 <label>
                   <input
                     checked={automationEnabled}
@@ -990,7 +995,7 @@ function BoardWorkspace({
                     }
                     type="checkbox"
                   />
-                  Enable this preview rule
+                  Include this rule in the browser-only preview
                 </label>
               </div>
               <footer>
@@ -1003,12 +1008,12 @@ function BoardWorkspace({
                     setAutomationOpen(false);
                     setNotice(
                       automationEnabled
-                        ? "Board automation enabled."
-                        : "Automation preview saved without enabling.",
+                        ? "Automation rule added to this browser-only preview; no background action or notification was enabled."
+                        : "Automation preview closed without adding the sample rule.",
                     );
                   }}
                 >
-                  Save automation
+                  Save local preview
                 </button>
               </footer>
             </section>
@@ -1282,7 +1287,6 @@ function ItemPanel({
   const [attachments, setAttachments] = useState<string[]>([]);
   const [linkDraft, setLinkDraft] = useState("");
   const [addingLink, setAddingLink] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const people = ["Mohammed", "Nora", "Amira", "Elias", "Unassigned"];
   return (
     <aside className="item-panel" aria-label={item.title}>
@@ -1294,7 +1298,7 @@ function ItemPanel({
           </span>
           <span className="save-state">
             <Check size={12} />
-            {copy.changesSaved}
+            Saved in this browser
           </span>
         </div>
         <div>
@@ -1555,7 +1559,7 @@ function ItemPanel({
             <span className="resource-icon">F</span>
             <div>
               <strong>{item.title} — working file</strong>
-              <span>{workspaceName} · Design resource</span>
+              <span>{workspaceName} · Fictional sample resource</span>
             </div>
             <ExternalLink size={14} />
           </a>
@@ -1570,7 +1574,7 @@ function ItemPanel({
             </span>
             <div>
               <strong>{boardName} evidence</strong>
-              <span>Google Docs · Project resource</span>
+              <span>Google Docs · Fictional sample resource</span>
             </div>
             <ExternalLink size={14} />
           </a>
@@ -1618,11 +1622,12 @@ function ItemPanel({
             onChange={(event) => setComment(event.target.value)}
             placeholder={copy.addComment}
           />
-          {attachments.length > 0 && (
-            <small className="comment-attachments">
-              {attachments.join(", ")}
-            </small>
-          )}
+          <small className="comment-attachments">
+            {attachments.length > 0
+              ? `Sample links: ${attachments.join(", ")}. `
+              : ""}
+            Comments and links stay in this browser. File upload is unavailable.
+          </small>
           {addingLink && (
             <input
               aria-label="Link to add"
@@ -1642,23 +1647,10 @@ function ItemPanel({
             />
           )}
           <span>
-            <input
-              hidden
-              multiple
-              onChange={(event) =>
-                setAttachments((current) => [
-                  ...current,
-                  ...Array.from(event.target.files ?? []).map(
-                    (file) => file.name,
-                  ),
-                ])
-              }
-              ref={fileInputRef}
-              type="file"
-            />
             <button
-              aria-label="Attach file"
-              onClick={() => fileInputRef.current?.click()}
+              aria-label="File upload unavailable in technical preview"
+              disabled
+              title="Secure file upload is unavailable in this technical preview"
             >
               <Paperclip size={14} />
             </button>
@@ -1687,11 +1679,13 @@ function ItemPanel({
                 setAttachments([]);
                 setAddingLink(false);
                 setLinkDraft("");
-                onNotice("Comment posted to the item activity.");
+                onNotice(
+                  "Sample comment added to this browser-only item activity; nothing was sent or persisted.",
+                );
               }}
             >
               <Send size={14} />
-              {copy.send}
+              Add sample comment
             </button>
           </span>
         </div>

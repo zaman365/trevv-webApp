@@ -3,9 +3,9 @@ import { InboxExperience } from "@/components/email-inbox-workflow";
 import { WorkspaceFrame } from "@/components/workspace-frame";
 
 export const metadata: Metadata = {
-  title: "Email",
+  title: "Sample Email",
   description:
-    "A connected mailbox for Gmail, Microsoft, Yahoo, iCloud, and custom domains.",
+    "A fictional mailbox preview with no provider connection or message delivery.",
 };
 
 export default function MailPage() {
@@ -14,11 +14,11 @@ export default function MailPage() {
       <main className="focus-main">
         <header className="focus-header">
           <div>
-            <p>Communication / Email</p>
-            <h1>Email</h1>
+            <p>Communication / Sample Email</p>
+            <h1>Fictional mailbox preview</h1>
             <span>
-              Read and send account-level email. Promote only messages that need
-              tracked Workspace action.
+              Explore sample messages and promote one into browser-local work.
+              No mailbox is connected and no email is delivered.
             </span>
           </div>
         </header>

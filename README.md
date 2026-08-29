@@ -2,7 +2,9 @@
 
 TREVV is a commercial, portfolio-first operating system for people responsible for several businesses, brands, clients, products, departments, ventures, or initiatives. It brings execution, decisions, waiting dependencies, evidence, and management memory together—and shows where attention matters.
 
-## What ships
+> **Current release status: technical preview.** The hosted Web experience uses fictional sample data. Most interactive changes stay in the current browser and are not durable, shared, authenticated, or permission-enforced. Do not enter real credentials, confidential information, or customer data. See [known limitations](docs/known-limitations.md).
+
+## What can be explored
 
 - Organization → Portfolio → Workspace tenancy with automatic default-Portfolio migration
 - deterministic Attention Engine, Waiting Center, personalized Portfolio roll-ups, and Change Radar
@@ -12,9 +14,9 @@ TREVV is a commercial, portfolio-first operating system for people responsible f
 - stakeholder-safe Workspace views, import presets/dry runs, cross-Workspace dependencies, and workload evidence
 - pricing-agnostic subscription and entitlement architecture with unrestricted development mode
 - polished Workspace Overview, board table/Kanban, inline editing, and item side panel
-- My Work, actionable Inbox, informational Notifications, Decision Center, Approval Center, search, integrations, commercial onboarding, sign-in, and sign-up
+- My Work, actionable Inbox, informational Notifications, Decision Center, Approval Center, search, integration previews, and a fictional onboarding walkthrough
 - English/German UI foundations, responsive mobile-browser layouts, dark mode, and installable PWA behavior
-- versioned Hono API, Better Auth, PostgreSQL/Drizzle schema, background worker, typed client, permission policy, events/outbox, CSV/JSON export, and safe integration mocks
+- versioned Hono API contract, Better Auth configuration, PostgreSQL/Drizzle schema, worker boundaries, typed client, permission policy, events/outbox schema, sample browser exports, and safe integration mocks
 - Expo mobile companion shell and Tauri desktop shell consuming the same hosted API contract
 
 ## Prerequisites
@@ -37,13 +39,13 @@ pnpm contracts:generate
 pnpm dev
 ```
 
-Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. Demo mode is on unless `DEMO_MODE=false`; it uses fictional public data in the `TREVV Demo` organization and an unrestricted development entitlement set.
+Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. Demo mode is on unless `DEMO_MODE=false`; it uses fictional data in the `TREVV Demo` organization and an unrestricted development entitlement set. Setting `DEMO_MODE=false` alone does not make the product production ready: Web authentication, membership-derived authorization, repositories, and the production API/worker/database topology are not yet connected end to end.
 
 For a focused process, use `pnpm dev:web` or `pnpm dev:api`. Expo runs with `pnpm --filter @founderhq/mobile dev`; the Tauri shell runs with `pnpm --filter @founderhq/desktop tauri dev`.
 
 ## Environment
 
-Copy `.env.example`. At minimum, production requires `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `WEB_ORIGIN`, and the three public API base URLs. Use a random 32-byte encryption key for stored OAuth credentials. Google Drive is optional; when unset, the integrations screen clearly uses demo mode.
+Copy `.env.example`. The variables describe the target runtime; configuring them does not promote a preview capability to production. A future production deployment requires `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `WEB_ORIGIN`, and the three public API base URLs, plus the release constraints in [the implementation report](docs/implementation-report.md) and [known limitations](docs/known-limitations.md). Google Drive and other providers remain previews with no production OAuth token or synchronization.
 
 Never commit `.env` files. Public Web, Expo, and Vite variables are intentionally non-secret.
 
@@ -64,9 +66,9 @@ The CI workflow additionally migrates and seeds a clean PostgreSQL database, reg
 ## Repository map
 
 ```text
-apps/web       complete Next.js Web/PWA
-apps/api       Hono HTTP API and Better Auth endpoint
-apps/worker    outbox/reminder worker foundation
+apps/web       complete interactive Next.js Web/PWA demonstration
+apps/api       Hono demo/API-contract foundation and Better Auth endpoint
+apps/worker    unconnected outbox/reminder worker foundation
 apps/mobile    Expo companion shell
 apps/desktop   Tauri + React desktop shell
 packages/      contracts, clients, domain, DB, auth, permissions, UI, tokens

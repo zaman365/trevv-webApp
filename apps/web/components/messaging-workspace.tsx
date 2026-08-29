@@ -63,6 +63,7 @@ import {
   type StoredWorkspaceTeamMember,
   type WorkspaceTeam,
 } from "@/lib/teams";
+import { CapabilityNotice } from "./capability-status";
 
 const conversationsStorageKey = "trevv:messaging-conversations";
 const messagesStorageKey = "trevv:messaging-messages";
@@ -485,6 +486,9 @@ export function MessagingWorkspace() {
     );
     setComposer("");
     setIntent("message");
+    setNotice(
+      "Message added to the fictional conversation in this browser; nothing was delivered.",
+    );
     window.requestAnimationFrame(() =>
       messageEndRef.current?.scrollIntoView({ behavior: "smooth" }),
     );
@@ -508,6 +512,9 @@ export function MessagingWorkspace() {
       },
     ]);
     setThreadComposer("");
+    setNotice(
+      "Reply added to the fictional thread in this browser; nothing was delivered.",
+    );
   };
 
   const resolveResponse = (messageId: string) => {
@@ -602,7 +609,7 @@ export function MessagingWorkspace() {
       ),
     );
     setNotice(
-      `${intentDetails[message.intent].label} added to TREVV work and Inbox.`,
+      `${intentDetails[message.intent].label} added to browser-local sample work and Inbox.`,
     );
   };
 
@@ -623,8 +630,8 @@ export function MessagingWorkspace() {
           </span>
           <h1>Messages</h1>
           <p>
-            Talk where the work lives. Requests, decisions, and updates stay
-            connected to the workspace they move forward.
+            Explore fictional rooms, requests, decisions, and updates alongside
+            sample Workspace work.
           </p>
         </div>
         <div className="messaging-header-actions">
@@ -632,16 +639,17 @@ export function MessagingWorkspace() {
             className="secondary-button"
             onClick={() => setNewConversationMode("direct")}
           >
-            <AtSign size={15} /> New message
+            <AtSign size={15} /> New sample conversation
           </button>
           <button
             className="primary-button"
             onClick={() => setNewConversationMode("room")}
           >
-            <Plus size={15} /> Create room
+            <Plus size={15} /> Add sample room
           </button>
         </div>
       </header>
+      <CapabilityNotice capability="messages" />
 
       {notice && (
         <div className="workflow-toast messaging-toast" role="status">
@@ -676,7 +684,7 @@ export function MessagingWorkspace() {
           Unread <b>{totalUnread}</b>
         </button>
         <span>
-          <ShieldCheck size={14} /> Workspace and guest permissions apply
+          <ShieldCheck size={14} /> Permission behavior is illustrative only
           automatically
         </span>
       </section>
@@ -921,10 +929,10 @@ export function MessagingWorkspace() {
                 >
                   <Paperclip size={15} />
                 </button>
-                <span>⌘ + Enter to send</span>
+                <span>⌘ + Enter to add locally</span>
               </div>
               <button className="composer-send" disabled={!composer.trim()}>
-                <Send size={15} /> Send
+                <Send size={15} /> Add to sample conversation
               </button>
             </footer>
           </form>
@@ -967,8 +975,8 @@ export function MessagingWorkspace() {
             setNewConversationMode(null);
             setNotice(
               conversation.kind === "direct"
-                ? `Direct conversation with ${conversation.title} is ready.`
-                : `${conversation.title} is ready with scoped access.`,
+                ? `Sample conversation with ${conversation.title} added in this browser.`
+                : `Sample room ${conversation.title} added locally; no access was granted.`,
             );
           }}
         />
@@ -1287,10 +1295,10 @@ function RoomContext({
             <ShieldCheck size={14} />
             <span>
               {conversation.visibility === "guest-scoped"
-                ? "Guests only see this room and explicitly shared work."
+                ? "Preview intention: guests would see only this room and explicitly shared work."
                 : conversation.visibility === "private"
-                  ? "Only invited participants can open this room."
-                  : "Access follows organization and Workspace membership."}
+                  ? "Preview intention: only invited participants would open this room."
+                  : "Preview intention: access would follow organization and Workspace membership."}
             </span>
           </div>
         </section>
@@ -1339,6 +1347,7 @@ function ThreadPanel({
         ))}
       </div>
       <form className="thread-composer" onSubmit={onSubmit}>
+        <CapabilityNotice capability="messages" />
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -1346,9 +1355,9 @@ function ThreadPanel({
           rows={3}
         />
         <footer>
-          <span>Keep the room focused</span>
+          <span>Saved only in this browser</span>
           <button disabled={!value.trim()}>
-            <Send size={14} /> Reply
+            <Send size={14} /> Add sample reply
           </button>
         </footer>
       </form>
@@ -1475,8 +1484,8 @@ function NewConversationDialog({
             <p>Messages</p>
             <h2 id="new-conversation-title">
               {mode === "direct"
-                ? "Start a direct message"
-                : "Create a work room"}
+                ? "Add a sample direct conversation"
+                : "Add a sample work room"}
             </h2>
           </div>
           <button
@@ -1489,6 +1498,7 @@ function NewConversationDialog({
           </button>
         </header>
         <div className="workflow-dialog-body messaging-create-body">
+          <CapabilityNotice capability="messages" />
           {mode === "direct" ? (
             <fieldset className="direct-person-list">
               <legend>Choose a teammate</legend>
@@ -1598,10 +1608,10 @@ function NewConversationDialog({
                 <ShieldCheck size={16} />
                 <span>
                   {kind === "external"
-                    ? "External people receive access only to this room and explicitly shared work."
+                    ? "Preview intention: external people would receive access only to this room and explicitly shared work."
                     : kind === "workspace"
-                      ? "Membership stays aligned with the active Workspace."
-                      : "Only workspace members added here can participate."}
+                      ? "Preview intention: membership would stay aligned with the active Workspace."
+                      : "Preview intention: only added Workspace members would participate."}
                 </span>
               </div>
             </>
@@ -1610,8 +1620,8 @@ function NewConversationDialog({
         <footer className="workflow-dialog-actions">
           <span>
             {mode === "direct"
-              ? "Direct messages are private to their participants."
-              : "Rooms keep communication tied to an outcome."}
+              ? "Fictional participants only; no private channel is created."
+              : "This adds a browser-local sample room only."}
           </span>
           <div>
             <button
@@ -1629,7 +1639,9 @@ function NewConversationDialog({
                   : !title.trim() || !purpose.trim()
               }
             >
-              {mode === "direct" ? "Start message" : "Create room"}
+              {mode === "direct"
+                ? "Add sample conversation"
+                : "Add sample room"}
             </button>
           </div>
         </footer>
@@ -1829,9 +1841,9 @@ function oneDayFromNow() {
 }
 
 function visibilityLabel(visibility: Conversation["visibility"]) {
-  if (visibility === "private") return "Private";
-  if (visibility === "guest-scoped") return "Guest-scoped";
-  return "Workspace";
+  if (visibility === "private") return "Private preview";
+  if (visibility === "guest-scoped") return "Guest-scope preview";
+  return "Workspace-scope preview";
 }
 
 function shortTime(value: string) {

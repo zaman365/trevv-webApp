@@ -10,7 +10,6 @@ import {
   FileText,
   Forward,
   Inbox,
-  KeyRound,
   Mail,
   MailOpen,
   MoreHorizontal,
@@ -43,6 +42,7 @@ import {
   type EmailProviderKey,
 } from "@/lib/email-providers";
 import { InboxWorkflow, type EmailInboxAction } from "./inbox-workflow";
+import { CapabilityNotice } from "./capability-status";
 
 type InboxArea = "email" | "actionable";
 type MailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | "trash";
@@ -322,7 +322,7 @@ export function InboxExperience({
           onClick={() => setArea("email")}
         >
           <Mail size={16} />
-          Account Email
+          Sample Email
           <b>2</b>
         </button>
         <button
@@ -336,8 +336,8 @@ export function InboxExperience({
           <b>{4 + promotedMessages.length}</b>
         </button>
         <span>
-          Account email stays separate; promote only messages that need tracked
-          Workspace work.
+          Fictional email stays separate; promote a sample message to explore
+          tracked Workspace work.
         </span>
       </div>
       <div role="tabpanel">
@@ -444,6 +444,7 @@ function EmailInboxWorkflow({
 
   return (
     <div className="email-workflow">
+      <CapabilityNotice capability="email" />
       {notice && (
         <div className="workflow-toast email-toast" role="status">
           <CheckCircle2 size={15} />
@@ -467,7 +468,7 @@ function EmailInboxWorkflow({
               setComposeOpen(true);
             }}
           >
-            <PenLine size={15} /> Compose
+            <PenLine size={15} /> Draft sample
           </button>
           <label className="email-search">
             <Search size={15} />
@@ -475,7 +476,7 @@ function EmailInboxWorkflow({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search all connected mail…"
+              placeholder="Search the fictional mailbox…"
             />
           </label>
         </div>
@@ -483,7 +484,9 @@ function EmailInboxWorkflow({
           <button
             className="email-sync-button"
             onClick={() => {
-              setNotice("All connected inboxes are up to date.");
+              setNotice(
+                "Fictional mailbox refreshed from local data; no provider sync occurred.",
+              );
               saveAccounts(
                 accounts.map((account) => ({
                   ...account,
@@ -492,13 +495,13 @@ function EmailInboxWorkflow({
               );
             }}
           >
-            <RefreshCw size={14} /> Sync now
+            <RefreshCw size={14} /> Refresh sample
           </button>
           <button
             className="email-manage-button"
             onClick={() => setAccountsOpen(true)}
           >
-            <Settings2 size={14} /> Manage accounts
+            <Settings2 size={14} /> Manage sample accounts
           </button>
         </div>
       </div>
@@ -514,8 +517,8 @@ function EmailInboxWorkflow({
                 <Mail size={14} />
               </span>
               <span>
-                <strong>All inboxes</strong>
-                <small>{accounts.length} accounts</small>
+                <strong>All sample inboxes</strong>
+                <small>{accounts.length} fictional accounts</small>
               </span>
               <b>{unreadCount}</b>
             </button>
@@ -553,7 +556,7 @@ function EmailInboxWorkflow({
               className="email-add-account"
               onClick={() => setAccountsOpen(true)}
             >
-              <Plus size={14} /> Add account
+              <Plus size={14} /> Add sample label
             </button>
           </div>
           <nav aria-label="Mail folders">
@@ -579,8 +582,8 @@ function EmailInboxWorkflow({
           <div className="email-sync-state">
             <ShieldCheck size={14} />
             <span>
-              <strong>Secure sync</strong>
-              <small>Updated just now</small>
+              <strong>Local sample data</strong>
+              <small>No provider sync</small>
             </span>
           </div>
         </aside>
@@ -642,7 +645,7 @@ function EmailInboxWorkflow({
                       setAccountsOpen(true);
                     }}
                   >
-                    <Settings2 size={14} /> Manage accounts
+                    <Settings2 size={14} /> Manage sample labels
                   </button>
                 </div>
               )}
@@ -891,7 +894,7 @@ function EmailInboxWorkflow({
                       <dd>
                         {accounts.find(
                           (account) => account.id === selected.accountId,
-                        )?.email ?? "Disconnected account"}
+                        )?.email ?? "Missing sample label"}
                       </dd>
                     </div>
                   </dl>
@@ -913,7 +916,7 @@ function EmailInboxWorkflow({
                         <span
                           aria-label={`Attachment: ${attachment}`}
                           key={attachment}
-                          title="Attachment metadata from the synced message"
+                          title="Fictional attachment metadata; no file is stored"
                         >
                           <FileText size={17} />
                           <span>{attachment}</span>
@@ -977,7 +980,9 @@ function EmailInboxWorkflow({
             setComposeOpen(false);
             setComposeMode("new");
             setReplyTo(null);
-            setNotice("Email sent.");
+            setNotice(
+              "Sample email added to the fictional Sent folder; nothing was delivered.",
+            );
           }}
         />
       )}
@@ -1058,13 +1063,14 @@ function ComposeDialog({
           </span>
           <div>
             <p>{modeLabel}</p>
-            <h2>{replyTo ? replyTo.subject : "Compose email"}</h2>
+            <h2>{replyTo ? replyTo.subject : "Compose sample email"}</h2>
           </div>
           <button type="button" aria-label="Close composer" onClick={onClose}>
             <X size={17} />
           </button>
         </header>
         <div className="workflow-dialog-body email-compose-fields">
+          <CapabilityNotice capability="email" />
           <label>
             <span>From</span>
             <select
@@ -1107,7 +1113,8 @@ function ComposeDialog({
         </div>
         <footer className="workflow-dialog-actions">
           <span className="email-compose-safety">
-            <ShieldCheck size={13} /> Sent through the selected account
+            <ShieldCheck size={13} /> Stored only in this fictional mailbox; not
+            sent
           </span>
           <div>
             <button
@@ -1123,7 +1130,7 @@ function ComposeDialog({
                 !fromAccountId || !to.trim() || !subject.trim() || !body.trim()
               }
             >
-              <Send size={14} /> Send
+              <Send size={14} /> Add to sample Sent folder
             </button>
           </div>
         </footer>
@@ -1147,7 +1154,6 @@ function AccountManagerDialog({
     useState<EmailProviderDefinition | null>(null);
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
-  const [appPassword, setAppPassword] = useState("");
   const [incomingHost, setIncomingHost] = useState("");
   const [incomingPort, setIncomingPort] = useState("993");
   const [outgoingHost, setOutgoingHost] = useState("");
@@ -1157,7 +1163,6 @@ function AccountManagerDialog({
     setSelectedProvider(provider);
     setEmail("");
     setLabel("");
-    setAppPassword("");
     setIncomingHost(provider.incoming?.host ?? "");
     setIncomingPort(String(provider.incoming?.port ?? 993));
     setOutgoingHost(provider.outgoing?.host ?? "");
@@ -1167,11 +1172,6 @@ function AccountManagerDialog({
   const connect = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedProvider || !email.trim()) return;
-    if (
-      selectedProvider.connectionMode === "imap-app-password" &&
-      !appPassword.trim()
-    )
-      return;
     if (
       selectedProvider.key === "custom" &&
       (!incomingHost.trim() || !outgoingHost.trim())
@@ -1183,7 +1183,7 @@ function AccountManagerDialog({
           account.email.toLocaleLowerCase() === email.toLocaleLowerCase(),
       )
     ) {
-      onNotice("That email account is already connected.");
+      onNotice("That sample account label already exists in this browser.");
       return;
     }
 
@@ -1198,7 +1198,7 @@ function AccountManagerDialog({
     };
     onChange([...accounts, next]);
     onNotice(
-      `${next.label} connected. Mail will appear after the first secure sync.`,
+      `${next.label} saved as a browser-local sample. No mailbox was connected.`,
     );
     setSelectedProvider(null);
   };
@@ -1223,8 +1223,8 @@ function AccountManagerDialog({
             <p>Email</p>
             <h2>
               {selectedProvider
-                ? `Connect ${selectedProvider.shortName}`
-                : "Mail accounts"}
+                ? `Preview ${selectedProvider.shortName} setup`
+                : "Sample mail accounts"}
             </h2>
           </div>
           <button aria-label="Close account manager" onClick={onClose}>
@@ -1234,8 +1234,9 @@ function AccountManagerDialog({
 
         {!selectedProvider ? (
           <div className="settings-dialog-body">
+            <CapabilityNotice capability="email" />
             <div className="connected-mail-accounts">
-              <strong>Connected accounts</strong>
+              <strong>Browser-local sample labels</strong>
               {accounts.map((account) => {
                 const provider = emailProvider(account.provider);
                 return (
@@ -1249,11 +1250,11 @@ function AccountManagerDialog({
                       <strong>{account.label}</strong>
                       <span>{account.email}</span>
                       <small>
-                        <CheckCircle2 size={11} /> Connected securely
+                        <CheckCircle2 size={11} /> Fictional label only
                       </small>
                     </div>
                     <button
-                      aria-label={`Disconnect ${account.email}`}
+                      aria-label={`Remove sample account ${account.email}`}
                       onClick={() => {
                         onChange(
                           accounts.filter(
@@ -1261,18 +1262,18 @@ function AccountManagerDialog({
                           ),
                         );
                         onNotice(
-                          `${account.email} disconnected. Stored email remains untouched.`,
+                          `${account.email} removed from this browser-only sample.`,
                         );
                       }}
                     >
-                      Disconnect
+                      Remove sample
                     </button>
                   </article>
                 );
               })}
             </div>
             <div className="email-provider-picker">
-              <strong>Add another account</strong>
+              <strong>Add another fictional account label</strong>
               <div>
                 {emailProviderDefinitions.map((provider) => (
                   <button
@@ -1296,10 +1297,11 @@ function AccountManagerDialog({
             <div className="email-credential-note">
               <ShieldCheck size={16} />
               <span>
-                <strong>Passwords never live in this browser</strong>
+                <strong>Do not enter a password or real credential</strong>
                 <small>
-                  This demo saves account labels only. Production OAuth tokens
-                  and app passwords belong in encrypted server-side storage.
+                  This preview stores only the sample address and label in this
+                  browser. OAuth, IMAP, SMTP, sync, and secure credential
+                  storage are unavailable.
                 </small>
               </span>
             </div>
@@ -1307,6 +1309,7 @@ function AccountManagerDialog({
         ) : (
           <form onSubmit={connect}>
             <div className="settings-dialog-body email-connect-form">
+              <CapabilityNotice capability="email" />
               <div
                 className={`email-provider-summary tone-${selectedProvider.tone}`}
               >
@@ -1321,21 +1324,14 @@ function AccountManagerDialog({
                 </div>
               </div>
 
-              {selectedProvider.guidance && (
-                <div className="email-provider-guidance">
-                  <KeyRound size={15} />
-                  <span>{selectedProvider.guidance}</span>
-                </div>
-              )}
-
               <div className="email-connect-fields">
                 <label>
-                  <span>Email address</span>
+                  <span>Fictional email label</span>
                   <input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="you@example.com"
+                    placeholder="sample@example.com"
                     autoFocus
                   />
                 </label>
@@ -1347,18 +1343,6 @@ function AccountManagerDialog({
                     placeholder={`${selectedProvider.shortName} account`}
                   />
                 </label>
-                {selectedProvider.connectionMode === "imap-app-password" && (
-                  <label>
-                    <span>App-specific password</span>
-                    <input
-                      type="password"
-                      value={appPassword}
-                      onChange={(event) => setAppPassword(event.target.value)}
-                      placeholder="Provider-issued app password"
-                      autoComplete="new-password"
-                    />
-                  </label>
-                )}
               </div>
 
               {(selectedProvider.key === "custom" ||
@@ -1400,7 +1384,7 @@ function AccountManagerDialog({
               )}
 
               <div className="permission-list">
-                <strong>Requested access</strong>
+                <strong>Future live integration would request</strong>
                 {selectedProvider.permissions.map((permission) => (
                   <span key={permission}>
                     <Check size={13} /> {permission}
@@ -1408,8 +1392,9 @@ function AccountManagerDialog({
                 ))}
               </div>
               <p className="email-demo-disclaimer">
-                <Clock3 size={13} /> Demo mode validates the setup experience
-                without contacting the provider.
+                <Clock3 size={13} /> Saving creates a browser-local sample label
+                only. TREVV does not contact, authenticate, test, or synchronize
+                with this provider.
               </p>
             </div>
             <footer className="settings-dialog-actions split-actions">
@@ -1424,15 +1409,11 @@ function AccountManagerDialog({
                   className="primary-button"
                   disabled={
                     !email.trim() ||
-                    (selectedProvider.connectionMode === "imap-app-password" &&
-                      !appPassword.trim()) ||
                     (selectedProvider.key === "custom" &&
                       (!incomingHost.trim() || !outgoingHost.trim()))
                   }
                 >
-                  {selectedProvider.connectionMode.includes("oauth")
-                    ? `Continue with ${selectedProvider.shortName}`
-                    : "Test & connect"}
+                  Save sample label
                 </button>
               </div>
             </footer>

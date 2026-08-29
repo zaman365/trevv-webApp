@@ -46,6 +46,7 @@ import { useLearningCenter } from "./learning-center";
 import type { CapturedWorkItem } from "@/lib/captured-work";
 import { UniversalCreateDialog } from "./universal-create";
 import { CreateWorkspaceDialog } from "./create-workspace-dialog";
+import { TechnicalPreviewBadge } from "./capability-status";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import {
   createCustomPortfolio,
@@ -883,6 +884,7 @@ function WorkspaceChrome({
               <kbd title="Press slash to search">/</kbd>
             </Link>
           )}
+          <TechnicalPreviewBadge />
           <nav className="topbar-actions" aria-label="Workspace shortcuts">
             {contextProject && (
               <>
@@ -1097,8 +1099,11 @@ function WorkspaceChrome({
           <div>
             <strong>{latestCapture.title}</strong>
             <span>
-              {latestCapture.type} created
-              {latestCapture.sendToInbox ? " and added to Inbox" : ""}.
+              Sample {latestCapture.type} added in this browser
+              {latestCapture.sendToInbox
+                ? " and shown in the sample Inbox"
+                : ""}
+              .
             </span>
           </div>
           <Link

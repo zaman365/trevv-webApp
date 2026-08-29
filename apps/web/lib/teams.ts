@@ -52,7 +52,7 @@ export interface StoredWorkspaceTeamMember {
   workspaceIds: string[];
   email?: string;
   role?: "Owner" | "Admin" | "Member" | "Guest";
-  status?: "active" | "away" | "invited";
+  status?: "active" | "away" | "draft";
 }
 
 export interface StoredWorkspaceTeamsSnapshot<

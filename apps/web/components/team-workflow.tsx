@@ -42,8 +42,9 @@ import {
   type WorkspaceTeam,
 } from "@/lib/teams";
 import { Hint } from "./learning-center";
+import { CapabilityNotice } from "./capability-status";
 
-type MemberStatus = "active" | "away" | "invited";
+type MemberStatus = "active" | "away" | "draft";
 type MemberRole = "Owner" | "Admin" | "Member" | "Guest";
 
 interface TeamMember extends ResourcePressure {
@@ -89,6 +90,12 @@ const capabilityLabel = new Map(
   teamCapabilityCatalog.map((capability) => [capability.id, capability.label]),
 );
 
+const normalizeMemberStatus = (status: string): MemberStatus => {
+  if (status === "away" || status === "draft") return status;
+  if (status === "invited") return "draft";
+  return "active";
+};
+
 export function TeamWorkflow() {
   const { scope } = useWorkspace();
   const [members, setMembers] = useState(initialMembers);
@@ -109,7 +116,19 @@ export function TeamWorkflow() {
     const stored = readWorkspaceTeamsSnapshot<TeamMember>();
     const frame = window.requestAnimationFrame(() => {
       if (stored) {
-        setMembers(stored.members);
+        setMembers(
+          stored.members.map((member) => {
+            const storedStatus = String(member.status);
+            return {
+              ...member,
+              status: normalizeMemberStatus(storedStatus),
+              focusNote:
+                storedStatus === "invited"
+                  ? "Invitation draft only. No email or access was created."
+                  : member.focusNote,
+            };
+          }),
+        );
         setTeams(stored.teams);
       }
       setStorageReady(true);
@@ -202,8 +221,8 @@ export function TeamWorkflow() {
             Workspace teams <Hint resourceId="team-pressure" />
           </h1>
           <span>
-            Organize people into focused teams. Members inherit each team&apos;s
-            tools, access, and collaboration features.
+            Preview fictional teams and feature presets. Nothing here grants
+            real access or changes another person&apos;s account.
           </span>
         </div>
         <div className="team-header-actions">
@@ -211,16 +230,17 @@ export function TeamWorkflow() {
             className="secondary-button"
             onClick={() => setInviteOpen(true)}
           >
-            <UserPlus size={16} /> Invite person
+            <UserPlus size={16} /> Prepare sample invite
           </button>
           <button
             className="primary-button"
             onClick={() => setCreateTeamOpen(true)}
           >
-            <Plus size={16} /> Add team
+            <Plus size={16} /> Add sample team
           </button>
         </div>
       </header>
+      <CapabilityNotice capability="teams" />
 
       {notice && (
         <div className="workflow-toast" role="status">
@@ -280,8 +300,8 @@ export function TeamWorkflow() {
       >
         <header>
           <div>
-            <p>Structure and inherited access</p>
-            <h2 id="teams-heading">Teams in this workspace</h2>
+            <p>Sample structure and planned feature inheritance</p>
+            <h2 id="teams-heading">Fictional teams in this Workspace</h2>
           </div>
           <span>{scopedTeams.length} configured</span>
         </header>
@@ -365,8 +385,10 @@ export function TeamWorkflow() {
               onClick={() => setCreateTeamOpen(true)}
             >
               <Plus size={20} />
-              <strong>Create the first team</strong>
-              <span>Group people and choose the features they inherit.</span>
+              <strong>Add the first sample team</strong>
+              <span>
+                Group fictional people and preview feature inheritance.
+              </span>
             </button>
           )}
         </div>
@@ -443,7 +465,7 @@ export function TeamWorkflow() {
             <option value="all">All status</option>
             <option value="active">Available</option>
             <option value="away">Away</option>
-            <option value="invited">Invited</option>
+            <option value="draft">Invite drafts</option>
           </select>
         </label>
       </div>
@@ -479,7 +501,9 @@ export function TeamWorkflow() {
                   <small>
                     {member.status === "active"
                       ? member.location
-                      : member.status}
+                      : member.status === "draft"
+                        ? "Invite draft · no email sent"
+                        : member.status}
                   </small>
                 </span>
               </button>
@@ -590,7 +614,7 @@ export function TeamWorkflow() {
           onCreate={(team) => {
             setTeams((current) => [...current, team]);
             setCreateTeamOpen(false);
-            setNotice(`${team.name} was added to this workspace.`);
+            setNotice(`${team.name} was added to this browser-only preview.`);
           }}
         />
       )}
@@ -687,7 +711,8 @@ function MemberDetailDialog({
           </span>
           <div>
             <p>
-              {member.role} · {member.status}
+              {member.role} ·{" "}
+              {member.status === "draft" ? "invite draft only" : member.status}
             </p>
             <h2 id="member-detail-title">{member.userName}</h2>
           </div>
@@ -702,7 +727,7 @@ function MemberDetailDialog({
         </header>
         <div className="workflow-dialog-body member-detail-grid">
           <section>
-            <h3>Profile & access</h3>
+            <h3>Sample profile & access preview</h3>
             <dl className="member-profile-list">
               <div>
                 <dt>
@@ -741,7 +766,7 @@ function MemberDetailDialog({
               </select>
             </label>
             <div className="member-access-list">
-              <b>Workspace access</b>
+              <b>Workspace access preview</b>
               {projects.slice(0, 5).map((workspace) => (
                 <label key={workspace.id}>
                   <input
@@ -767,7 +792,7 @@ function MemberDetailDialog({
                   />
                   <span>
                     <b>{team.name}</b>
-                    <small>{team.capabilities.length} inherited features</small>
+                    <small>{team.capabilities.length} preview features</small>
                   </span>
                 </label>
               ))}
@@ -780,12 +805,12 @@ function MemberDetailDialog({
                   : "/app/portfolio"
               }
             >
-              <ShieldCheck size={14} /> Manage organization permissions{" "}
+              <ShieldCheck size={14} /> Preview organization permissions{" "}
               <ArrowRight size={13} />
             </Link>
           </section>
           <aside>
-            <h3>Inherited team features</h3>
+            <h3>Feature inheritance preview</h3>
             <div className="inherited-capability-list">
               {inheritedCapabilities.map((capabilityId) => {
                 const capability = teamCapabilityCatalog.find(
@@ -798,7 +823,10 @@ function MemberDetailDialog({
                 );
               })}
               {!inheritedCapabilities.length && (
-                <p>Assign this person to a team to grant team features.</p>
+                <p>
+                  Assign this fictional person to preview team feature
+                  inheritance.
+                </p>
               )}
             </div>
             <h3>Current pressure</h3>
@@ -830,7 +858,7 @@ function MemberDetailDialog({
               <ArrowRightLeft size={14} /> Rebalance one item
             </button>
             <label className="stacked-field">
-              <span>Availability</span>
+              <span>Preview status</span>
               <select
                 value={member.status}
                 onChange={(event) =>
@@ -842,7 +870,7 @@ function MemberDetailDialog({
               >
                 <option value="active">Available</option>
                 <option value="away">Away</option>
-                <option value="invited">Invited</option>
+                <option value="draft">Invite draft · no access</option>
               </select>
             </label>
           </aside>
@@ -890,10 +918,10 @@ function InviteMemberDialog({
         userName: name.trim(),
         email: email.trim(),
         role,
-        status: "invited",
+        status: "draft",
         location: "Not provided",
         weeklyCapacity: 40,
-        focusNote: "Invitation pending.",
+        focusNote: "Invitation draft only. No email or access was created.",
         urgentHighActive: 0,
         dueThisWeek: 0,
         blockedResponsibilities: 0,
@@ -937,7 +965,7 @@ function InviteMemberDialog({
           </span>
           <div>
             <p>Workspace teams</p>
-            <h2 id="invite-member-title">Invite a person</h2>
+            <h2 id="invite-member-title">Prepare a sample invitation</h2>
           </div>
           <button
             type="button"
@@ -949,6 +977,7 @@ function InviteMemberDialog({
           </button>
         </header>
         <div className="workflow-dialog-body form-stack">
+          <CapabilityNotice capability="invitations" />
           <div className="form-grid-two">
             <label className="stacked-field">
               <span>Name</span>
@@ -961,7 +990,7 @@ function InviteMemberDialog({
               />
             </label>
             <label className="stacked-field">
-              <span>Email</span>
+              <span>Fictional email</span>
               <input
                 type="email"
                 required
@@ -982,11 +1011,11 @@ function InviteMemberDialog({
               <option>Guest</option>
             </select>
             <small className="field-help">
-              Members can create and update work in projects they can access.
+              This previews a future role. No permission or account is created.
             </small>
           </label>
           <fieldset className="invite-workspace-access">
-            <legend>Initial Workspace access</legend>
+            <legend>Initial Workspace access preview</legend>
             {projects.slice(0, 6).map((workspace) => (
               <label key={workspace.id}>
                 <input
@@ -1015,7 +1044,7 @@ function InviteMemberDialog({
           </fieldset>
         </div>
         <footer className="workflow-dialog-actions">
-          <span>You can change role and access later.</span>
+          <span>No email is sent and no access is granted.</span>
           <div>
             <button
               type="button"
@@ -1029,7 +1058,7 @@ function InviteMemberDialog({
               type="submit"
               disabled={!name.trim() || !email.trim()}
             >
-              <UserPlus size={14} /> Invite person
+              <UserPlus size={14} /> Prepare invitation draft
             </button>
           </div>
         </footer>
@@ -1183,8 +1212,11 @@ function CreateTeamDialog({
             </fieldset>
           </section>
           <fieldset className="team-capability-options">
-            <legend>Features this team inherits</legend>
-            <p>Every assigned person receives the selected team features.</p>
+            <legend>Feature inheritance preview</legend>
+            <p>
+              This browser-local demo associates selected features with
+              fictional people; it grants no real permission.
+            </p>
             {teamCapabilityCatalog.map((capability) => (
               <label key={capability.id}>
                 <input
@@ -1219,7 +1251,7 @@ function CreateTeamDialog({
               className="primary-button"
               disabled={!name.trim()}
             >
-              <Plus size={14} /> Add team
+              <Plus size={14} /> Add sample team
             </button>
           </div>
         </footer>
@@ -1342,10 +1374,10 @@ function TeamDetailDialog({
             </fieldset>
           </section>
           <fieldset className="team-capability-options">
-            <legend>Inherited team features</legend>
+            <legend>Feature inheritance preview</legend>
             <p>
-              These features are available to every person assigned to{" "}
-              {team.name}.
+              The preview associates these features with fictional people in{" "}
+              {team.name}; it does not grant real access.
             </p>
             {teamCapabilityCatalog.map((capability) => (
               <label key={capability.id}>
@@ -1364,7 +1396,7 @@ function TeamDetailDialog({
         </div>
         <footer className="workflow-dialog-actions">
           <span>
-            Membership changes immediately update inherited team features.
+            Membership changes update this browser-local preview only.
           </span>
           <div>
             <button className="primary-button" onClick={onClose}>

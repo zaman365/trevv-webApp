@@ -1,6 +1,8 @@
 # Architecture
 
-## Topology
+> **Target architecture, not current deployed topology.** The hosted technical preview currently serves the Web demonstration with fictional seed/browser-local state. The API, repositories, worker, PostgreSQL, object storage, and tenant-aware authentication described below are the intended production boundary and are not yet connected end to end.
+
+## Target topology
 
 TREVV is one platform with purpose-built clients:
 
@@ -10,20 +12,20 @@ Mobile (Expo) ─┼─ typed API client ─ Hono /api/v1 ─ domain services �
 Desktop (Tauri)┘                            └──── outbox ─ worker
 ```
 
-The Hono service owns transport, authentication boundaries, authorization calls, validation, rate limits, and webhook endpoints. `packages/core` owns deterministic attention, entitlement, Blueprint diff, opportunity, pressure, and portfolio-rollup rules. `packages/api-contract` is the single Zod contract source. `packages/db` owns the additive Drizzle schema and repositories. No client imports server-only packages.
+In the target runtime, the Hono service owns transport, authentication boundaries, authorization calls, validation, rate limits, and webhook endpoints. Today it is a demo service with process-local mutation state, no rate limiter, and no production webhook adapters. `packages/core` owns deterministic attention, entitlement, Blueprint diff, opportunity, pressure, and portfolio-rollup rules. `packages/api-contract` is the Zod contract source. `packages/db` currently owns the additive Drizzle schema; tenant-scoped repositories remain to be implemented. No client imports server-only packages.
 
 ## Authentication
 
-Better Auth is configured once in `packages/auth-server`. Web uses secure same-site HTTP-only cookies. Mobile and desktop use the same hosted identity and API session endpoints, with tokens stored through a client-neutral session contract and platform-secure storage adapters. Development demo mode is explicitly isolated from production configuration.
+Better Auth is configured in `packages/auth-server`, but the Web sign-in/onboarding preview does not authenticate, provision, or guard application routes. Secure same-site cookies, membership-derived access, revocation, verification/recovery, and platform-secure native session adapters describe the target implementation.
 
 ## Realtime and background work
 
-Mutations emit transactionally stored outbox events. The worker leases events idempotently and handles notifications, reminders, deterministic Attention refreshes, review cadence, update staleness, import/export jobs, and provider synchronization. Server-Sent Events refresh activity and notification surfaces; event types remain transport-neutral.
+The schema and worker define the intended outbox/job boundaries. Transactional outbox writes, leasing, scheduling, retries/dead letters, provider delivery, and Server-Sent Events are not currently connected.
 
 ## Offline and concurrency
 
-Clients cache safe reads, apply optimistic board mutations, and surface retry/failed-sync state. Mutations use updated-at/version checks; risky mutations accept idempotency keys. Full collaborative conflict resolution is deferred.
+The current Web demo applies local optimistic changes and does not implement production retry/failed-sync state. Safe caching, canonical server writes, durable idempotency, and visible conflict handling remain target behavior. Full collaborative conflict resolution is deferred.
 
 ## Deployment
 
-Web, API, and worker are independently deployable. API and worker share PostgreSQL and private object storage. Mobile and desktop point to the hosted HTTPS API. Preferred production data regions are in the EU. Deep links use `trevv://` plus verified `https://trevv.de` links.
+The target deployment independently promotes Web, API, and worker, with PostgreSQL and private object storage in an EU region. The current production workflow deploys only Web. Mobile/desktop hosting, the full runtime, and verified deep-link behavior must pass their release gates before being described as live.

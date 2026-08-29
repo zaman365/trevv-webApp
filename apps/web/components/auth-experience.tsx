@@ -4,11 +4,7 @@ import {
   ArrowRight,
   Check,
   ChevronLeft,
-  Eye,
-  EyeOff,
   Grid2X2,
-  LockKeyhole,
-  Mail,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -16,10 +12,9 @@ import {
 import { useState } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
+import { CapabilityNotice, TechnicalPreviewBadge } from "./capability-status";
 
 export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
-  const copy = productCopy.en.auth;
-  const [show, setShow] = useState(false);
   return (
     <main className="auth-page">
       <section className="auth-brand-panel">
@@ -45,7 +40,7 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
           <ul>
             <li>
               <Check size={13} />
-              Explainable signals from real operational work
+              Explainable signals from fictional operational work
             </li>
             <li>
               <Check size={13} />
@@ -86,71 +81,29 @@ export function AuthExperience({ mode }: { mode: "sign-in" | "sign-up" }) {
       </section>
       <section className="auth-form-panel">
         <div className="auth-form-wrap">
-          <span className="auth-kicker">
-            <ShieldCheck size={14} />
-            Secure workspace access
-          </span>
-          <h2>{mode === "sign-in" ? copy.signInTitle : copy.signUpTitle}</h2>
+          <TechnicalPreviewBadge />
+          <h2>{mode === "sign-in" ? "Explore TREVV" : "Preview onboarding"}</h2>
           <p>
-            {mode === "sign-in" ? copy.signInSubtitle : copy.signUpSubtitle}
+            {mode === "sign-in"
+              ? "Open the fictional sample Portfolio without entering credentials."
+              : "Walk through the fictional setup flow without creating an account."}
           </p>
-          <form action="/app/portfolio">
-            {mode === "sign-up" && (
-              <label>
-                {copy.name}
-                <span>
-                  <UserRound size={15} />
-                  <input required placeholder="Mohammed Zaman" />
-                </span>
-              </label>
-            )}
-            <label>
-              {copy.email}
-              <span>
-                <Mail size={15} />
-                <input
-                  type="email"
-                  required
-                  defaultValue={mode === "sign-in" ? "owner@trevv.local" : ""}
-                  placeholder="you@company.com"
-                />
-              </span>
-            </label>
-            <label>
-              {copy.password}
-              <span>
-                <LockKeyhole size={15} />
-                <input
-                  type={show ? "text" : "password"}
-                  required
-                  defaultValue={mode === "sign-in" ? "trevv-demo" : ""}
-                  placeholder="At least 12 characters"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShow(!show)}
-                  aria-label="Toggle password visibility"
-                >
-                  {show ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
-              </span>
-            </label>
-            <button className="primary-button" type="submit">
-              {mode === "sign-in" ? copy.signIn : copy.create}
-              <ArrowRight size={15} />
-            </button>
-          </form>
-          <div className="auth-separator">
-            <span>or</span>
-          </div>
-          <a className="demo-auth-button" href="/app/portfolio">
+          <CapabilityNotice capability="authentication" />
+          <a
+            className="demo-auth-button"
+            href={mode === "sign-in" ? "/app/portfolio" : "/onboarding"}
+          >
             <Grid2X2 size={16} />
-            {copy.demo}
+            {mode === "sign-in"
+              ? "Explore fictional sample workspace"
+              : "Open fictional setup walkthrough"}
           </a>
           <p className="auth-switch">
-            {mode === "sign-in" ? copy.noAccount : copy.hasAccount}{" "}
+            {mode === "sign-in"
+              ? "Want to preview setup?"
+              : "Want to skip setup?"}{" "}
             <a href={mode === "sign-in" ? "/sign-up" : "/sign-in"}>
-              {mode === "sign-in" ? copy.create : copy.signIn}
+              {mode === "sign-in" ? "View onboarding" : "Open sample now"}
             </a>
           </p>
         </div>
@@ -184,7 +137,7 @@ export function OnboardingExperience() {
           </span>
           <strong>{trevvBrand.name}</strong>
         </div>
-        <span>Step {step} of 5</span>
+        <span>Technical preview · Step {step} of 5</span>
       </header>
       <div className="onboarding-track">
         <i style={{ width: `${step * 20}%` }} />
@@ -206,15 +159,16 @@ export function OnboardingExperience() {
         </h1>
         <p>
           {step === 1
-            ? "This only selects sensible defaults. You can combine different Workspace types later."
+            ? "This fictional walkthrough selects sample defaults. It does not create an organization or account."
             : step === 2
               ? "A Workspace is anything you are responsible for — a business, client, product, department, or initiative."
               : step === 3
                 ? "Start with a useful structure or keep the Workspace completely blank."
                 : step === 4
-                  ? "Invite, connect, or import now — every option can be skipped."
-                  : "You can see health, priority, waiting work, and next attention in under five minutes."}
+                  ? "Preview invitations, connections, and import mapping. No external or durable action occurs."
+                  : "Open the fictional Portfolio to explore health, priority, waiting work, and next attention."}
         </p>
+        <CapabilityNotice capability="browserChanges" />
         {step === 1 && (
           <div className="onboarding-form onboarding-mode-form">
             <label>
@@ -343,30 +297,30 @@ export function OnboardingExperience() {
               <span>
                 <UserRound size={17} />
               </span>
-              <strong>Invite team</strong>
-              <small>Now or later</small>
+              <strong>Preview team invitation</strong>
+              <small>No email is sent</small>
             </label>
             <label>
               <input type="checkbox" />
               <span>G</span>
-              <strong>Connect Google Drive</strong>
-              <small>Permission-safe file picker</small>
+              <strong>Preview Google Drive setup</strong>
+              <small>No provider account is connected</small>
             </label>
             <label>
               <input type="checkbox" />
               <span>
                 <Grid2X2 size={17} />
               </span>
-              <strong>Import spreadsheet</strong>
-              <small>Preview and dry run first</small>
+              <strong>Preview spreadsheet mapping</strong>
+              <small>No file is uploaded or imported</small>
             </label>
             <label>
               <input type="checkbox" defaultChecked />
               <span>
                 <ShieldCheck size={17} />
               </span>
-              <strong>Keep workspace private</strong>
-              <small>Recommended default</small>
+              <strong>Preview private-workspace setting</strong>
+              <small>Not an active permission control</small>
             </label>
           </div>
         )}
@@ -375,11 +329,11 @@ export function OnboardingExperience() {
             <span>
               <Check size={20} />
             </span>
-            <h2>Your Portfolio is ready</h2>
+            <h2>Your sample Portfolio preview is ready</h2>
             <p>
-              TREVV created one Portfolio, your first Workspace, a starter
-              Blueprint, and a calm Portfolio view. Nothing is locked into a
-              customer mode.
+              TREVV prepared a browser-local walkthrough of one Portfolio, a
+              Workspace, a starter Blueprint, and a calm Portfolio view. No
+              account, organization, or shared record was created.
             </p>
             <div>
               <b>Venture Portfolio</b>
@@ -404,7 +358,7 @@ export function OnboardingExperience() {
             </button>
           ) : (
             <a className="primary-button" href="/app/portfolio">
-              Open TREVV
+              Open fictional sample
               <ArrowRight size={14} />
             </a>
           )}

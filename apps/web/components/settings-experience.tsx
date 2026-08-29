@@ -38,6 +38,7 @@ import {
 } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { Hint } from "./learning-center";
+import { CapabilityNotice } from "./capability-status";
 
 type SettingsSection =
   "integrations" | "security" | "organization" | "members" | "audit" | "export";
@@ -126,7 +127,7 @@ const providers: ProviderDefinition[] = [
     key: "google-drive",
     name: "Google Drive",
     category: "Deep integration",
-    description: "Connect files and folders with a permission-safe picker.",
+    description: "Preview a permission-safe file and folder picker.",
     icon: "G",
     tone: "drive",
     mode: "deep",
@@ -210,15 +211,15 @@ const initialAudit: AuditEvent[] = [
   {
     id: "audit-3",
     actor: "System",
-    action: "Completed organization export",
-    target: "Portable JSON export",
+    action: "Generated sample browser export",
+    target: "Sample JSON export",
     category: "Export",
     createdAt: "2026-08-25T09:06:00.000Z",
   },
   {
     id: "audit-4",
     actor: "Mohammed Zaman",
-    action: "Invited a workspace member",
+    action: "Prepared a sample invitation",
     target: "lena@example.com",
     category: "Member",
     createdAt: "2026-08-22T14:30:00.000Z",
@@ -226,8 +227,8 @@ const initialAudit: AuditEvent[] = [
   {
     id: "audit-5",
     actor: "System",
-    action: "Created a new browser session",
-    target: "Chrome on macOS",
+    action: "Displayed a fictional browser session",
+    target: "Sample Chrome session",
     category: "Security",
     createdAt: "2026-08-20T06:55:00.000Z",
   },
@@ -288,7 +289,7 @@ const initialSettings: StoredSettings = {
       initials: "LR",
       role: "Member",
       status: "invited",
-      lastActive: "Invite sent Aug 22",
+      lastActive: "Draft prepared Aug 22",
     },
   ],
   sessions: [
@@ -329,14 +330,15 @@ const sectionCopy: Record<
   integrations: {
     label: "Integrations",
     title: "Integrations",
-    subtitle: "Connect optional tools while TREVV stays useful on its own.",
+    subtitle:
+      "Preview optional provider behavior without connecting an account.",
     icon: Settings2,
   },
   security: {
     label: "Security",
     title: "Security",
     subtitle:
-      "Protect your account and review the places where you are signed in.",
+      "Review fictional account-security examples. Controls are inactive.",
     icon: ShieldCheck,
   },
   organization: {
@@ -349,21 +351,19 @@ const sectionCopy: Record<
   members: {
     label: "Members",
     title: "Members",
-    subtitle:
-      "Invite people and give each person the access their work requires.",
+    subtitle: "Explore a fictional member directory and invitation workflow.",
     icon: Users,
   },
   audit: {
     label: "Audit log",
     title: "Audit log",
-    subtitle: "Review important security and administration activity.",
+    subtitle: "Review fictional, browser-local administration activity.",
     icon: Clock3,
   },
   export: {
     label: "Export",
     title: "Export & portability",
-    subtitle:
-      "Download portable copies of your work and workspace administration data.",
+    subtitle: "Download samples generated from fictional browser data.",
     icon: Download,
   },
 };
@@ -609,7 +609,7 @@ export function SettingsExperience({
           },
         },
         provider.mode === "deep"
-          ? "Disconnected demo connection"
+          ? "Cleared demo configuration"
           : "Disabled smart-link previews",
         provider.name,
         "Integration",
@@ -624,16 +624,16 @@ export function SettingsExperience({
       withAudit(
         { ...current, calendarWaitlisted: !current.calendarWaitlisted },
         current.calendarWaitlisted
-          ? "Left release notification list"
-          : "Joined release notification list",
+          ? "Cleared sample release reminder"
+          : "Saved sample release reminder",
         "Google Calendar",
         "Integration",
       ),
     );
     notify(
       settings.calendarWaitlisted
-        ? "Release reminder removed."
-        : "We’ll show a notice when Calendar is available.",
+        ? "Sample reminder removed from this browser."
+        : "Sample reminder saved in this browser; no notification will be sent.",
     );
   };
 
@@ -648,7 +648,9 @@ export function SettingsExperience({
         "Security",
       ),
     );
-    notify(`${label} ${settings[field] ? "disabled" : "enabled"}.`);
+    notify(
+      `${label} preview ${settings[field] ? "disabled" : "enabled"} in this browser; account security did not change.`,
+    );
   };
 
   const revokeSession = (session: Session) => {
@@ -658,12 +660,12 @@ export function SettingsExperience({
           ...current,
           sessions: current.sessions.filter((item) => item.id !== session.id),
         },
-        "Revoked a session",
+        "Removed a fictional session from the preview",
         session.device,
         "Security",
       ),
     );
-    notify(`${session.device} was signed out.`);
+    notify(`${session.device} was removed from this browser-only preview.`);
   };
 
   const saveOrganization = (event: FormEvent<HTMLFormElement>) => {
@@ -683,7 +685,7 @@ export function SettingsExperience({
         "Organization",
       ),
     );
-    notify("Organization settings saved.");
+    notify("Sample organization settings saved in this browser.");
   };
 
   const changeMemberRole = (member: Member, role: MemberRole) => {
@@ -711,16 +713,16 @@ export function SettingsExperience({
           members: current.members.filter((item) => item.id !== member.id),
         },
         member.status === "invited"
-          ? "Revoked invitation"
-          : "Removed workspace member",
+          ? "Discarded invitation draft"
+          : "Removed sample workspace member",
         member.email,
         "Member",
       ),
     );
     notify(
       member.status === "invited"
-        ? `Invitation for ${member.email} revoked.`
-        : `${member.name} removed from the organization.`,
+        ? `Invitation draft for ${member.email} discarded in this browser.`
+        : `${member.name} removed from the fictional directory in this browser.`,
     );
   };
 
@@ -759,12 +761,12 @@ export function SettingsExperience({
       initials: initials || "?",
       role: inviteRole,
       status: "invited",
-      lastActive: "Invite sent just now",
+      lastActive: "Draft prepared just now",
     };
     setSettings((current) =>
       withAudit(
         { ...current, members: [...current.members, member] },
-        `Invited a workspace ${inviteRole.toLocaleLowerCase()}`,
+        `Prepared a sample ${inviteRole.toLocaleLowerCase()} invitation`,
         email,
         "Member",
       ),
@@ -772,14 +774,16 @@ export function SettingsExperience({
     setInviteEmail("");
     setInviteRole("Member");
     setInviteOpen(false);
-    notify(`Invitation created for ${email}.`);
+    notify(`Invitation draft prepared for ${email}; no email was sent.`);
   };
 
   const resendInvite = (member: Member) => {
     setSettings((current) =>
-      withAudit(current, "Resent workspace invitation", member.email, "Member"),
+      withAudit(current, "Refreshed invitation draft", member.email, "Member"),
     );
-    notify(`Invitation resent to ${member.email}.`);
+    notify(
+      `Invitation draft refreshed for ${member.email}; no email was sent.`,
+    );
   };
 
   const exportOrganization = () => {
@@ -816,12 +820,12 @@ export function SettingsExperience({
     setSettings((current) =>
       withAudit(
         current,
-        "Downloaded organization export",
-        "Portable JSON export",
+        "Downloaded sample organization export",
+        "Sample JSON export",
         "Export",
       ),
     );
-    notify("Organization export downloaded.");
+    notify("Sample browser-data export downloaded.");
   };
 
   const exportMembers = () => {
@@ -837,9 +841,14 @@ export function SettingsExperience({
       "text/csv;charset=utf-8",
     );
     setSettings((current) =>
-      withAudit(current, "Downloaded member list", "Members CSV", "Export"),
+      withAudit(
+        current,
+        "Downloaded sample member list",
+        "Sample members CSV",
+        "Export",
+      ),
     );
-    notify("Member list downloaded.");
+    notify("Sample member list downloaded from this browser.");
   };
 
   const exportAudit = () => {
@@ -854,9 +863,14 @@ export function SettingsExperience({
       "text/csv;charset=utf-8",
     );
     setSettings((current) =>
-      withAudit(current, "Downloaded audit log", "Audit CSV", "Export"),
+      withAudit(
+        current,
+        "Downloaded sample activity",
+        "Sample activity CSV",
+        "Export",
+      ),
     );
-    notify("Audit log downloaded.");
+    notify("Sample browser activity downloaded.");
   };
 
   const visibleMembers = useMemo(() => {
@@ -903,7 +917,7 @@ export function SettingsExperience({
               type="button"
               onClick={() => setInviteOpen(true)}
             >
-              <UserPlus size={15} /> Invite member
+              <UserPlus size={15} /> Prepare sample invite
             </button>
           )}
         </header>
@@ -967,7 +981,9 @@ export function SettingsExperience({
                       "Security",
                     ),
                   );
-                  notify("Session timeout updated.");
+                  notify(
+                    "Session-timeout preview updated in this browser; account security did not change.",
+                  );
                 }}
                 onRevoke={revokeSession}
               />
@@ -1066,13 +1082,14 @@ function IntegrationsPanel({
 }) {
   return (
     <div className="settings-stack">
+      <CapabilityNotice capability="integrations" />
       <div className="settings-note">
         <ShieldCheck size={18} />
         <div>
           <strong>Optional by design</strong>
           <span>
-            Your Workspaces, boards and decisions keep working if every provider
-            is disconnected.
+            These preview settings stay in this browser. No provider account is
+            connected or synchronized.
           </span>
         </div>
       </div>
@@ -1104,7 +1121,9 @@ function IntegrationsPanel({
                   ) : (
                     <BellRing size={13} />
                   )}
-                  {settings.calendarWaitlisted ? "Reminder set" : "Notify me"}
+                  {settings.calendarWaitlisted
+                    ? "Sample reminder saved"
+                    : "Preview reminder"}
                 </button>
               ) : (
                 <button
@@ -1114,10 +1133,10 @@ function IntegrationsPanel({
                 >
                   {active && <CheckCircle2 size={13} />}
                   {active
-                    ? "Manage"
+                    ? "Manage preview"
                     : provider.mode === "smart-link"
-                      ? "Enable"
-                      : "Set up"}
+                      ? "Preview"
+                      : "Configure preview"}
                   <ArrowRight size={12} />
                 </button>
               )}
@@ -1127,7 +1146,7 @@ function IntegrationsPanel({
       </section>
       <p className="settings-footnote">
         Smart-link previews only enrich URLs a member deliberately adds. Deep
-        provider access is never required.
+        provider access, OAuth, sync, and writes are not active.
       </p>
     </div>
   );
@@ -1146,11 +1165,12 @@ function SecurityPanel({
 }) {
   return (
     <div className="settings-stack">
+      <CapabilityNotice capability="security" />
       <section className="settings-card settings-section-card">
         <SettingsHeading
           icon={KeyRound}
-          title="Account protection"
-          subtitle="Security preferences apply to your own TREVV account."
+          title="Account protection preview"
+          subtitle="These disabled controls illustrate planned behavior only."
         />
         <SettingRow
           title="Two-step verification"
@@ -1160,6 +1180,7 @@ function SecurityPanel({
             label="Two-step verification"
             checked={settings.twoFactorEnabled}
             onChange={() => onToggle("twoFactorEnabled")}
+            disabled
           />
         </SettingRow>
         <SettingRow
@@ -1170,6 +1191,7 @@ function SecurityPanel({
             label="Login alerts"
             checked={settings.loginAlertsEnabled}
             onChange={() => onToggle("loginAlertsEnabled")}
+            disabled
           />
         </SettingRow>
         <SettingRow
@@ -1178,6 +1200,7 @@ function SecurityPanel({
         >
           <select
             aria-label="Session timeout"
+            disabled
             value={settings.sessionTimeout}
             onChange={(event) =>
               onTimeout(event.target.value as StoredSettings["sessionTimeout"])
@@ -1193,8 +1216,8 @@ function SecurityPanel({
       <section className="settings-card settings-section-card">
         <SettingsHeading
           icon={Laptop}
-          title="Active sessions"
-          subtitle="Sign out devices you no longer use or recognize."
+          title="Fictional sessions"
+          subtitle="Sample devices only; no authenticated sessions are being shown."
         />
         <div className="session-list">
           {settings.sessions.map((session) => {
@@ -1211,11 +1234,15 @@ function SecurityPanel({
                 </div>
                 {session.current ? (
                   <b className="current-session">
-                    <CheckCircle2 size={12} /> Current
+                    <CheckCircle2 size={12} /> Sample current
                   </b>
                 ) : (
-                  <button type="button" onClick={() => onRevoke(session)}>
-                    Sign out
+                  <button
+                    type="button"
+                    disabled
+                    onClick={() => onRevoke(session)}
+                  >
+                    Preview only
                   </button>
                 )}
               </article>
@@ -1243,10 +1270,11 @@ function OrganizationPanel({
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   return (
     <form className="settings-card organization-form" onSubmit={onSave}>
+      <CapabilityNotice capability="browserChanges" />
       <SettingsHeading
         icon={Building2}
-        title="Workspace details"
-        subtitle="These defaults are shared by every member of this organization."
+        title="Sample Workspace details"
+        subtitle="These browser-local defaults illustrate a future organization configuration."
       />
       <div className="settings-form-grid">
         <label className="full-width">
@@ -1329,7 +1357,9 @@ function OrganizationPanel({
       </div>
       <footer className="settings-form-actions">
         <span>
-          {dirty ? "You have unsaved changes." : "All changes are saved."}
+          {dirty
+            ? "You have unsaved browser-local changes."
+            : "Sample settings are saved in this browser."}
         </span>
         <button type="button" onClick={onReset} disabled={!dirty}>
           Discard
@@ -1339,7 +1369,7 @@ function OrganizationPanel({
           type="submit"
           disabled={!dirty || !draft.name.trim() || !draft.slug}
         >
-          Save changes
+          Save in this browser
         </button>
       </footer>
     </form>
@@ -1365,6 +1395,7 @@ function MembersPanel({
 }) {
   return (
     <section className="settings-card members-card">
+      <CapabilityNotice capability="invitations" />
       <div className="settings-toolbar">
         <label className="settings-search">
           <Search size={15} />
@@ -1389,7 +1420,8 @@ function MembersPanel({
             </div>
             <div className="member-activity">
               <span className={`member-status ${member.status}`}>
-                <i /> {member.status === "active" ? "Active" : "Invited"}
+                <i />{" "}
+                {member.status === "active" ? "Sample member" : "Draft invite"}
               </span>
               <small>{member.lastActive}</small>
             </div>
@@ -1414,13 +1446,13 @@ function MembersPanel({
             ) : member.status === "invited" ? (
               <div className="member-actions">
                 <button type="button" onClick={() => onResend(member)}>
-                  <RefreshCw size={13} /> Resend
+                  <RefreshCw size={13} /> Refresh draft
                 </button>
                 <button
                   type="button"
                   className="icon-danger"
                   onClick={() => onRemove(member)}
-                  aria-label={`Revoke invitation for ${member.email}`}
+                  aria-label={`Discard invitation draft for ${member.email}`}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -1431,7 +1463,7 @@ function MembersPanel({
                 className="remove-member"
                 onClick={() => onRemove(member)}
               >
-                Remove
+                Remove from sample
               </button>
             )}
           </article>
@@ -1441,9 +1473,9 @@ function MembersPanel({
         <div className="settings-empty">
           <Users size={24} />
           <h2>No members found</h2>
-          <p>Try a different search or invite someone new.</p>
+          <p>Try a different search or prepare another sample invite.</p>
           <button className="primary-button" type="button" onClick={onInvite}>
-            Invite member
+            Prepare sample invite
           </button>
         </div>
       )}
@@ -1468,6 +1500,7 @@ function AuditPanel({
 }) {
   return (
     <section className="settings-card audit-card">
+      <CapabilityNotice capability="export" />
       <div className="settings-toolbar audit-toolbar">
         <label className="settings-search">
           <Search size={15} />
@@ -1492,7 +1525,7 @@ function AuditPanel({
           <option>Export</option>
         </select>
         <button type="button" onClick={onExport}>
-          <Download size={14} /> Export CSV
+          <Download size={14} /> Download sample CSV
         </button>
       </div>
       <div className="audit-list">
@@ -1545,29 +1578,30 @@ function ExportPanel({
 }) {
   return (
     <div className="settings-stack">
+      <CapabilityNotice capability="export" />
       <div className="export-grid">
         <ExportCard
           icon={FileJson}
-          title="Organization data"
+          title="Sample organization data"
           description="A portable JSON summary of organization settings, members, providers, and demo-workspace counts."
           meta="JSON · generated on demand"
-          action="Download JSON"
+          action="Download sample JSON"
           onClick={onOrganization}
         />
         <ExportCard
           icon={FileSpreadsheet}
-          title="Member directory"
+          title="Sample member directory"
           description="Names, email addresses, roles, and invitation status for workspace administration."
           meta={`${members} people · CSV`}
-          action="Download CSV"
+          action="Download sample CSV"
           onClick={onMembers}
         />
         <ExportCard
           icon={Clock3}
-          title="Audit activity"
+          title="Sample activity"
           description="Important workspace administration and security activity currently retained in this demo."
           meta={`${auditEvents} events · CSV`}
-          action="Download CSV"
+          action="Download sample CSV"
           onClick={onAudit}
         />
       </div>
@@ -1576,23 +1610,24 @@ function ExportPanel({
           <Database size={18} />
         </span>
         <div>
-          <h2>Bring work into TREVV</h2>
+          <h2>Preview bringing work into TREVV</h2>
           <p>
             Preview field mappings and validation warnings before importing any
             CSV rows.
           </p>
         </div>
         <Link href={importHref}>
-          Open importer <ArrowRight size={13} />
+          Open import preview <ArrowRight size={13} />
         </Link>
       </section>
       <div className="settings-note neutral-note">
         <ShieldCheck size={18} />
         <div>
-          <strong>Your data remains portable</strong>
+          <strong>Sample download only</strong>
           <span>
-            Downloads are created in your browser for this demo. Production
-            exports are permission checked and auditable.
+            Downloads are created from fictional browser data. Complete,
+            permission-checked and auditable organization exports are not yet
+            available.
           </span>
         </div>
       </div>
@@ -1676,10 +1711,12 @@ function Switch({
   label,
   checked,
   onChange,
+  disabled = false,
 }: {
   label: string;
   checked: boolean;
   onChange: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -1687,6 +1724,8 @@ function Switch({
       role="switch"
       aria-label={label}
       aria-checked={checked}
+      aria-disabled={disabled}
+      disabled={disabled}
       className={`settings-switch ${checked ? "on" : ""}`}
       onClick={onChange}
     >
@@ -1723,7 +1762,9 @@ function ProviderDialog({
         <div>
           <p>{provider.category}</p>
           <h2 id={titleId}>
-            {active ? `Manage ${provider.name}` : `Enable ${provider.name}`}
+            {active
+              ? `Manage ${provider.name} preview`
+              : `Preview ${provider.name}`}
           </h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Close dialog">
@@ -1761,7 +1802,7 @@ function ProviderDialog({
           />
         </label>
         <div className="permission-list">
-          <strong>What this enables</strong>
+          <strong>What a future live version would enable</strong>
           {provider.permissions.map((permission) => (
             <span key={permission}>
               <CheckCircle2 size={14} /> {permission}
@@ -1770,7 +1811,7 @@ function ProviderDialog({
         </div>
         {active && connection.connectedAt && (
           <p className="connection-meta">
-            <Clock3 size={13} /> Enabled{" "}
+            <Clock3 size={13} /> Preview configured{" "}
             {formatAuditTime(connection.connectedAt)}
           </p>
         )}
@@ -1782,7 +1823,7 @@ function ProviderDialog({
             className="danger-button"
             onClick={onDisconnect}
           >
-            Disconnect
+            Clear preview
           </button>
         ) : (
           <span />
@@ -1798,10 +1839,10 @@ function ProviderDialog({
             onClick={onSave}
           >
             {active
-              ? "Save changes"
+              ? "Save preview settings"
               : provider.mode === "deep"
-                ? "Configure demo"
-                : "Enable smart links"}
+                ? "Configure picker preview"
+                : "Enable link preview"}
           </button>
         </div>
       </footer>
@@ -1833,14 +1874,15 @@ function InviteDialog({
             <UserPlus size={18} />
           </span>
           <div>
-            <p>Organization access</p>
-            <h2 id={titleId}>Invite a member</h2>
+            <p>Fictional directory</p>
+            <h2 id={titleId}>Prepare a sample invitation</h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Close dialog">
             <X size={18} />
           </button>
         </header>
         <div className="settings-dialog-body invite-fields">
+          <CapabilityNotice capability="invitations" />
           <label className="dialog-field">
             <span>Email address</span>
             <div className="input-with-icon">
@@ -1884,7 +1926,7 @@ function InviteDialog({
             type="submit"
             disabled={!email.trim()}
           >
-            Create invitation
+            Prepare invitation draft
           </button>
         </footer>
       </form>
@@ -1910,9 +1952,11 @@ function RemoveMemberDialog({
           <Trash2 size={18} />
         </span>
         <div>
-          <p>{invitation ? "Pending invitation" : "Organization access"}</p>
+          <p>{invitation ? "Invitation draft" : "Fictional directory"}</p>
           <h2 id={titleId}>
-            {invitation ? "Revoke this invitation?" : "Remove this member?"}
+            {invitation
+              ? "Discard this invitation draft?"
+              : "Remove this sample member?"}
           </h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Close dialog">
@@ -1922,8 +1966,8 @@ function RemoveMemberDialog({
       <div className="settings-dialog-body remove-member-copy">
         <p>
           {invitation
-            ? `${member.email} will no longer be able to accept this invitation.`
-            : `${member.name} will lose access to this organization. Their existing work and activity history will remain.`}
+            ? `The browser-local invitation draft for ${member.email} will be removed. No access was ever granted.`
+            : `${member.name} will be removed from this browser-only fictional directory. Real access is unaffected.`}
         </p>
         <div>
           <span className="member-avatar">{member.initials}</span>
@@ -1943,7 +1987,7 @@ function RemoveMemberDialog({
           className="confirm-danger-button"
           onClick={onConfirm}
         >
-          {invitation ? "Revoke invitation" : "Remove member"}
+          {invitation ? "Discard draft" : "Remove sample member"}
         </button>
       </footer>
     </SettingsDialog>

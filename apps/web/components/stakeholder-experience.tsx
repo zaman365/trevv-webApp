@@ -16,6 +16,7 @@ import {
 } from "@founderhq/core";
 import { trevvBrand } from "@/lib/branding";
 import { useState } from "react";
+import { CapabilityNotice, TechnicalPreviewBadge } from "./capability-status";
 
 export function StakeholderExperience({ slug }: { slug: string }) {
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -27,9 +28,10 @@ export function StakeholderExperience({ slug }: { slug: string }) {
   if (!workspace || workspace.id !== demoStakeholderExposure.workspaceId)
     return (
       <main className="stakeholder-page stakeholder-unavailable">
+        <TechnicalPreviewBadge />
         <ShieldCheck size={28} />
-        <h1>This stakeholder view is not shared</h1>
-        <p>Ask a Workspace lead or Admin to expose selected information.</p>
+        <h1>No fictional stakeholder sample exists for this Workspace</h1>
+        <p>This route does not check or grant real stakeholder access.</p>
       </main>
     );
   const work = demoItems.filter((item) =>
@@ -47,11 +49,9 @@ export function StakeholderExperience({ slug }: { slug: string }) {
           </span>
           <strong>{trevvBrand.name}</strong>
         </div>
-        <span>
-          <ShieldCheck size={13} />
-          Stakeholder view · selected information only
-        </span>
+        <TechnicalPreviewBadge />
       </header>
+      <CapabilityNotice capability="browserChanges" />
       <section
         className="stakeholder-hero"
         style={
@@ -88,7 +88,7 @@ export function StakeholderExperience({ slug }: { slug: string }) {
               <time>{workspace.latestUpdate.date}</time>
             </header>
             <p>{workspace.latestUpdate.text}</p>
-            <small>Shared by the Workspace lead</small>
+            <small>Fictional sample attributed to the Workspace lead</small>
           </section>
         )}
         {demoStakeholderExposure.milestones && (
@@ -129,10 +129,10 @@ export function StakeholderExperience({ slug }: { slug: string }) {
                 <strong>{item.title}</strong>
                 <small>
                   {outcomes[item.id] === "approved"
-                    ? "Approved by stakeholder"
+                    ? "Sample approval recorded in this browser"
                     : outcomes[item.id] === "changes"
-                      ? "Changes requested"
-                      : `Approval requested · due ${item.dueDate}`}
+                      ? "Sample change request recorded in this browser"
+                      : `Fictional approval example · due ${item.dueDate}`}
                 </small>
               </div>
               <button onClick={() => setReviewingId(item.id)}>
@@ -148,13 +148,13 @@ export function StakeholderExperience({ slug }: { slug: string }) {
         >
           <header>
             <ExternalLink size={16} />
-            <h2>Approved resources</h2>
+            <h2>Sample resource metadata</h2>
           </header>
-          <a href="https://docs.google.com" rel="noreferrer" target="_blank">
+          <a href="#resource" aria-disabled="true">
             <FileText size={15} />
             <div>
               <strong>Delivery proof pack</strong>
-              <small>Approved file · PDF</small>
+              <small>Fictional PDF metadata · no file attached</small>
             </div>
             <ExternalLink size={12} />
           </a>
@@ -162,8 +162,8 @@ export function StakeholderExperience({ slug }: { slug: string }) {
       </div>
       <footer className="stakeholder-footer">
         <ShieldCheck size={13} />
-        Internal comments, private notes, and unselected work are not included
-        in this view.
+        This page illustrates a future sharing boundary; it is not authenticated
+        or permission-enforced.
       </footer>
       {reviewingId && (
         <div
@@ -195,15 +195,11 @@ export function StakeholderExperience({ slug }: { slug: string }) {
                 <X size={17} />
               </button>
             </header>
-            <a
-              className="review-resource-link"
-              href="https://docs.google.com"
-              rel="noreferrer"
-              target="_blank"
-            >
-              <FileText size={15} /> Open the approved review resource{" "}
-              <ExternalLink size={12} />
-            </a>
+            <CapabilityNotice capability="browserChanges" />
+            <div className="review-resource-link">
+              <FileText size={15} /> Fictional resource metadata; no file is
+              attached
+            </div>
             <label className="stacked-field">
               Review note
               <textarea
@@ -224,7 +220,7 @@ export function StakeholderExperience({ slug }: { slug: string }) {
                   setReviewNote("");
                 }}
               >
-                Request changes
+                Record sample change request
               </button>
               <button
                 className="primary-button"
@@ -237,7 +233,7 @@ export function StakeholderExperience({ slug }: { slug: string }) {
                   setReviewNote("");
                 }}
               >
-                <CheckCircle2 size={14} /> Approve
+                <CheckCircle2 size={14} /> Record sample approval
               </button>
             </footer>
           </section>

@@ -35,6 +35,7 @@ import { productCopy } from "@/lib/product-copy";
 import { labelForType } from "@/lib/terminology";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { workspaceHref } from "@/lib/workspace-routes";
+import { CapabilityNotice } from "./capability-status";
 
 const workspaceHealthCopy: Record<string, string> = {
   on_track: "On track",
@@ -258,7 +259,7 @@ function WorkspaceWorkspace({
                       href={workspaceHref(workspace.slug, "settings")}
                       role="menuitem"
                     >
-                      Connected tools
+                      Tool link previews
                     </Link>
                   </div>
                 )}
@@ -391,7 +392,7 @@ function WorkspaceWorkspace({
             <section className="overview-section" id="work">
               <div className="overview-section-title">
                 <div>
-                  <h2>{copy.liveSignals}</h2>
+                  <h2>Sample signals</h2>
                   <p>Calculated directly from accessible work items.</p>
                 </div>
                 <a href={boardHref}>
@@ -430,7 +431,7 @@ function WorkspaceWorkspace({
               <div className="overview-section-title">
                 <div>
                   <h2>{copy.latestUpdate}</h2>
-                  <p>Published by {workspace.lead.name} · 1 day ago</p>
+                  <p>Fictional sample by {workspace.lead.name} · 1 day ago</p>
                 </div>
                 <button
                   aria-expanded={showAllUpdates}
@@ -578,7 +579,7 @@ function WorkspaceWorkspace({
             <section className="side-overview-card resources-list" id="files">
               <header>
                 <Link2 size={15} />
-                <h2>{copy.connected}</h2>
+                <h2>Sample tool links</h2>
               </header>
               <a href="https://www.figma.com">
                 <span className="mini-tone dark">F</span>
@@ -658,7 +659,9 @@ function WorkspaceWorkspace({
                 ]);
                 setUpdateText("");
                 setUpdateOpen(false);
-                setNotice("Workspace update published.");
+                setNotice(
+                  "Workspace update saved in this browser-only preview; no stakeholder was notified.",
+                );
               }}
               role="dialog"
             >
@@ -667,7 +670,9 @@ function WorkspaceWorkspace({
                   <Send size={16} />
                 </span>
                 <div>
-                  <h2 id="workspace-update-title">Post a workspace update</h2>
+                  <h2 id="workspace-update-title">
+                    Draft a sample workspace update
+                  </h2>
                   <p>
                     Record what moved, what is blocked, and what happens next.
                   </p>
@@ -680,6 +685,7 @@ function WorkspaceWorkspace({
                   <X size={17} />
                 </button>
               </header>
+              <CapabilityNotice capability="publishedUpdates" />
               <label className="stacked-field">
                 What changed?
                 <textarea
@@ -698,7 +704,7 @@ function WorkspaceWorkspace({
                   disabled={!updateText.trim()}
                   type="submit"
                 >
-                  <Send size={14} /> Publish update
+                  <Send size={14} /> Save local preview
                 </button>
               </footer>
             </form>

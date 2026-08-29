@@ -222,13 +222,16 @@ test("team member updates a board item inline and uses the detail panel", async 
   });
   if (!(await panel.isVisible())) await item.click();
   await expect(panel).toBeVisible();
-  await panel
-    .getByLabel("Status for Choose storefront launch offer")
-    .selectOption("review")
-    .catch(async () => {
-      await panel.locator("select").first().selectOption("review");
-    });
-  await expect(panel.getByText("Changes saved")).toBeVisible();
+  const status = panel.getByLabel("Status for Choose storefront launch offer");
+  await status.selectOption("review").catch(async () => {
+    await panel.locator("select").first().selectOption("review");
+  });
+  await expect(status).toHaveValue("review");
+  await expect(
+    panel.getByText(
+      "Comments and links stay in this browser. File upload is unavailable.",
+    ),
+  ).toBeVisible();
 });
 
 test("board controls add, filter, and expose item editing", async ({
@@ -280,7 +283,7 @@ test("Attention signals support accountable actions", async ({ page }) => {
   );
 });
 
-test("Waiting Center supports nudging and resolving dependencies", async ({
+test("Waiting Center supports local follow-up drafts and resolving dependencies", async ({
   page,
 }) => {
   await gotoCanonical(page, workspaceRoute("waiting"));
@@ -291,10 +294,10 @@ test("Waiting Center supports nudging and resolving dependencies", async ({
   // bucket that actually holds a dependency.
   await page.getByRole("button", { name: /^Waiting on External/ }).click();
   const waitingItem = page.locator(".waiting-list article").first();
-  await waitingItem.getByRole("button", { name: "Nudge" }).click();
+  await waitingItem.getByRole("button", { name: "Draft follow-up" }).click();
   await page
     .getByRole("dialog", { name: "Prepare a focused nudge" })
-    .getByRole("button", { name: "Record email note" })
+    .getByRole("button", { name: "Save local preview" })
     .click();
   await expect(page.getByRole("status")).toContainText("Follow-up prepared");
   await waitingItem.getByRole("button", { name: "Resolve" }).click();
@@ -305,16 +308,18 @@ test("Waiting Center supports nudging and resolving dependencies", async ({
   await expect(waitingItem).toBeHidden();
 });
 
-test("weekly review publishes an update and snapshot", async ({ page }) => {
+test("weekly review saves a local sample", async ({ page }) => {
   await gotoCanonical(page, workspaceRoute("reviews"));
   await expect(
     page.getByRole("heading", { name: "Review Rituals" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Publish review & snapshot" }).click();
+  await page
+    .getByRole("button", { name: "Save sample review locally" })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "Review published" }),
+    page.getByRole("heading", { name: "Sample review saved locally" }),
   ).toBeVisible();
-  await expect(page.getByText(/project snapshot captured/)).toBeVisible();
+  await expect(page.getByText(/browser-local update/)).toBeVisible();
 });
 
 test("Blueprint updates are previewed and preserve local overrides", async ({
@@ -338,7 +343,7 @@ test("Blueprint updates are previewed and preserve local overrides", async ({
 test("import presets require a dry-run preview", async ({ page }) => {
   await gotoCanonical(page, workspaceRoute("settings/import"));
   await expect(
-    page.getByRole("heading", { name: "Import work" }),
+    page.getByRole("heading", { name: "Preview an import" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Preview mapping" }).click();
   await expect(page.getByText("Nothing has been imported")).toBeVisible();
@@ -355,7 +360,9 @@ test("stakeholder view exposes only selected information", async ({ page }) => {
     page.getByRole("heading", { name: "Selected work" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Stakeholder view · selected information only"),
+    page.getByText(
+      /future sharing boundary; it is not authenticated or permission-enforced/,
+    ),
   ).toBeVisible();
   await expect(page.getByText("Private investment note")).toHaveCount(0);
 });
@@ -397,8 +404,12 @@ test("Messages keeps requests, threads, and project context connected", async ({
 }) => {
   await gotoCanonical(page, workspaceRoute("messages"));
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "New message" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create room" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "New sample conversation" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Add sample room", exact: true }),
+  ).toBeVisible();
   await expect(
     page
       .getByRole("button", { name: /Northstar · Launch room/ })
@@ -432,23 +443,27 @@ test("Messages keeps requests, threads, and project context connected", async ({
 
   await page.getByRole("button", { name: /1 reply Open thread/ }).click();
   await page.getByPlaceholder("Reply in thread…").fill("Margin check noted.");
-  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Add sample reply", exact: true })
+    .click();
   await expect(
     page.getByRole("paragraph").filter({ hasText: "Margin check noted." }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close thread" }).click();
 
-  await page.getByRole("button", { name: "Create room" }).click();
+  await page
+    .getByRole("button", { name: "Add sample room", exact: true })
+    .click();
   await page.getByLabel("Room name").fill("Northstar launch support");
   await page
     .getByLabel("Purpose")
     .fill("Coordinate launch-day support and escalation ownership.");
   await page
-    .getByRole("dialog", { name: "Create a work room" })
-    .getByRole("button", { name: "Create room" })
+    .getByRole("dialog", { name: "Add a sample work room" })
+    .getByRole("button", { name: "Add sample room" })
     .click();
   await expect(page.getByRole("status")).toContainText(
-    "Northstar launch support is ready",
+    "Sample room Northstar launch support added locally; no access was granted",
   );
 });
 
@@ -468,7 +483,9 @@ test("onboarding configures a generalized first project", async ({ page }) => {
       page.getByRole("heading", { name: heading, level: 1 }),
     ).toBeVisible();
   }
-  await expect(page.getByRole("link", { name: "Open TREVV" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open fictional sample" }),
+  ).toBeVisible();
 });
 
 test("member focus centers and informational notifications render", async ({
@@ -498,9 +515,11 @@ test("workspace teams create groups, assign people, and expose inherited feature
   await gotoCanonical(page, workspaceRoute("teams"));
 
   await expect(
-    page.getByRole("region", { name: "Teams in this workspace" }),
+    page.getByRole("region", { name: "Fictional teams in this Workspace" }),
   ).toContainText("Marketing");
-  await page.getByRole("button", { name: "Add team", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Add sample team", exact: true })
+    .click();
 
   const createTeam = page.getByRole("dialog", { name: "Add a team" });
   await createTeam.getByLabel("Team name").fill("Operations");
@@ -509,23 +528,36 @@ test("workspace teams create groups, assign people, and expose inherited feature
     .fill("Run delivery, staffing, and operational handoffs.");
   await createTeam.getByLabel("Team lead").selectOption({ index: 1 });
   await createTeam.getByLabel(/Approvals/).check();
-  await createTeam.getByRole("button", { name: "Add team" }).click();
+  await createTeam.getByRole("button", { name: "Add sample team" }).click();
 
   await expect(
     page.getByRole("heading", { name: "Operations", exact: true }),
   ).toBeVisible();
 
   await page
-    .getByRole("button", { name: "Invite person", exact: true })
+    .getByRole("button", { name: "Prepare sample invite", exact: true })
     .click();
-  const invite = page.getByRole("dialog", { name: "Invite a person" });
+  const invite = page.getByRole("dialog", {
+    name: "Prepare a sample invitation",
+  });
   await invite.getByLabel("Name").fill("Test Operator");
-  await invite.getByLabel("Email").fill("operator@example.invalid");
+  await invite.getByLabel("Fictional email").fill("operator@example.invalid");
   await invite.getByLabel("Operations").check();
-  await invite.getByRole("button", { name: "Invite person" }).click();
+  await invite
+    .getByRole("button", { name: "Prepare invitation draft" })
+    .click();
+
+  await expect(page.getByRole("status")).toContainText(
+    "No external email is sent in this demo",
+  );
+  await expect(
+    page.getByRole("button", {
+      name: /Test Operator Invite draft · no email sent/,
+    }),
+  ).toBeVisible();
 
   await page
-    .getByRole("button", { name: "TO Test Operator invited", exact: true })
+    .getByRole("button", { name: "Manage teams for Test Operator" })
     .click();
   const member = page.getByRole("dialog", { name: "Test Operator" });
   await expect(member.getByLabel("Operations")).toBeChecked();

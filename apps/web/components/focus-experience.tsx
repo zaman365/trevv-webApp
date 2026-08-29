@@ -34,6 +34,7 @@ import { Hint } from "./learning-center";
 import { DecisionCenter } from "./decision-center";
 import { InboxExperience } from "./email-inbox-workflow";
 import { MyWorkWorkflow } from "./my-work-workflow";
+import { CapabilityNotice } from "./capability-status";
 
 export type FocusKind =
   | "myWork"
@@ -107,7 +108,11 @@ function FocusMain({ kind }: { kind: FocusKind }) {
             {copy[titleKey]}
             <Hint resourceId={focusHintIds[kind]} />
           </h1>
-          <span>{copy[subtitleKey]}</span>
+          <span>
+            {kind === "search"
+              ? "Search the fictional Workspace corpus. These sample results do not prove production permission enforcement."
+              : copy[subtitleKey]}
+          </span>
         </div>
       </header>
       {kind === "myWork" && <MyWorkWorkflow />}
@@ -472,7 +477,7 @@ function SearchView({
         </section>
       ) : (
         <section className="search-results">
-          <h2>{total} accessible results</h2>
+          <h2>{total} fictional sample results</h2>
           {(filter === "everything" || filter === "work") &&
             results.map((item) => (
               <Link
@@ -526,13 +531,16 @@ function SearchView({
                       <span>Message</span>
                     </Link>
                   )}
-                  <a
-                    href={`mailto:${person.email}`}
-                    aria-label={`Email ${person.name}`}
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled
+                    aria-label={`External email unavailable for ${person.name}`}
+                    title="External email is unavailable in this technical preview"
                   >
                     <Mail size={14} />
-                    <span>Email</span>
-                  </a>
+                    <span>Email unavailable</span>
+                  </button>
                 </div>
               </article>
             ))}
@@ -584,14 +592,14 @@ function SearchView({
                 </span>
                 <div>
                   <strong>{resource.name}</strong>
-                  <span>{resource.provider} · Connected resource</span>
+                  <span>{resource.provider} · Fictional sample resource</span>
                 </div>
                 <ExternalLink size={14} />
               </a>
             ))}
           {total === 0 && (
             <p className="search-empty">
-              No accessible results match this search and filter.
+              No fictional sample results match this search and filter.
             </p>
           )}
         </section>
@@ -657,26 +665,26 @@ function SettingsView() {
   const providers = [
     [
       "Google Drive",
-      "Deep integration",
-      "Connect files and folders with a permission-safe picker.",
-      "configured",
+      "Picker preview",
+      "Preview how a future permission-scoped picker could reference sample files. No provider is connected.",
+      "preview",
     ],
     [
       "Figma",
-      "Smart links",
-      "Rich cards and safe embeds for design reviews.",
+      "Smart-link preview",
+      "Preview a fictional rich card for a deliberately added design link.",
       "preview",
     ],
     [
       "GitHub",
-      "Smart links",
-      "Attach repositories, issues and pull requests.",
+      "Smart-link preview",
+      "Preview fictional repository, issue, and pull-request references.",
       "preview",
     ],
     [
       "Canva",
-      "Smart links",
-      "Reference designs and exported review assets.",
+      "Smart-link preview",
+      "Preview fictional design and review-asset references.",
       "preview",
     ],
     [
@@ -703,13 +711,14 @@ function SettingsView() {
         <Link href={importHref}>Import / Export</Link>
       </aside>
       <section>
+        <CapabilityNotice capability="integrations" />
         <div className="settings-note">
           <ShieldCheck size={17} />
           <div>
             <strong>Optional by design</strong>
             <span>
-              Your Workspace, boards, and decisions keep working if every
-              provider is disconnected.
+              These sample screens do not depend on a provider. No provider
+              account is connected in this technical preview.
             </span>
           </div>
         </div>
@@ -726,14 +735,9 @@ function SettingsView() {
                 <h2>{name}</h2>
                 <span>{description}</span>
               </div>
-              {state === "configured" ? (
-                <Link className="configured" href={settingsHref}>
-                  <CheckCircle2 size={14} />
-                  Configured
-                </Link>
-              ) : state === "preview" ? (
+              {state === "preview" ? (
                 <Link href={settingsHref}>
-                  Set up <ArrowRight size={12} />
+                  Open preview <ArrowRight size={12} />
                 </Link>
               ) : (
                 <span className="later-badge">Later release</span>

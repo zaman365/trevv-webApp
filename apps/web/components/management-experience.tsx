@@ -52,6 +52,7 @@ import {
 } from "@/lib/custom-workspaces";
 import { useCustomPortfolios } from "@/lib/custom-portfolios";
 import { workspaceHref } from "@/lib/workspace-routes";
+import { CapabilityNotice } from "./capability-status";
 
 const workspaceFor = (workspaceId?: string) =>
   demoWorkspaces.find((workspace) => workspace.id === workspaceId);
@@ -211,7 +212,7 @@ function WaitingMain() {
             <footer>
               <button onClick={() => setNudgeItem(item)}>
                 <Send size={14} />
-                Nudge
+                Draft follow-up
               </button>
               <button className="resolve" onClick={() => setResolveItem(item)}>
                 <Check size={14} />
@@ -275,7 +276,7 @@ function WaitingNudgeDialog({
   onClose: () => void;
   onRecord: (message: string, nextFollowUp: string) => void;
 }) {
-  const [channel, setChannel] = useState("Email note");
+  const [channel, setChannel] = useState("Email draft");
   const [message, setMessage] = useState(
     `Hi ${item.waitingLabel ?? "there"}, checking in on “${item.title}”. We expected this by ${item.expectedBy ?? "the agreed date"}. Could you share the current status and next step?`,
   );
@@ -316,6 +317,7 @@ function WaitingNudgeDialog({
           </button>
         </header>
         <div className="workflow-dialog-body">
+          <CapabilityNotice capability="waitingFollowUp" />
           <div className="workflow-context-card">
             <Hourglass size={16} />
             <p>
@@ -332,8 +334,8 @@ function WaitingNudgeDialog({
               value={channel}
               onChange={(event) => setChannel(event.target.value)}
             >
-              <option>Email note</option>
-              <option>Slack message</option>
+              <option>Email draft</option>
+              <option>Slack draft</option>
               <option>Internal follow-up</option>
             </select>
           </label>
@@ -368,7 +370,7 @@ function WaitingNudgeDialog({
             type="submit"
             disabled={!message.trim() || !nextFollowUp}
           >
-            Record {channel.toLocaleLowerCase()} <ArrowRight size={13} />
+            Save local preview <ArrowRight size={13} />
           </button>
         </footer>
       </form>
@@ -520,13 +522,14 @@ function ReviewsMain() {
             title="Weekly workspace review"
             subtitle={`${reviewLabel} · due today`}
           />
+          <CapabilityNotice capability="publishedUpdates" />
           {posted ? (
             <div className="review-posted">
               <CheckCircle2 size={24} />
-              <h2>Review published</h2>
+              <h2>Sample review saved locally</h2>
               <p>
-                Structured update posted, a project snapshot captured, and
-                Attention signals refreshed for {reviewLabel}.
+                The preview recorded a browser-local update and demonstrates how
+                a snapshot and Attention refresh would work for {reviewLabel}.
               </p>
               {activeProject && (
                 <Link href={workspaceHref(activeProject.slug)}>
@@ -598,7 +601,7 @@ function ReviewsMain() {
                 />
               </label>
               <button className="primary-button" type="submit">
-                Publish review & snapshot
+                Save sample review locally
               </button>
             </form>
           )}
@@ -629,7 +632,7 @@ function ReviewsMain() {
             <EmptyState
               icon={History}
               title="No review history yet"
-              note={`Publish the first ${reviewLabel} review to start a durable health timeline.`}
+              note={`Save the first sample ${reviewLabel} review to preview a health timeline in this browser.`}
             />
           )}
         </div>
@@ -1538,10 +1541,11 @@ export function ImportExperience({
       <main className="trevv-main import-page">
         <PageHeader
           eyebrow="Migration"
-          title="Import work"
-          subtitle="Map fields, statuses, and owners before anything is written. Unsupported data is always reported."
+          title="Preview an import"
+          subtitle="Explore a fictional mapping and dry-run report. No file is uploaded and no records are written."
           hintId="import-export"
         />
+        <CapabilityNotice capability="import" />
         <div className="import-steps">
           <b className="active">1 Source</b>
           <i />
@@ -1549,7 +1553,7 @@ export function ImportExperience({
           <i />
           <b className={confirming || imported ? "active" : ""}>3 Dry run</b>
           <i />
-          <b className={imported ? "active" : ""}>4 Import report</b>
+          <b className={imported ? "active" : ""}>4 Sample outcome</b>
         </div>
         <section className="trevv-panel import-card">
           <div className="import-source">
@@ -1637,7 +1641,7 @@ export function ImportExperience({
                   className="primary-button"
                   onClick={() => setConfirming(true)}
                 >
-                  Continue to import
+                  Preview sample outcome
                 </button>
               </footer>
             </div>
@@ -1646,10 +1650,10 @@ export function ImportExperience({
             <div className="import-confirmation" role="alert">
               <ShieldCheck size={18} />
               <div>
-                <strong>Confirm the safe import</strong>
+                <strong>Preview the sample import outcome</strong>
                 <span>
-                  179 ready rows will be created. Five rows will remain in the
-                  report and no existing TREVV work will be overwritten.
+                  The walkthrough will show how 179 ready rows would be handled.
+                  It creates no records and changes no existing TREVV work.
                 </span>
               </div>
               <button onClick={() => setConfirming(false)}>Back</button>
@@ -1660,7 +1664,7 @@ export function ImportExperience({
                   setConfirming(false);
                 }}
               >
-                Import 179 rows
+                Simulate 179-row outcome
               </button>
             </div>
           )}
@@ -1668,13 +1672,13 @@ export function ImportExperience({
             <div className="import-complete" role="status">
               <CheckCircle2 size={24} />
               <div>
-                <strong>Import complete</strong>
+                <strong>Sample import preview complete</strong>
                 <span>
-                  179 work items were created. Five review rows remain
-                  documented in the report.
+                  The preview demonstrates 179 ready rows and five review rows.
+                  No work item was created.
                 </span>
               </div>
-              <button onClick={downloadReport}>Download final report</button>
+              <button onClick={downloadReport}>Download sample report</button>
               <Link className="primary-button" href="/app/portfolio">
                 Open Portfolio
               </Link>
@@ -1704,8 +1708,8 @@ function NotificationsMain() {
     {
       id: "notification-1",
       workspaceId: "workspace-localreach",
-      title: "LocalReach weekly update published",
-      detail: "Delivery remains On Track · 18 minutes ago",
+      title: "Sample LocalReach weekly update",
+      detail: "Fictional activity · Delivery remains On Track · 18 minutes ago",
     },
     {
       id: "notification-2",

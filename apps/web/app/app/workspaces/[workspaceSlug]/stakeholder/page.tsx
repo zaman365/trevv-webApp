@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { StakeholderExperience } from "@/components/stakeholder-experience";
 
 export const metadata: Metadata = {
-  title: "Stakeholder view",
+  title: "Stakeholder preview",
   description:
-    "A permission-safe summary containing only explicitly shared workspace information.",
+    "A fictional stakeholder-view sample that is not authenticated, shared, or permission-enforced.",
 };
 
 export default async function WorkspaceStakeholderPage({
