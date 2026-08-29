@@ -21,7 +21,10 @@ export const openApiDocument = {
     { name: "Blueprints" },
     { name: "Commercial" },
     { name: "Workspaces" },
+    { name: "Boards" },
+    { name: "Inbox" },
     { name: "Items" },
+    { name: "Operations" },
     { name: "Search" },
     { name: "Exports" },
     { name: "Events" },
@@ -605,6 +608,47 @@ export const openApiDocument = {
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
+      post: {
+        tags: ["Waiting"],
+        operationId: "createWaitingState",
+        parameters: [
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateWaitingState" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durably created Waiting state and bumped WorkItem",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WaitingState" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
     },
     "/api/v1/waiting/{id}": {
       patch: {
@@ -689,6 +733,30 @@ export const openApiDocument = {
       },
     },
     "/api/v1/reviews/weekly": {
+      get: {
+        tags: ["Reviews"],
+        operationId: "listWeeklyReviews",
+        parameters: [
+          { name: "workspaceId", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Accessible durable weekly-review history",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/WeeklyReviewRecord" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
       post: {
         tags: ["Reviews"],
         operationId: "submitWeeklyReview",
@@ -722,6 +790,53 @@ export const openApiDocument = {
           "404": { $ref: "#/components/responses/NotFound" },
           "409": { $ref: "#/components/responses/Conflict" },
           "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/snapshots": {
+      get: {
+        tags: ["Reviews"],
+        operationId: "listWorkspaceSnapshots",
+        parameters: [
+          { name: "portfolioId", in: "query", schema: { type: "string" } },
+          { name: "workspaceId", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Accessible durable Workspace snapshots",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/WorkspaceSnapshot" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/operations/status": {
+      get: {
+        tags: ["Operations"],
+        operationId: "getOperationsStatus",
+        responses: {
+          "200": {
+            description: "Tenant-scoped outbox processing status for managers",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/OperationsStatus" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "429": { $ref: "#/components/responses/RateLimited" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -858,6 +973,42 @@ export const openApiDocument = {
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
+      post: {
+        tags: ["Workspaces"],
+        operationId: "createWorkspace",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateWorkspace" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Atomically created Workspace and starter Board",
+            headers: {
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkspaceCreation" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
     },
     "/api/v1/workspaces/{slug}": {
       get: {
@@ -875,6 +1026,238 @@ export const openApiDocument = {
           },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/boards": {
+      get: {
+        tags: ["Boards"],
+        operationId: "listBoards",
+        parameters: [
+          {
+            name: "workspaceId",
+            in: "query",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Boards in an accessible Workspace",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Board" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      post: {
+        tags: ["Boards"],
+        operationId: "createBoard",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateBoard" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durably created Board",
+            headers: {
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Board" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/boards/{id}": {
+      get: {
+        tags: ["Boards"],
+        operationId: "getBoard",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: {
+          "200": {
+            description: "Accessible Board",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Board" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/inbox": {
+      get: {
+        tags: ["Inbox"],
+        operationId: "listInbox",
+        responses: {
+          "200": {
+            description: "Current user's durable Inbox",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/InboxItem" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      post: {
+        tags: ["Inbox"],
+        operationId: "captureInboxItem",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CaptureInboxItem" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durably captured Inbox item",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/InboxItem" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/inbox/{id}": {
+      patch: {
+        tags: ["Inbox"],
+        operationId: "updateInboxItem",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateInboxItem" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated Inbox item",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/InboxItem" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/inbox/{id}/convert": {
+      post: {
+        tags: ["Inbox"],
+        operationId: "convertInboxItem",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ConvertInboxItem" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Atomically converted Inbox item to WorkItem",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ConvertedInboxItem" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -952,6 +1335,25 @@ export const openApiDocument = {
       },
     },
     "/api/v1/items/{id}": {
+      get: {
+        tags: ["Items"],
+        operationId: "getItem",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: {
+          "200": {
+            description: "Canonical accessible WorkItem",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkItem" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
       patch: {
         tags: ["Items"],
         operationId: "updateItem",
@@ -991,6 +1393,321 @@ export const openApiDocument = {
           "409": { $ref: "#/components/responses/Conflict" },
           "422": { $ref: "#/components/responses/Validation" },
           "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/history": {
+      get: {
+        tags: ["Items"],
+        operationId: "listItemHistory",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: {
+          "200": {
+            description: "Durable WorkItem state and evidence history",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/WorkItemHistory" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/evidence": {
+      get: {
+        tags: ["Items"],
+        operationId: "listItemEvidence",
+        parameters: [{ $ref: "#/components/parameters/ItemId" }],
+        responses: {
+          "200": {
+            description: "Durable evidence attached to a WorkItem",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/WorkItemEvidence" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      post: {
+        tags: ["Items"],
+        operationId: "addItemEvidence",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/WorkItemEvidenceInput" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durably recorded evidence",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/WorkItemEvidenceMutation",
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/assignees": {
+      put: {
+        tags: ["Items"],
+        operationId: "assignItem",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/AssignWorkItem" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Atomically changed WorkItem assignment",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkItemTransition" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/block": {
+      post: {
+        tags: ["Items"],
+        operationId: "setItemBlocked",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/BlockWorkItem" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Atomically blocked or unblocked WorkItem",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkItemTransition" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/decision": {
+      post: {
+        tags: ["Items"],
+        operationId: "transitionDecision",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DecisionTransition" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Atomically changed decision state and evidence",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkItemTransition" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/approval": {
+      post: {
+        tags: ["Items"],
+        operationId: "transitionApproval",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ApprovalTransition" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Atomically changed approval state and evidence",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkItemTransition" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/resolve": {
+      post: {
+        tags: ["Items"],
+        operationId: "resolveItem",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ResolveWorkItem" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Atomically resolved WorkItem with evidence",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkItemTransition" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -1225,6 +1942,18 @@ export const openApiDocument = {
           },
         },
       },
+      OrganizationContext: {
+        allOf: [
+          { $ref: "#/components/schemas/OrganizationSummary" },
+          {
+            type: "object",
+            required: ["timezone"],
+            properties: {
+              timezone: { type: "string", minLength: 1, maxLength: 120 },
+            },
+          },
+        ],
+      },
       Session: {
         type: "object",
         required: [
@@ -1243,7 +1972,7 @@ export const openApiDocument = {
             maxLength: 128,
           },
           organization: {
-            $ref: "#/components/schemas/OrganizationSummary",
+            $ref: "#/components/schemas/OrganizationContext",
           },
           availableOrganizations: {
             type: "array",
@@ -1615,6 +2344,7 @@ export const openApiDocument = {
           "portfolioId",
           "slug",
           "name",
+          "description",
           "icon",
           "accent",
           "type",
@@ -1623,6 +2353,8 @@ export const openApiDocument = {
           "healthNote",
           "priority",
           "metrics",
+          "versionTag",
+          "updatedAt",
         ],
         additionalProperties: false,
         properties: {
@@ -1630,6 +2362,7 @@ export const openApiDocument = {
           portfolioId: { type: "string", minLength: 3, maxLength: 128 },
           slug: { type: "string", minLength: 1, maxLength: 120 },
           name: { type: "string", minLength: 1, maxLength: 160 },
+          description: { type: "string", maxLength: 5000 },
           icon: { type: "string", minLength: 1, maxLength: 12 },
           accent: {
             type: "string",
@@ -1707,6 +2440,140 @@ export const openApiDocument = {
             maxItems: 12,
             items: { $ref: "#/components/schemas/WorkspaceMetric" },
           },
+          versionTag: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CreateWorkspace: {
+        type: "object",
+        required: ["portfolioId", "name", "slug", "type", "accent", "icon"],
+        additionalProperties: false,
+        properties: {
+          portfolioId: { type: "string", minLength: 3, maxLength: 128 },
+          name: { type: "string", minLength: 2, maxLength: 160 },
+          slug: {
+            type: "string",
+            minLength: 2,
+            maxLength: 80,
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          },
+          description: { type: "string", maxLength: 5000, default: "" },
+          type: {
+            type: "string",
+            enum: [
+              "business",
+              "brand",
+              "client",
+              "product",
+              "department",
+              "venture",
+              "initiative",
+              "investment",
+              "campaign",
+              "program",
+              "project",
+              "shared_function",
+              "client_program",
+              "journey",
+              "other",
+            ],
+          },
+          accent: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+          icon: { type: "string", minLength: 1, maxLength: 12 },
+          stage: {
+            type: "string",
+            enum: [
+              "idea",
+              "validate",
+              "build",
+              "launch",
+              "grow",
+              "operate",
+              "paused",
+              "archived",
+            ],
+            default: "idea",
+          },
+          health: {
+            type: "string",
+            enum: ["on_track", "watch", "critical", "parked"],
+            default: "on_track",
+          },
+          healthNote: { type: "string", maxLength: 1000, default: "" },
+          priority: { type: "string", maxLength: 500, default: "" },
+          leadUserId: { type: "string", minLength: 3, maxLength: 128 },
+          initialBoardName: { type: "string", minLength: 1, maxLength: 160 },
+        },
+      },
+      Board: {
+        type: "object",
+        required: [
+          "id",
+          "workspaceId",
+          "name",
+          "description",
+          "visibility",
+          "progressMode",
+          "ordering",
+          "versionTag",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          description: { type: "string", maxLength: 5000 },
+          templateKey: { type: "string", maxLength: 120 },
+          visibility: { type: "string", enum: ["private", "organization"] },
+          progressMode: {
+            type: "string",
+            enum: [
+              "none",
+              "task_completion",
+              "weighted_work_items",
+              "milestone_completion",
+              "weighted_milestones",
+              "manual",
+            ],
+          },
+          manualProgressValue: { type: "number", minimum: 0, maximum: 100 },
+          manualProgressNote: { type: "string", maxLength: 2000 },
+          startDate: { type: "string", format: "date" },
+          endDate: { type: "string", format: "date" },
+          ordering: { type: "number" },
+          versionTag: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CreateBoard: {
+        type: "object",
+        required: ["workspaceId", "name"],
+        additionalProperties: false,
+        properties: {
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          description: { type: "string", maxLength: 5000, default: "" },
+          templateKey: { type: "string", maxLength: 120 },
+          visibility: {
+            type: "string",
+            enum: ["private", "organization"],
+            default: "private",
+          },
+          progressMode: { type: "string", default: "task_completion" },
+          startDate: { type: "string", format: "date" },
+          endDate: { type: "string", format: "date" },
+        },
+      },
+      WorkspaceCreation: {
+        type: "object",
+        required: ["workspace", "board"],
+        additionalProperties: false,
+        properties: {
+          workspace: { $ref: "#/components/schemas/Workspace" },
+          board: { $ref: "#/components/schemas/Board" },
         },
       },
       WorkspaceRollup: {
@@ -2451,11 +3318,14 @@ export const openApiDocument = {
           "workspaceId",
           "boardId",
           "title",
+          "description",
           "type",
           "priority",
           "status",
           "assignees",
           "version",
+          "createdAt",
+          "updatedAt",
         ],
         additionalProperties: false,
         allOf: [
@@ -2487,6 +3357,7 @@ export const openApiDocument = {
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           boardId: { type: "string", minLength: 3, maxLength: 128 },
           title: { type: "string", minLength: 1, maxLength: 500 },
+          description: { type: "string", maxLength: 20000 },
           type: {
             type: "string",
             enum: [
@@ -2521,6 +3392,8 @@ export const openApiDocument = {
             enum: ["needed", "analyzing", "delegated", "deferred", "decided"],
           },
           version: { type: "integer", minimum: 0, maximum: 2147483647 },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
         },
       },
       PaginatedItems: {
@@ -2548,8 +3421,12 @@ export const openApiDocument = {
           "impact",
           "urgency",
           "responsibility",
+          "reasonCode",
+          "sourceFingerprint",
           "reason",
           "createdAt",
+          "computedAt",
+          "sourceEvidence",
           "metadata",
           "version",
         ],
@@ -2573,9 +3450,29 @@ export const openApiDocument = {
           impact: { type: "number", minimum: 1, maximum: 5 },
           urgency: { type: "number", minimum: 1, maximum: 5 },
           responsibility: { type: "number", exclusiveMinimum: 0 },
+          reasonCode: { type: "string", minLength: 1, maxLength: 160 },
+          sourceFingerprint: { type: "string", minLength: 1, maxLength: 256 },
           reason: { type: "string", minLength: 1, maxLength: 2000 },
           recommendedAction: { type: "string", maxLength: 2000 },
           createdAt: { type: "string", format: "date-time" },
+          computedAt: { type: "string", format: "date-time" },
+          sourceEvidence: {
+            type: "array",
+            minItems: 1,
+            maxItems: 50,
+            items: {
+              type: "object",
+              required: ["sourceType", "sourceId", "capturedAt"],
+              additionalProperties: false,
+              properties: {
+                sourceType: { type: "string", minLength: 1, maxLength: 80 },
+                sourceId: { type: "string", minLength: 3, maxLength: 128 },
+                capturedAt: { type: "string", format: "date-time" },
+                summary: { type: "string", maxLength: 1000 },
+                data: { type: "object", additionalProperties: true },
+              },
+            },
+          },
           resolvedAt: { type: "string", format: "date-time" },
           dismissedAt: { type: "string", format: "date-time" },
           snoozedUntil: { type: "string", format: "date-time" },
@@ -2616,6 +3513,7 @@ export const openApiDocument = {
           },
           entityId: { type: "string", minLength: 3, maxLength: 128 },
           title: { type: "string", minLength: 1, maxLength: 500 },
+          description: { type: "string", maxLength: 20000, default: "" },
           waitingType: {
             type: "string",
             enum: [
@@ -2693,6 +3591,7 @@ export const openApiDocument = {
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           boardId: { type: "string", minLength: 3, maxLength: 128 },
           title: { type: "string", minLength: 1, maxLength: 500 },
+          description: { type: "string", maxLength: 20000 },
           type: {
             type: "string",
             enum: [
@@ -2734,6 +3633,7 @@ export const openApiDocument = {
         additionalProperties: false,
         properties: {
           title: { type: "string", minLength: 1, maxLength: 500 },
+          description: { type: "string", maxLength: 20000 },
           priority: {
             type: "string",
             enum: ["urgent", "high", "normal", "low", "none"],
@@ -2748,6 +3648,250 @@ export const openApiDocument = {
             maxItems: 100,
             items: { type: "string", minLength: 3, maxLength: 128 },
           },
+        },
+      },
+      InboxItem: {
+        type: "object",
+        required: [
+          "id",
+          "userId",
+          "category",
+          "title",
+          "body",
+          "resource",
+          "version",
+          "createdAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          userId: { type: "string", minLength: 3, maxLength: 128 },
+          category: { type: "string", minLength: 1, maxLength: 80 },
+          title: { type: "string", minLength: 1, maxLength: 500 },
+          body: { type: "string", maxLength: 20000 },
+          resource: { type: "object", additionalProperties: true },
+          doneAt: { type: "string", format: "date-time" },
+          snoozedUntil: { type: "string", format: "date-time" },
+          convertedItemId: { type: "string", minLength: 3, maxLength: 128 },
+          convertedAt: { type: "string", format: "date-time" },
+          version: { type: "integer", minimum: 0, maximum: 2147483647 },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      CaptureInboxItem: {
+        type: "object",
+        required: ["category", "title"],
+        additionalProperties: false,
+        properties: {
+          category: { type: "string", minLength: 1, maxLength: 80 },
+          title: { type: "string", minLength: 1, maxLength: 500 },
+          body: { type: "string", maxLength: 20000, default: "" },
+          resource: { type: "object", additionalProperties: true, default: {} },
+        },
+      },
+      UpdateInboxItem: {
+        type: "object",
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          done: { type: "boolean" },
+          snoozedUntil: { type: ["string", "null"], format: "date-time" },
+        },
+      },
+      ConvertInboxItem: {
+        type: "object",
+        required: ["workspaceId", "boardId"],
+        additionalProperties: false,
+        properties: {
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          boardId: { type: "string", minLength: 3, maxLength: 128 },
+          title: { type: "string", minLength: 1, maxLength: 500 },
+          description: { type: "string", maxLength: 20000 },
+          type: {
+            type: "string",
+            enum: [
+              "task",
+              "decision",
+              "approval",
+              "milestone",
+              "idea",
+              "request",
+            ],
+            default: "task",
+          },
+          priority: {
+            type: "string",
+            enum: ["urgent", "high", "normal", "low", "none"],
+            default: "normal",
+          },
+          status: {
+            type: "string",
+            enum: ["not_started", "working", "blocked", "review", "done"],
+            default: "not_started",
+          },
+          dueDate: { type: "string", format: "date" },
+          assigneeIds: {
+            type: "array",
+            maxItems: 100,
+            items: { type: "string", minLength: 3, maxLength: 128 },
+            default: [],
+          },
+          approvalState: {
+            type: "string",
+            enum: ["pending", "changes_requested", "approved", "rejected"],
+          },
+          decisionState: {
+            type: "string",
+            enum: ["needed", "analyzing", "delegated", "deferred", "decided"],
+          },
+        },
+      },
+      ConvertedInboxItem: {
+        type: "object",
+        required: ["inboxItem", "workItem"],
+        additionalProperties: false,
+        properties: {
+          inboxItem: { $ref: "#/components/schemas/InboxItem" },
+          workItem: { $ref: "#/components/schemas/WorkItem" },
+        },
+      },
+      WorkItemEvidenceInput: {
+        type: "object",
+        required: ["body"],
+        additionalProperties: false,
+        properties: {
+          body: { type: "string", minLength: 1, maxLength: 20000 },
+        },
+      },
+      WorkItemEvidence: {
+        type: "object",
+        required: [
+          "id",
+          "itemId",
+          "author",
+          "body",
+          "evidence",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          itemId: { type: "string", minLength: 3, maxLength: 128 },
+          author: { $ref: "#/components/schemas/Assignee" },
+          body: { type: "string", minLength: 1, maxLength: 20000 },
+          evidence: { type: "boolean", const: true },
+          editedAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      WorkItemEvidenceMutation: {
+        type: "object",
+        required: ["evidence", "itemVersion"],
+        additionalProperties: false,
+        properties: {
+          evidence: { $ref: "#/components/schemas/WorkItemEvidence" },
+          itemVersion: { type: "integer", minimum: 0, maximum: 2147483647 },
+        },
+      },
+      WorkItemHistory: {
+        type: "object",
+        required: [
+          "id",
+          "type",
+          "reasonCode",
+          "summary",
+          "occurredAt",
+          "metadata",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          type: { type: "string", minLength: 1, maxLength: 120 },
+          reasonCode: { type: "string", minLength: 1, maxLength: 160 },
+          summary: { type: "string", minLength: 1, maxLength: 2000 },
+          actor: { $ref: "#/components/schemas/Assignee" },
+          evidence: {
+            type: "array",
+            maxItems: 25,
+            items: {
+              type: "object",
+              required: ["id", "body"],
+              properties: {
+                id: { type: "string", minLength: 3, maxLength: 128 },
+                body: { type: "string", minLength: 1, maxLength: 20000 },
+              },
+            },
+          },
+          itemVersion: { type: "integer", minimum: 0 },
+          occurredAt: { type: "string", format: "date-time" },
+          metadata: { type: "object", additionalProperties: true },
+        },
+      },
+      AssignWorkItem: {
+        type: "object",
+        required: ["assigneeIds"],
+        additionalProperties: false,
+        properties: {
+          assigneeIds: {
+            type: "array",
+            maxItems: 100,
+            items: { type: "string", minLength: 3, maxLength: 128 },
+          },
+        },
+      },
+      BlockWorkItem: {
+        type: "object",
+        required: ["blocked", "reason"],
+        additionalProperties: false,
+        properties: {
+          blocked: { type: "boolean" },
+          reason: { type: "string", minLength: 1, maxLength: 2000 },
+        },
+      },
+      DecisionTransition: {
+        type: "object",
+        required: ["state", "rationale"],
+        additionalProperties: false,
+        properties: {
+          state: {
+            type: "string",
+            enum: ["needed", "analyzing", "delegated", "deferred", "decided"],
+          },
+          rationale: { type: "string", minLength: 1, maxLength: 5000 },
+          evidence: { type: "string", minLength: 1, maxLength: 20000 },
+        },
+      },
+      ApprovalTransition: {
+        type: "object",
+        required: ["state", "rationale"],
+        additionalProperties: false,
+        properties: {
+          state: {
+            type: "string",
+            enum: ["pending", "changes_requested", "approved", "rejected"],
+          },
+          rationale: { type: "string", minLength: 1, maxLength: 5000 },
+          evidence: { type: "string", minLength: 1, maxLength: 20000 },
+        },
+      },
+      ResolveWorkItem: {
+        type: "object",
+        required: ["evidence"],
+        additionalProperties: false,
+        properties: {
+          evidence: { type: "string", minLength: 1, maxLength: 20000 },
+        },
+      },
+      WorkItemTransition: {
+        type: "object",
+        required: ["item", "attentionRefreshQueued"],
+        additionalProperties: false,
+        properties: {
+          item: { $ref: "#/components/schemas/WorkItem" },
+          evidence: { $ref: "#/components/schemas/WorkItemEvidence" },
+          attentionRefreshQueued: { type: "boolean" },
         },
       },
       AttentionAction: {
@@ -2779,6 +3923,44 @@ export const openApiDocument = {
           nextFollowUp: { type: "string", format: "date" },
         },
       },
+      CreateWaitingState: {
+        type: "object",
+        required: [
+          "workspaceId",
+          "entityType",
+          "entityId",
+          "title",
+          "waitingType",
+          "followUpOwnerId",
+        ],
+        additionalProperties: false,
+        properties: {
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          entityType: { type: "string", const: "work_item" },
+          entityId: { type: "string", minLength: 3, maxLength: 128 },
+          title: { type: "string", minLength: 1, maxLength: 500 },
+          waitingType: {
+            type: "string",
+            enum: [
+              "person",
+              "team",
+              "external_partner",
+              "client",
+              "vendor",
+              "decision",
+              "document",
+              "dependency",
+              "other",
+            ],
+          },
+          waitingReferenceId: { type: "string", minLength: 3, maxLength: 128 },
+          waitingLabel: { type: "string", maxLength: 200 },
+          expectedBy: { type: "string", format: "date" },
+          followUpOwnerId: { type: "string", minLength: 3, maxLength: 128 },
+          nextFollowUp: { type: "string", format: "date" },
+          note: { type: "string", maxLength: 2000 },
+        },
+      },
       WeeklyReviewInput: {
         type: "object",
         required: [
@@ -2801,6 +3983,40 @@ export const openApiDocument = {
           nextMilestone: { type: "string", minLength: 1 },
           decisionNeeded: { type: "string" },
           priorityNextWeek: { type: "string", minLength: 1 },
+        },
+      },
+      WeeklyReviewRecord: {
+        type: "object",
+        required: [
+          "id",
+          "workspaceId",
+          "author",
+          "progress",
+          "blocker",
+          "nextMilestone",
+          "priorityNextWeek",
+          "publishedAt",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          author: { $ref: "#/components/schemas/Assignee" },
+          health: {
+            type: "string",
+            enum: ["on_track", "watch", "critical", "parked"],
+          },
+          progress: { type: "string" },
+          blocker: { type: "string" },
+          nextMilestone: { type: "string" },
+          decisionNeeded: { type: "string" },
+          priorityNextWeek: { type: "string" },
+          note: { type: "string" },
+          publishedAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
         },
       },
       WeeklyReviewResponse: {
@@ -2878,6 +4094,17 @@ export const openApiDocument = {
             },
           },
           attentionRefreshQueued: { type: "boolean" },
+        },
+      },
+      OperationsStatus: {
+        type: "object",
+        required: ["pendingOutbox", "failedCount"],
+        additionalProperties: false,
+        properties: {
+          pendingOutbox: { type: "integer", minimum: 0 },
+          failedCount: { type: "integer", minimum: 0 },
+          oldestPendingAt: { type: "string", format: "date-time" },
+          lastProcessedAt: { type: "string", format: "date-time" },
         },
       },
       WorkspaceInput: {
@@ -2991,6 +4218,21 @@ export const openApiDocument = {
       },
       PreconditionRequired: {
         description: "A current quoted ETag is required in If-Match.",
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/Error" },
+          },
+        },
+      },
+      RateLimited: {
+        description:
+          "The tenant or identity mutation budget is temporarily exhausted.",
+        headers: {
+          "Retry-After": {
+            description: "Seconds until the request may be retried.",
+            schema: { type: "integer", minimum: 1 },
+          },
+        },
         content: {
           "application/json": {
             schema: { $ref: "#/components/schemas/Error" },

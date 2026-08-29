@@ -1,16 +1,25 @@
 import type {
   AttentionSignalDto,
+  BoardDto,
+  InboxItemDto,
   PortfolioDto,
   PortfolioResponse,
+  WeeklyReviewRecordDto,
+  WorkItemEvidenceDto,
+  WorkItemHistoryEntryDto,
   WaitingStateDto,
   WorkItemDto,
+  WorkspaceSnapshotDto,
   WorkspaceDto,
 } from "@founderhq/api-contract";
 import type {
+  InboxItemProjection,
   OrganizationScopedRepositories,
   PostgresRepositories,
   WaitingProjection,
+  WorkItemHistoryProjection,
   WorkItemProjection,
+  WorkItemTransitionInput,
   WorkspaceProjection,
 } from "@founderhq/db";
 import { createIdentityScope, createOrganizationScope } from "@founderhq/db";
@@ -79,6 +88,7 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
             name: resolved.organization.name,
             slug: resolved.organization.slug,
             role: resolved.membership.role,
+            timezone: resolved.organization.timezone,
           },
           availableOrganizations: resolved.availableOrganizations,
           expiresAt: identity.expiresAt.toISOString(),
@@ -193,6 +203,35 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
           action: input.action,
           ...(input.note ? { note: input.note } : {}),
           ...(input.nextFollowUp ? { nextFollowUp: input.nextFollowUp } : {}),
+        },
+        mutation(context),
+      );
+      return { value: toWaitingDto(result.value), replayed: result.replayed };
+    },
+
+    async createWaiting(context, expectedItemVersion, input) {
+      requireWorkspaceAccess(context.access, "update", input.workspaceId);
+      const repositories = scoped(options.repositories, context);
+      const item = await repositories.workItems.get(input.entityId);
+      if (item.workspaceId !== input.workspaceId) throw notFound();
+      const result = await repositories.waiting.create(
+        {
+          workspaceId: input.workspaceId,
+          entityType: "work_item",
+          entityId: input.entityId,
+          expectedItemVersion,
+          title: input.title,
+          waitingType: input.waitingType,
+          ...(input.waitingReferenceId
+            ? { waitingReferenceId: input.waitingReferenceId }
+            : {}),
+          ...(input.waitingLabel ? { waitingLabel: input.waitingLabel } : {}),
+          ...(input.expectedBy ? { expectedBy: input.expectedBy } : {}),
+          followUpOwnerId: input.followUpOwnerId,
+          ...(input.nextFollowUp ? { nextFollowUp: input.nextFollowUp } : {}),
+          ...(input.note ? { note: input.note } : {}),
+          reasonCode: "waiting_started",
+          ...(input.note ? { evidence: { summary: input.note } } : {}),
         },
         mutation(context),
       );
@@ -334,6 +373,69 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       };
     },
 
+    async listWeeklyReviews(context, workspaceId) {
+      if (workspaceId)
+        requireWorkspaceAccess(context.access, "read", workspaceId);
+      const repositories = scoped(options.repositories, context);
+      const updates = await repositories.workspaceUpdates.list(workspaceId);
+      const visible = updates.filter((update) =>
+        canSeeWorkspace(context.access, update.workspaceId),
+      );
+      const authors = new Map(
+        await Promise.all(
+          [...new Set(visible.map(({ authorId }) => authorId))].map(
+            async (authorId) =>
+              [
+                authorId,
+                await repositories.users.getMemberHistory(authorId),
+              ] as const,
+          ),
+        ),
+      );
+      return visible.map((update) =>
+        toWeeklyReviewRecord(
+          update,
+          requireAuthor(authors.get(update.authorId)),
+        ),
+      );
+    },
+
+    async listSnapshots(context, filters) {
+      if (filters.workspaceId)
+        requireWorkspaceAccess(context.access, "read", filters.workspaceId);
+      if (
+        filters.portfolioId &&
+        !isOrganizationManager(context.access) &&
+        !canSeePortfolio(context.access, filters.portfolioId)
+      )
+        throw notFound();
+      const rows = await scoped(options.repositories, context).snapshots.list({
+        ...(filters.portfolioId ? { portfolioId: filters.portfolioId } : {}),
+        ...(filters.workspaceId ? { workspaceId: filters.workspaceId } : {}),
+      });
+      return rows
+        .filter((row) => canSeeWorkspace(context.access, row.workspaceId))
+        .map(toSnapshotDto);
+    },
+
+    async getOperationsStatus(context) {
+      if (!isOrganizationManager(context.access)) throw notFound();
+      const status = await scoped(
+        options.repositories,
+        context,
+      ).operations.status();
+      return {
+        pendingOutbox: status.pendingOutbox,
+        failedCount: status.failedCount,
+        ...(status.oldestPendingAt
+          ? { oldestPendingAt: dateTime(status.oldestPendingAt) }
+          : {}),
+        ...(status.lastProcessedAt
+          ? { lastProcessedAt: dateTime(status.lastProcessedAt) }
+          : {}),
+      };
+    },
+
     listInsights: unsupported(
       "Live Insights repositories are outside Phase 1.",
     ),
@@ -352,6 +454,63 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         .map(toWorkspaceDto);
     },
 
+    async createWorkspace(context, input) {
+      requireAccess(context.access, "create", "workspace", {
+        organizationId: context.access.organizationId,
+        portfolioId: input.portfolioId,
+      });
+      const repositories = scoped(options.repositories, context);
+      await repositories.portfolios.get(input.portfolioId);
+      return repositories.unitOfWork.run(async (transaction) => {
+        const workspaceResult = await transaction.workspaces.create(
+          {
+            portfolioId: input.portfolioId,
+            name: input.name,
+            slug: input.slug,
+            description: input.description,
+            type: input.type,
+            accentColor: input.accent,
+            icon: input.icon,
+            lifecycleStage: input.stage,
+            health: input.health,
+            healthNote: input.healthNote,
+            currentPriority: input.priority,
+            ...(input.leadUserId ? { leadUserId: input.leadUserId } : {}),
+          },
+          mutation(context),
+        );
+        const board = workspaceResult.replayed
+          ? (await transaction.boards.list(workspaceResult.value.id)).find(
+              (candidate) => candidate.templateKey === "trevv_default",
+            )
+          : (
+              await transaction.boards.create(
+                {
+                  workspaceId: workspaceResult.value.id,
+                  name: input.initialBoardName ?? `${input.name} Board`,
+                  description: "",
+                  templateKey: "trevv_default",
+                  visibility: "private",
+                  progressMode: "task_completion",
+                },
+                mutationWithoutIdempotency(context),
+              )
+            ).value;
+        if (!board)
+          throw new DataPlaneError(
+            "repository_unavailable",
+            "The Workspace starter board could not be resolved.",
+          );
+        return {
+          value: {
+            workspace: toWorkspaceDto(workspaceResult.value),
+            board: toBoardDto(board),
+          },
+          replayed: workspaceResult.replayed,
+        };
+      });
+    },
+
     async getWorkspace(context, slug) {
       const repositories = scoped(options.repositories, context);
       const workspace = await repositories.workspaces.getBySlug(slug);
@@ -361,6 +520,113 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         workspace: toWorkspaceDto(workspace),
         rollup: rollupWorkspace(workspace, items, context.now),
         items: items.map(toWorkItemDto),
+      };
+    },
+
+    async listBoards(context, workspaceId) {
+      requireWorkspaceAccess(context.access, "read", workspaceId);
+      return (
+        await scoped(options.repositories, context).boards.list(workspaceId)
+      ).map(toBoardDto);
+    },
+
+    async getBoard(context, id) {
+      const board = await scoped(options.repositories, context).boards.get(id);
+      requireWorkspaceAccess(context.access, "read", board.workspaceId);
+      return toBoardDto(board);
+    },
+
+    async createBoard(context, input) {
+      requireWorkspaceAccess(context.access, "create", input.workspaceId);
+      const result = await scoped(options.repositories, context).boards.create(
+        {
+          workspaceId: input.workspaceId,
+          name: input.name,
+          description: input.description,
+          visibility: input.visibility,
+          progressMode: input.progressMode,
+          ...(input.templateKey !== undefined
+            ? { templateKey: input.templateKey }
+            : {}),
+          ...(input.startDate !== undefined
+            ? { startDate: input.startDate }
+            : {}),
+          ...(input.endDate !== undefined ? { endDate: input.endDate } : {}),
+        },
+        mutation(context),
+      );
+      return { value: toBoardDto(result.value), replayed: result.replayed };
+    },
+
+    async listInbox(context) {
+      return (await scoped(options.repositories, context).inbox.list()).map(
+        toInboxItemDto,
+      );
+    },
+
+    async captureInboxItem(context, input) {
+      const result = await scoped(options.repositories, context).inbox.capture(
+        input,
+        mutation(context),
+      );
+      return { value: toInboxItemDto(result.value), replayed: result.replayed };
+    },
+
+    async updateInboxItem(context, id, expectedVersion, input) {
+      const result = await scoped(options.repositories, context).inbox.update(
+        id,
+        expectedVersion,
+        {
+          ...(input.done !== undefined ? { done: input.done } : {}),
+          ...(input.snoozedUntil !== undefined
+            ? {
+                snoozedUntil:
+                  input.snoozedUntil === null
+                    ? null
+                    : new Date(input.snoozedUntil),
+              }
+            : {}),
+        },
+        mutation(context),
+      );
+      return { value: toInboxItemDto(result.value), replayed: result.replayed };
+    },
+
+    async convertInboxItem(context, id, expectedVersion, input) {
+      requireWorkspaceAccess(context.access, "create", input.workspaceId);
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).inbox.convertToWorkItem(
+        id,
+        expectedVersion,
+        {
+          workspaceId: input.workspaceId,
+          boardId: input.boardId,
+          type: input.type,
+          priority: input.priority,
+          status: input.status,
+          assigneeIds: input.assigneeIds,
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
+          ...(input.approvalState !== undefined
+            ? { approvalState: input.approvalState }
+            : {}),
+          ...(input.decisionState !== undefined
+            ? { decisionState: input.decisionState }
+            : {}),
+        },
+        mutation(context),
+      );
+      return {
+        value: {
+          inboxItem: toInboxItemDto(result.value.inboxItem),
+          workItem: toWorkItemDto(result.value.workItem),
+        },
+        replayed: result.replayed,
       };
     },
 
@@ -384,6 +650,14 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       };
     },
 
+    async getItem(context, id) {
+      const item = await scoped(options.repositories, context).workItems.get(
+        id,
+      );
+      requireWorkspaceAccess(context.access, "read", item.workspaceId);
+      return toWorkItemDto(item);
+    },
+
     async createItem(context, input) {
       requireWorkspaceAccess(context.access, "create", input.workspaceId);
       const result = await scoped(
@@ -394,6 +668,7 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
           workspaceId: input.workspaceId,
           boardId: input.boardId,
           title: input.title,
+          description: input.description,
           type: input.type,
           priority: input.priority,
           status: input.status,
@@ -420,6 +695,9 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         expectedVersion,
         {
           ...(patch.title !== undefined ? { title: patch.title } : {}),
+          ...(patch.description !== undefined
+            ? { description: patch.description }
+            : {}),
           ...(patch.status !== undefined ? { status: patch.status } : {}),
           ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
           ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
@@ -430,6 +708,171 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         mutation(context),
       );
       return { value: toWorkItemDto(result.value), replayed: result.replayed };
+    },
+
+    async listItemHistory(context, id) {
+      const repositories = scoped(options.repositories, context);
+      const item = await repositories.workItems.get(id);
+      requireWorkspaceAccess(context.access, "read", item.workspaceId);
+      const history = await repositories.workItems.history(id);
+      const actors = await historyActors(repositories, history);
+      return history.map((entry) =>
+        toWorkItemHistoryDto(entry, actors.get(entry.actorId ?? "")),
+      );
+    },
+
+    async listItemEvidence(context, id) {
+      const repositories = scoped(options.repositories, context);
+      const item = await repositories.workItems.get(id);
+      requireWorkspaceAccess(context.access, "read", item.workspaceId);
+      const comments = await repositories.comments.list(id);
+      const history = (await repositories.workItems.history(id)).filter(
+        (entry) =>
+          !entry.type.startsWith("comment_") && hasHistoryEvidence(entry),
+      );
+      const actorIds = [
+        ...comments.map(({ authorId }) => authorId),
+        ...history.flatMap(({ actorId }) => (actorId ? [actorId] : [])),
+      ];
+      const authors = new Map(
+        await Promise.all(
+          [...new Set(actorIds)].map(
+            async (authorId) =>
+              [
+                authorId,
+                await repositories.users.getMemberHistory(authorId),
+              ] as const,
+          ),
+        ),
+      );
+      return [
+        ...comments.map((comment) =>
+          toEvidenceDto(comment, requireAuthor(authors.get(comment.authorId))),
+        ),
+        ...history.map((entry) =>
+          toHistoryEvidenceDto(
+            entry,
+            entry.actorId
+              ? requireAuthor(authors.get(entry.actorId))
+              : { id: context.access.userId, name: "Former member" },
+          ),
+        ),
+      ].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    },
+
+    async addItemEvidence(context, id, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const item = await repositories.workItems.get(id);
+      requireAccess(context.access, "comment", "comment", {
+        organizationId: context.access.organizationId,
+        workspaceId: item.workspaceId,
+        explicitlyShared: true,
+      });
+      const result = await repositories.comments.create(
+        { itemId: id, expectedItemVersion: expectedVersion, body: input.body },
+        mutation(context),
+      );
+      const author = await repositories.users.getMemberHistory(
+        result.value.authorId,
+      );
+      return {
+        value: {
+          evidence: toEvidenceDto(result.value, author),
+          itemVersion: expectedVersion + 1,
+        },
+        replayed: result.replayed,
+      };
+    },
+
+    async assignItem(context, id, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const item = await repositories.workItems.get(id);
+      requireWorkspaceAccess(context.access, "update", item.workspaceId);
+      const result = await repositories.itemAssignees.replace(
+        id,
+        expectedVersion,
+        input.assigneeIds,
+        mutation(context),
+      );
+      return {
+        value: {
+          item: toWorkItemDto(result.value),
+          attentionRefreshQueued: true,
+        },
+        replayed: result.replayed,
+      };
+    },
+
+    async setItemBlocked(context, id, expectedVersion, input) {
+      return transitionItem(
+        scoped(options.repositories, context),
+        context,
+        id,
+        expectedVersion,
+        {
+          status: input.blocked ? "blocked" : "working",
+          reasonCode: input.blocked ? "item_blocked" : "item_unblocked",
+          rationale: input.reason,
+          evidence: { summary: input.reason },
+        },
+        true,
+      );
+    },
+
+    async transitionDecision(context, id, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const current = await repositories.workItems.get(id);
+      requireWorkspaceAccess(context.access, "update", current.workspaceId);
+      if (current.type !== "decision") throw notFound();
+      return transitionItem(
+        repositories,
+        context,
+        id,
+        expectedVersion,
+        {
+          decisionState: input.state,
+          reasonCode: `decision_${input.state}`,
+          rationale: input.rationale,
+          ...(input.evidence ? { evidence: { summary: input.evidence } } : {}),
+        },
+        Boolean(input.evidence),
+      );
+    },
+
+    async transitionApproval(context, id, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const current = await repositories.workItems.get(id);
+      requireWorkspaceAccess(context.access, "update", current.workspaceId);
+      if (current.type !== "approval") throw notFound();
+      return transitionItem(
+        repositories,
+        context,
+        id,
+        expectedVersion,
+        {
+          approvalState: input.state,
+          reasonCode: `approval_${input.state}`,
+          rationale: input.rationale,
+          ...(input.evidence ? { evidence: { summary: input.evidence } } : {}),
+        },
+        Boolean(input.evidence),
+      );
+    },
+
+    async resolveItem(context, id, expectedVersion, input) {
+      return transitionItem(
+        scoped(options.repositories, context),
+        context,
+        id,
+        expectedVersion,
+        {
+          status: "done",
+          reasonCode: "item_resolved",
+          rationale: "Resolved with recorded evidence.",
+          evidence: { summary: input.evidence },
+        },
+        true,
+      );
     },
 
     async search(context, query) {
@@ -512,6 +955,16 @@ function mutation(context: ApiMutationContext) {
   };
 }
 
+function mutationWithoutIdempotency(context: ApiMutationContext) {
+  return {
+    method: context.method,
+    route: context.route,
+    requestFingerprint: context.requestFingerprint,
+    responseStatus: context.responseStatus,
+    now: context.now,
+  };
+}
+
 async function getDefaultPortfolioRollup(
   repositories: OrganizationScopedRepositories,
   access: AccessContext,
@@ -570,6 +1023,7 @@ function toWorkspaceDto(workspace: WorkspaceProjection): WorkspaceDto {
     portfolioId: workspace.portfolioId,
     slug: workspace.slug,
     name: workspace.name,
+    description: workspace.description,
     icon: workspace.icon,
     accent: workspace.accent,
     type: workspace.type,
@@ -609,6 +1063,51 @@ function toWorkspaceDto(workspace: WorkspaceProjection): WorkspaceDto {
         label: metric.label,
         value: formatMetric(metric.value!, metric.target, metric.unit),
       })),
+    versionTag: workspace.versionTag,
+    updatedAt: workspace.versionTag,
+  };
+}
+
+function toBoardDto(
+  board: Awaited<ReturnType<OrganizationScopedRepositories["boards"]["get"]>>,
+): BoardDto {
+  return {
+    id: board.id,
+    workspaceId: board.workspaceId,
+    name: board.name,
+    description: board.description,
+    ...(board.templateKey ? { templateKey: board.templateKey } : {}),
+    visibility: board.visibility,
+    progressMode: board.progressMode,
+    ...(board.manualProgressValue === null
+      ? {}
+      : { manualProgressValue: board.manualProgressValue }),
+    ...(board.manualProgressNote
+      ? { manualProgressNote: board.manualProgressNote }
+      : {}),
+    ...(board.startDate ? { startDate: board.startDate } : {}),
+    ...(board.endDate ? { endDate: board.endDate } : {}),
+    ordering: board.ordering,
+    versionTag: board.updatedAt.toISOString(),
+    createdAt: board.createdAt.toISOString(),
+    updatedAt: board.updatedAt.toISOString(),
+  };
+}
+
+function toInboxItemDto(item: InboxItemProjection): InboxItemDto {
+  return {
+    id: item.id,
+    userId: item.userId,
+    category: item.category,
+    title: item.title,
+    body: item.body,
+    resource: isRecord(item.resource) ? item.resource : {},
+    ...(item.doneAt ? { doneAt: item.doneAt } : {}),
+    ...(item.snoozedUntil ? { snoozedUntil: item.snoozedUntil } : {}),
+    ...(item.convertedItemId ? { convertedItemId: item.convertedItemId } : {}),
+    ...(item.convertedAt ? { convertedAt: item.convertedAt } : {}),
+    version: item.version,
+    createdAt: item.createdAt,
   };
 }
 
@@ -618,6 +1117,7 @@ function toWorkItemDto(item: WorkItemProjection): WorkItemDto {
     workspaceId: item.workspaceId,
     boardId: item.boardId,
     title: item.title,
+    description: item.description,
     type: item.type,
     priority: item.priority,
     status: item.status,
@@ -630,6 +1130,194 @@ function toWorkItemDto(item: WorkItemProjection): WorkItemDto {
       ? { decisionState: decisionState(item.decisionState) }
       : {}),
     version: item.version,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  };
+}
+
+function toEvidenceDto(
+  comment: Awaited<
+    ReturnType<OrganizationScopedRepositories["comments"]["get"]>
+  >,
+  author: Awaited<
+    ReturnType<OrganizationScopedRepositories["users"]["getMemberHistory"]>
+  >,
+): WorkItemEvidenceDto {
+  return {
+    id: comment.id,
+    itemId: comment.itemId,
+    author: { id: author.id, name: author.name },
+    body: comment.body,
+    evidence: true,
+    ...(comment.editedAt ? { editedAt: comment.editedAt.toISOString() } : {}),
+    createdAt: comment.createdAt.toISOString(),
+    updatedAt: comment.updatedAt.toISOString(),
+  };
+}
+
+type MemberHistory = Awaited<
+  ReturnType<OrganizationScopedRepositories["users"]["getMemberHistory"]>
+>;
+
+async function historyActors(
+  repositories: OrganizationScopedRepositories,
+  history: WorkItemHistoryProjection[],
+): Promise<Map<string, MemberHistory>> {
+  return new Map(
+    await Promise.all(
+      [
+        ...new Set(
+          history.flatMap(({ actorId }) => (actorId ? [actorId] : [])),
+        ),
+      ].map(
+        async (actorId) =>
+          [
+            actorId,
+            await repositories.users.getMemberHistory(actorId),
+          ] as const,
+      ),
+    ),
+  );
+}
+
+function toWorkItemHistoryDto(
+  entry: WorkItemHistoryProjection,
+  actor?: MemberHistory,
+): WorkItemHistoryEntryDto {
+  return {
+    id: entry.id,
+    type: entry.type,
+    reasonCode: entry.reasonCode,
+    summary: entry.summary,
+    ...(actor ? { actor: { id: actor.id, name: actor.name } } : {}),
+    ...(hasHistoryEvidence(entry)
+      ? { evidence: [{ id: entry.id, body: historyEvidenceBody(entry) }] }
+      : {}),
+    itemVersion: entry.itemVersion,
+    occurredAt: entry.occurredAt,
+    metadata: {
+      ...entry.metadata,
+      source: entry.source,
+    },
+  };
+}
+
+function hasHistoryEvidence(entry: WorkItemHistoryProjection): boolean {
+  return Boolean(
+    entry.evidence.summary ||
+    entry.evidence.references?.length ||
+    (entry.evidence.data && Object.keys(entry.evidence.data).length),
+  );
+}
+
+function historyEvidenceBody(entry: WorkItemHistoryProjection): string {
+  if (entry.evidence.summary) return entry.evidence.summary;
+  if (entry.evidence.references?.length)
+    return entry.evidence.references
+      .map(
+        (reference) =>
+          reference.label ??
+          reference.url ??
+          `${reference.type}:${reference.id}`,
+      )
+      .join("\n");
+  return entry.summary;
+}
+
+function toHistoryEvidenceDto(
+  entry: WorkItemHistoryProjection,
+  author: { id: string; name: string },
+): WorkItemEvidenceDto {
+  return {
+    id: entry.id,
+    itemId: entry.snapshot.id,
+    author: { id: author.id, name: author.name },
+    body: historyEvidenceBody(entry),
+    evidence: true,
+    createdAt: entry.occurredAt,
+    updatedAt: entry.occurredAt,
+  };
+}
+
+async function transitionItem(
+  repositories: OrganizationScopedRepositories,
+  context: ApiMutationContext,
+  id: string,
+  expectedVersion: number,
+  input: WorkItemTransitionInput,
+  exposeEvidence: boolean,
+) {
+  const current = await repositories.workItems.get(id);
+  requireWorkspaceAccess(context.access, "update", current.workspaceId);
+  const result = await repositories.workItems.transition(
+    id,
+    expectedVersion,
+    input,
+    mutation(context),
+  );
+  const actor = await repositories.users.getMemberHistory(
+    result.value.evidence.actorId ?? context.access.userId,
+  );
+  return {
+    value: {
+      item: toWorkItemDto(result.value.item),
+      ...(exposeEvidence
+        ? { evidence: toHistoryEvidenceDto(result.value.evidence, actor) }
+        : {}),
+      attentionRefreshQueued: true,
+    },
+    replayed: result.replayed,
+  };
+}
+
+function toWeeklyReviewRecord(
+  update: Awaited<
+    ReturnType<OrganizationScopedRepositories["workspaceUpdates"]["get"]>
+  >,
+  author: Awaited<
+    ReturnType<OrganizationScopedRepositories["users"]["getMemberHistory"]>
+  >,
+): WeeklyReviewRecordDto {
+  return {
+    id: update.id,
+    workspaceId: update.workspaceId,
+    author: { id: author.id, name: author.name },
+    progress: update.wins,
+    blocker: update.blocker,
+    nextMilestone: update.nextMilestone,
+    ...(update.helpNeeded ? { decisionNeeded: update.helpNeeded } : {}),
+    priorityNextWeek: update.currentPriority,
+    ...(update.note ? { note: update.note } : {}),
+    publishedAt: update.publishedAt.toISOString(),
+    createdAt: update.createdAt.toISOString(),
+    updatedAt: update.updatedAt.toISOString(),
+  };
+}
+
+function toSnapshotDto(
+  row: Awaited<ReturnType<OrganizationScopedRepositories["snapshots"]["get"]>>,
+) {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    portfolioId: row.portfolioId,
+    workspaceId: row.workspaceId,
+    capturedAt: row.capturedAt.toISOString(),
+    health: row.health,
+    ...(row.progress === null ? {} : { progress: row.progress }),
+    openCount: row.openCount,
+    overdueCount: row.overdueCount,
+    blockedCount: row.blockedCount,
+    decisionCount: row.decisionCount,
+    attentionCount: row.attentionCount,
+    ...(row.nextMilestoneId ? { nextMilestoneId: row.nextMilestoneId } : {}),
+    ...(row.nextMilestoneStatus
+      ? { nextMilestoneStatus: row.nextMilestoneStatus }
+      : {}),
+    ...(row.latestUpdateAt
+      ? { latestUpdateAt: row.latestUpdateAt.toISOString() }
+      : {}),
+    source: reviewSource(row.source),
   };
 }
 
@@ -648,11 +1336,23 @@ function toAttentionDto(
     impact: row.impact,
     urgency: row.urgency,
     responsibility: row.responsibility,
+    reasonCode: row.reasonCode,
+    sourceFingerprint: row.sourceFingerprint,
     reason: row.reason,
     ...(row.recommendedAction
       ? { recommendedAction: row.recommendedAction }
       : {}),
     createdAt: row.createdAt.toISOString(),
+    computedAt: row.computedAt.toISOString(),
+    sourceEvidence: [
+      {
+        sourceType: row.entityType,
+        sourceId: row.entityId,
+        capturedAt: row.sourceOccurredAt.toISOString(),
+        summary: row.reason,
+        data: isRecord(row.evidence) ? row.evidence : {},
+      },
+    ],
     ...(row.resolvedAt ? { resolvedAt: row.resolvedAt.toISOString() } : {}),
     ...(row.dismissedAt ? { dismissedAt: row.dismissedAt.toISOString() } : {}),
     ...(row.snoozedUntil
@@ -813,6 +1513,24 @@ function locale(value: string): "en" | "de" {
   throw new DataPlaneError(
     "repository_unavailable",
     "A persisted user locale is invalid.",
+  );
+}
+
+function dateTime(value: string | Date): string {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.valueOf()))
+    throw new DataPlaneError(
+      "repository_unavailable",
+      "A persisted operation timestamp is invalid.",
+    );
+  return parsed.toISOString();
+}
+
+function requireAuthor<T>(author: T | undefined): T {
+  if (author) return author;
+  throw new DataPlaneError(
+    "repository_unavailable",
+    "A persisted evidence author could not be resolved.",
   );
 }
 
@@ -991,7 +1709,7 @@ function waitingType(value: string): WaitingStateDto["waitingType"] {
   );
 }
 
-function reviewSource(value: string) {
+function reviewSource(value: string): WorkspaceSnapshotDto["source"] {
   if (
     value === "weekly_review" ||
     value === "monthly_review" ||

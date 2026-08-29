@@ -2,6 +2,11 @@ import {
   createApiClient,
   TrevvApiError,
 } from "../../../packages/api-client/src/index.js";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { once } from "node:events";
+import { fileURLToPath } from "node:url";
+import { createServer } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   createMemoryMailSink,
   type MemoryMailSink,
@@ -267,6 +272,7 @@ describe("PostgreSQL-backed API", () => {
       workspaceId: fixture.first.visibleWorkspaceId,
       boardId: fixture.first.visibleBoardId,
       title: "Durable API work",
+      description: "Exercise persistence and optimistic concurrency.",
       type: "task" as const,
       priority: "high" as const,
       status: "working" as const,
@@ -350,6 +356,506 @@ describe("PostgreSQL-backed API", () => {
     } finally {
       if (!firstClosed) await first.close();
       await second.close();
+    }
+  });
+
+  it("serves the same canonical WorkItem after a full API process restart", async () => {
+    const port = await availablePort();
+    const first = await startRestartTestServer(port);
+    let firstStopped = false;
+    const createKey = "00000000-0000-4000-8000-000000000121";
+    try {
+      const client = restartClient(port);
+      const created = await client.createItem(
+        {
+          workspaceId: fixture.first.visibleWorkspaceId,
+          boardId: fixture.first.visibleBoardId,
+          title: "Process restart durability",
+          description: "Created before the API process exits.",
+          type: "task",
+          priority: "high",
+          status: "working",
+          assigneeIds: [fixture.first.ownerId],
+        },
+        createKey,
+      );
+      await first.stop();
+      firstStopped = true;
+
+      const second = await startRestartTestServer(port);
+      try {
+        await expect(
+          restartClient(port).item(created.data.id),
+        ).resolves.toEqual(created.data);
+        await expect(
+          restartClient(port).createItem(
+            {
+              workspaceId: fixture.first.visibleWorkspaceId,
+              boardId: fixture.first.visibleBoardId,
+              title: "Process restart durability",
+              description: "Created before the API process exits.",
+              type: "task",
+              priority: "high",
+              status: "working",
+              assigneeIds: [fixture.first.ownerId],
+            },
+            createKey,
+          ),
+        ).resolves.toEqual({ ...created, replayed: true });
+      } finally {
+        await second.stop();
+      }
+    } finally {
+      if (!firstStopped) await first.stop();
+    }
+  }, 30_000);
+
+  it("executes the durable founder golden path through typed HTTP transport", async () => {
+    const live = createLiveHarness();
+    const ownerClient = clientFor(
+      live.app,
+      fixture.first.ownerId,
+      fixture.first.organizationId,
+    );
+    const otherTenantClient = clientFor(
+      live.app,
+      fixture.second.ownerId,
+      fixture.second.organizationId,
+    );
+    const keys = {
+      workspace: "00000000-0000-4000-8000-000000000401",
+      capturedDone: "00000000-0000-4000-8000-000000000402",
+      updateCaptured: "00000000-0000-4000-8000-000000000403",
+      capturedConvert: "00000000-0000-4000-8000-000000000404",
+      convert: "00000000-0000-4000-8000-000000000405",
+      assign: "00000000-0000-4000-8000-000000000406",
+      block: "00000000-0000-4000-8000-000000000407",
+      evidence: "00000000-0000-4000-8000-000000000408",
+      waiting: "00000000-0000-4000-8000-000000000409",
+      resolve: "00000000-0000-4000-8000-000000000410",
+      resolveWaiting: "00000000-0000-4000-8000-000000000411",
+      decision: "00000000-0000-4000-8000-000000000412",
+      approval: "00000000-0000-4000-8000-000000000413",
+      review: "00000000-0000-4000-8000-000000000414",
+      stale: "00000000-0000-4000-8000-000000000415",
+      invalid: "00000000-0000-4000-8000-000000000416",
+      decisionItem: "00000000-0000-4000-8000-000000000417",
+      approvalItem: "00000000-0000-4000-8000-000000000418",
+    } as const;
+    const workspaceInput = {
+      portfolioId: fixture.first.portfolioId,
+      name: "Golden Transport",
+      slug: "golden-transport",
+      description: "A durable golden-path Workspace.",
+      type: "project" as const,
+      accent: "#0f766e",
+      icon: "G",
+      stage: "build" as const,
+      health: "on_track" as const,
+      healthNote: "",
+      priority: "Prove the operating loop",
+      leadUserId: fixture.first.ownerId,
+      initialBoardName: "Golden Board",
+    };
+
+    try {
+      const createdWorkspace = await ownerClient.createWorkspace(
+        workspaceInput,
+        keys.workspace,
+      );
+      expect(createdWorkspace).toMatchObject({
+        idempotencyKey: keys.workspace,
+        replayed: false,
+        data: {
+          workspace: {
+            slug: workspaceInput.slug,
+            description: workspaceInput.description,
+            versionTag: expect.any(String),
+            updatedAt: expect.any(String),
+          },
+          board: {
+            name: workspaceInput.initialBoardName,
+            templateKey: "trevv_default",
+            versionTag: expect.any(String),
+            updatedAt: expect.any(String),
+          },
+        },
+      });
+      await expect(
+        ownerClient.createWorkspace(workspaceInput, keys.workspace),
+      ).resolves.toEqual({ ...createdWorkspace, replayed: true });
+
+      const { workspace, board } = createdWorkspace.data;
+      await expect(
+        ownerClient.workspace(workspace.slug),
+      ).resolves.toMatchObject({
+        workspace: { id: workspace.id },
+        items: [],
+      });
+      await expect(ownerClient.boards(workspace.id)).resolves.toContainEqual(
+        board,
+      );
+
+      const capturedDone = await ownerClient.captureInboxItem(
+        {
+          category: "note",
+          title: "Record a completed thought",
+          body: "This capture remains durable after completion.",
+          resource: { source: "golden_path" },
+        },
+        keys.capturedDone,
+      );
+      expect(capturedDone).toMatchObject({
+        etag: '"0"',
+        idempotencyKey: keys.capturedDone,
+        replayed: false,
+        data: { version: 0 },
+      });
+      await expect(
+        ownerClient.captureInboxItem(
+          {
+            category: "note",
+            title: "Record a completed thought",
+            body: "This capture remains durable after completion.",
+            resource: { source: "golden_path" },
+          },
+          keys.capturedDone,
+        ),
+      ).resolves.toEqual({ ...capturedDone, replayed: true });
+      const completedCapture = await ownerClient.updateInboxItem(
+        capturedDone.data.id,
+        { done: true },
+        capturedDone.data.version,
+        keys.updateCaptured,
+      );
+      expect(completedCapture).toMatchObject({
+        etag: '"1"',
+        data: { doneAt: expect.any(String), version: 1 },
+      });
+
+      const capturedForConversion = await ownerClient.captureInboxItem(
+        {
+          category: "task",
+          title: "Turn a signal into canonical work",
+          body: "Carry the original capture into the canonical item.",
+          resource: { source: "golden_path", confidence: 1 },
+        },
+        keys.capturedConvert,
+      );
+      const converted = await ownerClient.convertInboxItem(
+        capturedForConversion.data.id,
+        {
+          workspaceId: workspace.id,
+          boardId: board.id,
+          title: "Canonical founder task",
+          description: "Converted from durable Inbox capture.",
+          type: "task",
+          priority: "high",
+          status: "working",
+          assigneeIds: [],
+        },
+        capturedForConversion.data.version,
+        keys.convert,
+      );
+      expect(converted).toMatchObject({
+        etag: '"1"',
+        replayed: false,
+        data: {
+          inboxItem: {
+            id: capturedForConversion.data.id,
+            convertedItemId: expect.any(String),
+            version: 1,
+          },
+          workItem: {
+            title: "Canonical founder task",
+            description: "Converted from durable Inbox capture.",
+            version: 0,
+          },
+        },
+      });
+      expect(converted.data.inboxItem.convertedItemId).toBe(
+        converted.data.workItem.id,
+      );
+
+      const assigned = await ownerClient.assignItem(
+        converted.data.workItem.id,
+        { assigneeIds: [fixture.first.ownerId] },
+        converted.data.workItem.version,
+        keys.assign,
+      );
+      expect(assigned).toMatchObject({
+        etag: '"1"',
+        data: {
+          item: {
+            version: 1,
+            assignees: [{ id: fixture.first.ownerId, name: "First Owner" }],
+          },
+          attentionRefreshQueued: true,
+        },
+      });
+      const blocked = await ownerClient.setItemBlocked(
+        assigned.data.item.id,
+        { blocked: true, reason: "Waiting for the launch evidence." },
+        assigned.data.item.version,
+        keys.block,
+      );
+      expect(blocked).toMatchObject({
+        etag: '"2"',
+        data: { item: { status: "blocked", version: 2 } },
+      });
+      const recordedEvidence = await ownerClient.addItemEvidence(
+        blocked.data.item.id,
+        { body: "The founder confirmed the blocked dependency." },
+        blocked.data.item.version,
+        keys.evidence,
+      );
+      expect(recordedEvidence).toMatchObject({
+        etag: '"3"',
+        data: {
+          evidence: {
+            body: "The founder confirmed the blocked dependency.",
+          },
+          itemVersion: 3,
+        },
+      });
+
+      const waiting = await ownerClient.createWaiting(
+        {
+          workspaceId: workspace.id,
+          entityType: "work_item",
+          entityId: blocked.data.item.id,
+          title: "Wait for launch evidence",
+          waitingType: "person",
+          waitingReferenceId: fixture.first.ownerId,
+          waitingLabel: "First Owner",
+          expectedBy: "2026-09-05",
+          followUpOwnerId: fixture.first.ownerId,
+          nextFollowUp: "2026-09-01",
+          note: "Follow up with evidence before resolving.",
+        },
+        recordedEvidence.data.itemVersion,
+        keys.waiting,
+      );
+      expect(waiting).toMatchObject({
+        etag: '"0"',
+        data: {
+          entityType: "work_item",
+          entityId: blocked.data.item.id,
+          version: 0,
+        },
+      });
+      const afterWaiting = await ownerClient.item(blocked.data.item.id);
+      expect(afterWaiting.version).toBeGreaterThan(
+        recordedEvidence.data.itemVersion,
+      );
+
+      const resolved = await ownerClient.resolveItem(
+        afterWaiting.id,
+        { evidence: "Launch evidence was accepted and archived." },
+        afterWaiting.version,
+        keys.resolve,
+      );
+      expect(resolved).toMatchObject({
+        etag: `"${afterWaiting.version + 1}"`,
+        data: {
+          item: { status: "done", version: afterWaiting.version + 1 },
+          evidence: {
+            body: "Launch evidence was accepted and archived.",
+          },
+        },
+      });
+      await expect(
+        ownerClient.actOnWaiting(
+          waiting.data.id,
+          { action: "resolve", note: "Canonical work is complete." },
+          waiting.data.version,
+          keys.resolveWaiting,
+        ),
+      ).resolves.toMatchObject({
+        etag: '"1"',
+        data: { resolvedAt: expect.any(String), version: 1 },
+      });
+
+      const decision = await ownerClient.createItem(
+        {
+          workspaceId: workspace.id,
+          boardId: board.id,
+          title: "Choose the release cohort",
+          description: "Select the smallest safe founder cohort.",
+          type: "decision",
+          priority: "high",
+          status: "working",
+          assigneeIds: [fixture.first.ownerId],
+          decisionState: "needed",
+        },
+        keys.decisionItem,
+      );
+      const decided = await ownerClient.transitionDecision(
+        decision.data.id,
+        {
+          state: "decided",
+          rationale: "The invited-founder cohort has the lowest risk.",
+          evidence: "Five founders completed the workflow successfully.",
+        },
+        decision.data.version,
+        keys.decision,
+      );
+      expect(decided).toMatchObject({
+        etag: '"1"',
+        data: {
+          item: { decisionState: "decided", version: 1 },
+          evidence: {
+            body: "Five founders completed the workflow successfully.",
+          },
+        },
+      });
+
+      const approval = await ownerClient.createItem(
+        {
+          workspaceId: workspace.id,
+          boardId: board.id,
+          title: "Approve the founder release",
+          description: "Approve the evidence-backed release.",
+          type: "approval",
+          priority: "high",
+          status: "working",
+          assigneeIds: [fixture.first.ownerId],
+          approvalState: "pending",
+        },
+        keys.approvalItem,
+      );
+      await expect(
+        ownerClient.transitionApproval(
+          approval.data.id,
+          {
+            state: "approved",
+            rationale: "All acceptance evidence is present.",
+            evidence: "The golden path and tenant tests passed.",
+          },
+          approval.data.version,
+          keys.approval,
+        ),
+      ).resolves.toMatchObject({
+        etag: '"1"',
+        data: {
+          item: { approvalState: "approved", version: 1 },
+          evidence: {
+            body: "The golden path and tenant tests passed.",
+          },
+        },
+      });
+
+      const review = await ownerClient.submitWeeklyReview(
+        {
+          workspaceId: workspace.id,
+          health: "on_track",
+          progress: "The canonical operating loop is durable.",
+          blocker: "No active blocker remains.",
+          nextMilestone: "Invite the first founder cohort.",
+          decisionNeeded: "Confirm the cohort size.",
+          priorityNextWeek: "Observe real founder usage.",
+        },
+        keys.review,
+      );
+      expect(review).toMatchObject({
+        replayed: false,
+        data: {
+          update: { workspaceId: workspace.id },
+          snapshot: {
+            workspaceId: workspace.id,
+            source: "weekly_review",
+          },
+          attentionRefreshQueued: true,
+        },
+      });
+      await expect(
+        ownerClient.weeklyReviews(workspace.id),
+      ).resolves.toContainEqual(
+        expect.objectContaining({
+          id: review.data.update.id,
+          workspaceId: workspace.id,
+          progress: "The canonical operating loop is durable.",
+        }),
+      );
+      await expect(
+        ownerClient.workspaceSnapshots({ workspaceId: workspace.id }),
+      ).resolves.toContainEqual(
+        expect.objectContaining({
+          id: review.data.snapshot.id,
+          workspaceId: workspace.id,
+          source: "weekly_review",
+        }),
+      );
+
+      const history = await ownerClient.itemHistory(resolved.data.item.id);
+      expect(history.map(({ type }) => type)).toEqual(
+        expect.arrayContaining([
+          "item_created",
+          "assignment_changed",
+          "item_transitioned",
+          "comment_added",
+          "waiting_started",
+        ]),
+      );
+      expect(history.every(({ reasonCode }) => reasonCode.length > 0)).toBe(
+        true,
+      );
+      await expect(
+        ownerClient.itemEvidence(resolved.data.item.id),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            body: "The founder confirmed the blocked dependency.",
+          }),
+          expect.objectContaining({
+            body: "Launch evidence was accepted and archived.",
+          }),
+        ]),
+      );
+      const operations = await ownerClient.operationStatus();
+      expect(operations.pendingOutbox).toBeGreaterThan(0);
+      expect(operations.failedCount).toBe(0);
+
+      await expect(
+        ownerClient.setItemBlocked(
+          resolved.data.item.id,
+          { blocked: true, reason: "This stale write must fail." },
+          recordedEvidence.data.itemVersion,
+          keys.stale,
+        ),
+      ).rejects.toMatchObject({
+        code: "version_conflict",
+        status: 409,
+        details: { currentVersion: resolved.data.item.version },
+        etag: `"${resolved.data.item.version}"`,
+      } satisfies Partial<TrevvApiError>);
+
+      const invalidTransition = await live.app.request(
+        `/api/v1/items/${decision.data.id}/decision`,
+        {
+          method: "POST",
+          headers: {
+            ...authorization(fixture.first.ownerId),
+            "content-type": "application/json",
+            "if-match": `"${decided.data.item.version}"`,
+            "idempotency-key": keys.invalid,
+          },
+          body: JSON.stringify({ state: "decided" }),
+        },
+      );
+      expect(invalidTransition.status).toBe(422);
+      await expect(errorCode(invalidTransition)).resolves.toBe(
+        "validation_error",
+      );
+
+      await expect(
+        otherTenantClient.item(resolved.data.item.id),
+      ).rejects.toMatchObject({
+        code: "resource_not_found",
+        status: 404,
+      } satisfies Partial<TrevvApiError>);
+    } finally {
+      await live.close();
     }
   });
 
@@ -840,6 +1346,99 @@ function clientFor(
       return response;
     },
   });
+}
+
+function restartClient(port: number) {
+  return createApiClient({
+    baseUrl: `http://127.0.0.1:${port}/api/v1`,
+    getAccessToken: async () => fixture.first.ownerId,
+  });
+}
+
+async function availablePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Could not allocate a local API restart test port.");
+  }
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return address.port;
+}
+
+async function startRestartTestServer(port: number): Promise<{
+  stop: () => Promise<void>;
+}> {
+  const executable = fileURLToPath(
+    new URL("../node_modules/.bin/tsx", import.meta.url),
+  );
+  const child = spawn(executable, ["integration/restart-server-fixture.ts"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    env: {
+      ...process.env,
+      DATABASE_URL: temporary.url,
+      PORT: String(port),
+      RESTART_TEST_USER_ID: fixture.first.ownerId,
+    },
+  });
+  await waitForRestartServer(child, port);
+  return {
+    stop: async () => {
+      if (child.exitCode !== null) return;
+      const stopped = once(child, "exit");
+      child.kill("SIGTERM");
+      try {
+        await Promise.race([
+          stopped,
+          delay(5_000).then(() => {
+            throw new Error("The restart test API did not stop gracefully.");
+          }),
+        ]);
+      } catch (error) {
+        if (child.exitCode === null) {
+          const forced = once(child, "exit");
+          child.kill("SIGKILL");
+          await forced;
+        }
+        throw error;
+      }
+    },
+  };
+}
+
+async function waitForRestartServer(
+  child: ChildProcessWithoutNullStreams,
+  port: number,
+) {
+  let standardError = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
+    standardError += chunk;
+  });
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null)
+      throw new Error(
+        `The restart test API exited before readiness: ${standardError}`,
+      );
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
+      if (response.ok) return;
+    } catch {
+      // The child process is still starting.
+    }
+    await delay(50);
+  }
+  child.kill("SIGTERM");
+  throw new Error(
+    `The restart test API did not become ready: ${standardError}`,
+  );
 }
 
 function authorization(userId: string) {

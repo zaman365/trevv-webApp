@@ -1,8 +1,13 @@
 import type {
+  BoardDto,
   AttentionSignalDto,
+  InboxItemDto,
   PortfolioDto,
   Session,
   WaitingStateDto,
+  WeeklyReviewRecordDto,
+  WorkItemEvidenceDto,
+  WorkItemHistoryEntryDto,
   WorkItemDto,
   WorkspaceDto,
 } from "@founderhq/api-contract";
@@ -11,6 +16,7 @@ import {
   changesSinceCheckpoint,
   demoBlueprintInstances,
   demoBlueprintVersions,
+  demoBoards,
   demoChangeCheckpoint,
   demoDecisionOutcomes,
   demoDependencies,
@@ -55,18 +61,57 @@ export interface DemoAdapter {
 }
 
 export function createDemoAdapter(): DemoAdapter {
+  const demoTimestamp = "2026-08-24T12:00:00.000Z";
   const itemStore = new Map<string, WorkItemDto>(
-    demoItems.map((item) => [item.id, toWorkItemDto(item)]),
+    demoItems.map((item) => [item.id, toWorkItemDto(item, demoTimestamp)]),
   );
+  const boardStore = new Map<string, BoardDto>(
+    demoBoards.map((board, ordering) => [
+      board.id,
+      {
+        id: board.id,
+        workspaceId: board.workspaceId,
+        name: board.name,
+        description: board.description,
+        visibility: "private",
+        progressMode: "task_completion",
+        ordering,
+        versionTag: demoTimestamp,
+        createdAt: demoTimestamp,
+        updatedAt: demoTimestamp,
+      },
+    ]),
+  );
+  const inboxStore = new Map<string, InboxItemDto>();
+  const evidenceStore = new Map<string, WorkItemEvidenceDto[]>();
+  const historyStore = new Map<string, WorkItemHistoryEntryDto[]>();
   const attentionStore = new Map<string, AttentionSignalDto>(
     generateAttentionSignals(
       "org-demo",
       demoWorkspaces,
       demoItems,
       demoWaitingStates,
-      new Date("2026-08-24T12:00:00.000Z"),
+      new Date(demoTimestamp),
       demoDependencies,
-    ).map((signal) => [signal.id, { ...signal, version: 0 }]),
+    ).map((signal) => [
+      signal.id,
+      {
+        ...signal,
+        reasonCode: signal.signalType,
+        sourceFingerprint: `fictional-demo:${signal.id}`,
+        computedAt: signal.createdAt,
+        sourceEvidence: [
+          {
+            sourceType: signal.entityType,
+            sourceId: signal.entityId,
+            capturedAt: signal.createdAt,
+            summary: signal.reason,
+            data: { source: "fictional_demo_fixture" },
+          },
+        ],
+        version: 0,
+      },
+    ]),
   );
   const waitingStore = new Map<string, WaitingStateDto>(
     demoWaitingStates.map((waiting) => [
@@ -343,6 +388,12 @@ export function createDemoAdapter(): DemoAdapter {
         .map(toWorkspaceDto);
     },
 
+    async createWorkspace() {
+      throw demoUnavailable(
+        "Workspace creation is available only in the persistent live preview.",
+      );
+    },
+
     async getWorkspace(context, slug) {
       const workspace = demoWorkspaces.find(
         (candidate) => candidate.slug === slug,
@@ -363,6 +414,56 @@ export function createDemoAdapter(): DemoAdapter {
         rollup: rollupWorkspace(workspace, rollupItems, context.now),
         items,
       };
+    },
+
+    async listBoards(context, workspaceId) {
+      requireAccess(context.access, "read", "workspace", {
+        organizationId: "org-demo",
+        workspaceId,
+      });
+      return [...boardStore.values()].filter(
+        (board) => board.workspaceId === workspaceId,
+      );
+    },
+
+    async getBoard(context, id) {
+      const board = boardStore.get(id);
+      if (!board) throw notFound();
+      requireAccess(context.access, "read", "board", {
+        organizationId: "org-demo",
+        workspaceId: board.workspaceId,
+      });
+      return board;
+    },
+
+    async createBoard() {
+      throw demoUnavailable(
+        "Board creation is available only in the persistent live preview.",
+      );
+    },
+
+    async listInbox(context) {
+      return [...inboxStore.values()].filter(
+        (item) => item.userId === context.access.userId,
+      );
+    },
+
+    async captureInboxItem() {
+      throw demoUnavailable(
+        "Inbox capture is available only in the persistent live preview.",
+      );
+    },
+
+    async updateInboxItem() {
+      throw demoUnavailable(
+        "Inbox updates are available only in the persistent live preview.",
+      );
+    },
+
+    async convertInboxItem() {
+      throw demoUnavailable(
+        "Inbox conversion is available only in the persistent live preview.",
+      );
     },
 
     async listItems(context, filters) {
@@ -394,6 +495,16 @@ export function createDemoAdapter(): DemoAdapter {
       };
     },
 
+    async getItem(context, id) {
+      const item = itemStore.get(id);
+      if (!item) throw notFound();
+      requireAccess(context.access, "read", "item", {
+        organizationId: "org-demo",
+        workspaceId: item.workspaceId,
+      });
+      return item;
+    },
+
     async createItem(context, input) {
       return withIdempotency(idempotencyStore, context, () => {
         requireAccess(context.access, "create", "item", {
@@ -416,6 +527,8 @@ export function createDemoAdapter(): DemoAdapter {
               Boolean(assignee),
           ),
           version: 0,
+          createdAt: context.now.toISOString(),
+          updatedAt: context.now.toISOString(),
         };
         itemStore.set(item.id, item);
         return item;
@@ -446,14 +559,236 @@ export function createDemoAdapter(): DemoAdapter {
               }
             : {}),
           version: existing.version + 1,
+          updatedAt: context.now.toISOString(),
         };
         if (patch.title !== undefined) updated.title = patch.title;
+        if (patch.description !== undefined)
+          updated.description = patch.description;
         if (patch.status !== undefined) updated.status = patch.status;
         if (patch.priority !== undefined) updated.priority = patch.priority;
         if (patch.dueDate !== undefined) updated.dueDate = patch.dueDate;
         itemStore.set(existing.id, updated);
         return updated;
       });
+    },
+
+    async listItemHistory(context, id) {
+      const item = itemStore.get(id);
+      if (!item) throw notFound();
+      requireAccess(context.access, "read", "item", {
+        organizationId: "org-demo",
+        workspaceId: item.workspaceId,
+      });
+      return historyStore.get(id) ?? [];
+    },
+
+    async listItemEvidence(context, id) {
+      const item = itemStore.get(id);
+      if (!item) throw notFound();
+      requireAccess(context.access, "read", "item", {
+        organizationId: "org-demo",
+        workspaceId: item.workspaceId,
+      });
+      return evidenceStore.get(id) ?? [];
+    },
+
+    async addItemEvidence(context, id, expectedVersion, input) {
+      return withIdempotency(idempotencyStore, context, () => {
+        const item = requireDemoItem(itemStore, context.access, id);
+        if (item.version !== expectedVersion)
+          throw versionConflict(item.version);
+        const now = context.now.toISOString();
+        const evidence: WorkItemEvidenceDto = {
+          id: context.newId(),
+          itemId: id,
+          author: { id: context.access.userId, name: "Mohammed Zaman" },
+          body: input.body,
+          evidence: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const version = item.version + 1;
+        itemStore.set(id, { ...item, version, updatedAt: now });
+        evidenceStore.set(id, [...(evidenceStore.get(id) ?? []), evidence]);
+        appendDemoHistory(historyStore, id, {
+          id: context.newId(),
+          type: "evidence.added",
+          reasonCode: "evidence_added",
+          summary: "Evidence was added to the item.",
+          actor: evidence.author,
+          evidence: [{ id: evidence.id, body: evidence.body }],
+          itemVersion: version,
+          occurredAt: now,
+          metadata: {},
+        });
+        return { evidence, itemVersion: version };
+      });
+    },
+
+    async assignItem(context, id, expectedVersion, input) {
+      return withIdempotency(idempotencyStore, context, () => {
+        const item = requireDemoItem(itemStore, context.access, id);
+        if (item.version !== expectedVersion)
+          throw versionConflict(item.version);
+        const assignees = input.assigneeIds.map(demoUserForId);
+        if (assignees.some((assignee) => !assignee)) throw notFound();
+        const now = context.now.toISOString();
+        const updated: WorkItemDto = {
+          ...item,
+          assignees: assignees.filter(
+            (assignee): assignee is { id: string; name: string } =>
+              Boolean(assignee),
+          ),
+          version: item.version + 1,
+          updatedAt: now,
+        };
+        itemStore.set(id, updated);
+        return { item: updated, attentionRefreshQueued: false };
+      });
+    },
+
+    async setItemBlocked(context, id, expectedVersion, input) {
+      return withIdempotency(idempotencyStore, context, () => {
+        const item = requireDemoItem(itemStore, context.access, id);
+        if (item.version !== expectedVersion)
+          throw versionConflict(item.version);
+        const now = context.now.toISOString();
+        const updated: WorkItemDto = {
+          ...item,
+          status: input.blocked ? "blocked" : "working",
+          version: item.version + 1,
+          updatedAt: now,
+        };
+        itemStore.set(id, updated);
+        appendDemoHistory(historyStore, id, {
+          id: context.newId(),
+          type: input.blocked ? "item.blocked" : "item.unblocked",
+          reasonCode: input.blocked ? "blocked" : "unblocked",
+          summary: input.reason,
+          actor: { id: context.access.userId, name: "Mohammed Zaman" },
+          itemVersion: updated.version,
+          occurredAt: now,
+          metadata: {},
+        });
+        return { item: updated, attentionRefreshQueued: false };
+      });
+    },
+
+    async transitionDecision(context, id, expectedVersion, input) {
+      return transitionDemoItem(
+        itemStore,
+        evidenceStore,
+        historyStore,
+        idempotencyStore,
+        context,
+        id,
+        expectedVersion,
+        "decision",
+        input.state,
+        input.rationale,
+        input.evidence,
+      );
+    },
+
+    async transitionApproval(context, id, expectedVersion, input) {
+      return transitionDemoItem(
+        itemStore,
+        evidenceStore,
+        historyStore,
+        idempotencyStore,
+        context,
+        id,
+        expectedVersion,
+        "approval",
+        input.state,
+        input.rationale,
+        input.evidence,
+      );
+    },
+
+    async resolveItem(context, id, expectedVersion, input) {
+      return transitionDemoItem(
+        itemStore,
+        evidenceStore,
+        historyStore,
+        idempotencyStore,
+        context,
+        id,
+        expectedVersion,
+        "resolve",
+        "done",
+        "Item resolved with evidence.",
+        input.evidence,
+      );
+    },
+
+    async createWaiting(context, expectedItemVersion, input) {
+      return withIdempotency(idempotencyStore, context, () => {
+        const workspace = workspaceForId(input.workspaceId);
+        if (!workspace) throw notFound();
+        requireAccess(context.access, "create", "item", {
+          organizationId: "org-demo",
+          workspaceId: input.workspaceId,
+        });
+        const item = itemStore.get(input.entityId);
+        if (!item || item.version !== expectedItemVersion)
+          throw item ? versionConflict(item.version) : notFound();
+        const owner = demoUserForId(input.followUpOwnerId);
+        if (!owner) throw notFound();
+        const waiting: WaitingStateDto = {
+          id: context.newId(),
+          organizationId: "org-demo",
+          portfolioId: workspace.portfolioId,
+          workspaceId: input.workspaceId,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          title: input.title,
+          waitingType: input.waitingType,
+          ...(input.waitingReferenceId
+            ? { waitingReferenceId: input.waitingReferenceId }
+            : {}),
+          ...(input.waitingLabel ? { waitingLabel: input.waitingLabel } : {}),
+          waitingSince: context.now.toISOString().slice(0, 10),
+          ...(input.expectedBy ? { expectedBy: input.expectedBy } : {}),
+          followUpOwnerId: owner.id,
+          followUpOwnerName: owner.name,
+          ...(input.nextFollowUp ? { nextFollowUp: input.nextFollowUp } : {}),
+          ...(input.note ? { waitingNote: input.note } : {}),
+          version: 0,
+        };
+        itemStore.set(item.id, {
+          ...item,
+          version: item.version + 1,
+          updatedAt: context.now.toISOString(),
+        });
+        waitingStore.set(waiting.id, waiting);
+        return waiting;
+      });
+    },
+
+    async listWeeklyReviews(context, workspaceId) {
+      if (workspaceId)
+        requireAccess(context.access, "read", "workspace", {
+          organizationId: "org-demo",
+          workspaceId,
+        });
+      return [] satisfies WeeklyReviewRecordDto[];
+    },
+
+    async listSnapshots(context, filters) {
+      return demoWorkspaceSnapshots.filter(
+        (snapshot) =>
+          snapshot.organizationId === context.access.organizationId &&
+          (!filters.portfolioId ||
+            snapshot.portfolioId === filters.portfolioId) &&
+          (!filters.workspaceId ||
+            snapshot.workspaceId === filters.workspaceId) &&
+          context.access.accessibleWorkspaceIds.has(snapshot.workspaceId),
+      );
+    },
+
+    async getOperationsStatus() {
+      return { pendingOutbox: 0, failedCount: 0 };
     },
 
     async search(context, query) {
@@ -575,6 +910,7 @@ function demoSession(): Session {
       name: "TREVV Demo",
       slug: "trevv-demo",
       role: "owner",
+      timezone: "Europe/Berlin",
     },
     availableOrganizations: [
       {
@@ -620,7 +956,7 @@ function demoUserForId(id: string) {
   return demoUsers.find((user) => user.id === id);
 }
 
-function toWorkItemDto(item: WorkItem): WorkItemDto {
+function toWorkItemDto(item: WorkItem, timestamp: string): WorkItemDto {
   const {
     assignee: assigneeName,
     groupId: _groupId,
@@ -631,8 +967,11 @@ function toWorkItemDto(item: WorkItem): WorkItemDto {
     : undefined;
   return {
     ...itemWithoutAssignee,
+    description: "",
     assignees: assignee ? [assignee] : [],
     version: 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
@@ -648,6 +987,7 @@ function toWorkspaceDto(
     portfolioId: workspace.portfolioId,
     slug: workspace.slug,
     name: workspace.name,
+    description: workspace.healthNote,
     icon: workspace.icon,
     accent: workspace.accent,
     type: workspace.type,
@@ -659,7 +999,100 @@ function toWorkspaceDto(
     nextMilestone: workspace.nextMilestone,
     latestUpdate: workspace.latestUpdate,
     metrics: workspace.metrics.map(({ label, value }) => ({ label, value })),
+    versionTag: `${workspace.latestUpdate.date}T12:00:00.000Z`,
+    updatedAt: `${workspace.latestUpdate.date}T12:00:00.000Z`,
   };
+}
+
+function requireDemoItem(
+  store: Map<string, WorkItemDto>,
+  access: AccessContext,
+  id: string,
+): WorkItemDto {
+  const item = store.get(id);
+  if (!item) throw notFound();
+  requireAccess(access, "update", "item", {
+    organizationId: "org-demo",
+    workspaceId: item.workspaceId,
+  });
+  return item;
+}
+
+function appendDemoHistory(
+  store: Map<string, WorkItemHistoryEntryDto[]>,
+  itemId: string,
+  entry: WorkItemHistoryEntryDto,
+) {
+  store.set(itemId, [...(store.get(itemId) ?? []), entry]);
+}
+
+function transitionDemoItem(
+  itemStore: Map<string, WorkItemDto>,
+  evidenceStore: Map<string, WorkItemEvidenceDto[]>,
+  historyStore: Map<string, WorkItemHistoryEntryDto[]>,
+  idempotencyStore: Map<string, StoredIdempotency<unknown>>,
+  context: ApiMutationContext,
+  id: string,
+  expectedVersion: number,
+  kind: "decision" | "approval" | "resolve",
+  state: string,
+  rationale: string,
+  evidenceBody?: string,
+) {
+  return withIdempotency(idempotencyStore, context, () => {
+    const item = requireDemoItem(itemStore, context.access, id);
+    if (item.version !== expectedVersion) throw versionConflict(item.version);
+    if (kind !== "resolve" && item.type !== kind) throw notFound();
+    const now = context.now.toISOString();
+    const updated: WorkItemDto = {
+      ...item,
+      ...(kind === "decision"
+        ? { decisionState: state as WorkItemDto["decisionState"] }
+        : {}),
+      ...(kind === "approval"
+        ? { approvalState: state as WorkItemDto["approvalState"] }
+        : {}),
+      ...(kind === "resolve" ? { status: "done" as const } : {}),
+      version: item.version + 1,
+      updatedAt: now,
+    };
+    const evidence = evidenceBody
+      ? {
+          id: context.newId(),
+          itemId: id,
+          author: { id: context.access.userId, name: "Mohammed Zaman" },
+          body: evidenceBody,
+          evidence: true as const,
+          createdAt: now,
+          updatedAt: now,
+        }
+      : undefined;
+    itemStore.set(id, updated);
+    if (evidence)
+      evidenceStore.set(id, [...(evidenceStore.get(id) ?? []), evidence]);
+    appendDemoHistory(historyStore, id, {
+      id: context.newId(),
+      type: `item.${kind}`,
+      reasonCode: `${kind}_${state}`,
+      summary: rationale,
+      actor: { id: context.access.userId, name: "Mohammed Zaman" },
+      ...(evidence
+        ? { evidence: [{ id: evidence.id, body: evidence.body }] }
+        : {}),
+      itemVersion: updated.version,
+      occurredAt: now,
+      metadata: { state },
+    });
+    return {
+      item: updated,
+      ...(evidence ? { evidence } : {}),
+      attentionRefreshQueued: false,
+    };
+  });
+}
+
+function demoUnavailable(message: string): DataPlaneError {
+  return new DataPlaneError("capability_unavailable", message);
 }
 
 function previewImport(input: ImportPreviewInput) {

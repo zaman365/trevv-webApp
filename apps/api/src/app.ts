@@ -1,17 +1,29 @@
 import {
   acceptInvitationSchema,
+  approvalTransitionSchema,
+  assignWorkItemSchema,
   attentionActionSchema,
+  blockWorkItemSchema,
+  captureInboxItemSchema,
   completeOnboardingSchema,
+  convertInboxItemSchema,
+  createBoardSchema,
   createInvitationSchema,
   createItemSchema,
+  createWaitingSchema,
+  createWorkspaceSchema,
+  decisionTransitionSchema,
   idSchema,
   idempotencyKeySchema,
   onboardingDraftSchema,
   organizationSelectionSchema,
+  resolveWorkItemSchema,
+  updateInboxItemSchema,
   updateItemSchema,
   updateMembershipSchema,
   waitingActionSchema,
   weeklyReviewInputSchema,
+  workItemEvidenceInputSchema,
   type Invitation,
   type Membership,
   type OnboardingState,
@@ -643,6 +655,43 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     ),
   );
 
+  api.post("/api/v1/waiting", async (context) => {
+    const expectedItemVersion = readIfMatch(context);
+    if (expectedItemVersion instanceof Response) return expectedItemVersion;
+    const parsed = createWaitingSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Waiting follow-up fields.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createWaiting(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/waiting",
+        parsed.data,
+        idempotency,
+        201,
+        expectedItemVersion,
+      ),
+      expectedItemVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
+
   api.patch("/api/v1/waiting/:id", async (context) => {
     const expectedVersion = readIfMatch(context);
     if (expectedVersion instanceof Response) return expectedVersion;
@@ -729,6 +778,58 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     return context.json(result.value, 201);
   });
 
+  api.get(
+    "/api/v1/reviews/weekly",
+    zValidator(
+      "query",
+      z.object({ workspaceId: idSchema.optional() }),
+      queryValidation("Review the weekly-review filters."),
+    ),
+    async (context) =>
+      context.json(
+        await dependencies.dataPlane.listWeeklyReviews(
+          requestContext(context, clock, idGenerator),
+          context.req.valid("query").workspaceId,
+        ),
+      ),
+  );
+
+  api.get(
+    "/api/v1/snapshots",
+    zValidator(
+      "query",
+      z.object({
+        portfolioId: idSchema.optional(),
+        workspaceId: idSchema.optional(),
+      }),
+      queryValidation("Review the snapshot filters."),
+    ),
+    async (context) => {
+      const filters = context.req.valid("query");
+      return context.json(
+        await dependencies.dataPlane.listSnapshots(
+          requestContext(context, clock, idGenerator),
+          {
+            ...(filters.portfolioId !== undefined
+              ? { portfolioId: filters.portfolioId }
+              : {}),
+            ...(filters.workspaceId !== undefined
+              ? { workspaceId: filters.workspaceId }
+              : {}),
+          },
+        ),
+      );
+    },
+  );
+
+  api.get("/api/v1/operations/status", async (context) =>
+    context.json(
+      await dependencies.dataPlane.getOperationsStatus(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
   api.get("/api/v1/insights", async (context) =>
     jsonUnknown(
       context,
@@ -799,6 +900,34 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     ),
   );
 
+  api.post("/api/v1/workspaces", async (context) => {
+    const parsed = createWorkspaceSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Workspace fields.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createWorkspace(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/workspaces",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setIdempotencyHeaders(context, idempotency, result.replayed);
+    return context.json(result.value, 201);
+  });
+
   api.get("/api/v1/workspaces/:slug", async (context) =>
     context.json(
       await dependencies.dataPlane.getWorkspace(
@@ -807,6 +936,178 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       ),
     ),
   );
+
+  api.get(
+    "/api/v1/boards",
+    zValidator(
+      "query",
+      z.object({ workspaceId: idSchema }),
+      queryValidation("Choose a valid Workspace."),
+    ),
+    async (context) =>
+      context.json(
+        await dependencies.dataPlane.listBoards(
+          requestContext(context, clock, idGenerator),
+          context.req.valid("query").workspaceId,
+        ),
+      ),
+  );
+
+  api.get("/api/v1/boards/:id", async (context) =>
+    context.json(
+      await dependencies.dataPlane.getBoard(
+        requestContext(context, clock, idGenerator),
+        context.req.param("id"),
+      ),
+    ),
+  );
+
+  api.post("/api/v1/boards", async (context) => {
+    const parsed = createBoardSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Board fields.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createBoard(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/boards",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setIdempotencyHeaders(context, idempotency, result.replayed);
+    return context.json(result.value, 201);
+  });
+
+  api.get("/api/v1/inbox", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listInbox(
+        requestContext(context, clock, idGenerator),
+      ),
+    ),
+  );
+
+  api.post("/api/v1/inbox", async (context) => {
+    const parsed = captureInboxItemSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Inbox capture fields.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.captureInboxItem(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/inbox",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
+
+  api.patch("/api/v1/inbox/:id", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = updateInboxItemSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Inbox changes.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.updateInboxItem(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/inbox/:id",
+        { id, patch: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.post("/api/v1/inbox/:id/convert", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = convertInboxItemSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Inbox conversion fields.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.convertInboxItem(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/inbox/:id/convert",
+        { id, conversion: parsed.data },
+        idempotency,
+        201,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.inboxItem.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
 
   api.get(
     "/api/v1/items",
@@ -839,6 +1140,72 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       );
     },
   );
+
+  api.get("/api/v1/items/:id", async (context) => {
+    const item = await dependencies.dataPlane.getItem(
+      requestContext(context, clock, idGenerator),
+      context.req.param("id"),
+    );
+    context.header("etag", `"${item.version}"`);
+    return context.json(item);
+  });
+
+  api.get("/api/v1/items/:id/history", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listItemHistory(
+        requestContext(context, clock, idGenerator),
+        context.req.param("id"),
+      ),
+    ),
+  );
+
+  api.get("/api/v1/items/:id/evidence", async (context) =>
+    context.json(
+      await dependencies.dataPlane.listItemEvidence(
+        requestContext(context, clock, idGenerator),
+        context.req.param("id"),
+      ),
+    ),
+  );
+
+  api.post("/api/v1/items/:id/evidence", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = workItemEvidenceInputSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Provide valid evidence.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.addItemEvidence(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id/evidence",
+        { id, evidence: parsed.data },
+        idempotency,
+        201,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.itemVersion,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
 
   api.post("/api/v1/items", async (context) => {
     const raw: unknown = await context.req.json().catch(() => undefined);
@@ -907,6 +1274,201 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     setMutationHeaders(
       context,
       result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.put("/api/v1/items/:id/assignees", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = assignWorkItemSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the assignee list.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.assignItem(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id/assignees",
+        { id, assignment: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.item.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.post("/api/v1/items/:id/block", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = blockWorkItemSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Provide a blocking state and reason.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.setItemBlocked(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id/block",
+        { id, transition: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.item.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.post("/api/v1/items/:id/decision", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = decisionTransitionSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the decision state and rationale.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.transitionDecision(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id/decision",
+        { id, transition: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.item.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.post("/api/v1/items/:id/approval", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = approvalTransitionSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the approval state and rationale.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.transitionApproval(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id/approval",
+        { id, transition: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.item.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.post("/api/v1/items/:id/resolve", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = resolveWorkItemSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Provide resolution evidence.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.resolveItem(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id/resolve",
+        { id, resolution: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.item.version,
       idempotency,
       result.replayed,
     );
@@ -1106,10 +1668,31 @@ export function createUnavailableLiveDependencies(): {
     getEntitlements: unavailable,
     previewImport: unavailable,
     listWorkspaces: unavailable,
+    createWorkspace: unavailable,
     getWorkspace: unavailable,
+    listBoards: unavailable,
+    getBoard: unavailable,
+    createBoard: unavailable,
+    listInbox: unavailable,
+    captureInboxItem: unavailable,
+    updateInboxItem: unavailable,
+    convertInboxItem: unavailable,
     listItems: unavailable,
+    getItem: unavailable,
     createItem: unavailable,
     updateItem: unavailable,
+    listItemHistory: unavailable,
+    listItemEvidence: unavailable,
+    addItemEvidence: unavailable,
+    assignItem: unavailable,
+    setItemBlocked: unavailable,
+    transitionDecision: unavailable,
+    transitionApproval: unavailable,
+    resolveItem: unavailable,
+    createWaiting: unavailable,
+    listWeeklyReviews: unavailable,
+    listSnapshots: unavailable,
+    getOperationsStatus: unavailable,
     search: unavailable,
     exportOrganization: unavailable,
     exportBoardCsv: unavailable,
@@ -1207,6 +1790,7 @@ function sessionFromIdentity(
       name: resolved.organization.name,
       slug: resolved.organization.slug,
       role: resolved.membership.role,
+      timezone: resolved.organization.timezone,
     },
     availableOrganizations: resolved.availableOrganizations,
     expiresAt: identity.expiresAt.toISOString(),
@@ -1623,6 +2207,17 @@ function mapError(
     return failure(context, 403, code, error.message);
   if (code === "repository_unavailable")
     return failure(context, 503, code, error.message);
+  if (code === "rate_limited") {
+    const details = dataPlaneErrorDetails(error);
+    const response = failure(context, 429, code, error.message, details);
+    const retryAfterSeconds = details?.retryAfterSeconds;
+    if (
+      Number.isSafeInteger(retryAfterSeconds) &&
+      Number(retryAfterSeconds) > 0
+    )
+      response.headers.set("retry-after", String(retryAfterSeconds));
+    return response;
+  }
   if (code === "invitation_delivery_incomplete")
     return failure(context, 503, code, error.message);
   if (isDatabaseUnavailable(error))
@@ -1679,6 +2274,29 @@ function jsonUnknown(
   value: unknown,
 ): Response {
   return context.json(value as never);
+}
+
+function validationFailure(
+  context: { get(name: "requestId"): string },
+  message: string,
+  issues: unknown,
+): Response {
+  return failure(context, 422, "validation_error", message, { issues });
+}
+
+function queryValidation(message: string) {
+  return (
+    result:
+      { success: true } | { success: false; error: { issues: unknown[] } },
+    context: Context,
+  ) =>
+    result.success
+      ? undefined
+      : validationFailure(
+          context as unknown as ApiContext,
+          message,
+          result.error.issues,
+        );
 }
 
 function failure(

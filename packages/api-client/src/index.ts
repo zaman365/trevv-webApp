@@ -1,20 +1,33 @@
 import {
+  approvalTransitionSchema,
   apiErrorSchema,
   acceptInvitationSchema,
+  assignWorkItemSchema,
   attentionActionSchema,
   attentionSignalSchema,
+  blockWorkItemSchema,
+  boardSchema,
+  captureInboxItemSchema,
   changeRadarSchema,
   completeOnboardingSchema,
+  convertInboxItemSchema,
+  convertedInboxItemSchema,
+  createBoardSchema,
   createInvitationSchema,
   createItemSchema,
+  createWaitingSchema,
+  createWorkspaceSchema,
+  decisionTransitionSchema,
   entityTagSchema,
   idempotencyKeySchema,
+  inboxItemSchema,
   invitationAcceptanceSchema,
   invitationSchema,
   managementMemorySchema,
   membershipSchema,
   onboardingDraftSchema,
   onboardingStateSchema,
+  operationsStatusSchema,
   organizationSummarySchema,
   organizationSelectionSchema,
   paginatedItemsSchema,
@@ -22,37 +35,69 @@ import {
   portfolioSchema,
   searchResultSchema,
   sessionSchema,
+  resolveWorkItemSchema,
+  updateInboxItemSchema,
   updateItemSchema,
   updateMembershipSchema,
   waitingActionSchema,
   waitingStateSchema,
   weeklyReviewInputSchema,
+  weeklyReviewRecordSchema,
   weeklyReviewResponseSchema,
+  workItemEvidenceInputSchema,
+  workItemEvidenceMutationSchema,
+  workItemEvidenceSchema,
+  workItemHistoryEntrySchema,
   workItemSchema,
+  workItemTransitionResponseSchema,
+  workspaceSnapshotSchema,
   workspaceDetailSchema,
+  workspaceCreationSchema,
   workspaceSchema,
   type AttentionSignalDto,
+  type ApprovalTransitionInput,
+  type AssignWorkItemInput,
+  type BlockWorkItemInput,
+  type BoardDto,
+  type CaptureInboxItemInput,
   type ChangeRadarDto,
   type CompleteOnboardingInput,
+  type ConvertInboxItemInput,
+  type ConvertedInboxItem,
   type CreateInvitationInput,
   type CreateItemInput,
+  type CreateBoardInput,
+  type CreateWaitingInput,
+  type CreateWorkspaceInput,
+  type DecisionTransitionInput,
   type PortfolioResponse,
   type ManagementMemoryDto,
   type Invitation,
   type InvitationAcceptance,
+  type InboxItemDto,
   type Membership,
   type OnboardingDraft,
   type OnboardingState,
+  type OperationsStatusDto,
   type OrganizationSummary,
   type SearchResultDto,
   type Session,
+  type ResolveWorkItemInput,
+  type UpdateInboxItemInput,
   type UpdateItemInput,
   type UpdateMembershipInput,
   type WaitingAction,
   type WaitingStateDto,
   type WeeklyReviewInput,
+  type WeeklyReviewRecordDto,
   type WeeklyReviewResponse,
+  type WorkItemEvidenceInput,
+  type WorkItemEvidenceDto,
+  type WorkItemHistoryEntryDto,
+  type WorkItemTransitionResponse,
   type WorkItemDto,
+  type WorkspaceSnapshotDto,
+  type WorkspaceCreation,
   type WorkspaceDetailDto,
 } from "@founderhq/api-contract";
 
@@ -330,10 +375,112 @@ export function createApiClient({
     workspaces: async () =>
       workspaceSchema.array().parse((await request("/workspaces")).body),
 
+    createWorkspace: async (
+      input: CreateWorkspaceInput,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<WorkspaceCreation>> => {
+      const response = await request("/workspaces", {
+        method: "POST",
+        headers: {
+          "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+        },
+        body: JSON.stringify(createWorkspaceSchema.parse(input)),
+      });
+      return {
+        data: workspaceCreationSchema.parse(response.body),
+        ...mutationMetadata(response.response),
+      };
+    },
+
     workspace: async (slug: string): Promise<WorkspaceDetailDto> =>
       workspaceDetailSchema.parse(
         (await request(`/workspaces/${encodeURIComponent(slug)}`)).body,
       ),
+
+    boards: async (workspaceId: string): Promise<BoardDto[]> =>
+      boardSchema
+        .array()
+        .parse(
+          (
+            await request(
+              `/boards?workspaceId=${encodeURIComponent(workspaceId)}`,
+            )
+          ).body,
+        ),
+
+    board: async (id: string): Promise<BoardDto> =>
+      boardSchema.parse(
+        (await request(`/boards/${encodeURIComponent(id)}`)).body,
+      ),
+
+    createBoard: async (
+      input: CreateBoardInput,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<BoardDto>> => {
+      const response = await request("/boards", {
+        method: "POST",
+        headers: {
+          "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+        },
+        body: JSON.stringify(createBoardSchema.parse(input)),
+      });
+      return {
+        data: boardSchema.parse(response.body),
+        ...mutationMetadata(response.response),
+      };
+    },
+
+    inbox: async (): Promise<InboxItemDto[]> =>
+      inboxItemSchema.array().parse((await request("/inbox")).body),
+
+    captureInboxItem: async (
+      input: CaptureInboxItemInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<InboxItemDto>> => {
+      const response = await request("/inbox", {
+        method: "POST",
+        headers: {
+          "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+        },
+        body: JSON.stringify(captureInboxItemSchema.parse(input)),
+      });
+      return parseVersionedMutation(response, inboxItemSchema);
+    },
+
+    updateInboxItem: async (
+      id: string,
+      input: UpdateInboxItemInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<InboxItemDto>> => {
+      const response = await request(`/inbox/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: mutationHeaders(version, idempotencyKey),
+        body: JSON.stringify(updateInboxItemSchema.parse(input)),
+      });
+      return parseVersionedMutation(response, inboxItemSchema);
+    },
+
+    convertInboxItem: async (
+      id: string,
+      input: ConvertInboxItemInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<ConvertedInboxItem>> => {
+      const response = await request(
+        `/inbox/${encodeURIComponent(id)}/convert`,
+        {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(convertInboxItemSchema.parse(input)),
+        },
+      );
+      return parseNestedVersionedMutation(
+        response,
+        convertedInboxItemSchema,
+        (value) => value.inboxItem.version,
+      );
+    },
 
     changeRadar: async (): Promise<ChangeRadarDto> =>
       changeRadarSchema.parse((await request("/change-radar")).body),
@@ -361,6 +508,51 @@ export function createApiClient({
       if (filters.limit) query.set("limit", String(filters.limit));
       return paginatedItemsSchema.parse(
         (await request(`/items${query.size ? `?${query}` : ""}`)).body,
+      );
+    },
+
+    item: async (id: string): Promise<WorkItemDto> =>
+      workItemSchema.parse(
+        (await request(`/items/${encodeURIComponent(id)}`)).body,
+      ),
+
+    itemHistory: async (id: string): Promise<WorkItemHistoryEntryDto[]> =>
+      workItemHistoryEntrySchema
+        .array()
+        .parse(
+          (await request(`/items/${encodeURIComponent(id)}/history`)).body,
+        ),
+
+    itemEvidence: async (id: string): Promise<WorkItemEvidenceDto[]> =>
+      workItemEvidenceSchema
+        .array()
+        .parse(
+          (await request(`/items/${encodeURIComponent(id)}/evidence`)).body,
+        ),
+
+    addItemEvidence: async (
+      id: string,
+      input: WorkItemEvidenceInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<
+      VersionedMutationResponse<{
+        evidence: WorkItemEvidenceDto;
+        itemVersion: number;
+      }>
+    > => {
+      const response = await request(
+        `/items/${encodeURIComponent(id)}/evidence`,
+        {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(workItemEvidenceInputSchema.parse(input)),
+        },
+      );
+      return parseNestedVersionedMutation(
+        response,
+        workItemEvidenceMutationSchema,
+        (value) => value.itemVersion,
       );
     },
 
@@ -393,6 +585,92 @@ export function createApiClient({
       return parseVersionedMutation(response, workItemSchema);
     },
 
+    assignItem: async (
+      id: string,
+      input: AssignWorkItemInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<WorkItemTransitionResponse>> =>
+      parseItemTransition(
+        await request(`/items/${encodeURIComponent(id)}/assignees`, {
+          method: "PUT",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(assignWorkItemSchema.parse(input)),
+        }),
+      ),
+
+    setItemBlocked: async (
+      id: string,
+      input: BlockWorkItemInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<WorkItemTransitionResponse>> =>
+      parseItemTransition(
+        await request(`/items/${encodeURIComponent(id)}/block`, {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(blockWorkItemSchema.parse(input)),
+        }),
+      ),
+
+    transitionDecision: async (
+      id: string,
+      input: DecisionTransitionInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<WorkItemTransitionResponse>> =>
+      parseItemTransition(
+        await request(`/items/${encodeURIComponent(id)}/decision`, {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(decisionTransitionSchema.parse(input)),
+        }),
+      ),
+
+    transitionApproval: async (
+      id: string,
+      input: ApprovalTransitionInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<WorkItemTransitionResponse>> =>
+      parseItemTransition(
+        await request(`/items/${encodeURIComponent(id)}/approval`, {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(approvalTransitionSchema.parse(input)),
+        }),
+      ),
+
+    resolveItem: async (
+      id: string,
+      input: ResolveWorkItemInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<WorkItemTransitionResponse>> =>
+      parseItemTransition(
+        await request(`/items/${encodeURIComponent(id)}/resolve`, {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(resolveWorkItemSchema.parse(input)),
+        }),
+      ),
+
+    createWaiting: async (
+      input: CreateWaitingInput,
+      itemVersion: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<WaitingStateDto>> => {
+      const response = await request("/waiting", {
+        method: "POST",
+        headers: {
+          "if-match": `"${itemVersion}"`,
+          "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+        },
+        body: JSON.stringify(createWaitingSchema.parse(input)),
+      });
+      return parseVersionedMutation(response, waitingStateSchema);
+    },
+
     submitWeeklyReview: async (
       input: WeeklyReviewInput,
       idempotencyKey: string,
@@ -409,6 +687,35 @@ export function createApiClient({
         ...mutationMetadata(response.response),
       };
     },
+
+    weeklyReviews: async (
+      workspaceId?: string,
+    ): Promise<WeeklyReviewRecordDto[]> =>
+      weeklyReviewRecordSchema
+        .array()
+        .parse(
+          (
+            await request(
+              `/reviews/weekly${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ""}`,
+            )
+          ).body,
+        ),
+
+    workspaceSnapshots: async (
+      filters: { workspaceId?: string; portfolioId?: string } = {},
+    ): Promise<WorkspaceSnapshotDto[]> => {
+      const query = new URLSearchParams();
+      if (filters.workspaceId) query.set("workspaceId", filters.workspaceId);
+      if (filters.portfolioId) query.set("portfolioId", filters.portfolioId);
+      return workspaceSnapshotSchema
+        .array()
+        .parse(
+          (await request(`/snapshots${query.size ? `?${query}` : ""}`)).body,
+        );
+    },
+
+    operationStatus: async (): Promise<OperationsStatusDto> =>
+      operationsStatusSchema.parse((await request("/operations/status")).body),
   };
 }
 
@@ -436,6 +743,33 @@ function parseVersionedMutation<T>(
       result.response.status,
     );
   return { data, etag, ...mutationMetadata(result.response) };
+}
+
+function parseNestedVersionedMutation<T>(
+  result: RawResponse,
+  schema: { parse(value: unknown): T },
+  version: (value: T) => number,
+): VersionedMutationResponse<T> {
+  const data = schema.parse(result.body);
+  const etag = entityTagSchema.parse(result.response.headers.get("etag"));
+  if (Number.parseInt(etag.slice(1, -1), 10) !== version(data))
+    throw new TrevvApiError(
+      "unexpected_response",
+      "The response ETag did not match the resource version.",
+      result.response.headers.get("x-request-id") ?? "unknown",
+      result.response.status,
+    );
+  return { data, etag, ...mutationMetadata(result.response) };
+}
+
+function parseItemTransition(
+  result: RawResponse,
+): VersionedMutationResponse<WorkItemTransitionResponse> {
+  return parseNestedVersionedMutation(
+    result,
+    workItemTransitionResponseSchema,
+    (value) => value.item.version,
+  );
 }
 
 function mutationMetadata(response: Response): {

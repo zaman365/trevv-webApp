@@ -81,10 +81,14 @@ export const organizationSummarySchema = z.object({
   role: roleSchema,
 });
 
+export const organizationContextSchema = organizationSummarySchema.extend({
+  timezone: z.string().min(1).max(120),
+});
+
 export const sessionSchema = z.object({
   user: userSchema,
   organizationId: idSchema,
-  organization: organizationSummarySchema,
+  organization: organizationContextSchema,
   availableOrganizations: z.array(organizationSummarySchema).min(1).max(100),
   expiresAt: z.iso.datetime(),
 });
@@ -230,6 +234,7 @@ export const workspaceSchema = z.object({
   portfolioId: idSchema,
   slug: z.string().min(1).max(120),
   name: z.string().min(1).max(160),
+  description: z.string().max(5_000),
   icon: z.string().min(1).max(12),
   accent: z.string().regex(/^#[0-9a-f]{6}$/i),
   type: workspaceTypeSchema,
@@ -251,6 +256,72 @@ export const workspaceSchema = z.object({
       }),
     )
     .max(12),
+  versionTag: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const createWorkspaceSchema = z
+  .object({
+    portfolioId: idSchema,
+    name: z.string().trim().min(2).max(160),
+    slug: productSlugSchema,
+    description: z.string().trim().max(5_000).default(""),
+    type: workspaceTypeSchema,
+    accent: z.string().regex(/^#[0-9a-f]{6}$/i),
+    icon: z.string().trim().min(1).max(12),
+    stage: lifecycleStageSchema.default("idea"),
+    health: workspaceHealthSchema.default("on_track"),
+    healthNote: z.string().trim().max(1_000).default(""),
+    priority: z.string().trim().max(500).default(""),
+    leadUserId: idSchema.optional(),
+    initialBoardName: z.string().trim().min(1).max(160).optional(),
+  })
+  .strict();
+
+export const boardVisibilitySchema = z.enum(["private", "organization"]);
+export const progressModeSchema = z.enum([
+  "none",
+  "task_completion",
+  "weighted_work_items",
+  "milestone_completion",
+  "weighted_milestones",
+  "manual",
+]);
+
+export const boardSchema = z.object({
+  id: idSchema,
+  workspaceId: idSchema,
+  name: z.string().min(1).max(160),
+  description: z.string().max(5_000),
+  templateKey: z.string().max(120).optional(),
+  visibility: boardVisibilitySchema,
+  progressMode: progressModeSchema,
+  manualProgressValue: z.number().min(0).max(100).optional(),
+  manualProgressNote: z.string().max(2_000).optional(),
+  startDate: z.iso.date().optional(),
+  endDate: z.iso.date().optional(),
+  ordering: z.number(),
+  versionTag: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const createBoardSchema = z
+  .object({
+    workspaceId: idSchema,
+    name: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(5_000).default(""),
+    templateKey: z.string().trim().max(120).optional(),
+    visibility: boardVisibilitySchema.default("private"),
+    progressMode: progressModeSchema.default("task_completion"),
+    startDate: z.iso.date().optional(),
+    endDate: z.iso.date().optional(),
+  })
+  .strict();
+
+export const workspaceCreationSchema = z.object({
+  workspace: workspaceSchema,
+  board: boardSchema,
 });
 
 const workItemBaseSchema = z.object({
@@ -258,6 +329,7 @@ const workItemBaseSchema = z.object({
   workspaceId: idSchema,
   boardId: idSchema,
   title: z.string().min(1).max(500),
+  description: z.string().max(20_000),
   type: itemTypeSchema,
   priority: prioritySchema,
   status: itemStatusSchema,
@@ -277,6 +349,8 @@ const workItemBaseSchema = z.object({
     .enum(["needed", "analyzing", "delegated", "deferred", "decided"])
     .optional(),
   version: z.number().int().nonnegative().max(2_147_483_647),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export const workItemSchema = workItemBaseSchema.superRefine(
@@ -356,9 +430,24 @@ export const attentionSignalSchema = z.object({
   impact: z.number().min(1).max(5),
   urgency: z.number().min(1).max(5),
   responsibility: z.number().positive(),
+  reasonCode: z.string().min(1).max(160),
+  sourceFingerprint: z.string().min(1).max(256),
   reason: z.string().min(1).max(2_000),
   recommendedAction: z.string().max(2_000).optional(),
   createdAt: z.iso.datetime(),
+  computedAt: z.iso.datetime(),
+  sourceEvidence: z
+    .array(
+      z.object({
+        sourceType: z.string().min(1).max(80),
+        sourceId: idSchema,
+        capturedAt: z.iso.datetime(),
+        summary: z.string().max(1_000).optional(),
+        data: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
   resolvedAt: z.iso.datetime().optional(),
   dismissedAt: z.iso.datetime().optional(),
   snoozedUntil: z.iso.datetime().optional(),
@@ -434,6 +523,32 @@ export const waitingActionSchema = z
       });
   });
 
+export const createWaitingSchema = z
+  .object({
+    workspaceId: idSchema,
+    entityType: z.literal("work_item"),
+    entityId: idSchema,
+    title: z.string().trim().min(1).max(500),
+    waitingType: z.enum([
+      "person",
+      "team",
+      "external_partner",
+      "client",
+      "vendor",
+      "decision",
+      "document",
+      "dependency",
+      "other",
+    ]),
+    waitingReferenceId: idSchema.optional(),
+    waitingLabel: z.string().trim().max(200).optional(),
+    expectedBy: z.iso.date().optional(),
+    followUpOwnerId: idSchema,
+    nextFollowUp: z.iso.date().optional(),
+    note: z.string().trim().max(2_000).optional(),
+  })
+  .strict();
+
 export const weeklyReviewInputSchema = z.object({
   workspaceId: idSchema,
   health: workspaceHealthSchema,
@@ -466,6 +581,25 @@ export const weeklyReviewResponseSchema = z.object({
     source: z.literal("weekly_review"),
   }),
   attentionRefreshQueued: z.boolean(),
+});
+
+export const weeklyReviewRecordSchema = z.object({
+  id: idSchema,
+  workspaceId: idSchema,
+  author: z.object({
+    id: idSchema,
+    name: z.string().min(1).max(160),
+  }),
+  health: workspaceHealthSchema.optional(),
+  progress: z.string(),
+  blocker: z.string(),
+  nextMilestone: z.string(),
+  decisionNeeded: z.string().optional(),
+  priorityNextWeek: z.string(),
+  note: z.string().optional(),
+  publishedAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export const workspaceDetailSchema = z.object({
@@ -667,14 +801,201 @@ export const updateMessageResponseSchema = z.object({
   responseState: messageResponseStateSchema,
 });
 
+export const inboxItemSchema = z.object({
+  id: idSchema,
+  userId: idSchema,
+  category: z.string().min(1).max(80),
+  title: z.string().min(1).max(500),
+  body: z.string().max(20_000),
+  resource: z.record(z.string(), z.unknown()),
+  doneAt: z.iso.datetime().optional(),
+  snoozedUntil: z.iso.datetime().optional(),
+  convertedItemId: idSchema.optional(),
+  convertedAt: z.iso.datetime().optional(),
+  version: z.number().int().nonnegative().max(2_147_483_647),
+  createdAt: z.iso.datetime(),
+});
+
+export const captureInboxItemSchema = z
+  .object({
+    category: z.string().trim().min(1).max(80),
+    title: z.string().trim().min(1).max(500),
+    body: z.string().trim().max(20_000).default(""),
+    resource: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
+
+export const updateInboxItemSchema = z
+  .object({
+    done: z.boolean().optional(),
+    snoozedUntil: z.iso.datetime().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.done !== undefined || value.snoozedUntil !== undefined,
+    "Change the completion or snooze state.",
+  );
+
+export const convertInboxItemSchema = z
+  .object({
+    workspaceId: idSchema,
+    boardId: idSchema,
+    title: z.string().trim().min(1).max(500).optional(),
+    description: z.string().trim().max(20_000).optional(),
+    type: itemTypeSchema.default("task"),
+    priority: prioritySchema.default("normal"),
+    status: itemStatusSchema.default("not_started"),
+    dueDate: z.iso.date().optional(),
+    assigneeIds: z.array(idSchema).max(100).default([]),
+    approvalState: z
+      .enum(["pending", "changes_requested", "approved", "rejected"])
+      .optional(),
+    decisionState: z
+      .enum(["needed", "analyzing", "delegated", "deferred", "decided"])
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.type === "approval" && !value.approvalState)
+      context.addIssue({
+        code: "custom",
+        path: ["approvalState"],
+        message: "An approval item needs an approval state.",
+      });
+    if (value.type !== "approval" && value.approvalState)
+      context.addIssue({
+        code: "custom",
+        path: ["approvalState"],
+        message: "Only approval items can carry an approval state.",
+      });
+    if (value.type === "decision" && !value.decisionState)
+      context.addIssue({
+        code: "custom",
+        path: ["decisionState"],
+        message: "A decision item needs a decision state.",
+      });
+    if (value.type !== "decision" && value.decisionState)
+      context.addIssue({
+        code: "custom",
+        path: ["decisionState"],
+        message: "Only decision items can carry a decision state.",
+      });
+  });
+
+export const convertedInboxItemSchema = z.object({
+  inboxItem: inboxItemSchema,
+  workItem: workItemSchema,
+});
+
+export const workItemEvidenceInputSchema = z
+  .object({ body: z.string().trim().min(1).max(20_000) })
+  .strict();
+
+export const workItemEvidenceSchema = z.object({
+  id: idSchema,
+  itemId: idSchema,
+  author: z.object({
+    id: idSchema,
+    name: z.string().min(1).max(160),
+  }),
+  body: z.string().min(1).max(20_000),
+  evidence: z.literal(true),
+  editedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const workItemEvidenceMutationSchema = z.object({
+  evidence: workItemEvidenceSchema,
+  itemVersion: z.number().int().nonnegative().max(2_147_483_647),
+});
+
+export const workItemHistoryEntrySchema = z.object({
+  id: idSchema,
+  type: z.string().min(1).max(120),
+  reasonCode: z.string().min(1).max(160),
+  summary: z.string().min(1).max(2_000),
+  actor: z
+    .object({
+      id: idSchema,
+      name: z.string().min(1).max(160),
+    })
+    .optional(),
+  evidence: z
+    .array(
+      z.object({
+        id: idSchema,
+        body: z.string().min(1).max(20_000),
+      }),
+    )
+    .max(25)
+    .optional(),
+  itemVersion: z.number().int().nonnegative().optional(),
+  occurredAt: z.iso.datetime(),
+  metadata: z.record(z.string(), z.unknown()),
+});
+
+export const assignWorkItemSchema = z
+  .object({ assigneeIds: z.array(idSchema).max(100) })
+  .strict();
+
+export const blockWorkItemSchema = z
+  .object({
+    blocked: z.boolean(),
+    reason: z.string().trim().min(1).max(2_000),
+  })
+  .strict();
+
+export const decisionTransitionSchema = z
+  .object({
+    state: z.enum(["needed", "analyzing", "delegated", "deferred", "decided"]),
+    rationale: z.string().trim().min(1).max(5_000),
+    evidence: z.string().trim().min(1).max(20_000).optional(),
+  })
+  .strict();
+
+export const approvalTransitionSchema = z
+  .object({
+    state: z.enum(["pending", "changes_requested", "approved", "rejected"]),
+    rationale: z.string().trim().min(1).max(5_000),
+    evidence: z.string().trim().min(1).max(20_000).optional(),
+  })
+  .strict();
+
+export const resolveWorkItemSchema = z
+  .object({ evidence: z.string().trim().min(1).max(20_000) })
+  .strict();
+
+export const workItemTransitionResponseSchema = z.object({
+  item: workItemSchema,
+  evidence: workItemEvidenceSchema.optional(),
+  attentionRefreshQueued: z.boolean(),
+});
+
+export const operationsStatusSchema = z.object({
+  pendingOutbox: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+  oldestPendingAt: z.iso.datetime().optional(),
+  lastProcessedAt: z.iso.datetime().optional(),
+});
+
 export const paginatedItemsSchema = z.object({
   data: z.array(workItemSchema),
   nextCursor: z.string().nullable(),
 });
 
 export const createItemSchema = workItemBaseSchema
-  .omit({ id: true, version: true, assignees: true })
-  .extend({ assigneeIds: z.array(idSchema).max(100).default([]) })
+  .omit({
+    id: true,
+    version: true,
+    assignees: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    description: z.string().max(20_000).default(""),
+    assigneeIds: z.array(idSchema).max(100).default([]),
+  })
   .superRefine((value, context) => {
     if (value.type === "approval" && !value.approvalState)
       context.addIssue({
@@ -704,6 +1025,7 @@ export const createItemSchema = workItemBaseSchema
 export const updateItemSchema = workItemBaseSchema
   .pick({
     title: true,
+    description: true,
     status: true,
     priority: true,
     dueDate: true,
@@ -732,6 +1054,7 @@ export const apiErrorSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
+export type OrganizationContext = z.infer<typeof organizationContextSchema>;
 export type OnboardingDraft = z.infer<typeof onboardingDraftSchema>;
 export type CompleteOnboardingInput = z.infer<typeof completeOnboardingSchema>;
 export type OnboardingState = z.infer<typeof onboardingStateSchema>;
@@ -741,6 +1064,10 @@ export type InvitationAcceptance = z.infer<typeof invitationAcceptanceSchema>;
 export type Membership = z.infer<typeof membershipSchema>;
 export type UpdateMembershipInput = z.infer<typeof updateMembershipSchema>;
 export type WorkspaceDto = z.infer<typeof workspaceSchema>;
+export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
+export type WorkspaceCreation = z.infer<typeof workspaceCreationSchema>;
+export type BoardDto = z.infer<typeof boardSchema>;
+export type CreateBoardInput = z.infer<typeof createBoardSchema>;
 export type WorkItemDto = z.infer<typeof workItemSchema>;
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
@@ -750,8 +1077,10 @@ export type AttentionSignalDto = z.infer<typeof attentionSignalSchema>;
 export type AttentionAction = z.infer<typeof attentionActionSchema>;
 export type WaitingStateDto = z.infer<typeof waitingStateSchema>;
 export type WaitingAction = z.infer<typeof waitingActionSchema>;
+export type CreateWaitingInput = z.infer<typeof createWaitingSchema>;
 export type WeeklyReviewInput = z.infer<typeof weeklyReviewInputSchema>;
 export type WeeklyReviewResponse = z.infer<typeof weeklyReviewResponseSchema>;
+export type WeeklyReviewRecordDto = z.infer<typeof weeklyReviewRecordSchema>;
 export type WorkspaceDetailDto = z.infer<typeof workspaceDetailSchema>;
 export type MeaningfulChangeDto = z.infer<typeof meaningfulChangeSchema>;
 export type ChangeRadarDto = z.infer<typeof changeRadarSchema>;
@@ -762,6 +1091,28 @@ export type ManagementMemoryDto = z.infer<typeof managementMemorySchema>;
 export type SearchResultDto = z.infer<typeof searchResultSchema>;
 export type ConversationDto = z.infer<typeof conversationSchema>;
 export type ConversationMessageDto = z.infer<typeof conversationMessageSchema>;
+export type InboxItemDto = z.infer<typeof inboxItemSchema>;
+export type CaptureInboxItemInput = z.infer<typeof captureInboxItemSchema>;
+export type UpdateInboxItemInput = z.infer<typeof updateInboxItemSchema>;
+export type ConvertInboxItemInput = z.infer<typeof convertInboxItemSchema>;
+export type ConvertedInboxItem = z.infer<typeof convertedInboxItemSchema>;
+export type WorkItemEvidenceInput = z.infer<typeof workItemEvidenceInputSchema>;
+export type WorkItemEvidenceDto = z.infer<typeof workItemEvidenceSchema>;
+export type WorkItemEvidenceMutation = z.infer<
+  typeof workItemEvidenceMutationSchema
+>;
+export type WorkItemHistoryEntryDto = z.infer<
+  typeof workItemHistoryEntrySchema
+>;
+export type AssignWorkItemInput = z.infer<typeof assignWorkItemSchema>;
+export type BlockWorkItemInput = z.infer<typeof blockWorkItemSchema>;
+export type DecisionTransitionInput = z.infer<typeof decisionTransitionSchema>;
+export type ApprovalTransitionInput = z.infer<typeof approvalTransitionSchema>;
+export type ResolveWorkItemInput = z.infer<typeof resolveWorkItemSchema>;
+export type WorkItemTransitionResponse = z.infer<
+  typeof workItemTransitionResponseSchema
+>;
+export type OperationsStatusDto = z.infer<typeof operationsStatusSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
 export const eventSchema = z.discriminatedUnion("type", [

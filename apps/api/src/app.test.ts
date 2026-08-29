@@ -6,6 +6,7 @@ import {
   createRuntimeApi,
   createUnavailableLiveDependencies,
 } from "./app";
+import { DataPlaneError } from "./data-plane";
 
 const fixedNow = new Date("2026-08-24T12:00:00.000Z");
 
@@ -21,6 +22,7 @@ const itemInput: CreateItemInput = {
   workspaceId: "workspace-northstar",
   boardId: "b-northstar-launch",
   title: "Verify launch smoke test",
+  description: "Run the durable launch-path checks.",
   type: "task",
   priority: "high",
   status: "working",
@@ -130,6 +132,98 @@ describe("TREVV API v1 dependency boundaries", () => {
     expect(
       ((await unavailable.json()) as { error: { code: string } }).error.code,
     ).toBe("repository_unavailable");
+  });
+
+  it("maps live transport failures to stable 401, 429, and 500 envelopes", async () => {
+    const live = createUnavailableLiveDependencies();
+    const anonymous = createApiApp({
+      mode: "live",
+      dataPlane: live.dataPlane,
+      accessResolver: { mode: "live", resolve: async () => null },
+    });
+    const unauthenticated = await anonymous.request("/api/v1/portfolios");
+    expect(unauthenticated.status).toBe(401);
+    await expect(errorCode(unauthenticated)).resolves.toBe("unauthenticated");
+
+    const accessResolver = {
+      mode: "live" as const,
+      async resolve() {
+        return {
+          access: {
+            userId: "user-live",
+            organizationId: "org-live",
+            role: "owner" as const,
+            accessiblePortfolioIds: new Set(["portfolio-live"]),
+            managedPortfolioIds: new Set(["portfolio-live"]),
+            accessibleWorkspaceIds: new Set(["workspace-live"]),
+            managedWorkspaceIds: new Set(["workspace-live"]),
+          },
+          session: {
+            user: {
+              id: "user-live",
+              email: "live@example.test",
+              name: "Live User",
+              role: "owner" as const,
+              locale: "en" as const,
+            },
+            organizationId: "org-live",
+            organization: {
+              id: "org-live",
+              name: "Live Org",
+              slug: "live-org",
+              role: "owner" as const,
+              timezone: "Europe/Berlin",
+            },
+            availableOrganizations: [
+              {
+                id: "org-live",
+                name: "Live Org",
+                slug: "live-org",
+                role: "owner" as const,
+              },
+            ],
+            expiresAt: "2026-08-30T12:00:00.000Z",
+          },
+        };
+      },
+    };
+    const rateLimited = createApiApp({
+      mode: "live",
+      accessResolver,
+      dataPlane: {
+        ...live.dataPlane,
+        async listPortfolios() {
+          throw new DataPlaneError(
+            "rate_limited",
+            "Retry this request later.",
+            { retryAfterSeconds: 17 },
+          );
+        },
+      },
+    });
+    const limited = await rateLimited.request("/api/v1/portfolios");
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("17");
+    await expect(errorCode(limited)).resolves.toBe("rate_limited");
+
+    const broken = createApiApp({
+      mode: "live",
+      accessResolver,
+      dataPlane: {
+        ...live.dataPlane,
+        async listPortfolios() {
+          throw new Error("internal database detail");
+        },
+      },
+    });
+    const internal = await broken.request("/api/v1/portfolios");
+    expect(internal.status).toBe(500);
+    expect(await internal.json()).toMatchObject({
+      error: {
+        code: "internal_error",
+        message: "TREVV could not complete that request.",
+      },
+    });
   });
 
   it("allows only verified cookie identities through exact pre-membership paths", async () => {
@@ -259,6 +353,148 @@ describe("TREVV API v1 dependency boundaries", () => {
 });
 
 describe("TREVV API v1 demo contract", () => {
+  it("exposes organization timezone and canonical provenance fields", async () => {
+    const app = freshDemoApp();
+    const session = (await (await app.request("/api/v1/session")).json()) as {
+      organization: { timezone?: string };
+    };
+    expect(session.organization.timezone).toBe("Europe/Berlin");
+
+    const attention = (await (
+      await app.request("/api/v1/attention")
+    ).json()) as Array<{
+      reasonCode?: string;
+      sourceFingerprint?: string;
+      computedAt?: string;
+      sourceEvidence?: Array<{ data?: Record<string, unknown> }>;
+    }>;
+    expect(attention[0]).toMatchObject({
+      reasonCode: expect.any(String),
+      sourceFingerprint: expect.stringContaining("fictional-demo:"),
+      computedAt: fixedNow.toISOString(),
+      sourceEvidence: [{ data: { source: "fictional_demo_fixture" } }],
+    });
+  });
+
+  it("serves Board and canonical WorkItem detail reads", async () => {
+    const app = freshDemoApp();
+    const boards = await app.request(
+      "/api/v1/boards?workspaceId=workspace-northstar",
+    );
+    expect(boards.status).toBe(200);
+    expect(await boards.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "b-northstar-launch",
+          workspaceId: "workspace-northstar",
+          versionTag: fixedNow.toISOString(),
+        }),
+      ]),
+    );
+
+    const items = (await (
+      await app.request("/api/v1/items?workspaceId=workspace-northstar")
+    ).json()) as { data: Array<{ id: string; version: number }> };
+    const item = items.data[0];
+    expect(item).toBeTruthy();
+    const detail = await app.request(`/api/v1/items/${item!.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.headers.get("etag")).toBe(`"${item!.version}"`);
+    expect(await detail.json()).toMatchObject({
+      id: item!.id,
+      description: expect.any(String),
+      createdAt: fixedNow.toISOString(),
+      updatedAt: fixedNow.toISOString(),
+    });
+  });
+
+  it("round-trips blocking, evidence, history, and Waiting concurrency", async () => {
+    const app = freshDemoApp();
+    const created = await app.request("/api/v1/items", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "71111111-1111-4111-8111-111111111111",
+      },
+      body: JSON.stringify({ ...itemInput, title: "Golden path item" }),
+    });
+    const item = (await created.json()) as { id: string; version: number };
+
+    const blocked = await app.request(`/api/v1/items/${item.id}/block`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "if-match": '"0"',
+        "idempotency-key": "72222222-2222-4222-8222-222222222222",
+      },
+      body: JSON.stringify({ blocked: true, reason: "Waiting for evidence." }),
+    });
+    expect(blocked.status).toBe(200);
+    expect(blocked.headers.get("etag")).toBe('"1"');
+    expect(await blocked.json()).toMatchObject({
+      item: { status: "blocked", version: 1 },
+    });
+
+    const evidence = await app.request(`/api/v1/items/${item.id}/evidence`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "if-match": '"1"',
+        "idempotency-key": "73333333-3333-4333-8333-333333333333",
+      },
+      body: JSON.stringify({ body: "Vendor confirmed the dependency." }),
+    });
+    expect(evidence.status).toBe(201);
+    expect(evidence.headers.get("etag")).toBe('"2"');
+
+    const waiting = await app.request("/api/v1/waiting", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "if-match": '"2"',
+        "idempotency-key": "74444444-4444-4444-8444-444444444444",
+      },
+      body: JSON.stringify({
+        workspaceId: itemInput.workspaceId,
+        entityType: "work_item",
+        entityId: item.id,
+        title: "Wait for vendor",
+        waitingType: "vendor",
+        followUpOwnerId: "user-owner",
+        note: "Follow up tomorrow.",
+      }),
+    });
+    expect(waiting.status).toBe(201);
+    expect(waiting.headers.get("etag")).toBe('"0"');
+
+    const staleWaiting = await app.request("/api/v1/waiting", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "if-match": '"2"',
+        "idempotency-key": "75555555-5555-4555-8555-555555555555",
+      },
+      body: JSON.stringify({
+        workspaceId: itemInput.workspaceId,
+        entityType: "work_item",
+        entityId: item.id,
+        title: "Stale wait",
+        waitingType: "vendor",
+        followUpOwnerId: "user-owner",
+      }),
+    });
+    expect(staleWaiting.status).toBe(409);
+    expect(await errorCode(staleWaiting)).toBe("version_conflict");
+
+    const history = await app.request(`/api/v1/items/${item.id}/history`);
+    expect(await history.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ reasonCode: "blocked" }),
+        expect.objectContaining({ reasonCode: "evidence_added" }),
+      ]),
+    );
+  });
+
   it("returns a Portfolio roll-up using the injected clock", async () => {
     const response = await freshDemoApp().request("/api/v1/portfolio");
     expect(response.status).toBe(200);

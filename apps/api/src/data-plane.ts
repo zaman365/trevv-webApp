@@ -1,18 +1,41 @@
 import type {
+  ApprovalTransitionInput,
+  AssignWorkItemInput,
   AttentionSignalDto,
   AttentionAction,
+  BlockWorkItemInput,
+  BoardDto,
+  CaptureInboxItemInput,
   ChangeRadarDto,
+  ConvertInboxItemInput,
+  ConvertedInboxItem,
+  CreateBoardInput,
   CreateItemInput,
+  CreateWaitingInput,
+  CreateWorkspaceInput,
+  DecisionTransitionInput,
+  InboxItemDto,
   ManagementMemoryDto,
+  OperationsStatusDto,
   PortfolioDto,
   PortfolioResponse,
   SearchResultDto,
   Session,
+  ResolveWorkItemInput,
+  UpdateInboxItemInput,
   WaitingAction,
   WaitingStateDto,
   WeeklyReviewInput,
+  WeeklyReviewRecordDto,
   WeeklyReviewResponse,
+  WorkItemEvidenceInput,
+  WorkItemEvidenceMutation,
+  WorkItemEvidenceDto,
+  WorkItemHistoryEntryDto,
+  WorkItemTransitionResponse,
   WorkItemDto,
+  WorkspaceCreation,
+  WorkspaceSnapshotDto,
   WorkspaceDetailDto,
   WorkspaceDto,
   UpdateItemInput,
@@ -110,10 +133,40 @@ export interface DataPlane {
     input: ImportPreviewInput,
   ): Promise<unknown>;
   listWorkspaces(context: ApiRequestContext): Promise<WorkspaceDto[]>;
+  createWorkspace(
+    context: ApiMutationContext,
+    input: CreateWorkspaceInput,
+  ): Promise<MutationResult<WorkspaceCreation>>;
   getWorkspace(
     context: ApiRequestContext,
     slug: string,
   ): Promise<WorkspaceDetail>;
+  listBoards(
+    context: ApiRequestContext,
+    workspaceId: string,
+  ): Promise<BoardDto[]>;
+  getBoard(context: ApiRequestContext, id: string): Promise<BoardDto>;
+  createBoard(
+    context: ApiMutationContext,
+    input: CreateBoardInput,
+  ): Promise<MutationResult<BoardDto>>;
+  listInbox(context: ApiRequestContext): Promise<InboxItemDto[]>;
+  captureInboxItem(
+    context: ApiMutationContext,
+    input: CaptureInboxItemInput,
+  ): Promise<MutationResult<InboxItemDto>>;
+  updateInboxItem(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: UpdateInboxItemInput,
+  ): Promise<MutationResult<InboxItemDto>>;
+  convertInboxItem(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: ConvertInboxItemInput,
+  ): Promise<MutationResult<ConvertedInboxItem>>;
   listItems(
     context: ApiRequestContext,
     filters: {
@@ -123,6 +176,7 @@ export interface DataPlane {
       limit: number;
     },
   ): Promise<PaginatedWorkItems>;
+  getItem(context: ApiRequestContext, id: string): Promise<WorkItemDto>;
   createItem(
     context: ApiMutationContext,
     input: CreateItemInput,
@@ -133,6 +187,64 @@ export interface DataPlane {
     expectedVersion: number,
     patch: UpdateItemInput,
   ): Promise<MutationResult<WorkItemDto>>;
+  listItemHistory(
+    context: ApiRequestContext,
+    id: string,
+  ): Promise<WorkItemHistoryEntryDto[]>;
+  listItemEvidence(
+    context: ApiRequestContext,
+    id: string,
+  ): Promise<WorkItemEvidenceDto[]>;
+  addItemEvidence(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: WorkItemEvidenceInput,
+  ): Promise<MutationResult<WorkItemEvidenceMutation>>;
+  assignItem(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: AssignWorkItemInput,
+  ): Promise<MutationResult<WorkItemTransitionResponse>>;
+  setItemBlocked(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: BlockWorkItemInput,
+  ): Promise<MutationResult<WorkItemTransitionResponse>>;
+  transitionDecision(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: DecisionTransitionInput,
+  ): Promise<MutationResult<WorkItemTransitionResponse>>;
+  transitionApproval(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: ApprovalTransitionInput,
+  ): Promise<MutationResult<WorkItemTransitionResponse>>;
+  resolveItem(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: ResolveWorkItemInput,
+  ): Promise<MutationResult<WorkItemTransitionResponse>>;
+  createWaiting(
+    context: ApiMutationContext,
+    expectedItemVersion: number,
+    input: CreateWaitingInput,
+  ): Promise<MutationResult<WaitingStateDto>>;
+  listWeeklyReviews(
+    context: ApiRequestContext,
+    workspaceId?: string,
+  ): Promise<WeeklyReviewRecordDto[]>;
+  listSnapshots(
+    context: ApiRequestContext,
+    filters: { portfolioId?: string; workspaceId?: string },
+  ): Promise<WorkspaceSnapshotDto[]>;
+  getOperationsStatus(context: ApiRequestContext): Promise<OperationsStatusDto>;
   search(context: ApiRequestContext, query: string): Promise<SearchResult>;
   exportOrganization(context: ApiRequestContext): Promise<unknown>;
   exportBoardCsv(context: ApiRequestContext, boardId: string): Promise<string>;
@@ -149,6 +261,7 @@ export type DataPlaneErrorCode =
   | "organization_selection_required"
   | "identity_access_unavailable"
   | "repository_unavailable"
+  | "rate_limited"
   | "capability_unavailable";
 
 export class DataPlaneError extends Error {

@@ -18,6 +18,7 @@
     "@dnd-kit/sortable": "latest",
     "@dnd-kit/utilities": "latest",
     "@founderhq/api-client": "workspace:*",
+    "@founderhq/api-contract": "workspace:*",
     "@founderhq/core": "workspace:*",
     "@founderhq/design-tokens": "workspace:*",
     "@founderhq/i18n": "workspace:*",
