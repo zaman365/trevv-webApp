@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   date,
   foreignKey,
   index,
@@ -116,6 +117,14 @@ export const messageIntentEnum = pgEnum("message_intent", [
 export const messageResponseStateEnum = pgEnum("message_response_state", [
   "open",
   "resolved",
+]);
+export const invitationDeliveryStatusEnum = pgEnum(
+  "invitation_delivery_status",
+  ["pending", "sent", "failed"],
+);
+export const onboardingStatusEnum = pgEnum("onboarding_status", [
+  "draft",
+  "completed",
 ]);
 
 const timestamps = {
@@ -245,11 +254,58 @@ export const invitations = pgTable(
     email: text("email").notNull(),
     role: roleEnum("role").notNull(),
     tokenHash: text("token_hash").notNull(),
+    invitedByUserId: text("invited_by_user_id").references(() => users.id),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedByUserId: text("accepted_by_user_id").references(() => users.id),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedByUserId: text("revoked_by_user_id").references(() => users.id),
+    lastSentAt: timestamp("last_sent_at", { withTimezone: true }),
+    sendCount: integer("send_count").notNull().default(0),
+    deliveryStatus: invitationDeliveryStatusEnum("delivery_status")
+      .notNull()
+      .default("pending"),
+    deliveryAttemptedAt: timestamp("delivery_attempted_at", {
+      withTimezone: true,
+    }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    deliveryErrorCode: text("delivery_error_code"),
+    providerMessageId: text("provider_message_id"),
+    version: integer("version").notNull().default(1),
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("invitations_token_hash_unique").on(table.tokenHash),
+    uniqueIndex("invitations_org_active_email_unique")
+      .on(table.organizationId, sql`lower(${table.email})`)
+      .where(
+        sql`${table.acceptedAt} is null and ${table.revokedAt} is null and ${table.deletedAt} is null`,
+      ),
+    foreignKey({
+      columns: [table.organizationId, table.invitedByUserId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "invitations_org_inviter_membership_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.acceptedByUserId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "invitations_org_acceptor_membership_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.revokedByUserId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "invitations_org_revoker_membership_fk",
+    }),
+    check(
+      "invitations_token_hash_format_check",
+      sql`${table.tokenHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "invitations_terminal_state_check",
+      sql`(${table.acceptedByUserId} is null or ${table.acceptedAt} is not null)
+        and (${table.revokedByUserId} is null or ${table.revokedAt} is not null)
+        and not (${table.acceptedAt} is not null and ${table.revokedAt} is not null)`,
+    ),
     index("invitations_org_email_idx").on(table.organizationId, table.email),
   ],
 );
@@ -1538,7 +1594,10 @@ export const blueprints = pgTable(
     currentVersionId: text("current_version_id"),
     ...timestamps,
   },
-  (table) => [index("blueprints_org_idx").on(table.organizationId)],
+  (table) => [
+    uniqueIndex("blueprints_org_id_unique").on(table.organizationId, table.id),
+    index("blueprints_org_idx").on(table.organizationId),
+  ],
 );
 
 export const blueprintVersions = pgTable(
@@ -1560,10 +1619,25 @@ export const blueprintVersions = pgTable(
       .defaultNow(),
   },
   (table) => [
+    uniqueIndex("blueprint_versions_org_blueprint_id_unique").on(
+      table.organizationId,
+      table.blueprintId,
+      table.id,
+    ),
     uniqueIndex("blueprint_versions_number_unique").on(
       table.blueprintId,
       table.version,
     ),
+    foreignKey({
+      columns: [table.organizationId, table.blueprintId],
+      foreignColumns: [blueprints.organizationId, blueprints.id],
+      name: "blueprint_versions_org_blueprint_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.createdBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "blueprint_versions_org_creator_membership_fk",
+    }),
   ],
 );
 
@@ -1591,7 +1665,34 @@ export const blueprintInstances = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("blueprint_instances_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
     uniqueIndex("blueprint_instances_board_unique").on(table.boardId),
+    foreignKey({
+      columns: [table.organizationId, table.blueprintId],
+      foreignColumns: [blueprints.organizationId, blueprints.id],
+      name: "blueprint_instances_org_blueprint_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.blueprintId,
+        table.blueprintVersionId,
+      ],
+      foreignColumns: [
+        blueprintVersions.organizationId,
+        blueprintVersions.blueprintId,
+        blueprintVersions.id,
+      ],
+      name: "blueprint_instances_org_blueprint_version_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.boardId],
+      foreignColumns: [boards.organizationId, boards.workspaceId, boards.id],
+      name: "blueprint_instances_org_workspace_board_fk",
+    }).onDelete("cascade"),
     index("blueprint_instances_update_idx").on(
       table.organizationId,
       table.blueprintId,
@@ -1930,6 +2031,7 @@ export const authAccounts = pgTable(
   {
     id: text("id").primaryKey(),
     accountId: text("accountId").notNull(),
+    issuer: text("issuer").notNull(),
     providerId: text("providerId").notNull(),
     userId: text("userId")
       .notNull()
@@ -1952,7 +2054,13 @@ export const authAccounts = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("auth_account_user_idx").on(table.userId)],
+  (table) => [
+    uniqueIndex("auth_account_issuer_account_unique").on(
+      table.issuer,
+      table.accountId,
+    ),
+    index("auth_account_user_idx").on(table.userId),
+  ],
 );
 
 export const authVerifications = pgTable(
@@ -1970,4 +2078,164 @@ export const authVerifications = pgTable(
       .defaultNow(),
   },
   (table) => [index("auth_verification_identifier_idx").on(table.identifier)],
+);
+
+// Better Auth identities and application users intentionally remain separate.
+// This one-to-one mapping is the only live bridge from credentials to product
+// authorization and is resolved exclusively on the server.
+export const authUserMappings = pgTable(
+  "auth_user_mappings",
+  {
+    authUserId: text("auth_user_id")
+      .primaryKey()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    appUserId: text("app_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("auth_user_mappings_app_user_unique").on(table.appUserId),
+  ],
+);
+
+// The active organization is server-owned state. A client can request a switch,
+// but this composite FK and repository checks require a real membership.
+export const appUserOrganizationSelections = pgTable(
+  "app_user_organization_selections",
+  {
+    appUserId: text("app_user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    selectedAt: timestamp("selected_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.appUserId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "app_user_org_selections_membership_fk",
+    }).onDelete("cascade"),
+    index("app_user_org_selections_org_idx").on(table.organizationId),
+  ],
+);
+
+// Drafts contain only the explicitly typed, non-secret onboarding fields. The
+// completion columns are written in the same transaction as the tenant graph.
+export const onboardingProgress = pgTable(
+  "onboarding_progress",
+  {
+    authUserId: text("auth_user_id")
+      .primaryKey()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    appUserId: text("app_user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    status: onboardingStatusEnum("status").notNull().default("draft"),
+    step: text("step").notNull().default("1"),
+    draft: jsonb("draft").notNull().default({}),
+    version: integer("version").notNull().default(1),
+    completionIdempotencyKey: text("completion_idempotency_key"),
+    completionRequestFingerprint: text("completion_request_fingerprint"),
+    completedOrganizationId: text("completed_organization_id").references(
+      () => organizations.id,
+      { onDelete: "set null" },
+    ),
+    completedPortfolioId: text("completed_portfolio_id").references(
+      () => portfolios.id,
+      { onDelete: "set null" },
+    ),
+    completedWorkspaceId: text("completed_workspace_id").references(
+      () => workspaces.id,
+      { onDelete: "set null" },
+    ),
+    completedBoardId: text("completed_board_id").references(() => boards.id, {
+      onDelete: "set null",
+    }),
+    completedBlueprintId: text("completed_blueprint_id").references(
+      () => blueprints.id,
+      { onDelete: "set null" },
+    ),
+    completedBlueprintInstanceId: text(
+      "completed_blueprint_instance_id",
+    ).references(() => blueprintInstances.id, { onDelete: "set null" }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("onboarding_progress_app_user_unique")
+      .on(table.appUserId)
+      .where(sql`${table.appUserId} is not null`),
+    foreignKey({
+      columns: [table.completedOrganizationId, table.completedPortfolioId],
+      foreignColumns: [portfolios.organizationId, portfolios.id],
+      name: "onboarding_progress_org_portfolio_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [table.completedOrganizationId, table.completedWorkspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "onboarding_progress_org_workspace_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [
+        table.completedOrganizationId,
+        table.completedWorkspaceId,
+        table.completedBoardId,
+      ],
+      foreignColumns: [boards.organizationId, boards.workspaceId, boards.id],
+      name: "onboarding_progress_org_workspace_board_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [table.completedOrganizationId, table.completedBlueprintId],
+      foreignColumns: [blueprints.organizationId, blueprints.id],
+      name: "onboarding_progress_org_blueprint_fk",
+    }).onDelete("set null"),
+    foreignKey({
+      columns: [
+        table.completedOrganizationId,
+        table.completedBlueprintInstanceId,
+      ],
+      foreignColumns: [
+        blueprintInstances.organizationId,
+        blueprintInstances.id,
+      ],
+      name: "onboarding_progress_org_blueprint_instance_fk",
+    }).onDelete("set null"),
+    check(
+      "onboarding_progress_completion_check",
+      sql`(
+        ${table.status} = 'draft'
+        and ${table.completedAt} is null
+      ) or (
+        ${table.status} = 'completed'
+        and ${table.appUserId} is not null
+        and ${table.completionIdempotencyKey} is not null
+        and ${table.completionRequestFingerprint} is not null
+        and ${table.completedOrganizationId} is not null
+        and ${table.completedPortfolioId} is not null
+        and ${table.completedWorkspaceId} is not null
+        and ${table.completedBoardId} is not null
+        and ${table.completedBlueprintId} is not null
+        and ${table.completedBlueprintInstanceId} is not null
+        and ${table.completedAt} is not null
+      )`,
+    ),
+  ],
 );

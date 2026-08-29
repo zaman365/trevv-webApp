@@ -43,6 +43,13 @@
       "when": 1787999903113,
       "tag": "0005_persistent_data_plane",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788005753286,
+      "tag": "0006_wet_spirit",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createDatabase,
+  hashInvitationToken,
   createOrganizationScope,
   createPostgresRepositories,
   type TenantScope,
@@ -555,7 +556,9 @@ describe("PostgreSQL repositories", () => {
       {
         email: "future.member@example.test",
         role: "member",
-        tokenHash: "never-return-this-token-hash",
+        tokenHash: hashInvitationToken(
+          "never-return-this-opaque-invitation-token-value",
+        ),
         expiresAt: new Date("2026-09-15T12:00:00.000Z"),
       },
       mutation(crypto.randomUUID(), "/invitations/create"),
@@ -1367,7 +1370,7 @@ describe("PostgreSQL repositories", () => {
         { role: "member" },
         mutation(crypto.randomUUID(), "/memberships/update"),
       ),
-    ).rejects.toMatchObject({ code: "repository_unavailable" });
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
     await expect(
       scoped.workItems.create(
         {

@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  createIdentityRepositories,
+  type IdentityRepositories,
+  type IdentityScope,
+} from "./identity-repositories.js";
 import type {
   DecisionOutcome,
   MeaningfulChange,
@@ -23,6 +28,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as databaseSchema from "./schema.js";
 import {
   activityEvents,
+  appUserOrganizationSelections,
   attentionSignals,
   auditLogs,
   boards,
@@ -55,6 +61,12 @@ export type RepositoryErrorCode =
   | "resource_not_found"
   | "version_conflict"
   | "idempotency_key_reused"
+  | "constraint_conflict"
+  | "identity_not_verified"
+  | "identity_access_unavailable"
+  | "organization_selection_required"
+  | "onboarding_conflict"
+  | "invitation_invalid"
   | "repository_unavailable";
 
 export class RepositoryError extends Error {
@@ -305,9 +317,12 @@ export interface WeeklyReviewInput {
   priorityNextWeek: string;
 }
 
+export type InvitationRole =
+  "admin" | "workspace_lead" | "member" | "guest" | "viewer";
+
 export interface CreateInvitationInput {
   email: string;
-  role: (typeof invitations.$inferInsert)["role"];
+  role: InvitationRole;
   tokenHash: string;
   expiresAt: Date;
 }
@@ -410,6 +425,7 @@ export interface OrganizationScopedRepositories {
   users: {
     list: () => Promise<Array<typeof users.$inferSelect>>;
     get: (id: string) => Promise<typeof users.$inferSelect>;
+    getMemberHistory: (id: string) => Promise<typeof users.$inferSelect>;
     update: (
       id: string,
       input: { email?: string; name?: string; locale?: string },
@@ -442,15 +458,25 @@ export interface OrganizationScopedRepositories {
       input: CreateInvitationInput,
       context: MutationContext,
     ) => Promise<MutationResult<InvitationProjection>>;
-    update: (
+    resend: (
       id: string,
-      input: {
-        role?: (typeof invitations.$inferInsert)["role"];
-        expiresAt?: Date;
-        acceptedAt?: Date | null;
-        archived?: boolean;
-      },
+      expectedVersion: number,
+      input: { tokenHash: string; expiresAt: Date },
       context: MutationContext,
+    ) => Promise<MutationResult<InvitationProjection>>;
+    revoke: (
+      id: string,
+      expectedVersion: number,
+      context: MutationContext,
+    ) => Promise<MutationResult<InvitationProjection>>;
+    recordDelivery: (
+      id: string,
+      expectedVersion: number,
+      input:
+        | { status: "sent"; providerMessageId?: string }
+        | { status: "failed"; errorCode: string },
+      context: MutationContext,
+      originatingContext?: MutationContext,
     ) => Promise<MutationResult<InvitationProjection>>;
   };
   session: {
@@ -741,6 +767,7 @@ export interface OrganizationScopedRepositories {
 
 export interface PostgresRepositories {
   forOrganization(scope: TenantScope): OrganizationScopedRepositories;
+  forIdentity(scope: IdentityScope): IdentityRepositories;
 }
 
 export function fingerprintRequest(value: unknown): string {
@@ -754,6 +781,9 @@ export function createPostgresRepositories(
     forOrganization(scope) {
       assertScope(scope);
       return createScopedRepositories(database, scope, false);
+    },
+    forIdentity(scope) {
+      return createIdentityRepositories(database, scope);
     },
   };
 }
@@ -948,6 +978,8 @@ function createScopedRepositories(
     users: {
       list: () => listOrganizationUsers(database, scope),
       get: (id) => getOrganizationUser(database, scope, id),
+      getMemberHistory: (id) =>
+        getOrganizationMemberHistory(database, scope, id),
       update: (id, input, context) =>
         runInTransaction((transaction) =>
           updateOrganizationUser(transaction, scope, id, input, context),
@@ -972,9 +1004,38 @@ function createScopedRepositories(
         runInTransaction((transaction) =>
           createInvitation(transaction, scope, input, context),
         ),
-      update: (id, input, context) =>
+      resend: (id, expectedVersion, input, context) =>
         runInTransaction((transaction) =>
-          updateInvitation(transaction, scope, id, input, context),
+          resendInvitation(
+            transaction,
+            scope,
+            id,
+            expectedVersion,
+            input,
+            context,
+          ),
+        ),
+      revoke: (id, expectedVersion, context) =>
+        runInTransaction((transaction) =>
+          revokeInvitation(transaction, scope, id, expectedVersion, context),
+        ),
+      recordDelivery: (
+        id,
+        expectedVersion,
+        input,
+        context,
+        originatingContext,
+      ) =>
+        runInTransaction((transaction) =>
+          recordInvitationDelivery(
+            transaction,
+            scope,
+            id,
+            expectedVersion,
+            input,
+            context,
+            originatingContext,
+          ),
         ),
     },
     session: {
@@ -1412,6 +1473,27 @@ async function getOrganizationUser(
   return resolved.user;
 }
 
+async function getOrganizationMemberHistory(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  id: string,
+) {
+  const [resolved] = await database
+    .select({ user: users })
+    .from(users)
+    .innerJoin(
+      memberships,
+      and(
+        eq(memberships.userId, users.id),
+        eq(memberships.organizationId, scope.organizationId),
+      ),
+    )
+    .where(and(eq(users.id, id), isNull(users.deletedAt)))
+    .limit(1);
+  if (!resolved) throw notFound();
+  return resolved.user;
+}
+
 async function updateOrganizationUser(
   transaction: TrevvDatabase,
   scope: OrganizationScope,
@@ -1591,7 +1673,7 @@ async function updateMembership(
           .for("update");
         if (activeOwners.length === 1)
           throw new RepositoryError(
-            "repository_unavailable",
+            "constraint_conflict",
             "An organization must retain at least one active owner.",
           );
       }
@@ -1614,12 +1696,59 @@ async function updateMembership(
         )
         .returning();
       if (!updated) throw notFound();
+      if (input.archived === true) {
+        await transaction
+          .update(portfolioMembers)
+          .set({ archivedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(portfolioMembers.organizationId, scope.organizationId),
+              eq(portfolioMembers.userId, userId),
+              isNull(portfolioMembers.deletedAt),
+            ),
+          );
+        await transaction
+          .update(workspaceMembers)
+          .set({ archivedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(workspaceMembers.organizationId, scope.organizationId),
+              eq(workspaceMembers.userId, userId),
+              isNull(workspaceMembers.deletedAt),
+            ),
+          );
+        await transaction
+          .delete(appUserOrganizationSelections)
+          .where(
+            and(
+              eq(appUserOrganizationSelections.appUserId, userId),
+              eq(
+                appUserOrganizationSelections.organizationId,
+                scope.organizationId,
+              ),
+            ),
+          );
+      }
       await writeAuditAndOutbox(transaction, scope, {
-        action: "membership.updated",
+        action:
+          input.archived === true
+            ? "membership.revoked"
+            : input.archived === false
+              ? "membership.restored"
+              : "membership.updated",
         aggregateType: "membership",
         aggregateId: `${scope.organizationId}:${userId}`,
-        eventType: "membership.updated",
-        payload: { fields: Object.keys(input).sort(), userId },
+        eventType:
+          input.archived === true
+            ? "membership.revoked"
+            : input.archived === false
+              ? "membership.restored"
+              : "membership.updated",
+        payload: {
+          active: updated.archivedAt === null && updated.deletedAt === null,
+          fields: Object.keys(input).sort(),
+          userId,
+        },
         now,
       });
       return updated;
@@ -1680,31 +1809,57 @@ async function createInvitation(
   input: CreateInvitationInput,
   context: MutationContext,
 ) {
+  assertInvitationTokenHash(input.tokenHash);
+  assertInvitationRole(input.role);
+  const email = normalizeInvitationEmail(input.email);
   return withIdempotency(
     transaction,
     scope,
     context,
-    { ...input, tokenHash: fingerprintRequest(input.tokenHash) },
+    { ...input, email, tokenHash: fingerprintRequest(input.tokenHash) },
     async () => {
       await assertActorMembership(transaction, scope);
       const now = context.now ?? new Date();
+      assertInvitationExpiry(input.expiresAt, now);
+      const [existingMember] = await transaction
+        .select({ userId: memberships.userId })
+        .from(memberships)
+        .innerJoin(users, eq(users.id, memberships.userId))
+        .where(
+          and(
+            eq(memberships.organizationId, scope.organizationId),
+            sql`lower(${users.email}) = ${email}`,
+            isNull(memberships.archivedAt),
+            isNull(memberships.deletedAt),
+            isNull(users.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (existingMember)
+        throw new RepositoryError(
+          "constraint_conflict",
+          "This email address already has an active organization membership.",
+        );
       const [created] = await transaction
         .insert(invitations)
         .values({
           id: crypto.randomUUID(),
           organizationId: scope.organizationId,
-          email: input.email.trim().toLowerCase(),
+          email,
           role: input.role,
           tokenHash: input.tokenHash,
+          invitedByUserId: scope.userId,
           expiresAt: input.expiresAt,
+          deliveryStatus: "pending",
           createdAt: now,
           updatedAt: now,
         })
+        .onConflictDoNothing()
         .returning();
       if (!created)
         throw new RepositoryError(
-          "repository_unavailable",
-          "The invitation could not be created.",
+          "constraint_conflict",
+          "An active invitation already exists for this email address or token.",
         );
       await writeAuditAndOutbox(transaction, scope, {
         action: "invitation.created",
@@ -1717,65 +1872,237 @@ async function createInvitation(
       return projectInvitation(created);
     },
     restoreInvitationProjection,
+    true,
   );
 }
 
-async function updateInvitation(
+async function resendInvitation(
   transaction: TrevvDatabase,
   scope: OrganizationScope,
   id: string,
-  input: {
-    role?: (typeof invitations.$inferInsert)["role"];
-    expiresAt?: Date;
-    acceptedAt?: Date | null;
-    archived?: boolean;
-  },
+  expectedVersion: number,
+  input: { tokenHash: string; expiresAt: Date },
   context: MutationContext,
 ) {
+  assertInvitationTokenHash(input.tokenHash);
   return withIdempotency(
     transaction,
     scope,
     context,
-    { id, ...input },
+    {
+      id,
+      expectedVersion,
+      expiresAt: input.expiresAt,
+      tokenHash: fingerprintRequest(input.tokenHash),
+    },
     async () => {
       await assertActorMembership(transaction, scope);
       const now = context.now ?? new Date();
+      assertInvitationExpiry(input.expiresAt, now);
+      const existing = await getInvitationRowForUpdate(
+        transaction,
+        scope.organizationId,
+        id,
+      );
+      if (existing.version !== expectedVersion)
+        throw versionConflict(existing.version);
+      if (existing.acceptedAt || existing.revokedAt) throw invalidInvitation();
       const [updated] = await transaction
         .update(invitations)
         .set({
-          ...(input.role !== undefined ? { role: input.role } : {}),
-          ...(input.expiresAt !== undefined
-            ? { expiresAt: input.expiresAt }
-            : {}),
-          ...(input.acceptedAt !== undefined
-            ? { acceptedAt: input.acceptedAt }
-            : {}),
-          ...(input.archived !== undefined
-            ? { archivedAt: input.archived ? now : null }
-            : {}),
+          tokenHash: input.tokenHash,
+          expiresAt: input.expiresAt,
+          deliveryStatus: "pending",
+          deliveryAttemptedAt: null,
+          deliveredAt: null,
+          deliveryErrorCode: null,
+          providerMessageId: null,
+          version: sql`${invitations.version} + 1`,
           updatedAt: now,
         })
         .where(
           and(
             eq(invitations.organizationId, scope.organizationId),
             eq(invitations.id, id),
+            eq(invitations.version, expectedVersion),
+            isNull(invitations.acceptedAt),
+            isNull(invitations.revokedAt),
             isNull(invitations.deletedAt),
           ),
         )
         .returning();
       if (!updated) throw notFound();
       await writeAuditAndOutbox(transaction, scope, {
-        action: "invitation.updated",
+        action: "invitation.resent",
         aggregateType: "invitation",
         aggregateId: id,
-        eventType: "invitation.updated",
-        payload: { fields: Object.keys(input).sort() },
+        eventType: "invitation.resent",
+        payload: { expiresAt: input.expiresAt.toISOString() },
+        now,
+      });
+      return projectInvitation(updated);
+    },
+    restoreInvitationProjection,
+    true,
+  );
+}
+
+async function revokeInvitation(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  id: string,
+  expectedVersion: number,
+  context: MutationContext,
+) {
+  return withIdempotency(
+    transaction,
+    scope,
+    context,
+    { id, expectedVersion },
+    async () => {
+      await assertActorMembership(transaction, scope);
+      const existing = await getInvitationRowForUpdate(
+        transaction,
+        scope.organizationId,
+        id,
+      );
+      if (existing.version !== expectedVersion)
+        throw versionConflict(existing.version);
+      if (existing.acceptedAt || existing.revokedAt) throw invalidInvitation();
+      const now = context.now ?? new Date();
+      const [revoked] = await transaction
+        .update(invitations)
+        .set({
+          revokedAt: now,
+          revokedByUserId: scope.userId,
+          version: sql`${invitations.version} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(invitations.organizationId, scope.organizationId),
+            eq(invitations.id, id),
+            eq(invitations.version, expectedVersion),
+            isNull(invitations.acceptedAt),
+            isNull(invitations.revokedAt),
+            isNull(invitations.deletedAt),
+          ),
+        )
+        .returning();
+      if (!revoked) throw invalidInvitation();
+      await writeAuditAndOutbox(transaction, scope, {
+        action: "invitation.revoked",
+        aggregateType: "invitation",
+        aggregateId: id,
+        eventType: "invitation.revoked",
+        payload: {},
+        now,
+      });
+      return projectInvitation(revoked);
+    },
+    restoreInvitationProjection,
+  );
+}
+
+async function recordInvitationDelivery(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  id: string,
+  expectedVersion: number,
+  input:
+    | { status: "sent"; providerMessageId?: string }
+    | { status: "failed"; errorCode: string },
+  context: MutationContext,
+  originatingContext?: MutationContext,
+) {
+  const result = await withIdempotency(
+    transaction,
+    scope,
+    context,
+    { id, expectedVersion, ...input },
+    async () => {
+      await assertActorMembership(transaction, scope);
+      const existing = await getInvitationRowForUpdate(
+        transaction,
+        scope.organizationId,
+        id,
+      );
+      if (existing.version !== expectedVersion)
+        throw versionConflict(existing.version);
+      if (existing.acceptedAt || existing.revokedAt) throw invalidInvitation();
+      const now = context.now ?? new Date();
+      const [updated] = await transaction
+        .update(invitations)
+        .set({
+          deliveryStatus: input.status,
+          deliveryAttemptedAt: now,
+          deliveredAt: input.status === "sent" ? now : null,
+          lastSentAt: input.status === "sent" ? now : existing.lastSentAt,
+          sendCount: sql`${invitations.sendCount} + 1`,
+          deliveryErrorCode:
+            input.status === "failed"
+              ? normalizeDiagnosticCode(input.errorCode)
+              : null,
+          providerMessageId:
+            input.status === "sent"
+              ? optionalDiagnosticValue(input.providerMessageId)
+              : null,
+          version: sql`${invitations.version} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(invitations.organizationId, scope.organizationId),
+            eq(invitations.id, id),
+            eq(invitations.version, expectedVersion),
+            isNull(invitations.acceptedAt),
+            isNull(invitations.revokedAt),
+            isNull(invitations.deletedAt),
+          ),
+        )
+        .returning();
+      if (!updated) throw invalidInvitation();
+      await writeAuditAndOutbox(transaction, scope, {
+        action: `invitation.delivery_${input.status}`,
+        aggregateType: "invitation",
+        aggregateId: id,
+        eventType: `invitation.delivery_${input.status}`,
+        payload: {},
         now,
       });
       return projectInvitation(updated);
     },
     restoreInvitationProjection,
   );
+  if (originatingContext?.idempotencyKey)
+    await finalizeIdempotencyResponse(
+      transaction,
+      scope,
+      originatingContext,
+      result.value,
+    );
+  return result;
+}
+
+async function getInvitationRowForUpdate(
+  database: TrevvDatabase,
+  organizationId: string,
+  id: string,
+) {
+  const [invitation] = await database
+    .select()
+    .from(invitations)
+    .where(
+      and(
+        eq(invitations.organizationId, organizationId),
+        eq(invitations.id, id),
+        isNull(invitations.deletedAt),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!invitation) throw notFound();
+  return invitation;
 }
 
 function projectInvitation(
@@ -5211,6 +5538,7 @@ async function withIdempotency<T>(
   request: unknown,
   operation: () => Promise<T>,
   restore: (value: unknown) => T = (value) => value as T,
+  deferCompletion = false,
 ): Promise<MutationResult<T>> {
   const key = context.idempotencyKey;
   if (!key) return { value: await operation(), replayed: false };
@@ -5276,6 +5604,7 @@ async function withIdempotency<T>(
     return { value: restore(existing.responseBody), replayed: true };
   }
   const value = await operation();
+  if (deferCompletion) return { value, replayed: false };
   await database
     .update(idempotencyRecords)
     .set({
@@ -5294,6 +5623,72 @@ async function withIdempotency<T>(
       ),
     );
   return { value, replayed: false };
+}
+
+async function finalizeIdempotencyResponse(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  context: MutationContext,
+  value: unknown,
+) {
+  const key = context.idempotencyKey;
+  if (!key)
+    throw new RepositoryError(
+      "repository_unavailable",
+      "The originating idempotency key is required.",
+    );
+  const method = context.method.trim().toUpperCase();
+  const route = normalizeRoute(context.route);
+  const [existing] = await database
+    .select()
+    .from(idempotencyRecords)
+    .where(
+      and(
+        eq(idempotencyRecords.organizationId, scope.organizationId),
+        eq(idempotencyRecords.userId, scope.userId),
+        eq(idempotencyRecords.key, key),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (
+    !existing ||
+    existing.state !== "pending" ||
+    existing.method !== method ||
+    existing.route !== route ||
+    context.requestFingerprint === undefined ||
+    existing.requestFingerprint !== context.requestFingerprint
+  )
+    throw new RepositoryError(
+      "repository_unavailable",
+      "The originating idempotency result could not be finalized.",
+    );
+  const now = context.now ?? new Date();
+  const reference = resultReference(value);
+  const [updated] = await database
+    .update(idempotencyRecords)
+    .set({
+      state: "completed",
+      responseStatus: context.responseStatus ?? existing.responseStatus ?? 200,
+      responseBody: value,
+      resultType: reference?.type,
+      resultId: reference?.id,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(idempotencyRecords.organizationId, scope.organizationId),
+        eq(idempotencyRecords.userId, scope.userId),
+        eq(idempotencyRecords.key, key),
+        eq(idempotencyRecords.state, "pending"),
+      ),
+    )
+    .returning({ id: idempotencyRecords.id });
+  if (!updated)
+    throw new RepositoryError(
+      "repository_unavailable",
+      "The originating idempotency result could not be finalized.",
+    );
 }
 
 function restoreAttention(
@@ -5374,6 +5769,10 @@ function restoreInvitationProjection(value: unknown): InvitationProjection {
     ...standardDateFields,
     "expiresAt",
     "acceptedAt",
+    "revokedAt",
+    "lastSentAt",
+    "deliveryAttemptedAt",
+    "deliveredAt",
   ]);
 }
 
@@ -5524,6 +5923,69 @@ function versionConflict(currentVersion?: number) {
     "The resource changed before this update was committed.",
     currentVersion === undefined ? undefined : { currentVersion },
   );
+}
+
+function assertInvitationTokenHash(value: string) {
+  if (!/^[a-f0-9]{64}$/u.test(value))
+    throw new RepositoryError(
+      "repository_unavailable",
+      "A SHA-256 invitation token hash is required.",
+    );
+}
+
+function assertInvitationRole(value: string): asserts value is InvitationRole {
+  if (
+    value !== "admin" &&
+    value !== "workspace_lead" &&
+    value !== "member" &&
+    value !== "guest" &&
+    value !== "viewer"
+  )
+    throw new RepositoryError(
+      "repository_unavailable",
+      "Invitation role is invalid.",
+    );
+}
+
+function assertInvitationExpiry(expiresAt: Date, now: Date) {
+  const duration = expiresAt.getTime() - now.getTime();
+  if (duration <= 0 || duration > 30 * 24 * 60 * 60 * 1_000)
+    throw new RepositoryError(
+      "constraint_conflict",
+      "Invitation expiry must be within the next 30 days.",
+    );
+}
+
+function normalizeInvitationEmail(value: string) {
+  const normalized = value.trim().toLocaleLowerCase("en-US");
+  if (
+    normalized.length > 320 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)
+  )
+    throw new RepositoryError(
+      "repository_unavailable",
+      "A valid invitation email address is required.",
+    );
+  return normalized;
+}
+
+function invalidInvitation() {
+  return new RepositoryError(
+    "invitation_invalid",
+    "This invitation is invalid, expired, revoked, or already used.",
+  );
+}
+
+function normalizeDiagnosticCode(value: string) {
+  const normalized = value.trim().toLocaleLowerCase("en-US");
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/u.test(normalized))
+    return "delivery_failed";
+  return normalized;
+}
+
+function optionalDiagnosticValue(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized.slice(0, 255) : null;
 }
 
 function approvalStateValue(
