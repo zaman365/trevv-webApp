@@ -1,14 +1,21 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createDatabase,
+  createOrganizationScope,
+  createPostgresRepositories,
   createWorkerRepositories,
   type TrevvDatabase,
 } from "../src/index.js";
 import {
   attentionSignals,
   boards,
+  conversationMessageMetadataQuarantine,
+  conversationMessages,
+  conversationParticipants,
+  conversations,
+  idempotencyRecords,
   itemAssignees,
   memberships,
   notifications,
@@ -165,14 +172,494 @@ async function insertOutboxEvent(
   return id;
 }
 
+async function insertRetentionMessage(
+  database: TrevvDatabase,
+  fixture: WorkerFixture,
+  label: string,
+  expiresAt: Date,
+) {
+  const conversationId = `conversation-retention-${label}-${sequence}`;
+  const messageId = `message-retention-${label}-${sequence}`;
+  const createdAt = new Date("2026-08-29T09:00:00.000Z");
+  await database.transaction(async (transaction) => {
+    await transaction.insert(conversations).values({
+      id: conversationId,
+      organizationId: fixture.organizationId,
+      portfolioId: fixture.portfolioId,
+      workspaceId: fixture.workspaceId,
+      title: `Retention ${label}`,
+      kind: "workspace",
+      visibility: "organization",
+      createdBy: fixture.userId,
+      lastMessageAt: createdAt,
+      retentionDays: 365,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    await transaction.insert(conversationParticipants).values({
+      organizationId: fixture.organizationId,
+      workspaceId: fixture.workspaceId,
+      conversationId,
+      userId: fixture.userId,
+      participantRole: "owner",
+      source: "workspace",
+      joinedAt: createdAt,
+      updatedAt: createdAt,
+    });
+    await transaction.insert(conversationMessages).values({
+      id: messageId,
+      organizationId: fixture.organizationId,
+      workspaceId: fixture.workspaceId,
+      conversationId,
+      senderId: fixture.userId,
+      clientMessageId: `client-retention-${label}-${sequence}`,
+      body: `Private message ${label}`,
+      responseOwnerId: fixture.userId,
+      responseState: "open",
+      metadata: { privateContext: "must be removed" },
+      expiresAt,
+      createdAt,
+      updatedAt: createdAt,
+    });
+  });
+  return { conversationId, messageId };
+}
+
+async function insertRetentionEvent(
+  database: TrevvDatabase,
+  fixture: WorkerFixture,
+  label: string,
+  messageId: string,
+  availableAt: Date,
+) {
+  const id = `event-retention-${label}-${sequence}`;
+  await database.insert(outboxEvents).values({
+    id,
+    organizationId: fixture.organizationId,
+    eventType: "message.retention_due",
+    aggregateType: "message",
+    aggregateId: messageId,
+    requestId: `request-retention-${label}`,
+    dedupKey: `dedup-retention-${label}-${sequence}`,
+    payload: { messageId, expiresAt: availableAt.toISOString() },
+    availableAt,
+    createdAt: new Date("2026-08-29T09:00:00.000Z"),
+  });
+  return id;
+}
+
 describe("worker PostgreSQL repositories", () => {
-  it("leaves unsupported outbox events pending for their owning handler", async () => {
+  it("redacts due messages idempotently and acknowledges in the same transaction", async () => {
+    const fixture = await seedWorkerFixture(connection.db, "retention-due");
+    const foreign = await seedWorkerFixture(connection.db, "retention-foreign");
+    const now = new Date("2026-08-29T10:00:00.000Z");
+    const expiresAt = new Date("2026-08-29T09:30:00.000Z");
+    const message = await insertRetentionMessage(
+      connection.db,
+      fixture,
+      "due",
+      expiresAt,
+    );
+    const foreignMessage = await insertRetentionMessage(
+      connection.db,
+      foreign,
+      "foreign",
+      expiresAt,
+    );
+    const eventId = await insertRetentionEvent(
+      connection.db,
+      fixture,
+      "due",
+      message.messageId,
+      expiresAt,
+    );
+    await connection.db.insert(idempotencyRecords).values({
+      id: `idempotency-retention-${sequence}`,
+      organizationId: fixture.organizationId,
+      userId: fixture.userId,
+      method: "PATCH",
+      route: `/api/v1/messages/${message.messageId}/response`,
+      key: `retention-private-response-${sequence}`,
+      requestFingerprint: `fingerprint-retention-${sequence}`,
+      state: "completed",
+      responseStatus: 200,
+      responseBody: {
+        message: {
+          id: message.messageId,
+          body: "Private message due",
+        },
+      },
+      resultType: "message",
+      resultId: message.messageId,
+      expiresAt: new Date("2026-08-30T10:00:00.000Z"),
+      createdAt: new Date("2026-08-29T09:15:00.000Z"),
+      updatedAt: new Date("2026-08-29T09:15:00.000Z"),
+    });
+    await connection.db.insert(conversationMessageMetadataQuarantine).values({
+      messageId: message.messageId,
+      organizationId: fixture.organizationId,
+      workspaceId: fixture.workspaceId,
+      conversationId: message.conversationId,
+      originalMetadata: { privateLegacyContext: "must expire" },
+      originalOctetLength: 39,
+      quarantineReason: "worker retention regression",
+    });
+    await connection.db.execute(sql`
+      insert into legacy_collaboration_record_quarantine (
+        id, organization_id, workspace_id, conversation_id,
+        entity_type, entity_id, quarantine_reason, original_record
+      ) values (
+        ${`legacy-retention-${sequence}`}, ${fixture.organizationId},
+        ${fixture.workspaceId}, ${message.conversationId}, 'message',
+        ${message.messageId}, 'worker retention regression',
+        ${JSON.stringify({ body: "legacy private body" })}::jsonb
+      )
+    `);
+    const repositories = createWorkerRepositories(connection.db, {
+      clock: () => now,
+    });
+    const [claim] = await repositories.outbox.lease({
+      workerId: "worker-retention-due",
+      now,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      limit: 1,
+      eventTypes: ["message.retention_due"],
+    });
+    expect(claim).toMatchObject({
+      eventId,
+      organizationId: fixture.organizationId,
+      eventType: "message.retention_due",
+    });
+    await expect(
+      repositories.outbox.process(claim!, async (transaction) => {
+        await transaction.processInternalEvent(now);
+        throw new Error("force retention rollback");
+      }),
+    ).rejects.toThrow("force retention rollback");
+    const [rolledBackMessage] = await connection.db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, message.messageId));
+    const [unacknowledged] = await connection.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, eventId));
+    expect(rolledBackMessage).toMatchObject({
+      body: "Private message due",
+      redactedAt: null,
+      version: 1,
+    });
+    expect(unacknowledged?.processedAt).toBeNull();
+    expect(
+      await connection.db.$count(
+        conversationMessageMetadataQuarantine,
+        eq(conversationMessageMetadataQuarantine.messageId, message.messageId),
+      ),
+    ).toBe(1);
+    const [rolledBackLegacyQuarantine] = await connection.db.execute<
+      Array<{ count: number }>
+    >(sql`
+      select count(*)::int as count
+        from legacy_collaboration_record_quarantine
+       where organization_id = ${fixture.organizationId}
+         and entity_type = 'message'
+         and entity_id = ${message.messageId}
+    `);
+    expect(rolledBackLegacyQuarantine?.count).toBe(1);
+    const maskedRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: fixture.organizationId,
+        userId: fixture.userId,
+        requestId: "request-expired-message-read-mask",
+      }),
+    );
+    await expect(
+      maskedRepositories.collaboration.getMessage(message.messageId),
+    ).resolves.toMatchObject({
+      message: { body: "[Message expired]", metadata: {} },
+    });
+
+    await expect(
+      repositories.outbox.process(claim!, (transaction) =>
+        transaction.processInternalEvent(now),
+      ),
+    ).resolves.toEqual({
+      status: "processed",
+      value: { recomputed: false, effects: 1 },
+    });
+    const [redacted] = await connection.db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, message.messageId));
+    const [acknowledged] = await connection.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, eventId));
+    expect(redacted).toMatchObject({
+      body: "[Message expired]",
+      metadata: {},
+      redactedAt: now,
+      version: 2,
+    });
+    expect(acknowledged?.processedAt).toEqual(now);
+    expect(
+      await connection.db.$count(
+        idempotencyRecords,
+        and(
+          eq(idempotencyRecords.organizationId, fixture.organizationId),
+          eq(idempotencyRecords.resultId, message.messageId),
+        ),
+      ),
+    ).toBe(0);
+    const [retainedLegacyQuarantine] = await connection.db.execute<
+      Array<{ count: number }>
+    >(sql`
+      select count(*)::int as count
+        from legacy_collaboration_record_quarantine
+       where organization_id = ${fixture.organizationId}
+         and entity_type = 'message'
+         and entity_id = ${message.messageId}
+    `);
+    expect(retainedLegacyQuarantine?.count).toBe(0);
+    expect(
+      await connection.db.$count(
+        conversationMessageMetadataQuarantine,
+        eq(conversationMessageMetadataQuarantine.messageId, message.messageId),
+      ),
+    ).toBe(0);
+    const scoped = createPostgresRepositories(connection.db).forOrganization(
+      createOrganizationScope({
+        organizationId: fixture.organizationId,
+        userId: fixture.userId,
+        requestId: "request-expired-message-mutation",
+      }),
+    );
+    const mutationContext = {
+      method: "PATCH",
+      route: `/api/v1/messages/${message.messageId}`,
+      now,
+    };
+    await expect(
+      scoped.collaboration.setMessageResponse(
+        message.conversationId,
+        message.messageId,
+        redacted!.version,
+        "resolved",
+        mutationContext,
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+    await expect(
+      scoped.collaboration.addReaction(
+        message.conversationId,
+        message.messageId,
+        redacted!.version,
+        "👍",
+        mutationContext,
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+    await expect(
+      scoped.collaboration.sendMessage(
+        message.conversationId,
+        {
+          clientMessageId: "reply-to-expired-message",
+          parentMessageId: message.messageId,
+          body: "This reply must be rejected",
+        },
+        {
+          ...mutationContext,
+          method: "POST",
+          route: `/api/v1/conversations/${message.conversationId}/messages`,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+
+    const duplicateId = await insertRetentionEvent(
+      connection.db,
+      fixture,
+      "duplicate",
+      message.messageId,
+      now,
+    );
+    const [duplicateClaim] = await repositories.outbox.lease({
+      workerId: "worker-retention-duplicate",
+      now,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      limit: 1,
+      eventTypes: ["message.retention_due"],
+    });
+    expect(duplicateClaim?.eventId).toBe(duplicateId);
+    await expect(
+      repositories.outbox.process(duplicateClaim!, (transaction) =>
+        transaction.processInternalEvent(now),
+      ),
+    ).resolves.toEqual({
+      status: "processed",
+      value: { recomputed: false, effects: 0 },
+    });
+    const [stillRedacted] = await connection.db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, message.messageId));
+    expect(stillRedacted?.version).toBe(2);
+
+    const crossTenantEventId = await insertRetentionEvent(
+      connection.db,
+      fixture,
+      "cross-tenant",
+      foreignMessage.messageId,
+      now,
+    );
+    const [crossTenantClaim] = await repositories.outbox.lease({
+      workerId: "worker-retention-cross-tenant",
+      now,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      limit: 1,
+      eventTypes: ["message.retention_due"],
+    });
+    expect(crossTenantClaim?.eventId).toBe(crossTenantEventId);
+    await expect(
+      repositories.outbox.process(crossTenantClaim!, (transaction) =>
+        transaction.processInternalEvent(now),
+      ),
+    ).resolves.toEqual({
+      status: "processed",
+      value: { recomputed: false, effects: 0 },
+    });
+    const [foreignUnchanged] = await connection.db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, foreignMessage.messageId));
+    expect(foreignUnchanged).toMatchObject({
+      body: "Private message foreign",
+      redactedAt: null,
+      version: 1,
+    });
+  });
+
+  it("retries an early retention event and redacts only when due", async () => {
+    const fixture = await seedWorkerFixture(connection.db, "retention-early");
+    const now = new Date("2026-08-29T10:00:00.000Z");
+    const expiresAt = new Date("2026-08-29T10:10:00.000Z");
+    let clockNow = now;
+    const message = await insertRetentionMessage(
+      connection.db,
+      fixture,
+      "early",
+      expiresAt,
+    );
+    const eventId = await insertRetentionEvent(
+      connection.db,
+      fixture,
+      "early",
+      message.messageId,
+      now,
+    );
+    const repositories = createWorkerRepositories(connection.db, {
+      clock: () => clockNow,
+    });
+    const [claim] = await repositories.outbox.lease({
+      workerId: "worker-retention-early",
+      now,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      limit: 1,
+      eventTypes: ["message.retention_due"],
+    });
+    await expect(
+      repositories.outbox.process(claim!, (transaction) =>
+        transaction.processInternalEvent(now),
+      ),
+    ).rejects.toMatchObject({ code: "message_retention_not_due" });
+    const [unchanged] = await connection.db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, message.messageId));
+    expect(unchanged).toMatchObject({
+      body: "Private message early",
+      redactedAt: null,
+      version: 1,
+    });
+    await expect(
+      repositories.outbox.fail(claim!, {
+        now: new Date("2026-08-29T10:00:01.000Z"),
+        nextAvailableAt: expiresAt,
+        errorCode: "message_retention_not_due",
+        maxAttempts: 3,
+      }),
+    ).resolves.toBe("retry_scheduled");
+    clockNow = expiresAt;
+    const [retry] = await repositories.outbox.lease({
+      workerId: "worker-retention-retry",
+      now: expiresAt,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      limit: 1,
+      eventTypes: ["message.retention_due"],
+    });
+    expect(retry).toMatchObject({ eventId, attempt: 2 });
+    await expect(
+      repositories.outbox.process(retry!, (transaction) =>
+        transaction.processInternalEvent(expiresAt),
+      ),
+    ).resolves.toEqual({
+      status: "processed",
+      value: { recomputed: false, effects: 1 },
+    });
+    const [redacted] = await connection.db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, message.messageId));
+    expect(redacted).toMatchObject({
+      body: "[Message expired]",
+      metadata: {},
+      redactedAt: expiresAt,
+      version: 2,
+    });
+  });
+
+  it("acknowledges reviewed audit-only events without a catch-all", async () => {
+    const fixture = await seedWorkerFixture(connection.db, "audit-only");
+    const eventId = await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "audit-only",
+      "board.updated",
+    );
+    const now = new Date("2026-08-29T10:00:00.000Z");
+    const repositories = createWorkerRepositories(connection.db, {
+      clock: () => now,
+    });
+    const [claim] = await repositories.outbox.lease({
+      workerId: "worker-audit-only",
+      now,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      limit: 1,
+      eventTypes: ["board.updated"],
+    });
+    expect(claim?.eventId).toBe(eventId);
+    await expect(
+      repositories.outbox.process(claim!, (transaction) =>
+        transaction.processInternalEvent(now),
+      ),
+    ).resolves.toEqual({
+      status: "processed",
+      value: { recomputed: false },
+    });
+  });
+
+  it("leaves unknown outbox events pending for a future owning handler", async () => {
     const fixture = await seedWorkerFixture(connection.db, "unsupported");
     const eventId = await insertOutboxEvent(
       connection.db,
       fixture,
       "unsupported",
-      "organization.updated",
+      "provider.delivery_requested",
     );
     const repositories = createWorkerRepositories(connection.db);
     await expect(
@@ -180,6 +667,7 @@ describe("worker PostgreSQL repositories", () => {
         workerId: "worker-attention-only",
         now: new Date("2026-08-29T10:00:00.000Z"),
         leaseMs: 30_000,
+        maxAttempts: 3,
         limit: 10,
       }),
     ).resolves.toEqual([]);
@@ -204,6 +692,7 @@ describe("worker PostgreSQL repositories", () => {
       workerId: "worker-first",
       now: firstNow,
       leaseMs: 30_000,
+      maxAttempts: 3,
       limit: 1,
     });
     expect(first).toMatchObject({ eventId, attempt: 1 });
@@ -212,6 +701,7 @@ describe("worker PostgreSQL repositories", () => {
         workerId: "worker-second",
         now: new Date("2026-08-29T10:00:29.000Z"),
         leaseMs: 30_000,
+        maxAttempts: 3,
         limit: 1,
       }),
     ).resolves.toEqual([]);
@@ -220,6 +710,7 @@ describe("worker PostgreSQL repositories", () => {
       workerId: "worker-second",
       now: secondNow,
       leaseMs: 30_000,
+      maxAttempts: 3,
       limit: 1,
     });
     expect(recovered).toMatchObject({ eventId, attempt: 2 });
@@ -236,6 +727,7 @@ describe("worker PostgreSQL repositories", () => {
         workerId: "worker-third",
         now: new Date("2026-08-29T10:02:30.000Z"),
         leaseMs: 30_000,
+        maxAttempts: 3,
         limit: 1,
       }),
     ).resolves.toEqual([]);
@@ -244,6 +736,7 @@ describe("worker PostgreSQL repositories", () => {
       workerId: "worker-third",
       now: thirdNow,
       leaseMs: 30_000,
+      maxAttempts: 3,
       limit: 1,
     });
     expect(third).toMatchObject({ eventId, attempt: 3 });
@@ -269,6 +762,97 @@ describe("worker PostgreSQL repositories", () => {
     ]);
   });
 
+  it("dead-letters repeated crash/restart leases at the configured attempt cap", async () => {
+    const fixture = await seedWorkerFixture(connection.db, "crash-cap");
+    const eventId = await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "crash-cap",
+    );
+    const repositories = createWorkerRepositories(connection.db);
+    const firstStartedAt = new Date("2026-08-29T10:00:00.000Z");
+    const [first] = await repositories.outbox.lease({
+      workerId: "worker-crash-first",
+      now: firstStartedAt,
+      leaseMs: 30_000,
+      maxAttempts: 2,
+      limit: 1,
+    });
+    expect(first).toMatchObject({ eventId, attempt: 1 });
+
+    const secondStartedAt = new Date("2026-08-29T10:00:31.000Z");
+    const [second] = await repositories.outbox.lease({
+      workerId: "worker-crash-second",
+      now: secondStartedAt,
+      leaseMs: 30_000,
+      maxAttempts: 2,
+      limit: 1,
+    });
+    expect(second).toMatchObject({ eventId, attempt: 2 });
+
+    const terminalAt = new Date("2026-08-29T10:01:02.000Z");
+    await expect(
+      repositories.outbox.lease({
+        workerId: "worker-crash-third",
+        now: terminalAt,
+        leaseMs: 30_000,
+        maxAttempts: 2,
+        limit: 1,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      repositories.outbox.lease({
+        workerId: "worker-after-dead-letter",
+        now: new Date("2026-08-29T10:02:00.000Z"),
+        leaseMs: 30_000,
+        maxAttempts: 2,
+        limit: 1,
+      }),
+    ).resolves.toEqual([]);
+
+    const [terminal] = await connection.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, eventId));
+    expect(terminal).toMatchObject({
+      attempts: 2,
+      processedAt: null,
+      deadLetteredAt: terminalAt,
+      lastErrorCode: "lease_expired",
+      lastErrorAt: terminalAt,
+      lockedAt: null,
+      lockedBy: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+    });
+    const attempts = await connection.db
+      .select()
+      .from(outboxAttempts)
+      .where(eq(outboxAttempts.eventId, eventId))
+      .orderBy(outboxAttempts.attempt);
+    expect(
+      attempts.map(({ attempt, status, errorCode, finishedAt }) => ({
+        attempt,
+        status,
+        errorCode,
+        finishedAt,
+      })),
+    ).toEqual([
+      {
+        attempt: 1,
+        status: "failed",
+        errorCode: "lease_expired",
+        finishedAt: secondStartedAt,
+      },
+      {
+        attempt: 2,
+        status: "dead_lettered",
+        errorCode: "lease_expired",
+        finishedAt: terminalAt,
+      },
+    ]);
+  });
+
   it("uses skip-locked leasing so concurrent workers claim an event once", async () => {
     const fixture = await seedWorkerFixture(connection.db, "concurrency");
     const eventId = await insertOutboxEvent(
@@ -291,12 +875,14 @@ describe("worker PostgreSQL repositories", () => {
           workerId: "worker-concurrent-a",
           now,
           leaseMs: 30_000,
+          maxAttempts: 3,
           limit: 1,
         }),
         secondRepositories.outbox.lease({
           workerId: "worker-concurrent-b",
           now,
           leaseMs: 30_000,
+          maxAttempts: 3,
           limit: 1,
         }),
       ]);
@@ -388,6 +974,7 @@ describe("worker PostgreSQL repositories", () => {
       workerId: "worker-rollback",
       now,
       leaseMs: 30_000,
+      maxAttempts: 1,
       limit: 1,
     });
     await expect(
@@ -448,6 +1035,7 @@ describe("worker PostgreSQL repositories", () => {
       workerId: "worker-slow",
       now: leaseStartedAt,
       leaseMs: 30_000,
+      maxAttempts: 2,
       limit: 1,
     });
     await expect(
@@ -470,6 +1058,7 @@ describe("worker PostgreSQL repositories", () => {
       workerId: "worker-recovery",
       now: new Date("2026-08-29T10:00:31.000Z"),
       leaseMs: 30_000,
+      maxAttempts: 2,
       limit: 1,
     });
     expect(recovered).toMatchObject({ eventId, attempt: 2 });
@@ -479,6 +1068,50 @@ describe("worker PostgreSQL repositories", () => {
       errorCode: "lease_expired",
       maxAttempts: 2,
     });
+  });
+
+  it("rejects an expired worker failure so recovery owns the disposition", async () => {
+    const fixture = await seedWorkerFixture(connection.db, "expired-fail");
+    const eventId = await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "expired-fail",
+    );
+    const repositories = createWorkerRepositories(connection.db);
+    const leasedAt = new Date("2026-08-29T10:00:00.000Z");
+    const [expired] = await repositories.outbox.lease({
+      workerId: "worker-expired-fail",
+      now: leasedAt,
+      leaseMs: 30_000,
+      maxAttempts: 2,
+      limit: 1,
+    });
+
+    await expect(
+      repositories.outbox.fail(expired!, {
+        now: new Date("2026-08-29T10:00:30.000Z"),
+        nextAvailableAt: new Date("2026-08-29T10:01:30.000Z"),
+        errorCode: "late_failure",
+        maxAttempts: 3,
+      }),
+    ).resolves.toBe("lease_lost");
+
+    const [recovered] = await repositories.outbox.lease({
+      workerId: "worker-expired-fail-recovery",
+      now: new Date("2026-08-29T10:00:30.000Z"),
+      leaseMs: 30_000,
+      maxAttempts: 2,
+      limit: 1,
+    });
+    expect(recovered).toMatchObject({ eventId, attempt: 2 });
+    await expect(
+      repositories.outbox.fail(recovered!, {
+        now: new Date("2026-08-29T10:00:31.000Z"),
+        nextAvailableAt: new Date("2026-08-29T10:01:31.000Z"),
+        errorCode: "recovery_failure",
+        maxAttempts: 2,
+      }),
+    ).resolves.toBe("dead_lettered");
   });
 
   it("derives deterministic tenant-scoped Attention with timezone evidence", async () => {
@@ -705,6 +1338,88 @@ describe("worker PostgreSQL repositories", () => {
           ),
         ),
     ).toHaveLength(7);
+  });
+
+  it("reports content-free queue age and failure telemetry by ownership", async () => {
+    const fixture = await seedWorkerFixture(connection.db, "telemetry");
+    const repositories = createWorkerRepositories(connection.db);
+    const now = new Date("2026-08-29T10:05:00.000Z");
+    const ownedEventTypes = ["item.updated", "message.sent"];
+    const activeEventTypes = ["item.updated"];
+    const before = await repositories.outbox.telemetry({
+      now,
+      ownedEventTypes,
+      activeEventTypes,
+    });
+    const readyId = await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "telemetry-ready",
+      "item.updated",
+    );
+    const delayedId = await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "telemetry-delayed",
+      "item.updated",
+    );
+    const deadId = await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "telemetry-dead",
+      "item.updated",
+    );
+    await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "telemetry-paused",
+      "message.sent",
+    );
+    await insertOutboxEvent(
+      connection.db,
+      fixture,
+      "telemetry-unsupported",
+      "provider.unowned",
+    );
+    await connection.db
+      .update(outboxEvents)
+      .set({ availableAt: new Date("2026-08-29T10:10:00.000Z") })
+      .where(eq(outboxEvents.id, delayedId));
+    await connection.db
+      .update(outboxEvents)
+      .set({ deadLetteredAt: now })
+      .where(eq(outboxEvents.id, deadId));
+    await connection.db.insert(outboxAttempts).values({
+      id: `attempt-${deadId}`,
+      organizationId: fixture.organizationId,
+      eventId: deadId,
+      attempt: 1,
+      workerId: "worker-telemetry",
+      leaseToken: `lease-${deadId}`,
+      status: "failed",
+      errorCode: "telemetry_fixture_failure",
+      startedAt: new Date("2026-08-29T10:04:00.000Z"),
+      finishedAt: now,
+    });
+
+    const after = await repositories.outbox.telemetry({
+      now,
+      ownedEventTypes,
+      activeEventTypes,
+    });
+    expect(after).toMatchObject({
+      observedAt: now,
+      ready: before.ready + 1,
+      delayed: before.delayed + 1,
+      deadLettered: before.deadLettered + 1,
+      paused: before.paused + 1,
+      unsupported: before.unsupported + 1,
+      attempts: { failed: before.attempts.failed + 1 },
+    });
+    expect(after.oldestReadyAgeMs).toBeGreaterThanOrEqual(300_000);
+    expect(after.oldestUnsupportedAgeMs).toBeGreaterThanOrEqual(300_000);
+    expect(JSON.stringify(after)).not.toContain(fixture.organizationId);
+    expect(JSON.stringify(after)).not.toContain(readyId);
   });
 });
 

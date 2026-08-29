@@ -1,21 +1,38 @@
 import { createDatabase, createWorkerRepositories } from "@founderhq/db";
-import { runWorkerOnce } from "./index";
+import {
+  createWorkerHandlerRegistry,
+  defaultWorkerHandlers,
+} from "./handlers.js";
+import { runWorkerOnce } from "./index.js";
+import { readWorkerRuntimeConfiguration } from "./runtime-config.js";
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) throw new Error("DATABASE_URL is required.");
+const configuration = readWorkerRuntimeConfiguration(
+  {
+    ...process.env,
+    WORKER_ID: process.env.WORKER_ID?.trim() || `worker-once-${process.pid}`,
+  },
+  defaultWorkerHandlers.map(({ name }) => name),
+);
+const handlerRegistry = createWorkerHandlerRegistry(
+  defaultWorkerHandlers,
+  configuration.disabledHandlerNames,
+);
 
 const now = new Date();
-const connection = createDatabase(databaseUrl);
+const connection = createDatabase(configuration.databaseUrl);
 
 try {
   const result = await runWorkerOnce(
     { now, requestId: crypto.randomUUID() },
     {
       repositories: createWorkerRepositories(connection.db),
-      workerId: process.env.WORKER_ID?.trim() || `worker-once-${process.pid}`,
-      batchSize: 100,
-      leaseMs: 30_000,
-      maxAttempts: 8,
+      handlerRegistry,
+      workerId: configuration.workerId,
+      enabled: configuration.enabled,
+      batchSize: configuration.batchSize,
+      concurrency: configuration.concurrency,
+      leaseMs: configuration.leaseMs,
+      maxAttempts: configuration.maxAttempts,
       organizationSweepLimit: 100,
     },
   );

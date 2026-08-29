@@ -3,9 +3,21 @@ import {
   createDatabase,
   createWorkerRepositories,
   type AttentionRecomputeResult,
+  type InternalEventResult,
   type WorkerLease,
+  type WorkerQueueTelemetry,
   type WorkerRepositories,
 } from "@founderhq/db";
+import {
+  createWorkerHandlerRegistry,
+  defaultWorkerHandlers,
+  type WorkerHandlerRegistry,
+} from "./handlers.js";
+import {
+  createWorkerHealthState,
+  startWorkerHealthServer,
+} from "./health-server.js";
+import { readWorkerRuntimeConfiguration } from "./runtime-config.js";
 
 export interface JobContext {
   now: Date;
@@ -25,12 +37,16 @@ export interface JobResult {
 
 export interface WorkerDependencies {
   repositories: WorkerRepositories;
+  handlerRegistry: WorkerHandlerRegistry;
   workerId: string;
+  enabled: boolean;
   batchSize: number;
+  concurrency: number;
   leaseMs: number;
   maxAttempts: number;
   organizationSweepLimit?: number;
   clock?: () => Date;
+  random?: () => number;
   log?: (record: Record<string, unknown>) => void;
 }
 
@@ -40,61 +56,114 @@ export interface WorkerRunResult {
   attention: JobResult;
 }
 
+export interface WorkerLoopObserver {
+  onSweepSucceeded?: (
+    occurredAt: Date,
+    result: WorkerRunResult,
+    queue: WorkerQueueTelemetry,
+  ) => void;
+  onSweepFailed?: (occurredAt: Date) => void;
+}
+
+interface LeaseResult {
+  processed: number;
+  failed: number;
+  retried: number;
+  deadLettered: number;
+  leaseLost: number;
+  effects: number;
+}
+
 export async function runOutboxSweep(
   context: JobContext,
   dependencies: WorkerDependencies,
 ): Promise<JobResult> {
   const started = performance.now();
-  const clock = dependencies.clock ?? (() => context.now);
-  const leaseNow = clock();
+  if (
+    !dependencies.enabled ||
+    dependencies.handlerRegistry.activeEventTypes.length === 0
+  )
+    return emptyJobResult("outbox-sweep", started);
+
+  const clock = dependencies.clock ?? (() => new Date());
+  const concurrency = boundedInteger(
+    dependencies.concurrency,
+    1,
+    10,
+    "WORKER_CONCURRENCY",
+  );
+  const claimLimit = Math.min(
+    boundedInteger(dependencies.batchSize, 1, 10, "WORKER_BATCH_SIZE"),
+    concurrency,
+  );
   const leases = await dependencies.repositories.outbox.lease({
     workerId: dependencies.workerId,
-    now: leaseNow,
+    now: clock(),
     leaseMs: dependencies.leaseMs,
-    limit: dependencies.batchSize,
+    maxAttempts: dependencies.maxAttempts,
+    limit: claimLimit,
+    eventTypes: dependencies.handlerRegistry.activeEventTypes,
   });
-  let processed = 0;
-  let failed = 0;
-  let retried = 0;
-  let deadLettered = 0;
-  let leaseLost = 0;
-  let effects = 0;
-  for (const lease of leases) {
-    try {
-      const result = await dependencies.repositories.outbox.process(
-        lease,
-        (transaction) => transaction.processInternalEvent(context.now),
-      );
-      if (result.status === "lease_lost") {
-        leaseLost += 1;
-        continue;
-      }
-      processed += 1;
-      effects += attentionEffects(result.value.attention);
-    } catch (error) {
-      failed += 1;
-      const failedAt = clock();
-      const disposition = await dependencies.repositories.outbox.fail(lease, {
-        now: failedAt,
-        nextAvailableAt: retryAt(failedAt, lease),
-        errorCode: workerErrorCode(error),
-        maxAttempts: dependencies.maxAttempts,
-      });
-      if (disposition === "retry_scheduled") retried += 1;
-      else if (disposition === "dead_lettered") deadLettered += 1;
-      else leaseLost += 1;
-    }
-  }
+  const results = await Promise.all(
+    leases.map((lease) => processLease(context, dependencies, lease, clock)),
+  );
+  const totals = results.reduce<LeaseResult>(
+    (total, result) => ({
+      processed: total.processed + result.processed,
+      failed: total.failed + result.failed,
+      retried: total.retried + result.retried,
+      deadLettered: total.deadLettered + result.deadLettered,
+      leaseLost: total.leaseLost + result.leaseLost,
+      effects: total.effects + result.effects,
+    }),
+    emptyLeaseResult(),
+  );
   return {
     job: "outbox-sweep",
-    processed,
-    failed,
-    retried,
-    deadLettered,
-    leaseLost,
-    effects,
+    ...totals,
     durationMs: Math.round(performance.now() - started),
   };
+}
+
+async function processLease(
+  context: JobContext,
+  dependencies: WorkerDependencies,
+  lease: WorkerLease,
+  clock: () => Date,
+): Promise<LeaseResult> {
+  const result = emptyLeaseResult();
+  try {
+    const handler = dependencies.handlerRegistry.resolve(lease.eventType);
+    if (!handler) throw workerError("handler_unavailable");
+    const processed = await dependencies.repositories.outbox.process(
+      lease,
+      (transaction) => handler.process(transaction, context.now),
+    );
+    if (processed.status === "lease_lost") {
+      result.leaseLost = 1;
+      return result;
+    }
+    result.processed = 1;
+    result.effects = internalEffects(processed.value);
+    return result;
+  } catch (error) {
+    result.failed = 1;
+    const failedAt = clock();
+    const disposition = await dependencies.repositories.outbox.fail(lease, {
+      now: failedAt,
+      nextAvailableAt: retryAvailableAt(
+        failedAt,
+        lease.attempt,
+        dependencies.random ?? Math.random,
+      ),
+      errorCode: workerErrorCode(error),
+      maxAttempts: dependencies.maxAttempts,
+    });
+    if (disposition === "retry_scheduled") result.retried = 1;
+    else if (disposition === "dead_lettered") result.deadLettered = 1;
+    else result.leaseLost = 1;
+    return result;
+  }
 }
 
 export async function runAttentionSweep(
@@ -102,6 +171,11 @@ export async function runAttentionSweep(
   dependencies: WorkerDependencies,
 ): Promise<JobResult> {
   const started = performance.now();
+  if (
+    !dependencies.enabled ||
+    !dependencies.handlerRegistry.isActive("attention")
+  )
+    return emptyJobResult("attention-sweep", started);
   const results = await dependencies.repositories.attention.recomputeAll(
     context.now,
     dependencies.organizationSweepLimit ?? 100,
@@ -135,7 +209,9 @@ export async function runWorkerLoop(
   input: {
     pollIntervalMs: number;
     attentionSweepIntervalMs?: number;
+    telemetryIntervalMs?: number;
     signal: AbortSignal;
+    observer?: WorkerLoopObserver;
   },
 ): Promise<void> {
   const pollIntervalMs = boundedInteger(
@@ -150,13 +226,27 @@ export async function runWorkerLoop(
     3_600_000,
     "WORKER_ATTENTION_SWEEP_INTERVAL_MS",
   );
-  let ready = false;
+  const telemetryIntervalMs = boundedInteger(
+    input.telemetryIntervalMs ?? 30_000,
+    1_000,
+    3_600_000,
+    "WORKER_TELEMETRY_INTERVAL_MS",
+  );
+  const clock = dependencies.clock ?? (() => new Date());
+  const log = dependencies.log ?? writeLog;
+  const operational =
+    dependencies.enabled &&
+    dependencies.handlerRegistry.activeHandlers.length > 0;
+  let announced = false;
   let nextAttentionSweepAt = Number.NEGATIVE_INFINITY;
+  let nextTelemetryAt = Number.NEGATIVE_INFINITY;
+  let lastQueue: WorkerQueueTelemetry | undefined;
+
   while (!input.signal.aborted) {
-    const context = { now: new Date(), requestId: crypto.randomUUID() };
-    const log = dependencies.log ?? writeLog;
+    const context = { now: clock(), requestId: crypto.randomUUID() };
     try {
       const outbox = await runOutboxSweep(context, dependencies);
+      if (input.signal.aborted) return;
       const attentionDue = context.now.getTime() >= nextAttentionSweepAt;
       const attention = attentionDue
         ? await runAttentionSweep(context, dependencies)
@@ -164,14 +254,34 @@ export async function runWorkerLoop(
       if (attentionDue)
         nextAttentionSweepAt = context.now.getTime() + attentionSweepIntervalMs;
       const result = { requestId: context.requestId, outbox, attention };
-      if (!ready) {
-        ready = true;
+      const telemetryDue = context.now.getTime() >= nextTelemetryAt;
+      if (telemetryDue) {
+        lastQueue = await dependencies.repositories.outbox.telemetry({
+          now: clock(),
+          ownedEventTypes: dependencies.handlerRegistry.handlerEventTypes,
+          activeEventTypes: operational
+            ? dependencies.handlerRegistry.activeEventTypes
+            : [],
+        });
+        nextTelemetryAt = context.now.getTime() + telemetryIntervalMs;
+      }
+      if (!lastQueue) throw workerError("queue_telemetry_unavailable");
+      input.observer?.onSweepSucceeded?.(clock(), result, lastQueue);
+
+      const wasAnnounced = announced;
+      if (!announced) {
+        announced = true;
         log({
           level: "info",
           service: "trevv-worker",
-          event: "ready",
+          event: operational ? "ready" : "paused",
           workerId: dependencies.workerId,
+          activeHandlers: dependencies.handlerRegistry.activeHandlers.map(
+            ({ name }) => name,
+          ),
+          disabledHandlers: dependencies.handlerRegistry.disabledHandlerNames,
           result,
+          queue: lastQueue,
         });
       } else if (
         result.outbox.processed > 0 ||
@@ -186,7 +296,17 @@ export async function runWorkerLoop(
           result,
         });
       }
+      if (telemetryDue && wasAnnounced)
+        log({
+          level: "info",
+          service: "trevv-worker",
+          event: "queue_snapshot",
+          workerId: dependencies.workerId,
+          queue: lastQueue,
+        });
     } catch (error) {
+      const failedAt = clock();
+      input.observer?.onSweepFailed?.(failedAt);
       log({
         level: "error",
         service: "trevv-worker",
@@ -201,96 +321,84 @@ export async function runWorkerLoop(
   }
 }
 
-interface WorkerEnvironment {
-  databaseUrl: string;
-  workerId: string;
-  pollIntervalMs: number;
-  batchSize: number;
-  leaseMs: number;
-  maxAttempts: number;
-  attentionSweepIntervalMs: number;
-}
-
-function readWorkerEnvironment(
-  environment: NodeJS.ProcessEnv,
-): WorkerEnvironment {
-  const databaseUrl = environment.DATABASE_URL?.trim();
-  if (!databaseUrl) throw new Error("DATABASE_URL is required.");
-  const workerId = normalizeWorkerId(environment.WORKER_ID ?? "");
-  return {
-    databaseUrl,
-    workerId,
-    pollIntervalMs: environmentInteger(
-      environment.WORKER_POLL_INTERVAL_MS,
-      1_000,
-      100,
-      60_000,
-      "WORKER_POLL_INTERVAL_MS",
-    ),
-    batchSize: environmentInteger(
-      environment.WORKER_BATCH_SIZE,
-      25,
-      1,
-      100,
-      "WORKER_BATCH_SIZE",
-    ),
-    leaseMs: environmentInteger(
-      environment.WORKER_LEASE_MS,
-      30_000,
-      1_000,
-      300_000,
-      "WORKER_LEASE_MS",
-    ),
-    maxAttempts: environmentInteger(
-      environment.WORKER_MAX_ATTEMPTS,
-      8,
-      1,
-      50,
-      "WORKER_MAX_ATTEMPTS",
-    ),
-    attentionSweepIntervalMs: environmentInteger(
-      environment.WORKER_ATTENTION_SWEEP_INTERVAL_MS,
-      60_000,
-      1_000,
-      3_600_000,
-      "WORKER_ATTENTION_SWEEP_INTERVAL_MS",
-    ),
-  };
-}
-
 async function main(): Promise<void> {
-  const environment = readWorkerEnvironment(process.env);
-  const connection = createDatabase(environment.databaseUrl);
+  const configuration = readWorkerRuntimeConfiguration(
+    process.env,
+    defaultWorkerHandlers.map(({ name }) => name),
+  );
+  const handlerRegistry = createWorkerHandlerRegistry(
+    defaultWorkerHandlers,
+    configuration.disabledHandlerNames,
+  );
+  const connection = createDatabase(configuration.databaseUrl);
+  const healthState = createWorkerHealthState({
+    enabled: configuration.enabled,
+    activeHandlerNames: handlerRegistry.activeHandlers.map(({ name }) => name),
+    disabledHandlerNames: handlerRegistry.disabledHandlerNames,
+    readinessMaxStalenessMs: configuration.readinessMaxStalenessMs,
+    readinessMaxUnsupportedAgeMs: configuration.readinessMaxUnsupportedAgeMs,
+  });
   const abortController = new AbortController();
-  const stop = () => abortController.abort();
+  const stop = () => {
+    healthState.beginShutdown();
+    abortController.abort();
+  };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
+  let healthServer:
+    Awaited<ReturnType<typeof startWorkerHealthServer>> | undefined;
   try {
+    healthServer = await startWorkerHealthServer({
+      host: configuration.healthHost,
+      port: configuration.healthPort,
+      state: healthState,
+    });
+    writeLog({
+      level: "info",
+      service: "trevv-worker",
+      event: "health_listening",
+      origin: healthServer.origin,
+    });
     await runWorkerLoop(
       {
         repositories: createWorkerRepositories(connection.db),
-        workerId: environment.workerId,
-        batchSize: environment.batchSize,
-        leaseMs: environment.leaseMs,
-        maxAttempts: environment.maxAttempts,
+        handlerRegistry,
+        workerId: configuration.workerId,
+        enabled: configuration.enabled,
+        batchSize: configuration.batchSize,
+        concurrency: configuration.concurrency,
+        leaseMs: configuration.leaseMs,
+        maxAttempts: configuration.maxAttempts,
       },
       {
-        pollIntervalMs: environment.pollIntervalMs,
-        attentionSweepIntervalMs: environment.attentionSweepIntervalMs,
+        pollIntervalMs: configuration.pollIntervalMs,
+        attentionSweepIntervalMs: configuration.attentionSweepIntervalMs,
+        telemetryIntervalMs: configuration.telemetryIntervalMs,
         signal: abortController.signal,
+        observer: {
+          onSweepSucceeded: (occurredAt, _result, queue) =>
+            healthState.recordSuccessfulSweep(occurredAt, queue),
+          onSweepFailed: (occurredAt) =>
+            healthState.recordFailedSweep(occurredAt),
+        },
       },
     );
   } finally {
+    healthState.beginShutdown();
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
-    await connection.close();
+    await Promise.all([healthServer?.close(), connection.close()]);
     writeLog({
       level: "info",
       service: "trevv-worker",
       event: "stopped",
-      workerId: environment.workerId,
+      workerId: configuration.workerId,
     });
   }
+}
+
+function internalEffects(result: InternalEventResult): number {
+  return (result.effects ?? 0) + attentionEffects(result.attention);
 }
 
 function attentionEffects(result?: AttentionRecomputeResult): number {
@@ -299,22 +407,38 @@ function attentionEffects(result?: AttentionRecomputeResult): number {
     : 0;
 }
 
-function emptyJobResult(job: string): JobResult {
+function emptyLeaseResult(): LeaseResult {
   return {
-    job,
     processed: 0,
     failed: 0,
     retried: 0,
     deadLettered: 0,
     leaseLost: 0,
     effects: 0,
-    durationMs: 0,
   };
 }
 
-function retryAt(now: Date, lease: WorkerLease): Date {
-  const exponent = Math.max(0, Math.min(lease.attempt - 1, 8));
-  return new Date(now.getTime() + Math.min(60_000 * 2 ** exponent, 3_600_000));
+function emptyJobResult(job: string, started?: number): JobResult {
+  return {
+    job,
+    ...emptyLeaseResult(),
+    durationMs:
+      started === undefined ? 0 : Math.round(performance.now() - started),
+  };
+}
+
+export function retryAvailableAt(
+  now: Date,
+  attempt: number,
+  random: () => number,
+): Date {
+  const exponent = Math.max(0, Math.min(attempt - 1, 8));
+  const capMs = Math.min(60_000 * 2 ** exponent, 3_600_000);
+  const randomValue = random();
+  if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1)
+    throw new Error("Worker retry randomness must be between 0 and 1.");
+  const delayMs = Math.floor(capMs * (0.5 + randomValue * 0.5));
+  return new Date(now.getTime() + delayMs);
 }
 
 function workerErrorCode(error: unknown): string {
@@ -328,22 +452,8 @@ function workerErrorCode(error: unknown): string {
   return "internal_error";
 }
 
-function normalizeWorkerId(value: string): string {
-  const normalized = value.trim();
-  if (!/^[a-z0-9][a-z0-9._-]{2,127}$/iu.test(normalized))
-    throw new Error("WORKER_ID must be 3-128 URL-safe characters.");
-  return normalized;
-}
-
-function environmentInteger(
-  value: string | undefined,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-  label: string,
-): number {
-  if (value === undefined || value.trim() === "") return fallback;
-  return boundedInteger(Number(value), minimum, maximum, label);
+function workerError(code: string): Error {
+  return Object.assign(new Error(code), { code });
 }
 
 function boundedInteger(
@@ -390,7 +500,6 @@ if (isExecutable)
       service: "trevv-worker",
       event: "fatal",
       errorCode: workerErrorCode(error),
-      message: error instanceof Error ? error.message : "Unknown worker error",
     });
     process.exitCode = 1;
   });

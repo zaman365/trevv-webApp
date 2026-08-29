@@ -6,14 +6,19 @@ import {
   eq,
   gt,
   inArray,
+  isNotNull,
   isNull,
   lte,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
 import type { TrevvDatabase } from "./repositories.js";
 import {
   attentionSignals,
+  conversationMessageMetadataQuarantine,
+  conversationMessages,
+  idempotencyRecords,
   itemAssignees,
   memberships,
   notifications,
@@ -52,6 +57,25 @@ export interface AttentionRecomputeResult {
 export interface InternalEventResult {
   recomputed: boolean;
   attention?: AttentionRecomputeResult;
+  effects?: number;
+}
+
+export interface WorkerQueueTelemetry {
+  observedAt: Date;
+  ready: number;
+  delayed: number;
+  leased: number;
+  deadLettered: number;
+  paused: number;
+  unsupported: number;
+  oldestReadyAgeMs: number | null;
+  oldestUnsupportedAgeMs: number | null;
+  attempts: {
+    leased: number;
+    succeeded: number;
+    failed: number;
+    deadLettered: number;
+  };
 }
 
 export interface WorkerRepositories {
@@ -60,7 +84,9 @@ export interface WorkerRepositories {
       workerId: string;
       now: Date;
       leaseMs: number;
+      maxAttempts: number;
       limit: number;
+      eventTypes?: readonly string[];
     }) => Promise<WorkerLease[]>;
     process: <T>(
       lease: WorkerLease,
@@ -75,6 +101,11 @@ export interface WorkerRepositories {
         maxAttempts: number;
       },
     ) => Promise<"retry_scheduled" | "dead_lettered" | "lease_lost">;
+    telemetry: (input: {
+      now: Date;
+      ownedEventTypes: readonly string[];
+      activeEventTypes: readonly string[];
+    }) => Promise<WorkerQueueTelemetry>;
   };
   attention: {
     recomputeOrganization: (
@@ -103,23 +134,306 @@ export interface WorkerRepositoryOptions {
   clock?: () => Date;
 }
 
-export const internalWorkerEventTypes = [
-  "item.created",
-  "item.updated",
-  "item.assignees_replaced",
-  "item.dependency_added",
-  "item.dependency_removed",
-  "comment.created",
-  "comment.updated",
-  "decision.outcome_recorded",
-  "waiting.created",
-  "waiting.actioned",
-  "workspace_update.created",
-  "workspace_update.updated",
-  "weekly_review.submitted",
-] as const;
+export type WorkerEventHandlerName = "attention" | "audit" | "collaboration";
+
+export interface WorkerEventCatalogEntry {
+  handler: WorkerEventHandlerName;
+  effect:
+    | "acknowledge_audit_only"
+    | "apply_collaboration_effect"
+    | "recompute_attention";
+  reason: string;
+}
+
+/**
+ * Exhaustive catalog of every event currently written to outbox_events.
+ *
+ * Adding an event producer requires a reviewed entry here. Events whose only
+ * durable effect is the audit/outbox record are acknowledged by the explicit
+ * audit handler; they are not swallowed by a catch-all. Unknown event types
+ * remain pending and become a readiness failure once their grace period ends.
+ */
+export const workerEventCatalog = {
+  "organization.onboarded": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Initialize deterministic signals for the provisioned tenant.",
+  },
+  "organization.updated": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Timezone changes can change due and stale-signal calculations.",
+  },
+  "application_user.updated": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Profile changes have no Phase 4 asynchronous projection.",
+  },
+  "membership.created": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Active membership controls eligible signal recipients.",
+  },
+  "membership.updated": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Role changes can alter eligible signal recipients.",
+  },
+  "membership.revoked": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Revoked members must stop receiving computed notifications.",
+  },
+  "membership.restored": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Restored members may become eligible signal recipients again.",
+  },
+  "invitation.created": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Invitation mail is delivered and reconciled by the API adapter.",
+  },
+  "invitation.resent": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Invitation mail is delivered and reconciled by the API adapter.",
+  },
+  "invitation.revoked": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Revocation is fully committed in the originating transaction.",
+  },
+  "invitation.delivery_sent": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "The provider delivery result is already durably reconciled.",
+  },
+  "invitation.delivery_failed": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "The provider delivery failure is already durably reconciled.",
+  },
+  "invitation.accepted": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Acceptance creates a membership eligible for signal delivery.",
+  },
+  "portfolio.created": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Portfolio scope participates in the active Attention data set.",
+  },
+  "portfolio.updated": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Portfolio state can change the active Attention data set.",
+  },
+  "portfolio.archived": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Signals beneath archived Portfolios must resolve promptly.",
+  },
+  "workspace.created": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "New Workspaces participate in stale-update signal calculation.",
+  },
+  "workspace.updated": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Lead and lifecycle changes alter signals and their recipients.",
+  },
+  "workspace.archived": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Signals beneath archived Workspaces must resolve promptly.",
+  },
+  "board.created": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Boards have no independent Phase 4 asynchronous projection.",
+  },
+  "board.updated": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Board metadata does not affect the current signal rules.",
+  },
+  "item.created": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "WorkItem state is a canonical Attention input.",
+  },
+  "item.updated": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "WorkItem state is a canonical Attention input.",
+  },
+  "item.dependency_added": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Dependency changes may alter deterministic work signals.",
+  },
+  "item.dependency_removed": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Dependency changes may alter deterministic work signals.",
+  },
+  "comment.created": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Comments are durable evidence without a separate projection.",
+  },
+  "comment.updated": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Comments are durable evidence without a separate projection.",
+  },
+  "workspace_update.created": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Published updates reset Workspace staleness signals.",
+  },
+  "workspace_update.updated": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Published updates reset Workspace staleness signals.",
+  },
+  "decision.outcome_recorded": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Decision outcomes resolve pending-decision signals.",
+  },
+  "review_ritual.created": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Review cadence has no separate Phase 4 worker projection.",
+  },
+  "review_ritual.updated": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Review cadence has no separate Phase 4 worker projection.",
+  },
+  "workspace_snapshot.created": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Snapshots are complete when their transaction commits.",
+  },
+  "attention.actioned": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "The action is already reflected in the signal aggregate.",
+  },
+  "waiting.created": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Waiting deadlines are canonical Attention inputs.",
+  },
+  "waiting.actioned": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "Waiting actions can resolve or reschedule Attention signals.",
+  },
+  "inbox_item.captured": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Captured Inbox state is already canonical and durable.",
+  },
+  "inbox_item.updated": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Inbox metadata has no separate Phase 4 projection.",
+  },
+  "inbox_item.converted": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "The converted WorkItem emits its own Attention event.",
+  },
+  "weekly_review.submitted": {
+    handler: "attention",
+    effect: "recompute_attention",
+    reason: "A weekly review publishes an update and changes staleness.",
+  },
+  "team.created": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the atomic Team-room collaboration mutation.",
+  },
+  "team.updated": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the synchronized Team-room mutation.",
+  },
+  "team.membership_changed": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge synchronized Team and room membership.",
+  },
+  "conversation.created": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the durable conversation and participants.",
+  },
+  "conversation.participants_changed": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the durable participant grant change.",
+  },
+  "conversation.read": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the durable read checkpoint change.",
+  },
+  "message.sent": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the durable idempotent message mutation.",
+  },
+  "message.response_changed": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the durable response workflow change.",
+  },
+  "message.reaction_changed": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Acknowledge the durable reaction change.",
+  },
+  "message.retention_due": {
+    handler: "collaboration",
+    effect: "apply_collaboration_effect",
+    reason: "Redact expired message content and replay material atomically.",
+  },
+} as const satisfies Record<string, WorkerEventCatalogEntry>;
+
+export type WorkerEventType = keyof typeof workerEventCatalog;
+
+export const knownWorkerEventTypes = Object.freeze(
+  Object.keys(workerEventCatalog) as WorkerEventType[],
+);
+
+export const internalWorkerEventTypes = eventTypesForHandler("attention");
+export const auditWorkerEventTypes = eventTypesForHandler("audit");
+export const collaborationWorkerEventTypes =
+  eventTypesForHandler("collaboration");
+
+function eventTypesForHandler(
+  handler: WorkerEventHandlerName,
+): readonly WorkerEventType[] {
+  return Object.freeze(
+    (
+      Object.entries(workerEventCatalog) as Array<
+        [WorkerEventType, WorkerEventCatalogEntry]
+      >
+    )
+      .filter(([, definition]) => definition.handler === handler)
+      .map(([eventType]) => eventType),
+  );
+}
 
 const recomputableEventTypes = new Set<string>(internalWorkerEventTypes);
+const auditOnlyEventTypes = new Set<string>(auditWorkerEventTypes);
+const collaborationEventTypes = new Set<string>(collaborationWorkerEventTypes);
 
 export function createWorkerRepositories(
   database: TrevvDatabase,
@@ -132,6 +446,7 @@ export function createWorkerRepositories(
       process: (lease, handler) =>
         processLeasedEvent(database, lease, handler, clock),
       fail: (lease, input) => failLeasedEvent(database, lease, input),
+      telemetry: (input) => readOutboxTelemetry(database, input),
     },
     attention: {
       recomputeOrganization: (organizationId, now) =>
@@ -146,7 +461,14 @@ export function createWorkerRepositories(
 
 async function leaseOutbox(
   database: TrevvDatabase,
-  input: { workerId: string; now: Date; leaseMs: number; limit: number },
+  input: {
+    workerId: string;
+    now: Date;
+    leaseMs: number;
+    maxAttempts: number;
+    limit: number;
+    eventTypes?: readonly string[];
+  },
 ): Promise<WorkerLease[]> {
   const workerId = normalizeWorkerId(input.workerId);
   const limit = boundedInteger(input.limit, 1, 100, "lease batch size");
@@ -156,6 +478,14 @@ async function leaseOutbox(
     300_000,
     "lease duration",
   );
+  const maxAttempts = boundedInteger(
+    input.maxAttempts,
+    1,
+    50,
+    "maximum attempt count",
+  );
+  const eventTypes = [...new Set(input.eventTypes ?? internalWorkerEventTypes)];
+  if (eventTypes.length === 0) return [];
   const leaseExpiresAt = new Date(input.now.getTime() + leaseMs);
   return database.transaction(async (transaction) => {
     const candidates = await transaction
@@ -165,7 +495,7 @@ async function leaseOutbox(
         and(
           isNull(outboxEvents.processedAt),
           isNull(outboxEvents.deadLetteredAt),
-          inArray(outboxEvents.eventType, internalWorkerEventTypes),
+          inArray(outboxEvents.eventType, eventTypes),
           lte(outboxEvents.availableAt, input.now),
           or(
             isNull(outboxEvents.leaseExpiresAt),
@@ -184,10 +514,11 @@ async function leaseOutbox(
     const leases: WorkerLease[] = [];
     for (const candidate of candidates) {
       if (candidate.leaseToken && candidate.attempts > 0) {
+        const deadLettered = candidate.attempts >= maxAttempts;
         await transaction
           .update(outboxAttempts)
           .set({
-            status: "failed",
+            status: deadLettered ? "dead_lettered" : "failed",
             errorCode: "lease_expired",
             finishedAt: input.now,
           })
@@ -196,9 +527,34 @@ async function leaseOutbox(
               eq(outboxAttempts.organizationId, candidate.organizationId),
               eq(outboxAttempts.eventId, candidate.id),
               eq(outboxAttempts.attempt, candidate.attempts),
+              eq(outboxAttempts.leaseToken, candidate.leaseToken),
               eq(outboxAttempts.status, "leased"),
             ),
           );
+        if (deadLettered) {
+          await transaction
+            .update(outboxEvents)
+            .set({
+              lastErrorCode: "lease_expired",
+              lastErrorAt: input.now,
+              deadLetteredAt: input.now,
+              lockedAt: null,
+              lockedBy: null,
+              leaseToken: null,
+              leaseExpiresAt: null,
+            })
+            .where(
+              and(
+                eq(outboxEvents.organizationId, candidate.organizationId),
+                eq(outboxEvents.id, candidate.id),
+                eq(outboxEvents.attempts, candidate.attempts),
+                eq(outboxEvents.leaseToken, candidate.leaseToken),
+                isNull(outboxEvents.processedAt),
+                isNull(outboxEvents.deadLetteredAt),
+              ),
+            );
+          continue;
+        }
       }
       const attempt = candidate.attempts + 1;
       const leaseToken = crypto.randomUUID();
@@ -363,29 +719,14 @@ async function failLeasedEvent(
           eq(outboxEvents.attempts, lease.attempt),
           isNull(outboxEvents.processedAt),
           isNull(outboxEvents.deadLetteredAt),
+          gt(outboxEvents.leaseExpiresAt, input.now),
         ),
       )
       .limit(1)
       .for("update");
     if (!current) return "lease_lost";
     const deadLettered = current.attempts >= maxAttempts;
-    await transaction
-      .update(outboxAttempts)
-      .set({
-        status: deadLettered ? "dead_lettered" : "failed",
-        errorCode,
-        finishedAt: input.now,
-      })
-      .where(
-        and(
-          eq(outboxAttempts.organizationId, lease.organizationId),
-          eq(outboxAttempts.eventId, lease.eventId),
-          eq(outboxAttempts.attempt, lease.attempt),
-          eq(outboxAttempts.leaseToken, lease.leaseToken),
-          eq(outboxAttempts.status, "leased"),
-        ),
-      );
-    await transaction
+    const [failed] = await transaction
       .update(outboxEvents)
       .set({
         availableAt: input.nextAvailableAt,
@@ -403,10 +744,150 @@ async function failLeasedEvent(
           eq(outboxEvents.id, lease.eventId),
           eq(outboxEvents.leaseToken, lease.leaseToken),
           eq(outboxEvents.attempts, lease.attempt),
+          gt(outboxEvents.leaseExpiresAt, input.now),
+        ),
+      )
+      .returning({ id: outboxEvents.id });
+    if (!failed) return "lease_lost";
+    await transaction
+      .update(outboxAttempts)
+      .set({
+        status: deadLettered ? "dead_lettered" : "failed",
+        errorCode,
+        finishedAt: input.now,
+      })
+      .where(
+        and(
+          eq(outboxAttempts.organizationId, lease.organizationId),
+          eq(outboxAttempts.eventId, lease.eventId),
+          eq(outboxAttempts.attempt, lease.attempt),
+          eq(outboxAttempts.leaseToken, lease.leaseToken),
+          eq(outboxAttempts.status, "leased"),
         ),
       );
     return deadLettered ? "dead_lettered" : "retry_scheduled";
   });
+}
+
+async function readOutboxTelemetry(
+  database: TrevvDatabase,
+  input: {
+    now: Date;
+    ownedEventTypes: readonly string[];
+    activeEventTypes: readonly string[];
+  },
+): Promise<WorkerQueueTelemetry> {
+  const ownedEventTypes = [...new Set(input.ownedEventTypes)];
+  const activeEventTypes = [...new Set(input.activeEventTypes)];
+  const pending = and(
+    isNull(outboxEvents.processedAt),
+    isNull(outboxEvents.deadLetteredAt),
+  );
+  const owned = ownedEventTypes.length
+    ? inArray(outboxEvents.eventType, ownedEventTypes)
+    : sql`false`;
+  const active = activeEventTypes.length
+    ? inArray(outboxEvents.eventType, activeEventTypes)
+    : sql`false`;
+  const paused = activeEventTypes.length
+    ? and(owned, notInArray(outboxEvents.eventType, activeEventTypes))
+    : owned;
+  const unsupported = ownedEventTypes.length
+    ? notInArray(outboxEvents.eventType, ownedEventTypes)
+    : sql`true`;
+  const ready = and(
+    pending,
+    active,
+    lte(outboxEvents.availableAt, input.now),
+    or(
+      isNull(outboxEvents.leaseExpiresAt),
+      lte(outboxEvents.leaseExpiresAt, input.now),
+    ),
+  );
+  const delayed = and(pending, active, gt(outboxEvents.availableAt, input.now));
+  const leased = and(
+    pending,
+    active,
+    gt(outboxEvents.leaseExpiresAt, input.now),
+  );
+
+  const [queueRows, attemptRows] = await Promise.all([
+    database
+      .select({
+        ready: sql<number>`count(*) filter (where ${ready})::int`,
+        delayed: sql<number>`count(*) filter (where ${delayed})::int`,
+        leased: sql<number>`count(*) filter (where ${leased})::int`,
+        deadLettered: sql<number>`count(*) filter (where ${and(
+          owned,
+          isNotNull(outboxEvents.deadLetteredAt),
+        )})::int`,
+        paused: sql<number>`count(*) filter (where ${and(
+          pending,
+          paused,
+        )})::int`,
+        unsupported: sql<number>`count(*) filter (where ${and(
+          pending,
+          unsupported,
+        )})::int`,
+        oldestReadyAt: sql<Date | null>`min(${outboxEvents.createdAt}) filter (where ${ready})`,
+        oldestUnsupportedAt: sql<Date | null>`min(${outboxEvents.createdAt}) filter (where ${and(
+          pending,
+          unsupported,
+        )})`,
+      })
+      .from(outboxEvents),
+    database
+      .select({
+        leased: sql<number>`count(*) filter (where ${eq(
+          outboxAttempts.status,
+          "leased",
+        )})::int`,
+        succeeded: sql<number>`count(*) filter (where ${eq(
+          outboxAttempts.status,
+          "succeeded",
+        )})::int`,
+        failed: sql<number>`count(*) filter (where ${eq(
+          outboxAttempts.status,
+          "failed",
+        )})::int`,
+        deadLettered: sql<number>`count(*) filter (where ${eq(
+          outboxAttempts.status,
+          "dead_lettered",
+        )})::int`,
+      })
+      .from(outboxAttempts),
+  ]);
+  const [queue] = queueRows;
+  const [attempts] = attemptRows;
+
+  return {
+    observedAt: input.now,
+    ready: queue?.ready ?? 0,
+    delayed: queue?.delayed ?? 0,
+    leased: queue?.leased ?? 0,
+    deadLettered: queue?.deadLettered ?? 0,
+    paused: queue?.paused ?? 0,
+    unsupported: queue?.unsupported ?? 0,
+    oldestReadyAgeMs: ageMs(input.now, queue?.oldestReadyAt),
+    oldestUnsupportedAgeMs: ageMs(input.now, queue?.oldestUnsupportedAt),
+    attempts: {
+      leased: attempts?.leased ?? 0,
+      succeeded: attempts?.succeeded ?? 0,
+      failed: attempts?.failed ?? 0,
+      deadLettered: attempts?.deadLettered ?? 0,
+    },
+  };
+}
+
+function ageMs(
+  now: Date,
+  value: Date | string | null | undefined,
+): number | null {
+  if (!value) return null;
+  const observed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(observed.getTime())
+    ? null
+    : Math.max(0, now.getTime() - observed.getTime());
 }
 
 function createWorkerTransactionRepositories(
@@ -416,22 +897,106 @@ function createWorkerTransactionRepositories(
   return {
     event,
     processInternalEvent: async (now) => {
-      if (!recomputableEventTypes.has(event.eventType))
+      if (collaborationEventTypes.has(event.eventType))
+        return processCollaborationEvent(transaction, event, now);
+      if (auditOnlyEventTypes.has(event.eventType))
         return { recomputed: false };
-      return {
-        recomputed: true,
-        attention: await recomputeOrganizationAttention(
-          transaction,
-          event.organizationId,
-          now,
-        ),
-      };
+      if (recomputableEventTypes.has(event.eventType))
+        return {
+          recomputed: true,
+          attention: await recomputeOrganizationAttention(
+            transaction,
+            event.organizationId,
+            now,
+          ),
+        };
+      throw workerRepositoryError("unsupported_worker_event");
     },
     attention: {
       recomputeOrganization: (organizationId, now) =>
         recomputeOrganizationAttention(transaction, organizationId, now),
     },
   };
+}
+
+async function processCollaborationEvent(
+  transaction: TrevvDatabase,
+  event: WorkerLease,
+  now: Date,
+): Promise<InternalEventResult> {
+  if (event.eventType !== "message.retention_due")
+    return { recomputed: false, effects: 0 };
+  if (event.aggregateType !== "message")
+    throw workerRepositoryError("invalid_retention_event");
+  const [message] = await transaction
+    .select()
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.organizationId, event.organizationId),
+        eq(conversationMessages.id, event.aggregateId),
+        isNull(conversationMessages.deletedAt),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!message) return { recomputed: false, effects: 0 };
+  if (message.expiresAt > now)
+    throw workerRepositoryError("message_retention_not_due");
+  const [redacted] =
+    message.redactedAt === null
+      ? await transaction
+          .update(conversationMessages)
+          .set({
+            body: "[Message expired]",
+            metadata: {},
+            redactedAt: now,
+            version: sql`${conversationMessages.version} + 1`,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(conversationMessages.organizationId, event.organizationId),
+              eq(conversationMessages.id, event.aggregateId),
+              isNull(conversationMessages.redactedAt),
+              isNull(conversationMessages.deletedAt),
+              lte(conversationMessages.expiresAt, now),
+            ),
+          )
+          .returning({ id: conversationMessages.id })
+      : [];
+  await Promise.all([
+    transaction
+      .delete(idempotencyRecords)
+      .where(
+        and(
+          eq(idempotencyRecords.organizationId, event.organizationId),
+          eq(idempotencyRecords.resultType, "message"),
+          eq(idempotencyRecords.resultId, event.aggregateId),
+        ),
+      ),
+    transaction
+      .delete(conversationMessageMetadataQuarantine)
+      .where(
+        and(
+          eq(
+            conversationMessageMetadataQuarantine.organizationId,
+            event.organizationId,
+          ),
+          eq(
+            conversationMessageMetadataQuarantine.messageId,
+            event.aggregateId,
+          ),
+        ),
+      ),
+    transaction.execute(sql`
+      delete from legacy_collaboration_record_quarantine
+       where organization_id = ${event.organizationId}
+         and entity_type = 'message'
+         and entity_id = ${event.aggregateId}
+    `),
+  ]);
+  return { recomputed: false, effects: redacted ? 1 : 0 };
 }
 
 interface DesiredAttentionSignal {
@@ -1046,6 +1611,10 @@ function normalizeErrorCode(value: string): string {
   return /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(normalized)
     ? normalized.slice(0, 100)
     : "internal_error";
+}
+
+function workerRepositoryError(code: string): Error {
+  return Object.assign(new Error(code), { code });
 }
 
 function boundedInteger(
