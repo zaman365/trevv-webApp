@@ -3788,6 +3788,7 @@ async function resolveSession(
         eq(memberships.userId, scope.userId),
         isNull(memberships.archivedAt),
         isNull(memberships.deletedAt),
+        isNull(organizations.archivedAt),
         isNull(organizations.deletedAt),
         isNull(users.deletedAt),
       ),

@@ -16,6 +16,10 @@ test.beforeAll(async () => {
   await rm(file, { force: true });
 });
 
+test.afterAll(async () => {
+  await rm(requiredMailSink(), { force: true });
+});
+
 test("live identity, onboarding, invitation, revocation, and recovery fail closed", async ({
   browser,
 }) => {

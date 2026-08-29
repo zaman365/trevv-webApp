@@ -97,7 +97,7 @@ export function createApiApp(dependencies: ApiAppDependencies) {
 
   api.use("*", secureHeaders());
   api.use(
-    "*",
+    "/api/v1/*",
     cors({
       origin:
         dependencies.corsOrigin ??

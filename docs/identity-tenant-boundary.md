@@ -141,8 +141,17 @@ account-ID unique index. The invitation token-format constraint is installed
 `NOT VALID`: it protects every new or changed row without making an upgrade
 fail solely because an older deployment stored a legacy-format digest.
 
-PostgreSQL integration coverage proves clean migration, populated `0005`
-upgrade, restart recovery, optimistic draft updates, idempotent and concurrent
-onboarding, full rollback, token rotation/expiry/revocation/email matching,
-one-time acceptance, case-insensitive duplicate rejection, tenant grant
-removal, and audit/outbox atomicity.
+Migration `0007_normalized_app_user_email.sql` adds active, case-insensitive
+uniqueness for application-user email addresses. Its preflight aborts before
+creating the index if populated legacy data contains a collision; it never
+guesses which tenant identity to keep or rewrites user ownership. The
+repository independently returns `identity_access_unavailable` when it sees an
+ambiguous pre-migration match, so identity claiming remains fail-closed while
+an operator resolves the data conflict.
+
+PostgreSQL integration coverage proves clean migration, populated `0005` and
+`0006` upgrades, normalized-email collision rejection, restart recovery,
+optimistic draft updates, idempotent and concurrent onboarding, full rollback,
+token rotation/expiry/revocation/email matching, one-time acceptance,
+case-insensitive duplicate rejection, tenant grant removal, and audit/outbox
+atomicity.

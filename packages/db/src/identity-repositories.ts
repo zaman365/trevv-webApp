@@ -259,10 +259,22 @@ async function resolveIdentity(
         isNull(memberships.deletedAt),
       ),
     )
+    .innerJoin(
+      organizations,
+      and(
+        eq(organizations.id, appUserOrganizationSelections.organizationId),
+        isNull(organizations.archivedAt),
+        isNull(organizations.deletedAt),
+      ),
+    )
     .where(eq(appUserOrganizationSelections.appUserId, mappedUser.id))
     .limit(1);
 
-  let organizationId = selection?.organizationId;
+  let organizationId = choices.some(
+    ({ id }) => id === selection?.organizationId,
+  )
+    ? selection?.organizationId
+    : undefined;
   if (!organizationId && choices.length === 1) {
     organizationId = choices[0]!.id;
     await persistOrganizationSelection(
@@ -318,6 +330,14 @@ async function selectOrganization(
     const [activeMembership] = await transaction
       .select({ userId: memberships.userId })
       .from(memberships)
+      .innerJoin(
+        organizations,
+        and(
+          eq(organizations.id, memberships.organizationId),
+          isNull(organizations.archivedAt),
+          isNull(organizations.deletedAt),
+        ),
+      )
       .where(
         and(
           eq(memberships.organizationId, organizationId),
@@ -867,7 +887,7 @@ async function ensureApplicationUser(
   if (mapped) return mapped;
 
   const normalizedEmail = normalizeEmail(authUser.email);
-  const [existingUser] = await database
+  const existingUsers = await database
     .select()
     .from(users)
     .where(
@@ -876,8 +896,11 @@ async function ensureApplicationUser(
         isNull(users.deletedAt),
       ),
     )
-    .limit(1)
+    .limit(2)
     .for("update");
+  if (existingUsers.length > 1 || existingUsers[0]?.archivedAt)
+    throw identityAccessUnavailable();
+  const existingUser = existingUsers[0];
   const appUser =
     existingUser ??
     (

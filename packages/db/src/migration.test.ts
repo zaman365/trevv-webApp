@@ -11,6 +11,9 @@ const workspaceRenameMigrationPath = fileURLToPath(
 const persistentDataPlaneMigrationPath = fileURLToPath(
   new URL("../migrations/0005_persistent_data_plane.sql", import.meta.url),
 );
+const normalizedIdentityEmailMigrationPath = fileURLToPath(
+  new URL("../migrations/0007_normalized_app_user_email.sql", import.meta.url),
+);
 
 describe("TREVV commercial migration", () => {
   const migration = readFileSync(migrationPath, "utf8");
@@ -124,5 +127,23 @@ describe("Persistent data plane migration", () => {
     expect(migration).toContain(
       'ADD CONSTRAINT "waiting_states_org_workspace_item_fk" FOREIGN KEY ("organization_id","workspace_id","entity_id")',
     );
+  });
+});
+
+describe("Normalized identity email migration", () => {
+  const migration = readFileSync(normalizedIdentityEmailMigrationPath, "utf8");
+
+  it("fails closed on legacy collisions before adding normalized uniqueness", () => {
+    const collisionCheck = migration.indexOf(
+      "active case-insensitive duplicates exist",
+    );
+    const normalizedIndex = migration.indexOf(
+      'CREATE UNIQUE INDEX "app_users_active_email_normalized_unique"',
+    );
+
+    expect(collisionCheck).toBeGreaterThan(-1);
+    expect(normalizedIndex).toBeGreaterThan(collisionCheck);
+    expect(migration).toContain('GROUP BY lower("email")');
+    expect(migration).not.toContain('DELETE FROM "app_users"');
   });
 });

@@ -84,6 +84,33 @@ describe("TREVV API v1 dependency boundaries", () => {
     ).toThrow(/must match/);
   });
 
+  it("does not make raw auth responses readable across browser origins", async () => {
+    const webOrigin = "https://app.trevv.test";
+    const app = createApiApp({
+      mode: "live",
+      ...createUnavailableLiveDependencies(),
+      corsOrigin: webOrigin,
+      authHandler: async () =>
+        Response.json({
+          session: { token: "raw-session-token" },
+        }),
+    });
+
+    const authResponse = await app.request("/api/auth/get-session", {
+      headers: { origin: webOrigin },
+    });
+    expect(authResponse.status).toBe(200);
+    expect(authResponse.headers.get("access-control-allow-origin")).toBeNull();
+
+    const apiResponse = await app.request("/api/v1/health", {
+      headers: { origin: webOrigin },
+    });
+    expect(apiResponse.status).toBe(200);
+    expect(apiResponse.headers.get("access-control-allow-origin")).toBe(
+      webOrigin,
+    );
+  });
+
   it("never substitutes demo access or data in a live app", async () => {
     const app = createApiApp({
       mode: "live",

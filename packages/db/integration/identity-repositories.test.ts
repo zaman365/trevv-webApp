@@ -466,6 +466,47 @@ describe("Phase 2 identity repositories", () => {
     expect(selection?.organizationId).toBe(secondOrganizationId);
   });
 
+  it("replaces an archived selected organization with the sole active choice", async () => {
+    const owner = await onboardOwner(`archived-selection-${randomUUID()}`);
+    const archivedOrganizationId = `org-archived-${randomUUID()}`;
+    await connection.db.transaction(async (transaction) => {
+      await transaction.insert(organizations).values({
+        id: archivedOrganizationId,
+        name: "Organization to archive",
+        slug: `archived-${randomUUID()}`,
+      });
+      await transaction.insert(memberships).values({
+        organizationId: archivedOrganizationId,
+        userId: owner.result.appUserId,
+        role: "admin",
+      });
+    });
+    await owner.identity.selectOrganization(archivedOrganizationId);
+
+    const archivedAt = new Date("2026-08-29T13:00:00.000Z");
+    await connection.db
+      .update(organizations)
+      .set({ archivedAt, updatedAt: archivedAt })
+      .where(eq(organizations.id, archivedOrganizationId));
+
+    await expect(owner.identity.resolve()).resolves.toMatchObject({
+      status: "active",
+      organization: { id: owner.result.organizationId },
+      organizations: [{ id: owner.result.organizationId }],
+    });
+    await expect(
+      owner.identity.selectOrganization(archivedOrganizationId),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    const selection =
+      await connection.db.query.appUserOrganizationSelections.findFirst({
+        where: eq(
+          appUserOrganizationSelections.appUserId,
+          owner.result.appUserId,
+        ),
+      });
+    expect(selection?.organizationId).toBe(owner.result.organizationId);
+  });
+
   it("rotates, records delivery, accepts once, and never exposes token hashes", async () => {
     const owner = await onboardOwner(`invite-owner-${randomUUID()}`);
     const ownerRepositories = createPostgresRepositories(
@@ -958,7 +999,10 @@ describe("Phase 2 migration upgrade", () => {
         await client.end();
       }
 
-      await applyMigrationFiles(upgrade.url, ["0006_wet_spirit.sql"]);
+      await applyMigrationFiles(upgrade.url, [
+        "0006_wet_spirit.sql",
+        "0007_normalized_app_user_email.sql",
+      ]);
       const upgraded = postgres(upgrade.url, { max: 1, prepare: false });
       try {
         const accounts = await upgraded<
@@ -982,9 +1026,75 @@ describe("Phase 2 migration upgrade", () => {
         `;
         expect(legacyInvitation?.acceptedAt).toBeInstanceOf(Date);
         expect(legacyInvitation?.acceptedByUserId).toBeNull();
+        await expect(
+          upgraded.unsafe(`
+            insert into app_users (id, email, name)
+            values (
+              'user-auth-upgrade-duplicate',
+              'ACCEPTED@EXAMPLE.TEST',
+              'Duplicate User'
+            )
+          `),
+        ).rejects.toMatchObject({ code: "23505" });
       } finally {
         await upgraded.end();
       }
+    } finally {
+      await upgrade.drop();
+    }
+  });
+
+  it("fails closed before mapping a case-ambiguous legacy app user", async () => {
+    const upgrade = await createTemporaryDatabase();
+    try {
+      await applyMigrationFiles(upgrade.url, [
+        "0000_cool_loa.sql",
+        "0001_adorable_sue_storm.sql",
+        "0002_trevv_commercial_delta.sql",
+        "0003_wandering_prowler.sql",
+        "0004_workspace_domain_rename.sql",
+        "0005_persistent_data_plane.sql",
+        "0006_wet_spirit.sql",
+      ]);
+      const legacy = postgres(upgrade.url, { max: 1, prepare: false });
+      try {
+        await legacy.unsafe(`
+          insert into "user" (
+            "id", "name", "email", "emailVerified", "createdAt", "updatedAt"
+          ) values (
+            'auth-ambiguous', 'Ambiguous User', 'ambiguous@example.test', true,
+            now(), now()
+          );
+          insert into app_users (id, email, name) values
+            ('user-ambiguous-one', 'ambiguous@example.test', 'First User'),
+            ('user-ambiguous-two', 'AMBIGUOUS@EXAMPLE.TEST', 'Second User');
+        `);
+      } finally {
+        await legacy.end();
+      }
+
+      const database = createDatabase(upgrade.url);
+      try {
+        const identity = createPostgresRepositories(database.db).forIdentity(
+          createIdentityScope({
+            authUserId: "auth-ambiguous",
+            requestId: "request-ambiguous",
+          }),
+        );
+        await expect(
+          identity.onboarding.complete(onboardingInput("ambiguous"), {
+            idempotencyKey: "ambiguous-onboarding",
+          }),
+        ).rejects.toMatchObject({ code: "identity_access_unavailable" });
+      } finally {
+        await database.close();
+      }
+
+      await expect(
+        applyMigrationFiles(upgrade.url, [
+          "0007_normalized_app_user_email.sql",
+        ]),
+      ).rejects.toThrow(/active case-insensitive duplicates exist/u);
     } finally {
       await upgrade.drop();
     }

@@ -179,6 +179,15 @@ describe("PostgreSQL-backed API", () => {
         "resource_not_found",
       );
 
+      const crossTenantWorkspaceSlug = await live.app.request(
+        "/api/v1/workspaces/second",
+        { headers: authorization(fixture.first.ownerId) },
+      );
+      expect(crossTenantWorkspaceSlug.status).toBe(404);
+      await expect(errorCode(crossTenantWorkspaceSlug)).resolves.toBe(
+        "resource_not_found",
+      );
+
       const crossOrganization = await live.app.request(
         `/api/v1/items/${fixture.second.itemId}`,
         {

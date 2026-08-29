@@ -56,7 +56,13 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build
+      - name: Build live-safe production artifacts
+        env:
+          DEMO_MODE: "false"
+          NEXT_PUBLIC_APP_URL: https://trevv.test
+          API_ORIGIN: https://api.trevv.test
+          BETTER_AUTH_URL: https://api.trevv.test/api/auth
+        run: pnpm build
       - name: Dependency security scan
         run: pnpm security:audit
 

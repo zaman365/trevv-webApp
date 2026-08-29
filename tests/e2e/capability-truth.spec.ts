@@ -159,7 +159,8 @@ test("integrations and exports identify their preview boundaries", async ({
     page.getByRole("button", { name: "Manage preview" }).first(),
   ).toBeVisible();
 
-  await gotoCanonical(page, `${workspaceRoute("settings")}#export`);
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings#export$/);
   await expect(
     page.getByLabel(
       "Demo only capability: Exports contain sample browser data",

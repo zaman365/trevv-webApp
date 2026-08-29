@@ -160,7 +160,12 @@ export const users = pgTable(
     locale: text("locale").notNull().default("en"),
     ...timestamps,
   },
-  (table) => [uniqueIndex("app_users_email_unique").on(table.email)],
+  (table) => [
+    uniqueIndex("app_users_email_unique").on(table.email),
+    uniqueIndex("app_users_active_email_normalized_unique")
+      .on(sql`lower(${table.email})`)
+      .where(sql`${table.deletedAt} is null`),
+  ],
 );
 
 export const portfolios = pgTable(
