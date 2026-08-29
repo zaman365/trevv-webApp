@@ -11,15 +11,12 @@ import {
   Download,
   FileJson,
   FileSpreadsheet,
-  KeyRound,
-  Laptop,
   Link2,
   Mail,
   RefreshCw,
   Search,
   Settings2,
   ShieldCheck,
-  Smartphone,
   Trash2,
   UserPlus,
   Users,
@@ -39,6 +36,7 @@ import {
 import { WorkspaceFrame } from "./workspace-frame";
 import { Hint } from "./learning-center";
 import { CapabilityNotice } from "./capability-status";
+import { useAppSession } from "@/lib/app-session-context";
 
 type SettingsSection =
   "integrations" | "security" | "organization" | "members" | "audit" | "export";
@@ -637,37 +635,6 @@ export function SettingsExperience({
     );
   };
 
-  const toggleSecurity = (field: "twoFactorEnabled" | "loginAlertsEnabled") => {
-    const label =
-      field === "twoFactorEnabled" ? "Two-step verification" : "Login alerts";
-    setSettings((current) =>
-      withAudit(
-        { ...current, [field]: !current[field] },
-        `${current[field] ? "Disabled" : "Enabled"} ${label.toLocaleLowerCase()}`,
-        label,
-        "Security",
-      ),
-    );
-    notify(
-      `${label} preview ${settings[field] ? "disabled" : "enabled"} in this browser; account security did not change.`,
-    );
-  };
-
-  const revokeSession = (session: Session) => {
-    setSettings((current) =>
-      withAudit(
-        {
-          ...current,
-          sessions: current.sessions.filter((item) => item.id !== session.id),
-        },
-        "Removed a fictional session from the preview",
-        session.device,
-        "Security",
-      ),
-    );
-    notify(`${session.device} was removed from this browser-only preview.`);
-  };
-
   const saveOrganization = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalized = {
@@ -968,26 +935,7 @@ export function SettingsExperience({
                 onToggleCalendar={toggleCalendarWaitlist}
               />
             )}
-            {activeSection === "security" && (
-              <SecurityPanel
-                settings={settings}
-                onToggle={toggleSecurity}
-                onTimeout={(sessionTimeout) => {
-                  setSettings((current) =>
-                    withAudit(
-                      { ...current, sessionTimeout },
-                      "Updated session timeout",
-                      sessionTimeout,
-                      "Security",
-                    ),
-                  );
-                  notify(
-                    "Session-timeout preview updated in this browser; account security did not change.",
-                  );
-                }}
-                onRevoke={revokeSession}
-              />
-            )}
+            {activeSection === "security" && <SecurityPanel />}
             {activeSection === "organization" && (
               <OrganizationPanel
                 draft={organizationDraft}
@@ -1152,103 +1100,31 @@ function IntegrationsPanel({
   );
 }
 
-function SecurityPanel({
-  settings,
-  onToggle,
-  onTimeout,
-  onRevoke,
-}: {
-  settings: StoredSettings;
-  onToggle: (field: "twoFactorEnabled" | "loginAlertsEnabled") => void;
-  onTimeout: (value: StoredSettings["sessionTimeout"]) => void;
-  onRevoke: (session: Session) => void;
-}) {
+function SecurityPanel() {
+  const session = useAppSession();
   return (
     <div className="settings-stack">
-      <CapabilityNotice capability="security" />
       <section className="settings-card settings-section-card">
         <SettingsHeading
-          icon={KeyRound}
-          title="Account protection preview"
-          subtitle="These disabled controls illustrate planned behavior only."
+          icon={ShieldCheck}
+          title="Account protection"
+          subtitle="Manage real server-side sessions from the dedicated account surface."
         />
-        <SettingRow
-          title="Two-step verification"
-          description="Require a second verification step when a new device signs in."
-        >
-          <Switch
-            label="Two-step verification"
-            checked={settings.twoFactorEnabled}
-            onChange={() => onToggle("twoFactorEnabled")}
-            disabled
-          />
-        </SettingRow>
-        <SettingRow
-          title="Login alerts"
-          description="Notify you when TREVV sees a sign-in from a new browser or device."
-        >
-          <Switch
-            label="Login alerts"
-            checked={settings.loginAlertsEnabled}
-            onChange={() => onToggle("loginAlertsEnabled")}
-            disabled
-          />
-        </SettingRow>
-        <SettingRow
-          title="Session timeout"
-          description="Ask inactive browser sessions to sign in again."
-        >
-          <select
-            aria-label="Session timeout"
-            disabled
-            value={settings.sessionTimeout}
-            onChange={(event) =>
-              onTimeout(event.target.value as StoredSettings["sessionTimeout"])
-            }
-          >
-            <option>7 days</option>
-            <option>30 days</option>
-            <option>90 days</option>
-          </select>
-        </SettingRow>
-      </section>
-
-      <section className="settings-card settings-section-card">
-        <SettingsHeading
-          icon={Laptop}
-          title="Fictional sessions"
-          subtitle="Sample devices only; no authenticated sessions are being shown."
-        />
-        <div className="session-list">
-          {settings.sessions.map((session) => {
-            const DeviceIcon = session.kind === "mobile" ? Smartphone : Laptop;
-            return (
-              <article key={session.id}>
-                <span className="settings-list-icon">
-                  <DeviceIcon size={17} />
-                </span>
-                <div>
-                  <strong>{session.device}</strong>
-                  <span>{session.detail}</span>
-                  <small>{session.activeAt}</small>
-                </div>
-                {session.current ? (
-                  <b className="current-session">
-                    <CheckCircle2 size={12} /> Sample current
-                  </b>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    onClick={() => onRevoke(session)}
-                  >
-                    Preview only
-                  </button>
-                )}
-              </article>
-            );
-          })}
+        <div className="settings-security-links">
+          <Link className="primary-button" href="/app/account/sessions">
+            Review and revoke sessions <ArrowRight size={13} />
+          </Link>
+          {session.organization.role === "owner" ||
+          session.organization.role === "admin" ? (
+            <Link href="/app/account/invitations">
+              Manage organization invitations <ArrowRight size={13} />
+            </Link>
+          ) : null}
         </div>
+        <p className="settings-footnote">
+          Multi-factor authentication, passkeys, login alerts, and configurable
+          session timeouts are hidden until they are fully implemented.
+        </p>
       </section>
     </div>
   );
@@ -1684,53 +1560,6 @@ function SettingsHeading({
         <p>{subtitle}</p>
       </div>
     </header>
-  );
-}
-
-function SettingRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="setting-row">
-      <div>
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Switch({
-  label,
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-label={label}
-      aria-checked={checked}
-      aria-disabled={disabled}
-      disabled={disabled}
-      className={`settings-switch ${checked ? "on" : ""}`}
-      onClick={onChange}
-    >
-      <span />
-    </button>
   );
 }
 

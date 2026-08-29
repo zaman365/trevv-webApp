@@ -1,6 +1,6 @@
 # Architecture
 
-> **Implemented server foundation, not current deployed topology.** The hosted technical preview still serves the Web demonstration with fictional seed/browser-local state. The API can now select an explicit tenant-scoped PostgreSQL adapter, but Web account provisioning, Web-to-API product wiring, the worker, object storage, and the production topology are not connected end to end.
+> **Implemented identity/server foundation, not current deployed topology.** The hosted technical preview still serves the Web demonstration with fictional seed/browser-local product state. Live Web account provisioning and tenant authorization now connect end to end in local/CI production-mode tests, but principal Web product screens, the worker, object storage, and the production API/database/mail topology are not deployed end to end.
 
 ## Target topology
 
@@ -12,11 +12,13 @@ Mobile (Expo) ─┼─ typed API client ─ Hono /api/v1 ─ domain services �
 Desktop (Tauri)┘                            └──── outbox ─ worker
 ```
 
-The Hono service owns transport, authentication boundaries, authorization calls, validation, and its versioned contract. It now receives either a per-instance fictional demo adapter or a live PostgreSQL adapter; live mode never falls back to fixtures. The live resolver derives organization and Workspace access from persisted membership rows, and repositories require organization/user/request scope. Rate limits and production webhook adapters remain unimplemented. `packages/core` owns deterministic rules, `packages/api-contract` owns Zod/OpenAPI transport shapes, and `packages/db` owns additive migrations, repositories, transactions, audit/outbox writes, versions, and idempotency. No client imports server-only packages.
+The Hono service owns transport, Better Auth composition, authorization calls, validation, and its versioned contract. It receives either a per-instance fictional demo adapter or a live PostgreSQL adapter; live mode never falls back to fixtures. The live resolver maps the verified auth identity to one application user, resolves the server-owned active organization, and derives role plus Portfolio/Workspace scopes from current membership rows on every request. Repositories require identity or organization/user/request scope. Rate limits and production webhook adapters remain unimplemented. `packages/core` owns deterministic rules, `packages/api-contract` owns Zod/OpenAPI transport shapes, and `packages/db` owns additive migrations, repositories, transactions, audit/outbox writes, versions, and idempotency. No client imports server-only packages.
 
 ## Authentication
 
-Better Auth is composed into the live API runtime, and live requests require an authoritative session plus `X-Organization-Id` before membership-derived access is resolved. The current Web sign-in/onboarding preview still does not authenticate, provision the matching `app_users` identity, or guard application routes. Verification/recovery, revocation UX, and platform-secure native bearer sessions remain Phase 2 work.
+Better Auth is composed into the live API runtime. Credentials, verification/recovery tokens, and sessions remain in its tables; TREVV owns the one-to-one application-user mapping, organization selection, onboarding graph, memberships, and invitation lifecycle. The client never submits a role, accessible Workspace list, or authorization tenant. Selecting an organization is a server command that first verifies current membership.
+
+The live Next.js Web uses a same-origin `/api/**` boundary so session cookies remain first-party. Its proxy rejects obviously anonymous `/app/**` requests, while every leaf route independently resolves the authoritative server session before rendering. Workspace routes additionally resolve the slug through the permission-scoped API and return the same 404 for unknown and inaccessible resources. One-time invite/reset tokens are normalized into short-lived HttpOnly, path-scoped cookies before Client Components render them. Native bearer sessions remain future work.
 
 ## Realtime and background work
 
@@ -24,7 +26,7 @@ In-scope live mutations commit audit and outbox rows in the same PostgreSQL tran
 
 ## Offline and concurrency
 
-The API now exposes canonical server writes, durable idempotency, numeric versions, strong quoted ETags, and compare-and-swap conflicts. The current Web demo still applies browser-local optimistic changes and does not consume those conflict/retry semantics. Full collaborative conflict resolution is deferred.
+The API exposes canonical server writes, durable idempotency, numeric versions, strong quoted ETags, and compare-and-swap conflicts. The current Web product demo still applies browser-local optimistic changes and does not consume most conflict/retry semantics. Live onboarding and invitation administration do use persisted versions, `If-Match`, and idempotency metadata. Full product-screen adoption and collaborative conflict resolution are Phase 3.
 
 ## Deployment
 

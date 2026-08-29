@@ -6,6 +6,10 @@ import { useMemo, type ReactNode } from "react";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { WorkspaceProvider } from "@/lib/workspace-context";
 import type { StoredWorkspaceSelection } from "@/lib/workspace-selection";
+import {
+  AppSessionProvider,
+  type AppSessionView,
+} from "@/lib/app-session-context";
 import { LearningCenterProvider } from "./learning-center";
 
 const workspaceSlugFrom = (pathname: string) => {
@@ -21,9 +25,11 @@ const workspaceSlugFrom = (pathname: string) => {
  */
 export function AppShellProviders({
   children,
+  session,
   storedSelection,
 }: {
   children: ReactNode;
+  session: AppSessionView;
   storedSelection?: StoredWorkspaceSelection;
 }) {
   const pathname = usePathname() ?? "";
@@ -38,17 +44,19 @@ export function AppShellProviders({
   }, [customWorkspaceRecords, pathname]);
 
   return (
-    <WorkspaceProvider
-      portfolioScoped={pathname === "/app/portfolio"}
-      {...(storedSelection ? { storedSelection } : {})}
-      {...(routeProject
-        ? {
-            routePortfolioId: routeProject.portfolioId,
-            routeProjectId: routeProject.id,
-          }
-        : {})}
-    >
-      <LearningCenterProvider>{children}</LearningCenterProvider>
-    </WorkspaceProvider>
+    <AppSessionProvider session={session}>
+      <WorkspaceProvider
+        portfolioScoped={pathname === "/app/portfolio"}
+        {...(storedSelection ? { storedSelection } : {})}
+        {...(routeProject
+          ? {
+              routePortfolioId: routeProject.portfolioId,
+              routeProjectId: routeProject.id,
+            }
+          : {})}
+      >
+        <LearningCenterProvider>{children}</LearningCenterProvider>
+      </WorkspaceProvider>
+    </AppSessionProvider>
   );
 }

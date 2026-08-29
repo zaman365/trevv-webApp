@@ -30,7 +30,7 @@ The root `pnpm build` validates every workspace through Turborepo. A Sites envir
 2. Run migrations with a dedicated migration identity.
 3. Deploy API; verify `/api/v1/health`, auth cookie policy, and one permission-scoped request.
 4. Deploy Worker and confirm outbox lease/attempt metrics.
-5. Deploy Web with `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_APP_URL` set to public HTTPS URLs.
+5. Deploy Web with `API_ORIGIN`, `BETTER_AUTH_URL`, and `NEXT_PUBLIC_APP_URL` set to the canonical public HTTPS topology and `DEMO_MODE=false`.
 6. Run Web smoke, Playwright, axe, export, and rollback tests.
 7. Point Expo/Tauri builds at the same API only after API compatibility is confirmed.
 
@@ -38,9 +38,11 @@ Use rolling API/Worker deploys. Database changes must be backwards-compatible fo
 
 ## Required production variables
 
-Use `.env.example` as the catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database or integration credentials to Next.js, Expo, or Vite bundles.
+Use `.env.example` as the catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database or integration credentials to Next.js, Expo, or Vite bundles. The API requires `DATABASE_URL` with TLS, a non-placeholder 32+ character `BETTER_AUTH_SECRET`, HTTPS `BETTER_AUTH_URL` and `WEB_ORIGIN`, `MAIL_FROM`, authenticated TLS SMTP settings, and `AUTH_COOKIE_DOMAIN` when the Web and auth hosts differ. Production refuses the test mail sink.
 
-The GitHub Actions deployment stays disabled until the `production` environment exists, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are configured as Actions secrets, and the `PRODUCTION_DEPLOY_ENABLED` repository variable is set to `true`. Protect the environment before enabling that variable. Production uses the `trevv.de` custom domain only; `workers_dev` is explicitly disabled in `apps/web/wrangler.jsonc`.
+The GitHub Actions deployment stays disabled until the `production` environment exists, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are configured as Actions secrets, `PRODUCTION_API_ORIGIN` and `PRODUCTION_AUTH_URL` are configured as repository variables, and the `PRODUCTION_DEPLOY_ENABLED` repository variable is set to `true`. Protect the environment before enabling that variable. The deploy waits for quality, fictional-demo e2e, accessibility, and the PostgreSQL-backed live-identity browser gate. Production uses the `trevv.de` custom domain only; `workers_dev` is explicitly disabled in `apps/web/wrangler.jsonc`.
+
+Do not enable that Web deploy until the API, PostgreSQL, SMTP, rate limits, backup/restore, and observability are deployed and verified. The workflow deliberately fails its live Web build when the production API/auth origins are missing. Its smoke check expects anonymous `/app/**` access to redirect to sign-in without private HTML.
 
 ## Deep links
 

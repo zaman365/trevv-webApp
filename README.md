@@ -2,7 +2,7 @@
 
 TREVV is a commercial, portfolio-first operating system for people responsible for several businesses, brands, clients, products, departments, ventures, or initiatives. It brings execution, decisions, waiting dependencies, evidence, and management memory together—and shows where attention matters.
 
-> **Current release status: technical preview.** The hosted Web experience uses fictional sample data. Most interactive changes stay in the current browser and are not durable, shared, authenticated, or permission-enforced. Do not enter real credentials, confidential information, or customer data. See [known limitations](docs/known-limitations.md).
+> **Current release status: technical preview.** The hosted Web experience still uses fictional sample data. Most product-screen changes stay in the current browser and are not durable or shared. A production-mode identity and tenant boundary now exists for local/CI validation, but it has not been deployed as a customer service and the product screens are not yet migrated to it. Do not enter real credentials, confidential information, or customer data in the hosted preview. See [known limitations](docs/known-limitations.md).
 
 ## What can be explored
 
@@ -16,7 +16,7 @@ TREVV is a commercial, portfolio-first operating system for people responsible f
 - polished Workspace Overview, board table/Kanban, inline editing, and item side panel
 - My Work, actionable Inbox, informational Notifications, Decision Center, Approval Center, search, integration previews, and a fictional onboarding walkthrough
 - English/German UI foundations, responsive mobile-browser layouts, dark mode, and installable PWA behavior
-- versioned Hono API contract, an injected demo/live data plane, tenant-scoped PostgreSQL repositories, Better Auth configuration, worker boundaries, typed client, permission policy, transactional audit/outbox records, sample browser exports, and safe integration mocks
+- versioned Hono API contract, explicit demo/live data planes, tenant-scoped PostgreSQL repositories, real Better Auth email/password flows, transactional onboarding and invitations, server-derived organization selection, route guards, session revocation, worker boundaries, typed client, permission policy, transactional audit/outbox records, sample browser exports, and safe integration mocks
 - Expo mobile companion shell and Tauri desktop shell consuming the same hosted API contract
 
 ## Prerequisites
@@ -39,13 +39,13 @@ pnpm contracts:generate
 pnpm dev
 ```
 
-Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. `DEMO_MODE` must be set explicitly. The example environment uses `DEMO_MODE=true`, fictional data in the `TREVV Demo` organization, and an unrestricted development entitlement set. `DEMO_MODE=false` requires PostgreSQL and Better Auth configuration and selects the durable repository adapter; it does not make the hosted product production ready because Web account provisioning, Web-to-API migration, worker delivery, and production topology are not connected end to end.
+Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. `DEMO_MODE` must be set explicitly. The example environment uses `DEMO_MODE=true`, fictional data in the `TREVV Demo` organization, and an unrestricted development entitlement set. `DEMO_MODE=false` requires PostgreSQL, Better Auth, canonical Web/API origins, and SMTP (or the private test mail sink). It enables real accounts, onboarding, invitations, sessions, and server-derived tenant access. It does not make the product production ready: principal Web product screens still use fictional/browser-local models, and API/worker/production operations are not deployed end to end.
 
 For a focused process, use `pnpm dev:web` or `pnpm dev:api`. Expo runs with `pnpm --filter @founderhq/mobile dev`; the Tauri shell runs with `pnpm --filter @founderhq/desktop tauri dev`.
 
 ## Environment
 
-Copy `.env.example`. The variables describe the target runtime; configuring them does not promote a preview capability to production. A future production deployment requires `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `WEB_ORIGIN`, and the three public API base URLs, plus the release constraints in [the implementation report](docs/implementation-report.md) and [known limitations](docs/known-limitations.md). Google Drive and other providers remain previews with no production OAuth token or synchronization.
+Copy `.env.example`. The variables describe the target runtime; configuring them does not promote a preview capability to production. A future production deployment requires `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, HTTPS `BETTER_AUTH_URL`/`WEB_ORIGIN`, `API_ORIGIN`, a production SMTP transport, and the public client URLs, plus the release constraints in [the implementation report](docs/implementation-report.md) and [known limitations](docs/known-limitations.md). Google Drive and other providers remain previews with no production OAuth token or synchronization.
 
 Never commit `.env` files. Public Web, Expo, and Vite variables are intentionally non-secret.
 
@@ -59,10 +59,12 @@ TEST_DATABASE_URL=postgresql://founderhq:founderhq@127.0.0.1:5432/postgres pnpm 
 pnpm build
 pnpm test:e2e
 pnpm test:a11y
+DATABASE_URL=postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e pnpm db:migrate
+LIVE_E2E_DATABASE_URL=postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e pnpm test:e2e:live
 pnpm security:audit
 ```
 
-The CI workflow additionally migrates and seeds a clean PostgreSQL database, regenerates `openapi.json` and fails on drift, builds every application, scans dependencies, and runs Chromium critical-path/accessibility tests.
+The CI workflow additionally migrates and seeds a clean PostgreSQL database, regenerates `openapi.json` and fails on drift, builds every application, scans dependencies, runs fictional-demo Chromium critical-path/accessibility tests, and exercises real sign-up, verification, onboarding, two-browser persistence, non-leaking Workspace authorization, invitations, membership removal, session revocation, password recovery, and live auth-surface AA checks in `DEMO_MODE=false` against PostgreSQL and a private test mail sink.
 
 ## Repository map
 

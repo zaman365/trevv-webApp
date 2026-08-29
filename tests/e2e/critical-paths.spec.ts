@@ -184,7 +184,7 @@ test("a new workspace creates a working workspace and board", async ({
   await page.locator(".workspace-switcher-trigger").click();
   await page
     .getByRole("dialog", { name: "Workspace switcher" })
-    .getByRole("button", { name: "New workspace" })
+    .getByRole("button", { name: "New fictional workspace" })
     .click();
   await expect(
     page.getByRole("heading", { name: "Create a workspace" }),
@@ -193,7 +193,9 @@ test("a new workspace creates a working workspace and board", async ({
   await page
     .getByLabel("Current priority")
     .fill("Validate the first onboarding outcome");
-  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page
+    .getByRole("button", { name: "Create fictional workspace" })
+    .click();
 
   // The dialog routes straight into the workspace it just created.
   await expect(page).toHaveURL(/\/app\/workspaces\/customer-onboarding-lab$/);

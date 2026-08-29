@@ -1,5 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "API_ORIGIN",
+    "BETTER_AUTH_URL",
+    "DEMO_MODE",
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_APP_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -21,4 +28,3 @@
     }
   }
 }
-

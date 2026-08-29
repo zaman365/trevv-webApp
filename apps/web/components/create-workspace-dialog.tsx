@@ -18,7 +18,7 @@ export function CreateWorkspaceDialog({
   portfolios: readonly Portfolio[];
   initialPortfolioId: string;
   onClose: () => void;
-  onCreated: (workspace: Workspace) => void;
+  onCreated: (workspace: Workspace) => Promise<boolean> | boolean;
 }) {
   const [name, setName] = useState("");
   const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
@@ -27,10 +27,14 @@ export function CreateWorkspaceDialog({
   const [priority, setPriority] = useState("");
   const [milestone, setMilestone] = useState("First operating review");
   const [milestoneDate, setMilestoneDate] = useState("2026-09-30");
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!name.trim() || !milestoneDate) return;
+    if (!name.trim() || !milestoneDate || pending) return;
+    setMessage("");
+    setPending(true);
     const record = createCustomWorkspace({
       name,
       portfolioId,
@@ -40,7 +44,18 @@ export function CreateWorkspaceDialog({
       milestone,
       milestoneDate,
     });
-    onCreated(record.workspace);
+    let completed = false;
+    try {
+      completed = await onCreated(record.workspace);
+    } catch {
+      completed = false;
+    }
+    if (!completed) {
+      setMessage(
+        "The fictional workspace remains in this browser, but its preview could not be opened. Try again.",
+      );
+      setPending(false);
+    }
   };
 
   const types: Array<[WorkspaceType, string]> = [
@@ -163,8 +178,9 @@ export function CreateWorkspaceDialog({
         </div>
 
         <footer>
-          <span>
-            Creates a workspace overview and an empty operating board.
+          <span role={message ? "alert" : undefined}>
+            {message ||
+              "Creates a fictional browser-only overview and empty board."}
           </span>
           <div>
             <button onClick={onClose} type="button">
@@ -172,10 +188,11 @@ export function CreateWorkspaceDialog({
             </button>
             <button
               className="primary-button"
-              disabled={!name.trim() || !milestoneDate}
+              disabled={!name.trim() || !milestoneDate || pending}
               type="submit"
             >
-              <Plus size={14} /> Create workspace
+              <Plus size={14} />
+              {pending ? "Opening preview…" : "Create fictional workspace"}
             </button>
           </div>
         </footer>

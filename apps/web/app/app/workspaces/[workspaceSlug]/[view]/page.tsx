@@ -13,7 +13,8 @@ import {
 import { MessagingWorkspace } from "@/components/messaging-workspace";
 import { SettingsExperience } from "@/components/settings-experience";
 import { WorkspaceFrame } from "@/components/workspace-frame";
-import { isWorkspaceView } from "@/lib/workspace-routes";
+import { requireWorkspaceAccess } from "@/lib/server-auth";
+import { isWorkspaceView, workspaceHref } from "@/lib/workspace-routes";
 
 export default async function WorkspaceModulePage({
   params,
@@ -21,6 +22,10 @@ export default async function WorkspaceModulePage({
   params: Promise<{ workspaceSlug: string; view: string }>;
 }) {
   const { workspaceSlug, view } = await params;
+  const returnTo = isWorkspaceView(view)
+    ? workspaceHref(workspaceSlug, view)
+    : workspaceHref(workspaceSlug);
+  await requireWorkspaceAccess(workspaceSlug, returnTo);
   if (!isWorkspaceView(view)) notFound();
 
   switch (view) {

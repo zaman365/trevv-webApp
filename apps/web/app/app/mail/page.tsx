@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { InboxExperience } from "@/components/email-inbox-workflow";
 import { WorkspaceFrame } from "@/components/workspace-frame";
+import { requireAppSession } from "@/lib/server-auth";
 
 export const metadata: Metadata = {
   title: "Sample Email",
@@ -8,7 +9,8 @@ export const metadata: Metadata = {
     "A fictional mailbox preview with no provider connection or message delivery.",
 };
 
-export default function MailPage() {
+export default async function MailPage() {
+  await requireAppSession("/app/mail");
   return (
     <WorkspaceFrame active="mail">
       <main className="focus-main">

@@ -3,6 +3,7 @@
 import {
   Bell,
   BookOpenText,
+  Building2,
   ChartColumn,
   CheckCircle2,
   ChevronDown,
@@ -15,6 +16,7 @@ import {
   Languages,
   LayoutTemplate,
   Lightbulb,
+  LogOut,
   Mail,
   Menu,
   MessageCircleMore,
@@ -23,6 +25,7 @@ import {
   Plus,
   Search,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Sun,
   Users,
@@ -48,6 +51,7 @@ import { UniversalCreateDialog } from "./universal-create";
 import { CreateWorkspaceDialog } from "./create-workspace-dialog";
 import { TechnicalPreviewBadge } from "./capability-status";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
+import { useAppSession } from "@/lib/app-session-context";
 import {
   createCustomPortfolio,
   portfolioAccentOptions,
@@ -107,6 +111,16 @@ function formatWorkspaceDate(value: string) {
   }).format(new Date(`${value}T12:00:00`));
 }
 
+function initialsForUser(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 function workspaceViewForCapturedType(
   type: CapturedWorkItem["type"],
 ): WorkspaceView {
@@ -148,11 +162,14 @@ function WorkspaceChrome({
   active: ActivePage;
   workspaceSlug?: string | undefined;
 }) {
+  const appSession = useAppSession();
+  const userInitials = initialsForUser(appSession.user.name) || "U";
   const [open, setOpen] = useState(false);
   const [latestCapture, setLatestCapture] = useState<CapturedWorkItem | null>(
     null,
   );
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [accountMessage, setAccountMessage] = useState("");
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
   const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
@@ -239,6 +256,23 @@ function WorkspaceChrome({
     : undefined;
   const copy = productCopy.en;
   const { openLearningCenter } = useLearningCenter();
+
+  async function signOut() {
+    setAccountMessage("");
+    setUserMenuOpen(false);
+    if (!appSession.demo) {
+      const response = await fetch("/api/web/sign-out", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        setAccountMessage("Sign-out failed. Your session is still active.");
+        setUserMenuOpen(true);
+        return;
+      }
+    }
+    window.location.replace("/sign-in?signedOut=1");
+  }
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -551,22 +585,24 @@ function WorkspaceChrome({
                     })}
                   </div>
 
-                  <button
-                    type="button"
-                    className="workspace-switcher-create"
-                    onClick={() => {
-                      setWorkspaceMenuOpen(false);
-                      setOpen(false);
-                      setWorkspaceCreateOpen(true);
-                    }}
-                  >
-                    <span className="workspace-switcher-create-icon">
-                      <Plus size={16} />
-                    </span>
-                    <span>
-                      <strong>New workspace</strong>
-                    </span>
-                  </button>
+                  {appSession.demo && (
+                    <button
+                      type="button"
+                      className="workspace-switcher-create"
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        setOpen(false);
+                        setWorkspaceCreateOpen(true);
+                      }}
+                    >
+                      <span className="workspace-switcher-create-icon">
+                        <Plus size={16} />
+                      </span>
+                      <span>
+                        <strong>New fictional workspace</strong>
+                      </span>
+                    </button>
+                  )}
                 </section>
               )}
             </div>
@@ -980,15 +1016,20 @@ function WorkspaceChrome({
                 aria-label={copy.shell.userMenu}
                 onClick={() => setUserMenuOpen((current) => !current)}
               >
-                MZ
+                {userInitials}
               </button>
               {userMenuOpen && (
                 <div className="user-menu" role="menu">
                   <header>
-                    <span className="avatar avatar-mz">MZ</span>
+                    <span className="avatar avatar-mz">{userInitials}</span>
                     <div>
-                      <strong>Mohammed</strong>
-                      <small>Owner · {trevvBrand.organization}</small>
+                      <strong>{appSession.user.name}</strong>
+                      <small>
+                        {appSession.demo
+                          ? "Fictional demo"
+                          : appSession.user.role}{" "}
+                        · {appSession.organization.name}
+                      </small>
                     </div>
                   </header>
                   {contextProject && (
@@ -1009,6 +1050,31 @@ function WorkspaceChrome({
                       </Link>
                     </>
                   )}
+                  <Link
+                    href="/app/account/sessions"
+                    role="menuitem"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <ShieldCheck size={14} /> Sessions and sign-in
+                  </Link>
+                  {appSession.availableOrganizations.length > 1 ? (
+                    <Link
+                      href="/select-organization"
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <Building2 size={14} /> Switch organization
+                    </Link>
+                  ) : null}
+                  {canManageOrganization(appSession.organization.role) ? (
+                    <Link
+                      href="/app/account/invitations"
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <Users size={14} /> Organization invitations
+                    </Link>
+                  ) : null}
                   <button
                     role="menuitem"
                     onClick={() => {
@@ -1029,6 +1095,14 @@ function WorkspaceChrome({
                     {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
                     Switch to {theme === "light" ? "dark" : "light"} mode
                   </button>
+                  <button role="menuitem" onClick={() => void signOut()}>
+                    <LogOut size={14} /> Sign out
+                  </button>
+                  {accountMessage ? (
+                    <p className="user-menu-message" role="alert">
+                      {accountMessage}
+                    </p>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -1145,21 +1219,34 @@ function WorkspaceChrome({
           }}
         />
       )}
-      {workspaceCreateOpen && contextPortfolio && (
+      {appSession.demo && workspaceCreateOpen && contextPortfolio && (
         <CreateWorkspaceDialog
           portfolios={accessiblePortfolios}
           initialPortfolioId={contextPortfolio.id}
           onClose={() => setWorkspaceCreateOpen(false)}
-          onCreated={(workspace) => {
+          onCreated={async (workspace) => {
+            if (!appSession.demo) return false;
+            const response = await fetch("/api/web/demo-workspaces", {
+              body: JSON.stringify({ slug: workspace.slug }),
+              credentials: "same-origin",
+              headers: { "content-type": "application/json" },
+              method: "POST",
+            });
+            if (!response.ok) return false;
             setWorkspaceCreateOpen(false);
             selectProject(workspace.id, workspace.portfolioId);
             setOpen(false);
             router.push(workspaceHref(workspace.slug));
+            return true;
           }}
         />
       )}
     </div>
   );
+}
+
+function canManageOrganization(role: string): boolean {
+  return role === "owner" || role === "admin";
 }
 
 function PortfolioCreateDialog({

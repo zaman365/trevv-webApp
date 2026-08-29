@@ -64,17 +64,26 @@ test("sample email and invitations cannot imply external delivery", async ({
   ).toBeVisible();
 });
 
-test("security and import stay disabled or explicitly simulated", async ({
+test("real security surfaces replace simulated controls while import stays a preview", async ({
   page,
 }) => {
   await page.goto("/app/workspaces/centralops/settings#security");
   await expect(
-    page.getByLabel(
-      "Unavailable capability: Account security controls are not active",
-    ),
+    page.getByRole("heading", { name: "Account protection" }),
   ).toBeVisible();
-  await expect(page.getByRole("switch").first()).toBeDisabled();
-  await expect(page.getByLabel("Session timeout")).toBeDisabled();
+  await expect(
+    page.getByRole("link", { name: /Review and revoke sessions/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("switch")).toHaveCount(0);
+  await expect(page.getByLabel("Session timeout")).toHaveCount(0);
+  await expect(
+    page.getByText(/Multi-factor authentication, passkeys, login alerts/),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: /Review and revoke sessions/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "No real sessions in demo mode" }),
+  ).toBeVisible();
 
   await page.goto("/app/workspaces/centralops/settings/import");
   await expect(
@@ -86,6 +95,16 @@ test("security and import stay disabled or explicitly simulated", async ({
   const outcome = page.getByRole("status");
   await expect(outcome).toBeVisible();
   await expect(outcome).toContainText("No work item was created.");
+});
+
+test("unknown fictional workspace slugs return a genuine non-leaking 404", async ({
+  page,
+}) => {
+  const response = await page.goto("/app/workspaces/not-a-real-workspace");
+  expect(response?.status()).toBe(404);
+  await expect(page.getByText("This page could not be found")).toBeVisible();
+  await expect(page.getByText("Northstar Apparel")).toHaveCount(0);
+  await expect(page.getByText("Fictional Founder")).toHaveCount(0);
 });
 
 test("follow-ups, updates, and reviews expose only local preview actions", async ({

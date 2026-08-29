@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { StakeholderExperience } from "@/components/stakeholder-experience";
+import { requireWorkspaceAccess } from "@/lib/server-auth";
+import { workspaceHref } from "@/lib/workspace-routes";
 
 export const metadata: Metadata = {
   title: "Stakeholder preview",
@@ -13,5 +15,7 @@ export default async function WorkspaceStakeholderPage({
   params: Promise<{ workspaceSlug: string }>;
 }) {
   const { workspaceSlug } = await params;
+  const returnTo = `${workspaceHref(workspaceSlug)}/stakeholder`;
+  await requireWorkspaceAccess(workspaceSlug, returnTo);
   return <StakeholderExperience slug={workspaceSlug} />;
 }

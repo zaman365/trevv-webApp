@@ -447,15 +447,15 @@ Test-only fault injection must be able to throw after the business write, after 
 
 ### Repository seams prepared now but exposed later
 
-| Future surface         | Phase 1 seam                                          | Public route/UI phase                  |
-| ---------------------- | ----------------------------------------------------- | -------------------------------------- |
-| Organizations/users    | Scoped organization and member directory repositories | Phase 2                                |
-| Membership/invitations | Durable commands and tests                            | Phase 2                                |
-| Boards/groups/statuses | Repository and transactions                           | Phase 3                                |
-| Inbox/Quick Capture    | Capture, list, snooze, complete, convert commands     | Phase 3                                |
-| Comments/updates       | Repository and mutation transactions                  | Phase 3                                |
-| Decisions/approvals    | Typed lifecycle commands                              | Phase 3                                |
-| Teams/Messages         | None in this document                                 | Phase 4 after schema/API/policy design |
+| Future surface         | Phase 1 seam                                          | Public route/UI phase                   |
+| ---------------------- | ----------------------------------------------------- | --------------------------------------- |
+| Organizations/users    | Scoped organization and member directory repositories | Exposed through Phase 2 identity APIs   |
+| Membership/invitations | Durable commands, delivery state, and tests           | Exposed through Phase 2 authorized APIs |
+| Boards/groups/statuses | Repository and transactions                           | Phase 3                                 |
+| Inbox/Quick Capture    | Capture, list, snooze, complete, convert commands     | Phase 3                                 |
+| Comments/updates       | Repository and mutation transactions                  | Phase 3                                 |
+| Decisions/approvals    | Typed lifecycle commands                              | Phase 3                                 |
+| Teams/Messages         | None in this document                                 | Phase 4 after schema/API/policy design  |
 
 Any current handler that cannot use the mapped live repository must return an explicit unavailable/capability response in live mode. It must not read `demo*` arrays or process-local Maps.
 

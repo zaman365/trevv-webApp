@@ -1,5 +1,18 @@
 import type { NextConfig } from "next";
 
+const sensitiveAuthHeaders = [
+  {
+    key: "Cache-Control",
+    value: "private, no-store, max-age=0, must-revalidate",
+  },
+  { key: "Pragma", value: "no-cache" },
+  // Action tokens are stripped by proxy.ts before these pages render. Keeping
+  // referrers same-origin preserves browser Origin/Fetch-Metadata CSRF signals
+  // for their POSTs without disclosing auth-page URLs to another origin.
+  { key: "Referrer-Policy", value: "same-origin" },
+  { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+];
+
 const nextConfig: NextConfig = {
   transpilePackages: [
     "@founderhq/api-client",
@@ -8,6 +21,31 @@ const nextConfig: NextConfig = {
     "@founderhq/design-tokens",
     "@founderhq/i18n",
   ],
+  async headers() {
+    return [
+      {
+        source: "/app/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-store, max-age=0, must-revalidate",
+          },
+          { key: "Pragma", value: "no-cache" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+      },
+      ...[
+        "/sign-in",
+        "/sign-up",
+        "/onboarding",
+        "/forgot-password",
+        "/reset-password",
+        "/verify-email",
+        "/invite/accept",
+        "/select-organization",
+      ].map((source) => ({ source, headers: sensitiveAuthHeaders })),
+    ];
+  },
 };
 
 export default nextConfig;

@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const webBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
+const apiOrigin = process.env.PLAYWRIGHT_API_ORIGIN ?? "http://127.0.0.1:8787";
+const webUrl = new URL(webBaseUrl);
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -22,18 +24,25 @@ export default defineConfig({
   webServer: [
     {
       command: "pnpm --filter @founderhq/api dev",
-      url: "http://127.0.0.1:8787/api/v1/health",
+      url: `${apiOrigin}/api/v1/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      env: { DEMO_MODE: "true", WEB_ORIGIN: "http://127.0.0.1:3100" },
+      env: {
+        DEMO_MODE: "true",
+        PORT: new URL(apiOrigin).port || "8787",
+        WEB_ORIGIN: webBaseUrl,
+      },
     },
     {
-      command:
-        "pnpm --filter @founderhq/web exec next dev --hostname 127.0.0.1 --port 3100",
+      command: `pnpm --filter @founderhq/web exec next dev --hostname ${webUrl.hostname} --port ${webUrl.port || "3000"}`,
       url: `${webBaseUrl}/app/portfolio`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      env: { NEXT_PUBLIC_API_URL: "http://127.0.0.1:8787/api/v1" },
+      env: {
+        DEMO_MODE: "true",
+        NEXT_PUBLIC_APP_URL: webBaseUrl,
+        NEXT_PUBLIC_API_URL: `${apiOrigin}/api/v1`,
+      },
     },
   ],
 });

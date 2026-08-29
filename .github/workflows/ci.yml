@@ -106,6 +106,46 @@ jobs:
           path: playwright-report
           retention-days: 14
 
+  live-identity:
+    runs-on: ubuntu-latest
+    needs: quality
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: founderhq
+          POSTGRES_PASSWORD: founderhq
+          POSTGRES_DB: founderhq_live_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U founderhq -d founderhq_live_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
+      LIVE_E2E_DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify live identity and tenant boundaries
+        run: pnpm test:e2e:live
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-live-identity
+          path: playwright-report
+          retention-days: 14
+
   # Production deploys only from main, and only once every gate is green.
   # Requires the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets on
   # a protected "production" environment; without them this job cannot run.
@@ -117,7 +157,7 @@ jobs:
   #   pnpm --filter @founderhq/web exec wrangler deployments list
   deploy:
     runs-on: ubuntu-latest
-    needs: [quality, e2e, accessibility]
+    needs: [quality, e2e, accessibility, live-identity]
     if: >-
       github.event_name == 'push' && github.ref == 'refs/heads/main'
       && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
@@ -142,11 +182,17 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEMO_MODE: "false"
+          NEXT_PUBLIC_APP_URL: https://trevv.de
+          API_ORIGIN: ${{ vars.PRODUCTION_API_ORIGIN }}
+          BETTER_AUTH_URL: ${{ vars.PRODUCTION_AUTH_URL }}
       - name: Verify production responds
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' https://trevv.de/app/portfolio)
+          code=$(curl -sS -D /tmp/trevv-response-headers -o /tmp/trevv-response-body -w '%{http_code}' https://trevv.de/app/portfolio)
           echo "trevv.de/app/portfolio -> $code"
-          test "$code" = "200"
+          case "$code" in 302|303|307|308) ;; *) exit 1 ;; esac
+          grep -Eiq '^location: .*/sign-in' /tmp/trevv-response-headers
+          ! grep -q 'Northstar Apparel' /tmp/trevv-response-body
       - name: Report failure
         if: failure()
         run: |

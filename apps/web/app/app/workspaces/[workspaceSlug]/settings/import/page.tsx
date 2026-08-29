@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { ImportExperience } from "@/components/management-experience";
+import { requireWorkspaceAccess } from "@/lib/server-auth";
+import { workspaceHref } from "@/lib/workspace-routes";
 
 export const metadata: Metadata = {
   title: "Import preview",
@@ -13,5 +15,7 @@ export default async function WorkspaceImportPage({
   params: Promise<{ workspaceSlug: string }>;
 }) {
   const { workspaceSlug } = await params;
+  const returnTo = `${workspaceHref(workspaceSlug)}/settings/import`;
+  await requireWorkspaceAccess(workspaceSlug, returnTo);
   return <ImportExperience workspaceSlug={workspaceSlug} />;
 }
