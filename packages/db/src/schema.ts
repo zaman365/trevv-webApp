@@ -10,6 +10,7 @@ import {
   pgTable,
   primaryKey,
   real,
+  serial,
   text,
   timestamp,
   uniqueIndex,
@@ -108,6 +109,18 @@ export const conversationVisibilityEnum = pgEnum("conversation_visibility", [
   "private",
   "guest_scoped",
 ]);
+export const teamMemberRoleEnum = pgEnum("team_member_role", [
+  "lead",
+  "member",
+]);
+export const teamFeatureSourceEnum = pgEnum("team_feature_source", [
+  "preset",
+  "override",
+]);
+export const conversationParticipantSourceEnum = pgEnum(
+  "conversation_participant_source",
+  ["workspace", "team", "manual", "direct", "invitation"],
+);
 export const messageIntentEnum = pgEnum("message_intent", [
   "message",
   "request",
@@ -117,6 +130,7 @@ export const messageIntentEnum = pgEnum("message_intent", [
 export const messageResponseStateEnum = pgEnum("message_response_state", [
   "open",
   "resolved",
+  "cancelled",
 ]);
 export const invitationDeliveryStatusEnum = pgEnum(
   "invitation_delivery_status",
@@ -283,6 +297,7 @@ export const invitations = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("invitations_org_id_unique").on(table.organizationId, table.id),
     uniqueIndex("invitations_token_hash_unique").on(table.tokenHash),
     uniqueIndex("invitations_org_active_email_unique")
       .on(table.organizationId, sql`lower(${table.email})`)
@@ -399,6 +414,11 @@ export const workspaceMembers = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId] }),
+    uniqueIndex("workspace_members_org_workspace_user_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.userId,
+    ),
     foreignKey({
       columns: [table.organizationId, table.workspaceId],
       foreignColumns: [workspaces.organizationId, workspaces.id],
@@ -1972,6 +1992,205 @@ export const inboxItems = pgTable(
   ],
 );
 
+/**
+ * Teams are workspace-scoped collaboration groups. Feature policy rows affect
+ * product presentation only; authorization continues to derive from server
+ * memberships and conversation participation.
+ */
+export const teams = pgTable(
+  "teams",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    purpose: text("purpose").notNull().default(""),
+    presetKey: text("preset_key").notNull().default("custom"),
+    version: integer("version").notNull().default(1),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("teams_org_id_unique").on(table.organizationId, table.id),
+    uniqueIndex("teams_org_workspace_id_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.id,
+    ),
+    uniqueIndex("teams_workspace_active_slug_unique")
+      .on(table.organizationId, table.workspaceId, table.slug)
+      .where(sql`${table.archivedAt} is null and ${table.deletedAt} is null`),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "teams_org_workspace_fk",
+    }).onDelete("cascade"),
+    check("teams_version_positive_check", sql`${table.version} > 0`),
+    check(
+      "teams_preset_key_check",
+      sql`${table.presetKey} in ('leadership', 'marketing', 'technology', 'operations', 'sales', 'custom')`,
+    ),
+    index("teams_workspace_name_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.name,
+    ),
+  ],
+);
+
+export const teamMembers = pgTable(
+  "team_members",
+  {
+    organizationId: text("organization_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    teamId: text("team_id").notNull(),
+    userId: text("user_id").notNull(),
+    role: teamMemberRoleEnum("role").notNull().default("member"),
+    version: integer("version").notNull().default(1),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.teamId, table.userId] }),
+    uniqueIndex("team_members_org_workspace_team_user_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.teamId,
+      table.userId,
+    ),
+    uniqueIndex("team_members_one_active_lead_unique")
+      .on(table.organizationId, table.teamId)
+      .where(sql`${table.role} = 'lead' and ${table.removedAt} is null`),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.teamId],
+      foreignColumns: [teams.organizationId, teams.workspaceId, teams.id],
+      name: "team_members_org_workspace_team_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.userId],
+      foreignColumns: [
+        workspaceMembers.organizationId,
+        workspaceMembers.workspaceId,
+        workspaceMembers.userId,
+      ],
+      name: "team_members_org_workspace_member_fk",
+    }).onDelete("cascade"),
+    check("team_members_version_positive_check", sql`${table.version} > 0`),
+    index("team_members_user_active_idx").on(
+      table.organizationId,
+      table.userId,
+      table.removedAt,
+    ),
+  ],
+);
+
+export const teamFeaturePolicies = pgTable(
+  "team_feature_policies",
+  {
+    organizationId: text("organization_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    teamId: text("team_id").notNull(),
+    featureKey: text("feature_key").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    source: teamFeatureSourceEnum("source").notNull().default("preset"),
+    updatedBy: text("updated_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.teamId, table.featureKey] }),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.teamId],
+      foreignColumns: [teams.organizationId, teams.workspaceId, teams.id],
+      name: "team_feature_policies_org_workspace_team_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.updatedBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "team_feature_policies_org_updater_fk",
+    }),
+    check(
+      "team_feature_policies_feature_key_check",
+      sql`${table.featureKey} in ('work', 'messages', 'decisions', 'approvals', 'resources', 'reporting')`,
+    ),
+  ],
+);
+
+export const invitationWorkspaceAssignments = pgTable(
+  "invitation_workspace_assignments",
+  {
+    organizationId: text("organization_id").notNull(),
+    invitationId: text("invitation_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    canManage: boolean("can_manage").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.invitationId, table.workspaceId] }),
+    uniqueIndex("invitation_workspace_assignments_scope_unique").on(
+      table.organizationId,
+      table.invitationId,
+      table.workspaceId,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.invitationId],
+      foreignColumns: [invitations.organizationId, invitations.id],
+      name: "invitation_workspace_assignments_org_invitation_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "invitation_workspace_assignments_org_workspace_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const invitationTeamAssignments = pgTable(
+  "invitation_team_assignments",
+  {
+    organizationId: text("organization_id").notNull(),
+    invitationId: text("invitation_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    teamId: text("team_id").notNull(),
+    role: teamMemberRoleEnum("role").notNull().default("member"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.invitationId, table.teamId] }),
+    foreignKey({
+      columns: [table.organizationId, table.invitationId, table.workspaceId],
+      foreignColumns: [
+        invitationWorkspaceAssignments.organizationId,
+        invitationWorkspaceAssignments.invitationId,
+        invitationWorkspaceAssignments.workspaceId,
+      ],
+      name: "invitation_team_assignments_workspace_assignment_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.teamId],
+      foreignColumns: [teams.organizationId, teams.workspaceId, teams.id],
+      name: "invitation_team_assignments_org_workspace_team_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
 // Messaging is deliberately separate from Inbox. Inbox remains the user's
 // action queue; conversations keep durable communication and work context.
 export const conversations = pgTable(
@@ -1981,25 +2200,71 @@ export const conversations = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    portfolioId: text("portfolio_id").references(() => portfolios.id, {
-      onDelete: "cascade",
-    }),
-    workspaceId: text("workspace_id").references(() => workspaces.id, {
-      onDelete: "cascade",
-    }),
+    portfolioId: text("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     purpose: text("purpose").notNull().default(""),
     kind: conversationKindEnum("kind").notNull(),
     visibility: conversationVisibilityEnum("visibility").notNull(),
+    directKey: text("direct_key"),
     createdBy: text("created_by")
       .notNull()
       .references(() => users.id),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    retentionDays: integer("retention_days").notNull().default(365),
+    version: integer("version").notNull().default(1),
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("conversations_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    uniqueIndex("conversations_org_workspace_id_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.id,
+    ),
+    uniqueIndex("conversations_workspace_active_direct_unique")
+      .on(table.organizationId, table.workspaceId, table.directKey)
+      .where(
+        sql`${table.kind} = 'direct' and ${table.deletedAt} is null and ${table.archivedAt} is null`,
+      ),
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId, table.workspaceId],
+      foreignColumns: [
+        workspaces.organizationId,
+        workspaces.portfolioId,
+        workspaces.id,
+      ],
+      name: "conversations_org_portfolio_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.createdBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "conversations_org_creator_membership_fk",
+    }),
+    check(
+      "conversations_kind_visibility_check",
+      sql`(${table.kind} = 'workspace' and ${table.visibility} in ('organization', 'private'))
+        or (${table.kind} in ('team', 'direct') and ${table.visibility} = 'private')
+        or (${table.kind} = 'external' and ${table.visibility} = 'guest_scoped')`,
+    ),
+    check(
+      "conversations_retention_days_check",
+      sql`${table.retentionDays} between 1 and 3650`,
+    ),
+    check(
+      "conversations_direct_key_check",
+      sql`(${table.kind} = 'direct') = (${table.directKey} is not null)`,
+    ),
+    check("conversations_version_positive_check", sql`${table.version} > 0`),
     index("conversations_org_activity_idx").on(
       table.organizationId,
       table.lastMessageAt,
@@ -2012,6 +2277,42 @@ export const conversations = pgTable(
   ],
 );
 
+export const teamRooms = pgTable(
+  "team_rooms",
+  {
+    organizationId: text("organization_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    teamId: text("team_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.teamId] }),
+    uniqueIndex("team_rooms_conversation_unique").on(table.conversationId),
+    uniqueIndex("team_rooms_org_workspace_team_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.teamId,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.teamId],
+      foreignColumns: [teams.organizationId, teams.workspaceId, teams.id],
+      name: "team_rooms_org_workspace_team_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.conversationId],
+      foreignColumns: [
+        conversations.organizationId,
+        conversations.workspaceId,
+        conversations.id,
+      ],
+      name: "team_rooms_org_workspace_conversation_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
 export const conversationParticipants = pgTable(
   "conversation_participants",
   {
@@ -2021,10 +2322,14 @@ export const conversationParticipants = pgTable(
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     participantRole: text("participant_role").notNull().default("member"),
+    source: conversationParticipantSourceEnum("source")
+      .notNull()
+      .default("manual"),
     notificationLevel: text("notification_level").notNull().default("all"),
     lastReadAt: timestamp("last_read_at", { withTimezone: true }),
     mutedUntil: timestamp("muted_until", { withTimezone: true }),
@@ -2032,9 +2337,52 @@ export const conversationParticipants = pgTable(
       .notNull()
       .defaultNow(),
     removedAt: timestamp("removed_at", { withTimezone: true }),
+    version: integer("version").notNull().default(1),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.conversationId, table.userId] }),
+    uniqueIndex("conversation_participants_org_conversation_user_unique").on(
+      table.organizationId,
+      table.conversationId,
+      table.userId,
+    ),
+    uniqueIndex(
+      "conversation_participants_org_workspace_conversation_user_unique",
+    ).on(
+      table.organizationId,
+      table.workspaceId,
+      table.conversationId,
+      table.userId,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.conversationId],
+      foreignColumns: [
+        conversations.organizationId,
+        conversations.workspaceId,
+        conversations.id,
+      ],
+      name: "conversation_participants_org_workspace_conversation_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "conversation_participants_org_membership_fk",
+    }),
+    check(
+      "conversation_participants_version_positive_check",
+      sql`${table.version} > 0`,
+    ),
+    check(
+      "conversation_participants_role_check",
+      sql`${table.participantRole} in ('owner', 'member', 'guest')`,
+    ),
+    check(
+      "conversation_participants_notification_check",
+      sql`${table.notificationLevel} in ('all', 'mentions', 'none')`,
+    ),
     index("conversation_participants_user_idx").on(
       table.organizationId,
       table.userId,
@@ -2047,16 +2395,19 @@ export const conversationMessages = pgTable(
   "conversation_messages",
   {
     id: text("id").primaryKey(),
+    sequence: serial("sequence").notNull(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull(),
     senderId: text("sender_id")
       .notNull()
       .references(() => users.id),
     parentMessageId: text("parent_message_id"),
+    clientMessageId: text("client_message_id").notNull(),
     body: text("body").notNull(),
     intent: messageIntentEnum("intent").notNull().default("message"),
     responseOwnerId: text("response_owner_id").references(() => users.id),
@@ -2066,9 +2417,96 @@ export const conversationMessages = pgTable(
     linkedEntityId: text("linked_entity_id"),
     metadata: jsonb("metadata").notNull().default({}),
     editedAt: timestamp("edited_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
+    version: integer("version").notNull().default(1),
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("conversation_messages_org_conversation_id_unique").on(
+      table.organizationId,
+      table.conversationId,
+      table.id,
+    ),
+    uniqueIndex(
+      "conversation_messages_org_workspace_conversation_id_unique",
+    ).on(
+      table.organizationId,
+      table.workspaceId,
+      table.conversationId,
+      table.id,
+    ),
+    uniqueIndex("conversation_messages_org_conversation_sequence_unique").on(
+      table.organizationId,
+      table.conversationId,
+      table.sequence,
+    ),
+    uniqueIndex("conversation_messages_client_id_unique").on(
+      table.organizationId,
+      table.conversationId,
+      table.senderId,
+      table.clientMessageId,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.conversationId],
+      foreignColumns: [
+        conversations.organizationId,
+        conversations.workspaceId,
+        conversations.id,
+      ],
+      name: "conversation_messages_org_workspace_conversation_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.conversationId, table.senderId],
+      foreignColumns: [
+        conversationParticipants.organizationId,
+        conversationParticipants.conversationId,
+        conversationParticipants.userId,
+      ],
+      name: "conversation_messages_org_sender_participant_fk",
+    }),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.conversationId,
+        table.responseOwnerId,
+      ],
+      foreignColumns: [
+        conversationParticipants.organizationId,
+        conversationParticipants.conversationId,
+        conversationParticipants.userId,
+      ],
+      name: "conversation_messages_org_response_owner_participant_fk",
+    }),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.conversationId,
+        table.parentMessageId,
+      ],
+      foreignColumns: [table.organizationId, table.conversationId, table.id],
+      name: "conversation_messages_scoped_parent_fk",
+    }).onDelete("cascade"),
+    check(
+      "conversation_messages_version_positive_check",
+      sql`${table.version} > 0`,
+    ),
+    check(
+      "conversation_messages_body_check",
+      sql`length(trim(${table.body})) between 1 and 20000`,
+    ),
+    check(
+      "conversation_messages_link_check",
+      sql`(${table.linkedEntityType} is null) = (${table.linkedEntityId} is null)`,
+    ),
+    check(
+      "conversation_messages_response_check",
+      sql`${table.responseState} is null or ${table.responseState}::text = 'cancelled' or ${table.responseOwnerId} is not null`,
+    ),
+    check(
+      "conversation_messages_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
     index("conversation_messages_timeline_idx").on(
       table.organizationId,
       table.conversationId,
@@ -2088,6 +2526,47 @@ export const conversationMessages = pgTable(
   ],
 );
 
+// Raw pre-Phase-4 metadata is retained here only when it cannot satisfy the
+// bounded public Message contract. Application repositories deliberately do
+// not read this operator-only quarantine.
+export const conversationMessageMetadataQuarantine = pgTable(
+  "conversation_message_metadata_quarantine",
+  {
+    messageId: text("message_id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    originalMetadata: jsonb("original_metadata").notNull(),
+    originalOctetLength: integer("original_octet_length").notNull(),
+    quarantineReason: text("quarantine_reason").notNull(),
+    quarantinedAt: timestamp("quarantined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.conversationId,
+        table.messageId,
+      ],
+      foreignColumns: [
+        conversationMessages.organizationId,
+        conversationMessages.workspaceId,
+        conversationMessages.conversationId,
+        conversationMessages.id,
+      ],
+      name: "conversation_message_metadata_quarantine_scoped_message_fk",
+    }).onDelete("cascade"),
+    index("conversation_message_metadata_quarantine_scope_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.conversationId,
+    ),
+  ],
+);
+
 export const conversationReactions = pgTable(
   "conversation_reactions",
   {
@@ -2097,6 +2576,8 @@ export const conversationReactions = pgTable(
     messageId: text("message_id")
       .notNull()
       .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -2107,6 +2588,150 @@ export const conversationReactions = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.messageId, table.userId, table.emoji] }),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.conversationId,
+        table.messageId,
+      ],
+      foreignColumns: [
+        conversationMessages.organizationId,
+        conversationMessages.workspaceId,
+        conversationMessages.conversationId,
+        conversationMessages.id,
+      ],
+      name: "conversation_reactions_scoped_message_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.conversationId,
+        table.userId,
+      ],
+      foreignColumns: [
+        conversationParticipants.organizationId,
+        conversationParticipants.workspaceId,
+        conversationParticipants.conversationId,
+        conversationParticipants.userId,
+      ],
+      name: "conversation_reactions_participant_fk",
+    }).onDelete("cascade"),
+    check(
+      "conversation_reactions_emoji_check",
+      sql`length(trim(${table.emoji})) between 1 and 32`,
+    ),
+  ],
+);
+
+export const conversationReadCheckpoints = pgTable(
+  "conversation_read_checkpoints",
+  {
+    organizationId: text("organization_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    userId: text("user_id").notNull(),
+    lastReadMessageId: text("last_read_message_id"),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    version: integer("version").notNull().default(1),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.conversationId, table.userId] }),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.conversationId,
+        table.userId,
+      ],
+      foreignColumns: [
+        conversationParticipants.organizationId,
+        conversationParticipants.workspaceId,
+        conversationParticipants.conversationId,
+        conversationParticipants.userId,
+      ],
+      name: "conversation_read_checkpoints_participant_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.conversationId,
+        table.lastReadMessageId,
+      ],
+      foreignColumns: [
+        conversationMessages.organizationId,
+        conversationMessages.workspaceId,
+        conversationMessages.conversationId,
+        conversationMessages.id,
+      ],
+      name: "conversation_read_checkpoints_message_fk",
+    }),
+  ],
+);
+
+export const collaborationEvents = pgTable(
+  "collaboration_events",
+  {
+    id: text("id").primaryKey(),
+    cursor: serial("cursor").notNull(),
+    organizationId: text("organization_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    conversationId: text("conversation_id"),
+    actorId: text("actor_id"),
+    eventType: text("event_type").notNull(),
+    aggregateType: text("aggregate_type").notNull(),
+    aggregateId: text("aggregate_id").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("collaboration_events_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    uniqueIndex("collaboration_events_org_cursor_unique").on(
+      table.organizationId,
+      table.cursor,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "collaboration_events_org_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.conversationId],
+      foreignColumns: [
+        conversations.organizationId,
+        conversations.workspaceId,
+        conversations.id,
+      ],
+      name: "collaboration_events_org_workspace_conversation_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.actorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "collaboration_events_org_actor_fk",
+    }),
+    check(
+      "collaboration_events_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    index("collaboration_events_workspace_feed_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.createdAt,
+      table.id,
+    ),
   ],
 );
 
@@ -2117,6 +2742,8 @@ export const messageAttachments = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
     messageId: text("message_id")
       .notNull()
       .references(() => conversationMessages.id, { onDelete: "cascade" }),
@@ -2130,6 +2757,36 @@ export const messageAttachments = pgTable(
     ...timestamps,
   },
   (table) => [
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.conversationId,
+        table.messageId,
+      ],
+      foreignColumns: [
+        conversationMessages.organizationId,
+        conversationMessages.workspaceId,
+        conversationMessages.conversationId,
+        conversationMessages.id,
+      ],
+      name: "message_attachments_scoped_message_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.conversationId,
+        table.uploadedBy,
+      ],
+      foreignColumns: [
+        conversationParticipants.organizationId,
+        conversationParticipants.workspaceId,
+        conversationParticipants.conversationId,
+        conversationParticipants.userId,
+      ],
+      name: "message_attachments_uploader_participant_fk",
+    }),
     index("message_attachments_message_idx").on(
       table.organizationId,
       table.messageId,

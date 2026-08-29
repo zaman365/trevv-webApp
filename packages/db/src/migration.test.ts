@@ -17,6 +17,18 @@ const normalizedIdentityEmailMigrationPath = fileURLToPath(
 const persistentWorkerMigrationPath = fileURLToPath(
   new URL("../migrations/0008_lumpy_sasquatch.sql", import.meta.url),
 );
+const collaborationMigrationPath = fileURLToPath(
+  new URL("../migrations/0009_cooing_lady_deathstrike.sql", import.meta.url),
+);
+const directConversationMigrationPath = fileURLToPath(
+  new URL("../migrations/0011_natural_marrow.sql", import.meta.url),
+);
+const legacyCollaborationSafetyMigrationPath = fileURLToPath(
+  new URL(
+    "../migrations/0014_legacy_collaboration_upgrade_safety.sql",
+    import.meta.url,
+  ),
+);
 
 describe("TREVV commercial migration", () => {
   const migration = readFileSync(migrationPath, "utf8");
@@ -180,5 +192,119 @@ describe("Persistent worker migration", () => {
 
     expect(outboxKey).toBeGreaterThan(-1);
     expect(attemptForeignKey).toBeGreaterThan(outboxKey);
+  });
+});
+
+describe("Phase 4 collaboration upgrade safety", () => {
+  const collaborationMigration = readFileSync(
+    collaborationMigrationPath,
+    "utf8",
+  );
+  const directMigration = readFileSync(directConversationMigrationPath, "utf8");
+  const safetyMigration = readFileSync(
+    legacyCollaborationSafetyMigrationPath,
+    "utf8",
+  );
+
+  it("preserves duplicate direct-room history while choosing one canonical participant key", () => {
+    expect(directMigration).toContain('"ranked_direct_participants"');
+    expect(directMigration).toContain('"active_rank" = 1');
+    expect(directMigration).toContain(
+      '"ranked"."direct_key" || chr(31) || "ranked"."id"',
+    );
+    expect(directMigration).not.toContain('DELETE FROM "conversations"');
+  });
+
+  it("normalizes bounded legacy records before enforcing collaboration constraints", () => {
+    const quarantine = collaborationMigration.indexOf(
+      'CREATE TABLE "legacy_collaboration_record_quarantine"',
+    );
+    const normalizeMessage = collaborationMigration.indexOf(
+      "legacy_message_body_contract_bounds",
+    );
+    const synthesizeTombstones = collaborationMigration.indexOf(
+      'WITH "required_participants" AS',
+    );
+    const requireScopedMessage = collaborationMigration.indexOf(
+      'ALTER TABLE "conversation_messages" ALTER COLUMN "workspace_id" SET NOT NULL',
+    );
+    const messageBodyCheck = collaborationMigration.indexOf(
+      'ADD CONSTRAINT "conversation_messages_body_check"',
+    );
+
+    expect(quarantine).toBeGreaterThan(-1);
+    expect(normalizeMessage).toBeGreaterThan(quarantine);
+    expect(synthesizeTombstones).toBeGreaterThan(normalizeMessage);
+    expect(requireScopedMessage).toBeGreaterThan(synthesizeTombstones);
+    expect(messageBodyCheck).toBeGreaterThan(requireScopedMessage);
+    expect(collaborationMigration).toContain(
+      "Cannot upgrade a legacy non-Team conversation with more than 250 active participants",
+    );
+    expect(collaborationMigration).toContain(
+      "Application APIs must never read this table",
+    );
+  });
+
+  it("accepts pre-existing private Workspace rooms before the later constraint refresh", () => {
+    expect(collaborationMigration).toContain(
+      `"conversations"."kind" = 'workspace' and "conversations"."visibility" in ('organization', 'private')`,
+    );
+  });
+
+  it("converts legacy Team rooms without granting guests or viewers internal access", () => {
+    expect(safetyMigration).toContain('INSERT INTO "teams"');
+    expect(safetyMigration).toContain('INSERT INTO "team_members"');
+    expect(safetyMigration).toContain('INSERT INTO "team_rooms"');
+    expect(safetyMigration).toContain(
+      "\"membership\".\"role\" NOT IN ('guest', 'viewer')",
+    );
+    expect(safetyMigration).toContain(
+      "Cannot convert an active legacy Team room without an active internal Workspace member",
+    );
+    expect(safetyMigration).not.toContain(
+      'DELETE FROM "conversation_messages"',
+    );
+  });
+
+  it("quarantines out-of-contract metadata and schedules legacy retention work", () => {
+    const quarantine = safetyMigration.indexOf(
+      'INSERT INTO "conversation_message_metadata_quarantine"',
+    );
+    const normalize = safetyMigration.indexOf(
+      'UPDATE "conversation_messages" AS "message"',
+    );
+    expect(quarantine).toBeGreaterThan(-1);
+    expect(normalize).toBeGreaterThan(quarantine);
+    expect(safetyMigration).toContain("legacyMetadataQuarantined");
+    expect(safetyMigration).toContain("message.retention_due");
+    const addCancelled = safetyMigration.indexOf(
+      'ALTER TYPE "public"."message_response_state" ADD VALUE IF NOT EXISTS \'cancelled\'',
+    );
+    const allowOwnerlessCancellation = safetyMigration.indexOf(
+      `"conversation_messages"."response_state"::text = 'cancelled'`,
+    );
+    expect(addCancelled).toBeGreaterThan(-1);
+    expect(allowOwnerlessCancellation).toBeGreaterThan(addCancelled);
+  });
+
+  it("repairs open legacy Team response ownership before scheduling retention", () => {
+    const quarantine = safetyMigration.indexOf(
+      "legacy_team_response_owner_ineligible",
+    );
+    const repair = safetyMigration.indexOf(
+      'UPDATE "conversation_messages" AS "message"',
+      quarantine,
+    );
+    const retention = safetyMigration.indexOf("message.retention_due");
+
+    expect(quarantine).toBeGreaterThan(-1);
+    expect(repair).toBeGreaterThan(quarantine);
+    expect(retention).toBeGreaterThan(repair);
+    expect(safetyMigration).toContain(
+      `ORDER BY ("member"."role" = 'lead') DESC, "member"."joined_at", "member"."user_id"`,
+    );
+    expect(safetyMigration).toContain(
+      `WHEN "candidate"."user_id" IS NULL THEN NULL`,
+    );
   });
 });

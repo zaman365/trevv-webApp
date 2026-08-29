@@ -16,7 +16,11 @@ import {
   blueprints,
   blueprintVersions,
   boards,
+  collaborationEvents,
+  conversations,
   invitations,
+  invitationTeamAssignments,
+  invitationWorkspaceAssignments,
   memberships,
   onboardingProgress,
   organizations,
@@ -24,12 +28,17 @@ import {
   portfolioMembers,
   portfolios,
   users,
+  conversationParticipants,
+  teamMembers,
+  teamRooms,
+  teams,
   workspaceMembers,
   workspaces,
 } from "./schema.js";
 
 declare const identityScopeBrand: unique symbol;
 declare const invitationTokenHashBrand: unique symbol;
+const MAX_COLLABORATION_MEMBERS = 250;
 
 /** A server-only scope constructed from the resolved Better Auth session. */
 export type IdentityScope = {
@@ -146,6 +155,9 @@ export interface AcceptedInvitationResult {
   organizationId: string;
   appUserId: string;
   membership: typeof memberships.$inferSelect;
+  workspaceId?: string;
+  teamId?: string;
+  acceptedAt: Date;
 }
 
 export interface IdentityRepositories {
@@ -782,6 +794,293 @@ async function acceptInvitation(
     }
     if (!membership) throw invalidInvitation();
 
+    const [workspaceAssignment] = await transaction
+      .select()
+      .from(invitationWorkspaceAssignments)
+      .where(
+        and(
+          eq(
+            invitationWorkspaceAssignments.organizationId,
+            invitation.organizationId,
+          ),
+          eq(invitationWorkspaceAssignments.invitationId, invitation.id),
+        ),
+      )
+      .limit(1);
+    const [teamAssignment] = await transaction
+      .select()
+      .from(invitationTeamAssignments)
+      .where(
+        and(
+          eq(
+            invitationTeamAssignments.organizationId,
+            invitation.organizationId,
+          ),
+          eq(invitationTeamAssignments.invitationId, invitation.id),
+        ),
+      )
+      .limit(1);
+    if (workspaceAssignment)
+      await transaction
+        .insert(workspaceMembers)
+        .values({
+          organizationId: invitation.organizationId,
+          workspaceId: workspaceAssignment.workspaceId,
+          userId: appUser.id,
+          canManage: workspaceAssignment.canManage,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [workspaceMembers.workspaceId, workspaceMembers.userId],
+          set: {
+            canManage: workspaceAssignment.canManage,
+            archivedAt: null,
+            deletedAt: null,
+            updatedAt: now,
+          },
+        });
+    if (teamAssignment) {
+      const [assignedTeam] = await transaction
+        .select({ id: teams.id })
+        .from(teams)
+        .where(
+          and(
+            eq(teams.organizationId, invitation.organizationId),
+            eq(teams.workspaceId, teamAssignment.workspaceId),
+            eq(teams.id, teamAssignment.teamId),
+            isNull(teams.archivedAt),
+            isNull(teams.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!assignedTeam) throw invalidInvitation();
+      const [room] = await transaction
+        .select({ conversationId: teamRooms.conversationId })
+        .from(teamRooms)
+        .where(
+          and(
+            eq(teamRooms.organizationId, invitation.organizationId),
+            eq(teamRooms.workspaceId, teamAssignment.workspaceId),
+            eq(teamRooms.teamId, teamAssignment.teamId),
+          ),
+        )
+        .limit(1);
+      if (!room) throw invalidInvitation();
+      const [[existingTeamMember], [existingRoomParticipant]] =
+        await Promise.all([
+          transaction
+            .select({ removedAt: teamMembers.removedAt })
+            .from(teamMembers)
+            .where(
+              and(
+                eq(teamMembers.organizationId, invitation.organizationId),
+                eq(teamMembers.teamId, teamAssignment.teamId),
+                eq(teamMembers.userId, appUser.id),
+              ),
+            )
+            .limit(1),
+          transaction
+            .select({ removedAt: conversationParticipants.removedAt })
+            .from(conversationParticipants)
+            .where(
+              and(
+                eq(
+                  conversationParticipants.organizationId,
+                  invitation.organizationId,
+                ),
+                eq(
+                  conversationParticipants.conversationId,
+                  room.conversationId,
+                ),
+                eq(conversationParticipants.userId, appUser.id),
+              ),
+            )
+            .limit(1),
+        ]);
+      const [[activeTeamCount], [activeRoomCount]] = await Promise.all([
+        transaction
+          .select({ count: sql<number>`count(*)::int` })
+          .from(teamMembers)
+          .where(
+            and(
+              eq(teamMembers.organizationId, invitation.organizationId),
+              eq(teamMembers.teamId, teamAssignment.teamId),
+              isNull(teamMembers.removedAt),
+            ),
+          ),
+        transaction
+          .select({ count: sql<number>`count(*)::int` })
+          .from(conversationParticipants)
+          .where(
+            and(
+              eq(
+                conversationParticipants.organizationId,
+                invitation.organizationId,
+              ),
+              eq(conversationParticipants.conversationId, room.conversationId),
+              isNull(conversationParticipants.removedAt),
+            ),
+          ),
+      ]);
+      if (
+        (existingTeamMember?.removedAt !== null &&
+          (activeTeamCount?.count ?? 0) >= MAX_COLLABORATION_MEMBERS) ||
+        (existingRoomParticipant?.removedAt !== null &&
+          (activeRoomCount?.count ?? 0) >= MAX_COLLABORATION_MEMBERS)
+      )
+        throw invalidInvitation();
+      if (teamAssignment.role === "lead") {
+        await transaction
+          .update(teamMembers)
+          .set({
+            role: "member",
+            version: sql`${teamMembers.version} + 1`,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(teamMembers.organizationId, invitation.organizationId),
+              eq(teamMembers.teamId, teamAssignment.teamId),
+              eq(teamMembers.role, "lead"),
+              isNull(teamMembers.removedAt),
+            ),
+          );
+        await transaction
+          .update(conversationParticipants)
+          .set({
+            participantRole: "member",
+            version: sql`${conversationParticipants.version} + 1`,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(
+                conversationParticipants.organizationId,
+                invitation.organizationId,
+              ),
+              eq(conversationParticipants.conversationId, room.conversationId),
+              eq(conversationParticipants.participantRole, "owner"),
+              isNull(conversationParticipants.removedAt),
+            ),
+          );
+      }
+      await transaction
+        .insert(teamMembers)
+        .values({
+          organizationId: invitation.organizationId,
+          workspaceId: teamAssignment.workspaceId,
+          teamId: teamAssignment.teamId,
+          userId: appUser.id,
+          role: teamAssignment.role,
+          joinedAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [teamMembers.teamId, teamMembers.userId],
+          set: {
+            role: teamAssignment.role,
+            removedAt: null,
+            version: sql`${teamMembers.version} + 1`,
+            updatedAt: now,
+          },
+        });
+      await transaction
+        .insert(conversationParticipants)
+        .values({
+          organizationId: invitation.organizationId,
+          workspaceId: teamAssignment.workspaceId,
+          conversationId: room.conversationId,
+          userId: appUser.id,
+          participantRole: teamAssignment.role === "lead" ? "owner" : "member",
+          source: "team",
+          joinedAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            conversationParticipants.conversationId,
+            conversationParticipants.userId,
+          ],
+          set: {
+            participantRole:
+              teamAssignment.role === "lead" ? "owner" : "member",
+            source: "team",
+            removedAt: null,
+            version: sql`${conversationParticipants.version} + 1`,
+            updatedAt: now,
+          },
+        });
+      const [updatedTeam] = await transaction
+        .update(teams)
+        .set({
+          version: sql`${teams.version} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(teams.organizationId, invitation.organizationId),
+            eq(teams.id, teamAssignment.teamId),
+            isNull(teams.archivedAt),
+            isNull(teams.deletedAt),
+          ),
+        )
+        .returning({ id: teams.id });
+      if (!updatedTeam) throw invalidInvitation();
+      const [updatedRoom] = await transaction
+        .update(conversations)
+        .set({
+          version: sql`${conversations.version} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(conversations.organizationId, invitation.organizationId),
+            eq(conversations.id, room.conversationId),
+            isNull(conversations.archivedAt),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .returning({ id: conversations.id });
+      if (!updatedRoom) throw invalidInvitation();
+      const membershipPayload = {
+        teamId: teamAssignment.teamId,
+        userId: appUser.id,
+        active: true,
+        source: "invitation",
+      };
+      await appendAuditAndOutbox(
+        transaction,
+        {
+          organizationId: invitation.organizationId,
+          userId: appUser.id,
+          requestId: scope.requestId,
+        },
+        {
+          action: "team.membership_changed",
+          aggregateType: "team",
+          aggregateId: teamAssignment.teamId,
+          eventType: "team.membership_changed",
+          payload: membershipPayload,
+          now,
+        },
+      );
+      await transaction.insert(collaborationEvents).values({
+        id: randomUUID(),
+        organizationId: invitation.organizationId,
+        workspaceId: teamAssignment.workspaceId,
+        conversationId: room.conversationId,
+        actorId: appUser.id,
+        eventType: "team.membership_changed",
+        aggregateType: "team",
+        aggregateId: teamAssignment.teamId,
+        payload: membershipPayload,
+        expiresAt: new Date(now.getTime() + 7 * 86_400_000),
+        createdAt: now,
+      });
+    }
+
     const [accepted] = await transaction
       .update(invitations)
       .set({
@@ -829,6 +1128,11 @@ async function acceptInvitation(
       organizationId: invitation.organizationId,
       appUserId: appUser.id,
       membership,
+      ...(workspaceAssignment
+        ? { workspaceId: workspaceAssignment.workspaceId }
+        : {}),
+      ...(teamAssignment ? { teamId: teamAssignment.teamId } : {}),
+      acceptedAt: now,
     };
   });
 }
@@ -993,9 +1297,11 @@ async function appendAuditAndOutbox(
   const payload = { requestId: scope.requestId, ...input.payload };
   const dedupKey = fingerprintRequest({
     requestId: scope.requestId,
+    action: input.action,
     eventType: input.eventType,
     aggregateType: input.aggregateType,
     aggregateId: input.aggregateId,
+    payload: input.payload,
   });
   await database.insert(auditLogs).values({
     id: randomUUID(),

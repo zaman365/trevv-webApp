@@ -10,6 +10,10 @@ import {
   blueprintInstances,
   blueprints,
   boards,
+  collaborationEvents,
+  conversations,
+  conversationMessages,
+  conversationParticipants,
   createDatabase,
   createIdentityScope,
   createOrganizationScope,
@@ -24,6 +28,9 @@ import {
   outboxEvents,
   portfolioMembers,
   portfolios,
+  teamMembers,
+  teamRooms,
+  teams,
   users,
   workspaceMembers,
   workspaces,
@@ -740,6 +747,300 @@ describe("Phase 2 identity repositories", () => {
     });
   });
 
+  it("accepts Team-scoped invitations atomically and invalidates open clients", async () => {
+    const owner = await onboardOwner(`team-invite-owner-${randomUUID()}`);
+    const ownerRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: owner.result.appUserId,
+        requestId: "request-team-invite-owner",
+      }),
+    );
+    const team = await ownerRepositories.collaboration.createTeam(
+      {
+        workspaceId: owner.result.workspaceId,
+        name: "Invited operators",
+        memberIds: [owner.result.appUserId],
+      },
+      mutation("/teams/invited-operators"),
+    );
+    const inviteeAuthUserId = `auth-team-invitee-${randomUUID()}`;
+    const inviteeEmail = `${inviteeAuthUserId}@example.test`;
+    await seedAuthUser({ id: inviteeAuthUserId, email: inviteeEmail });
+    const tokenHash = hashInvitationToken(opaqueToken());
+    const invitation = await ownerRepositories.invitations.create(
+      {
+        email: inviteeEmail,
+        role: "member",
+        tokenHash,
+        expiresAt: new Date("2026-09-01T12:00:00.000Z"),
+        workspaceId: owner.result.workspaceId,
+        teamId: team.value.team.id,
+      },
+      mutation("/invitations/team"),
+    );
+    expect(invitation.value).toMatchObject({
+      workspaceId: owner.result.workspaceId,
+      teamId: team.value.team.id,
+    });
+    const inviteeIdentity = createPostgresRepositories(
+      connection.db,
+    ).forIdentity(identityScope(inviteeAuthUserId, "accept-team-invite"));
+    const accepted = await inviteeIdentity.invitations.accept(
+      tokenHash,
+      new Date("2026-08-29T12:00:00.000Z"),
+    );
+    expect(accepted).toMatchObject({
+      invitationId: invitation.value.id,
+      organizationId: owner.result.organizationId,
+      workspaceId: owner.result.workspaceId,
+      teamId: team.value.team.id,
+      membership: { role: "member" },
+    });
+    const [room] = await connection.db
+      .select()
+      .from(teamRooms)
+      .where(
+        and(
+          eq(teamRooms.organizationId, owner.result.organizationId),
+          eq(teamRooms.teamId, team.value.team.id),
+        ),
+      );
+    const [workspaceGrant, teamGrant, roomGrant, updatedTeam, updatedRoom] =
+      await Promise.all([
+        connection.db.query.workspaceMembers.findFirst({
+          where: and(
+            eq(workspaceMembers.organizationId, owner.result.organizationId),
+            eq(workspaceMembers.workspaceId, owner.result.workspaceId),
+            eq(workspaceMembers.userId, accepted.appUserId),
+          ),
+        }),
+        connection.db.query.teamMembers.findFirst({
+          where: and(
+            eq(teamMembers.organizationId, owner.result.organizationId),
+            eq(teamMembers.teamId, team.value.team.id),
+            eq(teamMembers.userId, accepted.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(conversationParticipants.conversationId, room!.conversationId),
+            eq(conversationParticipants.userId, accepted.appUserId),
+          ),
+        }),
+        connection.db.query.teams.findFirst({
+          where: and(
+            eq(teams.organizationId, owner.result.organizationId),
+            eq(teams.id, team.value.team.id),
+          ),
+        }),
+        connection.db.query.conversations.findFirst({
+          where: and(
+            eq(conversations.organizationId, owner.result.organizationId),
+            eq(conversations.id, room!.conversationId),
+          ),
+        }),
+      ]);
+    expect(workspaceGrant).toMatchObject({
+      canManage: false,
+      archivedAt: null,
+      deletedAt: null,
+    });
+    expect(teamGrant).toMatchObject({
+      role: "member",
+      removedAt: null,
+    });
+    expect(roomGrant).toMatchObject({
+      participantRole: "member",
+      source: "team",
+      removedAt: null,
+    });
+    expect(updatedTeam?.version).toBe(team.value.team.version + 1);
+    expect(updatedRoom?.version).toBe(2);
+    expect(
+      await connection.db.$count(
+        collaborationEvents,
+        and(
+          eq(collaborationEvents.organizationId, owner.result.organizationId),
+          eq(collaborationEvents.eventType, "team.membership_changed"),
+          eq(collaborationEvents.aggregateId, team.value.team.id),
+        ),
+      ),
+    ).toBe(1);
+    expect(
+      await connection.db.$count(
+        outboxEvents,
+        and(
+          eq(outboxEvents.organizationId, owner.result.organizationId),
+          eq(outboxEvents.eventType, "team.membership_changed"),
+          eq(outboxEvents.aggregateId, team.value.team.id),
+        ),
+      ),
+    ).toBe(1);
+    await expect(
+      inviteeIdentity.invitations.accept(
+        tokenHash,
+        new Date("2026-08-29T12:00:00.000Z"),
+      ),
+    ).rejects.toMatchObject({ code: "invitation_invalid" });
+
+    const rollbackTeam = await ownerRepositories.collaboration.createTeam(
+      {
+        workspaceId: owner.result.workspaceId,
+        name: "Missing room rollback",
+        memberIds: [owner.result.appUserId],
+      },
+      mutation("/teams/missing-room"),
+    );
+    const rollbackAuthUserId = `auth-team-rollback-${randomUUID()}`;
+    const rollbackEmail = `${rollbackAuthUserId}@example.test`;
+    await seedAuthUser({ id: rollbackAuthUserId, email: rollbackEmail });
+    const rollbackTokenHash = hashInvitationToken(opaqueToken());
+    const rollbackInvitation = await ownerRepositories.invitations.create(
+      {
+        email: rollbackEmail,
+        role: "member",
+        tokenHash: rollbackTokenHash,
+        expiresAt: new Date("2026-09-01T12:00:00.000Z"),
+        workspaceId: owner.result.workspaceId,
+        teamId: rollbackTeam.value.team.id,
+      },
+      mutation("/invitations/team-missing-room"),
+    );
+    await connection.db
+      .delete(teamRooms)
+      .where(
+        and(
+          eq(teamRooms.organizationId, owner.result.organizationId),
+          eq(teamRooms.teamId, rollbackTeam.value.team.id),
+        ),
+      );
+    await expect(
+      createPostgresRepositories(connection.db)
+        .forIdentity(identityScope(rollbackAuthUserId, "rollback-team-invite"))
+        .invitations.accept(
+          rollbackTokenHash,
+          new Date("2026-08-29T12:00:00.000Z"),
+        ),
+    ).rejects.toMatchObject({ code: "invitation_invalid" });
+    expect(
+      await connection.db.$count(
+        authUserMappings,
+        eq(authUserMappings.authUserId, rollbackAuthUserId),
+      ),
+    ).toBe(0);
+    await expect(
+      connection.db.query.invitations.findFirst({
+        where: eq(invitations.id, rollbackInvitation.value.id),
+      }),
+    ).resolves.toMatchObject({ acceptedAt: null, acceptedByUserId: null });
+  });
+
+  it("rolls back a Team-scoped invitation that would exceed the active member cap", async () => {
+    const owner = await onboardOwner(`team-invite-cap-owner-${randomUUID()}`);
+    const ownerRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: owner.result.appUserId,
+        requestId: "request-team-invite-cap-owner",
+      }),
+    );
+    const team = await ownerRepositories.collaboration.createTeam(
+      {
+        workspaceId: owner.result.workspaceId,
+        name: "Full invitation Team",
+        memberIds: [owner.result.appUserId],
+      },
+      mutation("/teams/full-invitation"),
+    );
+    const generatedIds = Array.from(
+      { length: 249 },
+      (_, index) => `team-invite-cap-member-${index}-${randomUUID()}`,
+    );
+    await connection.db.transaction(async (transaction) => {
+      await transaction.insert(users).values(
+        generatedIds.map((id) => ({
+          id,
+          email: `${id}@example.test`,
+          name: "Capacity member",
+        })),
+      );
+      await transaction.insert(memberships).values(
+        generatedIds.map((userId) => ({
+          organizationId: owner.result.organizationId,
+          userId,
+          role: "member" as const,
+        })),
+      );
+      await transaction.insert(workspaceMembers).values(
+        generatedIds.map((userId) => ({
+          organizationId: owner.result.organizationId,
+          workspaceId: owner.result.workspaceId,
+          userId,
+          canManage: false,
+        })),
+      );
+      await transaction.insert(teamMembers).values(
+        generatedIds.map((userId) => ({
+          organizationId: owner.result.organizationId,
+          workspaceId: owner.result.workspaceId,
+          teamId: team.value.team.id,
+          userId,
+          role: "member" as const,
+        })),
+      );
+      await transaction.insert(conversationParticipants).values(
+        generatedIds.map((userId) => ({
+          organizationId: owner.result.organizationId,
+          workspaceId: owner.result.workspaceId,
+          conversationId: team.value.room!.conversationId,
+          userId,
+          participantRole: "member" as const,
+          source: "team" as const,
+        })),
+      );
+    });
+    const inviteeAuthUserId = `auth-team-invite-cap-${randomUUID()}`;
+    const inviteeEmail = `${inviteeAuthUserId}@example.test`;
+    await seedAuthUser({ id: inviteeAuthUserId, email: inviteeEmail });
+    const tokenHash = hashInvitationToken(opaqueToken());
+    const invitation = await ownerRepositories.invitations.create(
+      {
+        email: inviteeEmail,
+        role: "member",
+        tokenHash,
+        expiresAt: new Date("2026-09-01T12:00:00.000Z"),
+        workspaceId: owner.result.workspaceId,
+        teamId: team.value.team.id,
+      },
+      mutation("/invitations/team-cap"),
+    );
+    await expect(
+      createPostgresRepositories(connection.db)
+        .forIdentity(identityScope(inviteeAuthUserId, "accept-team-cap"))
+        .invitations.accept(tokenHash, new Date("2026-08-29T12:00:00.000Z")),
+    ).rejects.toMatchObject({ code: "invitation_invalid" });
+    expect(
+      await connection.db.$count(
+        authUserMappings,
+        eq(authUserMappings.authUserId, inviteeAuthUserId),
+      ),
+    ).toBe(0);
+    await expect(
+      connection.db.query.invitations.findFirst({
+        where: eq(invitations.id, invitation.value.id),
+      }),
+    ).resolves.toMatchObject({ acceptedAt: null, acceptedByUserId: null });
+  });
+
   it("rejects expired, revoked, and wrong-email invitation acceptance without mappings", async () => {
     const owner = await onboardOwner(`invite-guard-${randomUUID()}`);
     const ownerRepositories = createPostgresRepositories(
@@ -872,6 +1173,75 @@ describe("Phase 2 identity repositories", () => {
       portfolioIds: [owner.result.portfolioId],
       workspaceIds: [owner.result.workspaceId],
     });
+    const oldTeam = await ownerRepositories.collaboration.createTeam(
+      {
+        workspaceId: owner.result.workspaceId,
+        name: "Old private Team",
+        memberIds: [owner.result.appUserId, accepted.appUserId],
+        leadUserId: accepted.appUserId,
+      },
+      mutation("/teams/old-private"),
+    );
+    const replacementTeam = await ownerRepositories.collaboration.createTeam(
+      {
+        workspaceId: owner.result.workspaceId,
+        name: "Explicit replacement Team",
+        memberIds: [owner.result.appUserId],
+      },
+      mutation("/teams/replacement"),
+    );
+    const privateRoom =
+      await ownerRepositories.collaboration.createConversation(
+        {
+          workspaceId: owner.result.workspaceId,
+          title: "Old private room",
+          kind: "workspace",
+          visibility: "private",
+          participantIds: [owner.result.appUserId, accepted.appUserId],
+        },
+        mutation("/conversations/old-private"),
+      );
+    const directRoom = await ownerRepositories.collaboration.createConversation(
+      {
+        workspaceId: owner.result.workspaceId,
+        title: "Old direct room",
+        kind: "direct",
+        visibility: "private",
+        participantIds: [owner.result.appUserId, accepted.appUserId],
+      },
+      mutation("/conversations/old-direct"),
+    );
+    await ownerRepositories.collaboration.setConversationParticipant(
+      privateRoom.value.conversation.id,
+      accepted.appUserId,
+      privateRoom.value.conversation.version,
+      true,
+      mutation("/conversations/old-private/transfer-owner"),
+      "owner",
+    );
+    const inviteeRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: accepted.appUserId,
+        requestId: "request-member-private-message",
+      }),
+    );
+    const openRequest = await inviteeRepositories.collaboration.sendMessage(
+      privateRoom.value.conversation.id,
+      {
+        clientMessageId: "9c088ea2-41cf-46f2-8c02-a586a2a25b99",
+        body: "Private state that must not survive an access replay",
+        intent: "request",
+        responseOwnerId: accepted.appUserId,
+      },
+      {
+        method: "POST",
+        route: `/api/v1/conversations/${privateRoom.value.conversation.id}/messages`,
+        idempotencyKey: "revoked-member-private-message",
+      },
+    );
 
     await ownerRepositories.memberships.update(
       accepted.appUserId,
@@ -937,6 +1307,213 @@ describe("Phase 2 identity repositories", () => {
     expect(workspaceGrant?.archivedAt).toBeInstanceOf(Date);
     expect(selection).toBeUndefined();
     expect(storedInvitation?.acceptedByUserId).toBe(accepted.appUserId);
+    const [oldTeamGrant, oldTeamRoomGrant, privateGrant, directGrant] =
+      await Promise.all([
+        connection.db.query.teamMembers.findFirst({
+          where: and(
+            eq(teamMembers.organizationId, owner.result.organizationId),
+            eq(teamMembers.teamId, oldTeam.value.team.id),
+            eq(teamMembers.userId, accepted.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(
+              conversationParticipants.conversationId,
+              oldTeam.value.room.conversationId,
+            ),
+            eq(conversationParticipants.userId, accepted.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(
+              conversationParticipants.conversationId,
+              privateRoom.value.conversation.id,
+            ),
+            eq(conversationParticipants.userId, accepted.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(
+              conversationParticipants.conversationId,
+              directRoom.value.conversation.id,
+            ),
+            eq(conversationParticipants.userId, accepted.appUserId),
+          ),
+        }),
+      ]);
+    expect(oldTeamGrant?.removedAt).toBeInstanceOf(Date);
+    expect(oldTeamRoomGrant?.removedAt).toBeInstanceOf(Date);
+    expect(privateGrant?.removedAt).toBeInstanceOf(Date);
+    expect(directGrant?.removedAt).toBeInstanceOf(Date);
+    await expect(
+      ownerRepositories.collaboration.getTeam(oldTeam.value.team.id),
+    ).resolves.toMatchObject({
+      team: { archivedAt: null },
+      members: [
+        expect.objectContaining({
+          membership: expect.objectContaining({
+            userId: owner.result.appUserId,
+            role: "lead",
+          }),
+        }),
+      ],
+    });
+    await expect(
+      ownerRepositories.collaboration.getConversation(
+        privateRoom.value.conversation.id,
+      ),
+    ).resolves.toMatchObject({
+      participants: expect.arrayContaining([
+        expect.objectContaining({
+          participant: expect.objectContaining({
+            userId: owner.result.appUserId,
+            participantRole: "owner",
+          }),
+        }),
+      ]),
+    });
+    await expect(
+      connection.db.query.conversationMessages.findFirst({
+        where: and(
+          eq(conversationMessages.organizationId, owner.result.organizationId),
+          eq(conversationMessages.id, openRequest.value.message.id),
+        ),
+      }),
+    ).resolves.toMatchObject({
+      responseState: "open",
+      responseOwnerId: owner.result.appUserId,
+    });
+    await expect(
+      ownerRepositories.collaboration.sendMessage(
+        directRoom.value.conversation.id,
+        {
+          clientMessageId: "103f060e-d7f5-4fd7-a036-50aa1d2f0229",
+          body: "A one-person direct room must not remain writable",
+        },
+        mutation("/conversations/old-direct/messages/after-revoke"),
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    expect(
+      await connection.db.$count(
+        idempotencyRecords,
+        and(
+          eq(idempotencyRecords.organizationId, owner.result.organizationId),
+          eq(idempotencyRecords.userId, accepted.appUserId),
+          eq(idempotencyRecords.state, "completed"),
+        ),
+      ),
+    ).toBe(0);
+
+    const replacementTokenHash = hashInvitationToken(opaqueToken());
+    await ownerRepositories.invitations.create(
+      {
+        email: inviteeEmail,
+        role: "member",
+        tokenHash: replacementTokenHash,
+        expiresAt: new Date("2026-09-02T12:00:00.000Z"),
+        workspaceId: owner.result.workspaceId,
+        teamId: replacementTeam.value.team.id,
+      },
+      mutation("/invitations/replacement-team"),
+    );
+    await inviteeIdentity.invitations.accept(
+      replacementTokenHash,
+      new Date("2026-08-29T12:30:00.000Z"),
+    );
+    await expect(inviteeIdentity.resolve()).resolves.toMatchObject({
+      status: "active",
+      workspaceIds: [owner.result.workspaceId],
+    });
+    const reactivatedRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: accepted.appUserId,
+        requestId: "request-reactivated-member",
+      }),
+    );
+    await expect(
+      reactivatedRepositories.collaboration.getConversation(
+        oldTeam.value.room.conversationId,
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    await expect(
+      reactivatedRepositories.collaboration.getConversation(
+        privateRoom.value.conversation.id,
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    await expect(
+      reactivatedRepositories.collaboration.getConversation(
+        directRoom.value.conversation.id,
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    await expect(
+      reactivatedRepositories.collaboration.getConversation(
+        replacementTeam.value.room.conversationId,
+      ),
+    ).resolves.toMatchObject({
+      conversation: { id: replacementTeam.value.room.conversationId },
+    });
+    const replacementDirect =
+      await reactivatedRepositories.collaboration.createConversation(
+        {
+          workspaceId: owner.result.workspaceId,
+          title: "Re-established direct room",
+          kind: "direct",
+          visibility: "private",
+          participantIds: [accepted.appUserId, owner.result.appUserId],
+        },
+        mutation("/conversations/re-established-direct"),
+      );
+    expect(replacementDirect.value.conversation.id).not.toBe(
+      directRoom.value.conversation.id,
+    );
+    const [archivedDirect] = await connection.db
+      .select({ archivedAt: conversations.archivedAt })
+      .from(conversations)
+      .where(eq(conversations.id, directRoom.value.conversation.id));
+    expect(archivedDirect?.archivedAt).toBeInstanceOf(Date);
+    await expect(
+      ownerRepositories.collaboration.getConversation(
+        replacementDirect.value.conversation.id,
+      ),
+    ).resolves.toMatchObject({
+      conversation: { id: replacementDirect.value.conversation.id },
+    });
+    const currentPrivateRoom =
+      await ownerRepositories.collaboration.getConversation(
+        privateRoom.value.conversation.id,
+      );
+    await ownerRepositories.collaboration.setConversationParticipant(
+      privateRoom.value.conversation.id,
+      accepted.appUserId,
+      currentPrivateRoom.conversation.version,
+      true,
+      mutation("/conversations/old-private/explicit-readd"),
+    );
+    await expect(
+      reactivatedRepositories.collaboration.getConversation(
+        privateRoom.value.conversation.id,
+      ),
+    ).resolves.toMatchObject({
+      conversation: { id: privateRoom.value.conversation.id },
+    });
     expect(
       await connection.db.$count(
         outboxEvents,
@@ -946,6 +1523,473 @@ describe("Phase 2 identity repositories", () => {
         ),
       ),
     ).toBe(1);
+    expect(
+      await connection.db.$count(
+        outboxEvents,
+        and(
+          eq(outboxEvents.organizationId, owner.result.organizationId),
+          eq(outboxEvents.eventType, "team.membership_changed"),
+          eq(outboxEvents.aggregateId, oldTeam.value.team.id),
+        ),
+      ),
+    ).toBe(2);
+  });
+
+  it("hands off Team, room, and response ownership on a viewer downgrade", async () => {
+    const owner = await onboardOwner(`viewer-transition-owner-${randomUUID()}`);
+    const targetId = `viewer-transition-target-${randomUUID()}`;
+    await connection.db.transaction(async (transaction) => {
+      await transaction.insert(users).values({
+        id: targetId,
+        email: `${targetId}@example.test`,
+        name: "Future viewer",
+      });
+      await transaction.insert(memberships).values({
+        organizationId: owner.result.organizationId,
+        userId: targetId,
+        role: "member",
+      });
+      await transaction.insert(workspaceMembers).values({
+        organizationId: owner.result.organizationId,
+        workspaceId: owner.result.workspaceId,
+        userId: targetId,
+        canManage: false,
+      });
+    });
+    const ownerRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: owner.result.appUserId,
+        requestId: "request-viewer-transition-owner",
+      }),
+    );
+    const team = await ownerRepositories.collaboration.createTeam(
+      {
+        workspaceId: owner.result.workspaceId,
+        name: "Viewer transition Team",
+        memberIds: [owner.result.appUserId, targetId],
+        leadUserId: targetId,
+      },
+      mutation("/teams/viewer-transition"),
+    );
+    const room = await ownerRepositories.collaboration.createConversation(
+      {
+        workspaceId: owner.result.workspaceId,
+        title: "Viewer transition room",
+        kind: "workspace",
+        visibility: "private",
+        participantIds: [owner.result.appUserId, targetId],
+      },
+      mutation("/conversations/viewer-transition"),
+    );
+    const targetOwner =
+      await ownerRepositories.collaboration.setConversationParticipant(
+        room.value.conversation.id,
+        targetId,
+        room.value.conversation.version,
+        true,
+        mutation("/conversations/viewer-transition/owner"),
+        "owner",
+      );
+    const request = await ownerRepositories.collaboration.sendMessage(
+      room.value.conversation.id,
+      {
+        clientMessageId: "a172e841-8ca1-4ee1-948f-2aa1fe160022",
+        body: "Ownership must be handed off",
+        intent: "request",
+        responseOwnerId: targetId,
+      },
+      mutation("/conversations/viewer-transition/messages"),
+    );
+    const targetRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: targetId,
+        requestId: "request-viewer-transition-target",
+      }),
+    );
+    const orphanRoom =
+      await targetRepositories.collaboration.createConversation(
+        {
+          workspaceId: owner.result.workspaceId,
+          title: "Viewer transition orphan room",
+          kind: "workspace",
+          visibility: "private",
+          participantIds: [targetId],
+        },
+        mutation("/conversations/viewer-transition-orphan"),
+      );
+    const orphanRequest = await targetRepositories.collaboration.sendMessage(
+      orphanRoom.value.conversation.id,
+      {
+        clientMessageId: "cd4bcc9f-8f94-470c-ac1a-4e1ec97cd19c",
+        body: "Cancel when no authorized handoff exists",
+        intent: "request",
+        responseOwnerId: targetId,
+      },
+      mutation("/conversations/viewer-transition-orphan/messages"),
+    );
+    await ownerRepositories.memberships.update(
+      targetId,
+      { role: "viewer" },
+      mutation(`/memberships/${targetId}/viewer`),
+    );
+
+    await expect(
+      ownerRepositories.collaboration.getTeam(team.value.team.id),
+    ).resolves.toMatchObject({
+      team: { archivedAt: null },
+      members: expect.arrayContaining([
+        expect.objectContaining({
+          membership: expect.objectContaining({
+            userId: owner.result.appUserId,
+            role: "lead",
+          }),
+        }),
+        expect.objectContaining({
+          membership: expect.objectContaining({
+            userId: targetId,
+            role: "member",
+          }),
+          user: expect.objectContaining({ organizationRole: "viewer" }),
+        }),
+      ]),
+    });
+    await expect(
+      ownerRepositories.collaboration.getConversation(
+        room.value.conversation.id,
+      ),
+    ).resolves.toMatchObject({
+      conversation: {
+        version: expect.any(Number),
+      },
+      participants: expect.arrayContaining([
+        expect.objectContaining({
+          participant: expect.objectContaining({
+            userId: owner.result.appUserId,
+            participantRole: "owner",
+          }),
+        }),
+        expect.objectContaining({
+          participant: expect.objectContaining({
+            userId: targetId,
+            participantRole: "member",
+          }),
+        }),
+      ]),
+    });
+    expect(targetOwner.value.conversation.version).toBeLessThan(
+      (
+        await ownerRepositories.collaboration.getConversation(
+          room.value.conversation.id,
+        )
+      ).conversation.version,
+    );
+    await expect(
+      connection.db.query.conversationMessages.findFirst({
+        where: and(
+          eq(conversationMessages.organizationId, owner.result.organizationId),
+          eq(conversationMessages.id, request.value.message.id),
+        ),
+      }),
+    ).resolves.toMatchObject({
+      responseState: "open",
+      responseOwnerId: owner.result.appUserId,
+    });
+    await expect(
+      connection.db.query.conversationMessages.findFirst({
+        where: eq(conversationMessages.id, orphanRequest.value.message.id),
+      }),
+    ).resolves.toMatchObject({
+      responseState: "cancelled",
+      responseOwnerId: null,
+    });
+    await expect(
+      connection.db.query.conversations.findFirst({
+        where: eq(conversations.id, orphanRoom.value.conversation.id),
+      }),
+    ).resolves.toMatchObject({ archivedAt: expect.any(Date) });
+    const viewerRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: targetId,
+        requestId: "request-viewer-transition-viewer",
+      }),
+    );
+    await expect(
+      viewerRepositories.collaboration.sendMessage(
+        team.value.room.conversationId,
+        {
+          clientMessageId: "581f635d-743a-4399-939f-c7f75496d701",
+          body: "Viewers remain read-only",
+        },
+        mutation("/conversations/viewer-transition-team/messages"),
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+  });
+
+  it("removes internal collaboration grants when a member becomes a guest", async () => {
+    const owner = await onboardOwner(`guest-transition-owner-${randomUUID()}`);
+    const ownerRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: owner.result.appUserId,
+        requestId: "request-guest-transition-owner",
+      }),
+    );
+    const invite = async (label: string, role: "member" | "guest") => {
+      const authUserId = `auth-${label}-${randomUUID()}`;
+      const email = `${authUserId}@example.test`;
+      await seedAuthUser({ id: authUserId, email });
+      const tokenHash = hashInvitationToken(opaqueToken());
+      await ownerRepositories.invitations.create(
+        {
+          email,
+          role,
+          tokenHash,
+          expiresAt: new Date("2026-09-02T12:00:00.000Z"),
+          workspaceId: owner.result.workspaceId,
+        },
+        mutation(`/invitations/${label}`),
+      );
+      const identity = createPostgresRepositories(connection.db).forIdentity(
+        identityScope(authUserId, `${label}-accept`),
+      );
+      const accepted = await identity.invitations.accept(
+        tokenHash,
+        new Date("2026-08-29T12:00:00.000Z"),
+      );
+      return { authUserId, identity, appUserId: accepted.appUserId };
+    };
+    const target = await invite("guest-transition-target", "member");
+    const externalGuest = await invite("external-room-guest", "guest");
+    const team = await ownerRepositories.collaboration.createTeam(
+      {
+        workspaceId: owner.result.workspaceId,
+        name: "Internal Team before guest transition",
+        memberIds: [owner.result.appUserId, target.appUserId],
+      },
+      mutation("/teams/guest-transition"),
+    );
+    const privateRoom =
+      await ownerRepositories.collaboration.createConversation(
+        {
+          workspaceId: owner.result.workspaceId,
+          title: "Internal private room before guest transition",
+          kind: "workspace",
+          visibility: "private",
+          participantIds: [owner.result.appUserId, target.appUserId],
+        },
+        mutation("/conversations/guest-transition-private"),
+      );
+    const directRoom = await ownerRepositories.collaboration.createConversation(
+      {
+        workspaceId: owner.result.workspaceId,
+        title: "Internal direct room before guest transition",
+        kind: "direct",
+        visibility: "private",
+        participantIds: [owner.result.appUserId, target.appUserId],
+      },
+      mutation("/conversations/guest-transition-direct"),
+    );
+    const targetRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: target.appUserId,
+        requestId: "request-guest-transition-target",
+      }),
+    );
+    const externalRoom =
+      await targetRepositories.collaboration.createConversation(
+        {
+          workspaceId: owner.result.workspaceId,
+          title: "Explicit external room",
+          kind: "external",
+          visibility: "guest_scoped",
+          participantIds: [
+            owner.result.appUserId,
+            target.appUserId,
+            externalGuest.appUserId,
+          ],
+        },
+        mutation("/conversations/guest-transition-external"),
+      );
+
+    await ownerRepositories.memberships.update(
+      target.appUserId,
+      { role: "guest" },
+      mutation(`/memberships/${target.appUserId}/role/guest`),
+    );
+    const [teamGrant, teamRoomGrant, privateGrant, directGrant, externalGrant] =
+      await Promise.all([
+        connection.db.query.teamMembers.findFirst({
+          where: and(
+            eq(teamMembers.organizationId, owner.result.organizationId),
+            eq(teamMembers.teamId, team.value.team.id),
+            eq(teamMembers.userId, target.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(
+              conversationParticipants.conversationId,
+              team.value.room.conversationId,
+            ),
+            eq(conversationParticipants.userId, target.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(
+              conversationParticipants.conversationId,
+              privateRoom.value.conversation.id,
+            ),
+            eq(conversationParticipants.userId, target.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(
+              conversationParticipants.conversationId,
+              directRoom.value.conversation.id,
+            ),
+            eq(conversationParticipants.userId, target.appUserId),
+          ),
+        }),
+        connection.db.query.conversationParticipants.findFirst({
+          where: and(
+            eq(
+              conversationParticipants.organizationId,
+              owner.result.organizationId,
+            ),
+            eq(
+              conversationParticipants.conversationId,
+              externalRoom.value.conversation.id,
+            ),
+            eq(conversationParticipants.userId, target.appUserId),
+          ),
+        }),
+      ]);
+    expect(teamGrant?.removedAt).toBeInstanceOf(Date);
+    expect(teamRoomGrant?.removedAt).toBeInstanceOf(Date);
+    expect(privateGrant?.removedAt).toBeInstanceOf(Date);
+    expect(directGrant?.removedAt).toBeInstanceOf(Date);
+    expect(externalGrant).toMatchObject({
+      removedAt: null,
+      participantRole: "guest",
+    });
+    const guestRepositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(
+      createOrganizationScope({
+        organizationId: owner.result.organizationId,
+        userId: target.appUserId,
+        requestId: "request-transitioned-guest",
+      }),
+    );
+    for (const conversationId of [
+      team.value.room.conversationId,
+      privateRoom.value.conversation.id,
+      directRoom.value.conversation.id,
+    ])
+      await expect(
+        guestRepositories.collaboration.getConversation(conversationId),
+      ).rejects.toMatchObject({ code: "resource_not_found" });
+    await expect(
+      guestRepositories.collaboration.getConversation(
+        externalRoom.value.conversation.id,
+      ),
+    ).resolves.toMatchObject({
+      conversation: { id: externalRoom.value.conversation.id },
+    });
+    const guestExternal = await guestRepositories.collaboration.getConversation(
+      externalRoom.value.conversation.id,
+    );
+    await expect(
+      guestRepositories.collaboration.setConversationParticipant(
+        externalRoom.value.conversation.id,
+        externalGuest.appUserId,
+        guestExternal.conversation.version,
+        false,
+        mutation("/conversations/external/guest-manage-participants"),
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+
+    await ownerRepositories.memberships.update(
+      target.appUserId,
+      { role: "member" },
+      mutation(`/memberships/${target.appUserId}/role/member`),
+    );
+    const promotedExternalGrant =
+      await connection.db.query.conversationParticipants.findFirst({
+        where: and(
+          eq(
+            conversationParticipants.organizationId,
+            owner.result.organizationId,
+          ),
+          eq(
+            conversationParticipants.conversationId,
+            externalRoom.value.conversation.id,
+          ),
+          eq(conversationParticipants.userId, target.appUserId),
+        ),
+      });
+    expect(promotedExternalGrant?.participantRole).toBe("member");
+    await expect(
+      ownerRepositories.memberships.update(
+        externalGuest.appUserId,
+        { role: "member" },
+        mutation(`/memberships/${externalGuest.appUserId}/role/member`),
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+    await expect(
+      connection.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.organizationId, owner.result.organizationId),
+          eq(memberships.userId, externalGuest.appUserId),
+        ),
+      }),
+    ).resolves.toMatchObject({ role: "guest" });
+    await ownerRepositories.memberships.update(
+      externalGuest.appUserId,
+      { archived: true },
+      mutation(`/memberships/${externalGuest.appUserId}/revoke`),
+    );
+    await expect(
+      ownerRepositories.collaboration.getConversation(
+        externalRoom.value.conversation.id,
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    await expect(
+      connection.db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.organizationId, owner.result.organizationId),
+          eq(conversations.id, externalRoom.value.conversation.id),
+        ),
+      }),
+    ).resolves.toMatchObject({ archivedAt: expect.any(Date) });
   });
 });
 

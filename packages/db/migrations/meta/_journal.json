@@ -64,6 +64,48 @@
       "when": 1788013050162,
       "tag": "0008_lumpy_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788023923273,
+      "tag": "0009_cooing_lady_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788024064022,
+      "tag": "0010_wandering_cargill",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788024223716,
+      "tag": "0011_natural_marrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788024327783,
+      "tag": "0012_white_skrulls",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788025640931,
+      "tag": "0013_private_workspace_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788028571995,
+      "tag": "0014_legacy_collaboration_upgrade_safety",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,10 @@ import {
   type IdentityRepositories,
   type IdentityScope,
 } from "./identity-repositories.js";
+import {
+  createCollaborationRepositories,
+  type CollaborationRepositories,
+} from "./collaboration-repositories.js";
 import type {
   DecisionOutcome,
   MeaningfulChange,
@@ -22,6 +26,7 @@ import {
   isNotNull,
   isNull,
   lte,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -33,13 +38,19 @@ import {
   attentionSignals,
   auditLogs,
   boards,
+  collaborationEvents,
   comments,
+  conversationMessages,
+  conversationParticipants,
+  conversations,
   decisionOutcomes,
   idempotencyRecords,
   inboxItems,
   itemAssignees,
   itemDependencies,
   invitations,
+  invitationTeamAssignments,
+  invitationWorkspaceAssignments,
   memberships,
   organizations,
   outboxEvents,
@@ -55,6 +66,9 @@ import {
   workspaceUpdates,
   workspaceMembers,
   workspaces,
+  teams,
+  teamMembers,
+  teamRooms,
 } from "./schema.js";
 
 export type TrevvDatabase = PostgresJsDatabase<typeof databaseSchema>;
@@ -403,12 +417,14 @@ export interface CreateInvitationInput {
   role: InvitationRole;
   tokenHash: string;
   expiresAt: Date;
+  workspaceId?: string;
+  teamId?: string;
 }
 
 export type InvitationProjection = Omit<
   typeof invitations.$inferSelect,
   "tokenHash"
->;
+> & { workspaceId?: string; teamId?: string };
 
 export interface CreateBoardInput {
   workspaceId: string;
@@ -489,6 +505,7 @@ export interface CreateWorkspaceSnapshotInput {
 }
 
 export interface OrganizationScopedRepositories {
+  collaboration: CollaborationRepositories;
   organization: {
     get: () => Promise<typeof organizations.$inferSelect>;
     update: (
@@ -869,6 +886,7 @@ export interface OrganizationScopedRepositories {
 }
 
 export interface PostgresRepositories {
+  readiness(): Promise<void>;
   forOrganization(scope: TenantScope): OrganizationScopedRepositories;
   forIdentity(scope: IdentityScope): IdentityRepositories;
 }
@@ -881,6 +899,9 @@ export function createPostgresRepositories(
   database: TrevvDatabase,
 ): PostgresRepositories {
   return {
+    async readiness() {
+      await database.execute(sql`select 1`);
+    },
     forOrganization(scope) {
       assertScope(scope);
       return createScopedRepositories(database, scope, false);
@@ -1071,6 +1092,11 @@ function createScopedRepositories(
   };
 
   return {
+    collaboration: createCollaborationRepositories(
+      database,
+      scope,
+      runInTransaction,
+    ),
     organization: {
       get: () => getOrganization(database, scope),
       update: (input, context) =>
@@ -1800,6 +1826,16 @@ async function updateMembership(
           );
       }
       const now = context.now ?? new Date();
+      if (
+        input.role !== undefined &&
+        input.role !== "guest" &&
+        existing.role === "guest"
+      )
+        await assertGuestPromotionPreservesExternalRooms(
+          transaction,
+          scope,
+          userId,
+        );
       const [updated] = await transaction
         .update(memberships)
         .set({
@@ -1839,6 +1875,13 @@ async function updateMembership(
               isNull(workspaceMembers.deletedAt),
             ),
           );
+        await invalidateCollaborationGrants(
+          transaction,
+          scope,
+          userId,
+          "membership_revoked",
+          now,
+        );
         await transaction
           .delete(appUserOrganizationSelections)
           .where(
@@ -1850,6 +1893,57 @@ async function updateMembership(
               ),
             ),
           );
+      } else if (input.role === "guest" && existing.role !== "guest") {
+        await invalidateCollaborationGrants(
+          transaction,
+          scope,
+          userId,
+          "role_changed_to_guest",
+          now,
+        );
+      } else if (
+        input.role !== undefined &&
+        input.role !== "guest" &&
+        existing.role === "guest"
+      ) {
+        await refreshExternalParticipantRoles(
+          transaction,
+          scope,
+          userId,
+          "member",
+          now,
+        );
+        if (input.role === "viewer") {
+          await repairViewerCollaborationOwnership(
+            transaction,
+            scope,
+            userId,
+            now,
+          );
+          await handoffOpenResponseObligations(
+            transaction,
+            scope,
+            userId,
+            undefined,
+            now,
+            "role_changed_to_viewer",
+          );
+        }
+      } else if (input.role === "viewer" && existing.role !== "viewer") {
+        await repairViewerCollaborationOwnership(
+          transaction,
+          scope,
+          userId,
+          now,
+        );
+        await handoffOpenResponseObligations(
+          transaction,
+          scope,
+          userId,
+          undefined,
+          now,
+          "role_changed_to_viewer",
+        );
       }
       await writeAuditAndOutbox(transaction, scope, {
         action:
@@ -1869,6 +1963,7 @@ async function updateMembership(
         payload: {
           active: updated.archivedAt === null && updated.deletedAt === null,
           fields: Object.keys(input).sort(),
+          role: updated.role,
           userId,
         },
         now,
@@ -1877,6 +1972,1099 @@ async function updateMembership(
     },
     (value) => restoreRowWithDates(value, membershipDateFields),
   );
+}
+
+type CollaborationGrantInvalidationReason =
+  "membership_revoked" | "role_changed_to_guest";
+
+async function repairViewerCollaborationOwnership(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  userId: string,
+  now: Date,
+) {
+  const [leadGrants, roomOwnerGrants] = await Promise.all([
+    transaction
+      .select({
+        teamId: teamMembers.teamId,
+        workspaceId: teamMembers.workspaceId,
+        conversationId: teamRooms.conversationId,
+        role: teamMembers.role,
+      })
+      .from(teamMembers)
+      .leftJoin(
+        teamRooms,
+        and(
+          eq(teamRooms.organizationId, teamMembers.organizationId),
+          eq(teamRooms.teamId, teamMembers.teamId),
+        ),
+      )
+      .where(
+        and(
+          eq(teamMembers.organizationId, scope.organizationId),
+          eq(teamMembers.userId, userId),
+          eq(teamMembers.role, "lead"),
+          isNull(teamMembers.removedAt),
+        ),
+      ),
+    transaction
+      .select({
+        conversationId: conversationParticipants.conversationId,
+        workspaceId: conversationParticipants.workspaceId,
+        kind: conversations.kind,
+        visibility: conversations.visibility,
+        participantRole: conversationParticipants.participantRole,
+      })
+      .from(conversationParticipants)
+      .innerJoin(
+        conversations,
+        and(
+          eq(
+            conversations.organizationId,
+            conversationParticipants.organizationId,
+          ),
+          eq(conversations.id, conversationParticipants.conversationId),
+          isNull(conversations.archivedAt),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(conversationParticipants.organizationId, scope.organizationId),
+          eq(conversationParticipants.userId, userId),
+          eq(conversationParticipants.participantRole, "owner"),
+          inArray(conversations.kind, ["workspace", "external"]),
+          isNull(conversationParticipants.removedAt),
+        ),
+      )
+      .for("update"),
+  ]);
+
+  const teamIds = [...new Set(leadGrants.map(({ teamId }) => teamId))];
+  const teamConversationIds = [
+    ...new Set(
+      leadGrants.flatMap(({ conversationId }) =>
+        conversationId ? [conversationId] : [],
+      ),
+    ),
+  ];
+  const roomConversationIds = [
+    ...new Set(roomOwnerGrants.map(({ conversationId }) => conversationId)),
+  ];
+
+  if (teamIds.length) {
+    await transaction
+      .update(teamMembers)
+      .set({
+        role: "member",
+        version: sql`${teamMembers.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(teamMembers.organizationId, scope.organizationId),
+          eq(teamMembers.userId, userId),
+          inArray(teamMembers.teamId, teamIds),
+          eq(teamMembers.role, "lead"),
+          isNull(teamMembers.removedAt),
+        ),
+      );
+    await transaction
+      .update(teams)
+      .set({ version: sql`${teams.version} + 1`, updatedAt: now })
+      .where(
+        and(
+          eq(teams.organizationId, scope.organizationId),
+          inArray(teams.id, teamIds),
+          isNull(teams.deletedAt),
+        ),
+      );
+  }
+
+  const ownedConversationIds = [
+    ...new Set([...teamConversationIds, ...roomConversationIds]),
+  ];
+  if (ownedConversationIds.length)
+    await transaction
+      .update(conversationParticipants)
+      .set({
+        participantRole: "member",
+        version: sql`${conversationParticipants.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(conversationParticipants.organizationId, scope.organizationId),
+          eq(conversationParticipants.userId, userId),
+          inArray(
+            conversationParticipants.conversationId,
+            ownedConversationIds,
+          ),
+          eq(conversationParticipants.participantRole, "owner"),
+          isNull(conversationParticipants.removedAt),
+        ),
+      );
+
+  await repairTeamLifecyclesAfterGrantRemoval(
+    transaction,
+    scope,
+    leadGrants,
+    userId,
+    now,
+  );
+  await repairConversationLifecyclesAfterGrantRemoval(
+    transaction,
+    scope,
+    roomOwnerGrants,
+    userId,
+    now,
+  );
+
+  if (ownedConversationIds.length)
+    await transaction
+      .update(conversations)
+      .set({ version: sql`${conversations.version} + 1`, updatedAt: now })
+      .where(
+        and(
+          eq(conversations.organizationId, scope.organizationId),
+          inArray(conversations.id, ownedConversationIds),
+          isNull(conversations.deletedAt),
+        ),
+      );
+}
+
+async function invalidateCollaborationGrants(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  userId: string,
+  reason: CollaborationGrantInvalidationReason,
+  now: Date,
+) {
+  const [teamGrants, participantGrants] = await Promise.all([
+    transaction
+      .select({
+        teamId: teamMembers.teamId,
+        workspaceId: teamMembers.workspaceId,
+        conversationId: teamRooms.conversationId,
+        role: teamMembers.role,
+      })
+      .from(teamMembers)
+      .leftJoin(
+        teamRooms,
+        and(
+          eq(teamRooms.organizationId, teamMembers.organizationId),
+          eq(teamRooms.teamId, teamMembers.teamId),
+        ),
+      )
+      .where(
+        and(
+          eq(teamMembers.organizationId, scope.organizationId),
+          eq(teamMembers.userId, userId),
+          isNull(teamMembers.removedAt),
+        ),
+      ),
+    transaction
+      .select({
+        conversationId: conversationParticipants.conversationId,
+        workspaceId: conversationParticipants.workspaceId,
+        kind: conversations.kind,
+        visibility: conversations.visibility,
+        participantRole: conversationParticipants.participantRole,
+      })
+      .from(conversationParticipants)
+      .innerJoin(
+        conversations,
+        and(
+          eq(
+            conversations.organizationId,
+            conversationParticipants.organizationId,
+          ),
+          eq(conversations.id, conversationParticipants.conversationId),
+        ),
+      )
+      .where(
+        and(
+          eq(conversationParticipants.organizationId, scope.organizationId),
+          eq(conversationParticipants.userId, userId),
+          isNull(conversationParticipants.removedAt),
+        ),
+      ),
+  ]);
+  const revokedParticipants =
+    reason === "membership_revoked"
+      ? participantGrants
+      : participantGrants.filter(({ kind }) => kind !== "external");
+  const retainedExternalParticipants =
+    reason === "role_changed_to_guest"
+      ? participantGrants.filter(({ kind }) => kind === "external")
+      : [];
+  const teamIds = [...new Set(teamGrants.map(({ teamId }) => teamId))];
+  const revokedConversationIds = [
+    ...new Set(revokedParticipants.map(({ conversationId }) => conversationId)),
+  ];
+  const retainedExternalConversationIds = [
+    ...new Set(
+      retainedExternalParticipants.map(({ conversationId }) => conversationId),
+    ),
+  ];
+
+  if (teamIds.length) {
+    await transaction
+      .update(teamMembers)
+      .set({
+        removedAt: now,
+        version: sql`${teamMembers.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(teamMembers.organizationId, scope.organizationId),
+          eq(teamMembers.userId, userId),
+          inArray(teamMembers.teamId, teamIds),
+          isNull(teamMembers.removedAt),
+        ),
+      );
+    await transaction
+      .update(teams)
+      .set({ version: sql`${teams.version} + 1`, updatedAt: now })
+      .where(
+        and(
+          eq(teams.organizationId, scope.organizationId),
+          inArray(teams.id, teamIds),
+          isNull(teams.deletedAt),
+        ),
+      );
+  }
+  if (revokedConversationIds.length) {
+    await transaction
+      .update(conversationParticipants)
+      .set({
+        removedAt: now,
+        version: sql`${conversationParticipants.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(conversationParticipants.organizationId, scope.organizationId),
+          eq(conversationParticipants.userId, userId),
+          inArray(
+            conversationParticipants.conversationId,
+            revokedConversationIds,
+          ),
+          isNull(conversationParticipants.removedAt),
+        ),
+      );
+  }
+  if (retainedExternalConversationIds.length)
+    await updateExternalParticipantRoles(
+      transaction,
+      scope,
+      userId,
+      retainedExternalConversationIds,
+      "guest",
+      now,
+    );
+  await repairTeamLifecyclesAfterGrantRemoval(
+    transaction,
+    scope,
+    teamGrants,
+    userId,
+    now,
+  );
+  await repairConversationLifecyclesAfterGrantRemoval(
+    transaction,
+    scope,
+    [...revokedParticipants, ...retainedExternalParticipants],
+    userId,
+    now,
+  );
+  await handoffOpenResponseObligations(
+    transaction,
+    scope,
+    userId,
+    revokedConversationIds,
+    now,
+    reason,
+  );
+  const changedConversationIds = [
+    ...new Set([...revokedConversationIds, ...retainedExternalConversationIds]),
+  ];
+  if (changedConversationIds.length)
+    await transaction
+      .update(conversations)
+      .set({ version: sql`${conversations.version} + 1`, updatedAt: now })
+      .where(
+        and(
+          eq(conversations.organizationId, scope.organizationId),
+          inArray(conversations.id, changedConversationIds),
+          isNull(conversations.deletedAt),
+        ),
+      );
+
+  await transaction
+    .delete(idempotencyRecords)
+    .where(
+      and(
+        eq(idempotencyRecords.organizationId, scope.organizationId),
+        eq(idempotencyRecords.userId, userId),
+        eq(idempotencyRecords.state, "completed"),
+      ),
+    );
+
+  for (const grant of teamGrants)
+    await publishCollaborationGrantChange(transaction, scope, {
+      workspaceId: grant.workspaceId,
+      conversationId: grant.conversationId,
+      eventType: "team.membership_changed",
+      aggregateType: "team",
+      aggregateId: grant.teamId,
+      payload: { userId, active: false, reason },
+      now,
+    });
+  for (const grant of revokedParticipants)
+    await publishCollaborationGrantChange(transaction, scope, {
+      workspaceId: grant.workspaceId,
+      conversationId: grant.conversationId,
+      eventType: "conversation.participants_changed",
+      aggregateType: "conversation",
+      aggregateId: grant.conversationId,
+      payload: { userId, active: false, reason },
+      now,
+    });
+  for (const grant of retainedExternalParticipants)
+    await publishCollaborationGrantChange(transaction, scope, {
+      workspaceId: grant.workspaceId,
+      conversationId: grant.conversationId,
+      eventType: "conversation.participants_changed",
+      aggregateType: "conversation",
+      aggregateId: grant.conversationId,
+      payload: {
+        userId,
+        active: true,
+        participantRole: "guest",
+        reason,
+      },
+      now,
+    });
+}
+
+async function repairTeamLifecyclesAfterGrantRemoval(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  grants: Array<{
+    teamId: string;
+    workspaceId: string;
+    conversationId: string | null;
+    role: "lead" | "member";
+  }>,
+  removedUserId: string,
+  now: Date,
+) {
+  for (const grant of grants) {
+    if (grant.role !== "lead") continue;
+    const [candidate] = await transaction
+      .select({ userId: teamMembers.userId })
+      .from(teamMembers)
+      .innerJoin(
+        memberships,
+        and(
+          eq(memberships.organizationId, teamMembers.organizationId),
+          eq(memberships.userId, teamMembers.userId),
+          ne(memberships.role, "guest"),
+          ne(memberships.role, "viewer"),
+          isNull(memberships.archivedAt),
+          isNull(memberships.deletedAt),
+        ),
+      )
+      .innerJoin(
+        workspaceMembers,
+        and(
+          eq(workspaceMembers.organizationId, teamMembers.organizationId),
+          eq(workspaceMembers.workspaceId, teamMembers.workspaceId),
+          eq(workspaceMembers.userId, teamMembers.userId),
+          isNull(workspaceMembers.archivedAt),
+          isNull(workspaceMembers.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(teamMembers.organizationId, scope.organizationId),
+          eq(teamMembers.teamId, grant.teamId),
+          ne(teamMembers.userId, removedUserId),
+          isNull(teamMembers.removedAt),
+        ),
+      )
+      .orderBy(asc(teamMembers.userId))
+      .limit(1)
+      .for("update");
+    if (!candidate || !grant.conversationId) {
+      await transaction
+        .update(teams)
+        .set({
+          archivedAt: now,
+          version: sql`${teams.version} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(teams.organizationId, scope.organizationId),
+            eq(teams.id, grant.teamId),
+            isNull(teams.archivedAt),
+            isNull(teams.deletedAt),
+          ),
+        );
+      if (grant.conversationId)
+        await archiveConversation(
+          transaction,
+          scope,
+          grant.conversationId,
+          now,
+        );
+      await publishCollaborationGrantChange(transaction, scope, {
+        workspaceId: grant.workspaceId,
+        conversationId: grant.conversationId,
+        eventType: "team.membership_changed",
+        aggregateType: "team",
+        aggregateId: grant.teamId,
+        payload: {
+          active: false,
+          archived: true,
+          reason: "no_eligible_team_lead",
+        },
+        now,
+      });
+      continue;
+    }
+    await transaction
+      .update(teamMembers)
+      .set({
+        role: "lead",
+        version: sql`${teamMembers.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(teamMembers.organizationId, scope.organizationId),
+          eq(teamMembers.teamId, grant.teamId),
+          eq(teamMembers.userId, candidate.userId),
+          isNull(teamMembers.removedAt),
+        ),
+      );
+    await transaction
+      .update(conversationParticipants)
+      .set({
+        participantRole: "member",
+        version: sql`${conversationParticipants.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(conversationParticipants.organizationId, scope.organizationId),
+          eq(conversationParticipants.conversationId, grant.conversationId),
+          eq(conversationParticipants.participantRole, "owner"),
+          isNull(conversationParticipants.removedAt),
+        ),
+      );
+    await transaction
+      .update(conversationParticipants)
+      .set({
+        participantRole: "owner",
+        version: sql`${conversationParticipants.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(conversationParticipants.organizationId, scope.organizationId),
+          eq(conversationParticipants.conversationId, grant.conversationId),
+          eq(conversationParticipants.userId, candidate.userId),
+          isNull(conversationParticipants.removedAt),
+        ),
+      );
+    await publishCollaborationGrantChange(transaction, scope, {
+      workspaceId: grant.workspaceId,
+      conversationId: grant.conversationId,
+      eventType: "team.membership_changed",
+      aggregateType: "team",
+      aggregateId: grant.teamId,
+      payload: {
+        leadUserId: candidate.userId,
+        reason: "automatic_lead_handoff",
+      },
+      now,
+    });
+  }
+}
+
+async function repairConversationLifecyclesAfterGrantRemoval(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  grants: Array<{
+    conversationId: string;
+    workspaceId: string;
+    kind: (typeof conversations.$inferSelect)["kind"];
+    visibility: (typeof conversations.$inferSelect)["visibility"];
+    participantRole: string;
+  }>,
+  removedUserId: string,
+  now: Date,
+) {
+  const uniqueGrants = new Map(
+    grants.map((grant) => [grant.conversationId, grant]),
+  );
+  for (const grant of uniqueGrants.values()) {
+    if (grant.kind === "team") continue;
+    const [conversation] = await transaction
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.organizationId, scope.organizationId),
+          eq(conversations.id, grant.conversationId),
+          isNull(conversations.archivedAt),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!conversation) continue;
+    let archiveReason: string | null =
+      conversation.kind === "direct" ? "direct_participant_removed" : null;
+    if (conversation.kind === "external") {
+      const [remainingGuest] = await transaction
+        .select({ userId: conversationParticipants.userId })
+        .from(conversationParticipants)
+        .innerJoin(
+          memberships,
+          and(
+            eq(
+              memberships.organizationId,
+              conversationParticipants.organizationId,
+            ),
+            eq(memberships.userId, conversationParticipants.userId),
+            eq(memberships.role, "guest"),
+            isNull(memberships.archivedAt),
+            isNull(memberships.deletedAt),
+          ),
+        )
+        .where(
+          and(
+            eq(conversationParticipants.organizationId, scope.organizationId),
+            eq(conversationParticipants.conversationId, conversation.id),
+            isNull(conversationParticipants.removedAt),
+          ),
+        )
+        .limit(1);
+      if (!remainingGuest) archiveReason = "external_room_lost_last_guest";
+    }
+    if (!archiveReason) {
+      const [owner] = await transaction
+        .select({ userId: conversationParticipants.userId })
+        .from(conversationParticipants)
+        .innerJoin(
+          memberships,
+          and(
+            eq(
+              memberships.organizationId,
+              conversationParticipants.organizationId,
+            ),
+            eq(memberships.userId, conversationParticipants.userId),
+            ne(memberships.role, "guest"),
+            ne(memberships.role, "viewer"),
+            isNull(memberships.archivedAt),
+            isNull(memberships.deletedAt),
+          ),
+        )
+        .where(
+          and(
+            eq(conversationParticipants.organizationId, scope.organizationId),
+            eq(conversationParticipants.conversationId, conversation.id),
+            eq(conversationParticipants.participantRole, "owner"),
+            isNull(conversationParticipants.removedAt),
+          ),
+        )
+        .limit(1);
+      if (!owner) {
+        const [candidate] = await transaction
+          .select({ userId: conversationParticipants.userId })
+          .from(conversationParticipants)
+          .innerJoin(
+            memberships,
+            and(
+              eq(
+                memberships.organizationId,
+                conversationParticipants.organizationId,
+              ),
+              eq(memberships.userId, conversationParticipants.userId),
+              ne(memberships.role, "guest"),
+              ne(memberships.role, "viewer"),
+              isNull(memberships.archivedAt),
+              isNull(memberships.deletedAt),
+            ),
+          )
+          .innerJoin(
+            workspaceMembers,
+            and(
+              eq(
+                workspaceMembers.organizationId,
+                conversationParticipants.organizationId,
+              ),
+              eq(
+                workspaceMembers.workspaceId,
+                conversationParticipants.workspaceId,
+              ),
+              eq(workspaceMembers.userId, conversationParticipants.userId),
+              isNull(workspaceMembers.archivedAt),
+              isNull(workspaceMembers.deletedAt),
+            ),
+          )
+          .where(
+            and(
+              eq(conversationParticipants.organizationId, scope.organizationId),
+              eq(conversationParticipants.conversationId, conversation.id),
+              ne(conversationParticipants.userId, removedUserId),
+              isNull(conversationParticipants.removedAt),
+            ),
+          )
+          .orderBy(asc(conversationParticipants.userId))
+          .limit(1);
+        if (candidate)
+          await transaction
+            .update(conversationParticipants)
+            .set({
+              participantRole: "owner",
+              version: sql`${conversationParticipants.version} + 1`,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(
+                  conversationParticipants.organizationId,
+                  scope.organizationId,
+                ),
+                eq(conversationParticipants.conversationId, conversation.id),
+                eq(conversationParticipants.userId, candidate.userId),
+                isNull(conversationParticipants.removedAt),
+              ),
+            );
+        else archiveReason = "no_eligible_conversation_owner";
+      }
+    }
+    if (archiveReason)
+      await archiveConversation(transaction, scope, conversation.id, now);
+    await publishCollaborationGrantChange(transaction, scope, {
+      workspaceId: grant.workspaceId,
+      conversationId: conversation.id,
+      eventType: "conversation.participants_changed",
+      aggregateType: "conversation",
+      aggregateId: conversation.id,
+      payload: archiveReason
+        ? { active: false, archived: true, reason: archiveReason }
+        : { active: true, reason: "automatic_owner_handoff" },
+      now,
+    });
+  }
+}
+
+async function archiveConversation(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  conversationId: string,
+  now: Date,
+) {
+  await transaction
+    .update(conversations)
+    .set({
+      archivedAt: now,
+      version: sql`${conversations.version} + 1`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(conversations.organizationId, scope.organizationId),
+        eq(conversations.id, conversationId),
+        isNull(conversations.archivedAt),
+        isNull(conversations.deletedAt),
+      ),
+    );
+}
+
+async function handoffOpenResponseObligations(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  previousOwnerId: string,
+  conversationIds: string[] | undefined,
+  now: Date,
+  reason: string,
+) {
+  if (conversationIds && !conversationIds.length) return;
+  const obligations = await transaction
+    .select({
+      id: conversationMessages.id,
+      conversationId: conversationMessages.conversationId,
+      workspaceId: conversationMessages.workspaceId,
+      kind: conversations.kind,
+      archivedAt: conversations.archivedAt,
+    })
+    .from(conversationMessages)
+    .innerJoin(
+      conversations,
+      and(
+        eq(conversations.organizationId, conversationMessages.organizationId),
+        eq(conversations.id, conversationMessages.conversationId),
+      ),
+    )
+    .where(
+      and(
+        eq(conversationMessages.organizationId, scope.organizationId),
+        eq(conversationMessages.responseOwnerId, previousOwnerId),
+        eq(conversationMessages.responseState, "open"),
+        gt(conversationMessages.expiresAt, now),
+        isNull(conversationMessages.redactedAt),
+        isNull(conversationMessages.deletedAt),
+        conversationIds
+          ? inArray(conversationMessages.conversationId, conversationIds)
+          : undefined,
+      ),
+    )
+    .for("update");
+  for (const obligation of obligations) {
+    const [candidate] = obligation.archivedAt
+      ? []
+      : await transaction
+          .select({
+            userId: conversationParticipants.userId,
+            participantRole: conversationParticipants.participantRole,
+          })
+          .from(conversationParticipants)
+          .innerJoin(
+            memberships,
+            and(
+              eq(
+                memberships.organizationId,
+                conversationParticipants.organizationId,
+              ),
+              eq(memberships.userId, conversationParticipants.userId),
+              ne(memberships.role, "viewer"),
+              obligation.kind === "external"
+                ? undefined
+                : ne(memberships.role, "guest"),
+              isNull(memberships.archivedAt),
+              isNull(memberships.deletedAt),
+            ),
+          )
+          .leftJoin(
+            teamRooms,
+            and(
+              eq(teamRooms.organizationId, scope.organizationId),
+              eq(teamRooms.conversationId, obligation.conversationId),
+            ),
+          )
+          .leftJoin(
+            teamMembers,
+            and(
+              eq(teamMembers.organizationId, scope.organizationId),
+              eq(teamMembers.teamId, teamRooms.teamId),
+              eq(teamMembers.userId, conversationParticipants.userId),
+              isNull(teamMembers.removedAt),
+            ),
+          )
+          .where(
+            and(
+              eq(conversationParticipants.organizationId, scope.organizationId),
+              eq(
+                conversationParticipants.conversationId,
+                obligation.conversationId,
+              ),
+              ne(conversationParticipants.userId, previousOwnerId),
+              isNull(conversationParticipants.removedAt),
+              obligation.kind === "team"
+                ? eq(teamMembers.userId, conversationParticipants.userId)
+                : undefined,
+            ),
+          )
+          .orderBy(
+            sql`case when ${conversationParticipants.participantRole} = 'owner' then 0 else 1 end`,
+            asc(conversationParticipants.userId),
+          )
+          .limit(1);
+    const responseState = candidate ? "open" : "cancelled";
+    await transaction
+      .update(conversationMessages)
+      .set({
+        responseOwnerId: candidate?.userId ?? null,
+        responseState,
+        version: sql`${conversationMessages.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(conversationMessages.organizationId, scope.organizationId),
+          eq(conversationMessages.id, obligation.id),
+          eq(conversationMessages.responseOwnerId, previousOwnerId),
+          eq(conversationMessages.responseState, "open"),
+        ),
+      );
+    await publishResponseHandoff(transaction, scope, {
+      workspaceId: obligation.workspaceId,
+      conversationId: obligation.conversationId,
+      messageId: obligation.id,
+      previousOwnerId,
+      ...(candidate ? { responseOwnerId: candidate.userId } : {}),
+      responseState,
+      reason,
+      now,
+    });
+  }
+}
+
+async function publishResponseHandoff(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  input: {
+    workspaceId: string;
+    conversationId: string;
+    messageId: string;
+    previousOwnerId: string;
+    responseOwnerId?: string;
+    responseState: "open" | "cancelled";
+    reason: string;
+    now: Date;
+  },
+) {
+  const payload = {
+    conversationId: input.conversationId,
+    messageId: input.messageId,
+    previousResponseOwnerId: input.previousOwnerId,
+    responseOwnerId: input.responseOwnerId ?? null,
+    responseState: input.responseState,
+    reason: input.reason,
+  };
+  await writeAuditAndOutbox(transaction, scope, {
+    action: "message.response_changed",
+    aggregateType: "message",
+    aggregateId: input.messageId,
+    eventType: "message.response_changed",
+    payload,
+    now: input.now,
+  });
+  await transaction.insert(collaborationEvents).values({
+    id: crypto.randomUUID(),
+    organizationId: scope.organizationId,
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+    actorId: scope.userId,
+    eventType: "message.response_changed",
+    aggregateType: "message",
+    aggregateId: input.messageId,
+    payload,
+    expiresAt: new Date(input.now.getTime() + 7 * 86_400_000),
+    createdAt: input.now,
+  });
+}
+
+async function refreshExternalParticipantRoles(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  userId: string,
+  participantRole: "member",
+  now: Date,
+) {
+  const grants = await transaction
+    .select({
+      conversationId: conversationParticipants.conversationId,
+      workspaceId: conversationParticipants.workspaceId,
+    })
+    .from(conversationParticipants)
+    .innerJoin(
+      conversations,
+      and(
+        eq(
+          conversations.organizationId,
+          conversationParticipants.organizationId,
+        ),
+        eq(conversations.id, conversationParticipants.conversationId),
+        eq(conversations.kind, "external"),
+      ),
+    )
+    .where(
+      and(
+        eq(conversationParticipants.organizationId, scope.organizationId),
+        eq(conversationParticipants.userId, userId),
+        isNull(conversationParticipants.removedAt),
+      ),
+    );
+  const conversationIds = [
+    ...new Set(grants.map(({ conversationId }) => conversationId)),
+  ];
+  if (!conversationIds.length) return;
+  await updateExternalParticipantRoles(
+    transaction,
+    scope,
+    userId,
+    conversationIds,
+    participantRole,
+    now,
+  );
+  await transaction
+    .update(conversations)
+    .set({ version: sql`${conversations.version} + 1`, updatedAt: now })
+    .where(
+      and(
+        eq(conversations.organizationId, scope.organizationId),
+        inArray(conversations.id, conversationIds),
+        isNull(conversations.deletedAt),
+      ),
+    );
+  for (const grant of grants)
+    await publishCollaborationGrantChange(transaction, scope, {
+      workspaceId: grant.workspaceId,
+      conversationId: grant.conversationId,
+      eventType: "conversation.participants_changed",
+      aggregateType: "conversation",
+      aggregateId: grant.conversationId,
+      payload: {
+        userId,
+        active: true,
+        participantRole,
+        reason: "role_changed_from_guest",
+      },
+      now,
+    });
+}
+
+async function updateExternalParticipantRoles(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  userId: string,
+  conversationIds: string[],
+  participantRole: "guest" | "member",
+  now: Date,
+) {
+  await transaction
+    .update(conversationParticipants)
+    .set({
+      participantRole,
+      version: sql`${conversationParticipants.version} + 1`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(conversationParticipants.organizationId, scope.organizationId),
+        eq(conversationParticipants.userId, userId),
+        inArray(conversationParticipants.conversationId, conversationIds),
+        isNull(conversationParticipants.removedAt),
+      ),
+    );
+}
+
+async function assertGuestPromotionPreservesExternalRooms(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  userId: string,
+) {
+  const affectedRooms = await transaction
+    .select({ conversationId: conversationParticipants.conversationId })
+    .from(conversationParticipants)
+    .innerJoin(
+      conversations,
+      and(
+        eq(
+          conversations.organizationId,
+          conversationParticipants.organizationId,
+        ),
+        eq(conversations.id, conversationParticipants.conversationId),
+        eq(conversations.kind, "external"),
+        eq(conversations.visibility, "guest_scoped"),
+        isNull(conversations.archivedAt),
+        isNull(conversations.deletedAt),
+      ),
+    )
+    .where(
+      and(
+        eq(conversationParticipants.organizationId, scope.organizationId),
+        eq(conversationParticipants.userId, userId),
+        isNull(conversationParticipants.removedAt),
+      ),
+    );
+  const conversationIds = [
+    ...new Set(affectedRooms.map(({ conversationId }) => conversationId)),
+  ];
+  if (!conversationIds.length) return;
+  await transaction
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.organizationId, scope.organizationId),
+        inArray(conversations.id, conversationIds),
+      ),
+    )
+    .for("update");
+  const roomsWithAnotherGuest = await transaction
+    .selectDistinct({ conversationId: conversationParticipants.conversationId })
+    .from(conversationParticipants)
+    .innerJoin(
+      memberships,
+      and(
+        eq(memberships.organizationId, conversationParticipants.organizationId),
+        eq(memberships.userId, conversationParticipants.userId),
+        eq(memberships.role, "guest"),
+        isNull(memberships.archivedAt),
+        isNull(memberships.deletedAt),
+      ),
+    )
+    .where(
+      and(
+        eq(conversationParticipants.organizationId, scope.organizationId),
+        inArray(conversationParticipants.conversationId, conversationIds),
+        ne(conversationParticipants.userId, userId),
+        isNull(conversationParticipants.removedAt),
+      ),
+    );
+  const safeRooms = new Set(
+    roomsWithAnotherGuest.map(({ conversationId }) => conversationId),
+  );
+  if (conversationIds.some((conversationId) => !safeRooms.has(conversationId)))
+    throw new RepositoryError(
+      "constraint_conflict",
+      "Assign another active guest to every external room before promoting this member.",
+    );
+}
+
+async function publishCollaborationGrantChange(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  input: {
+    workspaceId: string;
+    conversationId: string | null;
+    eventType: "team.membership_changed" | "conversation.participants_changed";
+    aggregateType: "team" | "conversation";
+    aggregateId: string;
+    payload: Record<string, unknown>;
+    now: Date;
+  },
+) {
+  await writeAuditAndOutbox(transaction, scope, {
+    action: input.eventType,
+    aggregateType: input.aggregateType,
+    aggregateId: input.aggregateId,
+    eventType: input.eventType,
+    payload: input.payload,
+    now: input.now,
+  });
+  await transaction.insert(collaborationEvents).values({
+    id: crypto.randomUUID(),
+    organizationId: scope.organizationId,
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+    actorId: scope.userId,
+    eventType: input.eventType,
+    aggregateType: input.aggregateType,
+    aggregateId: input.aggregateId,
+    payload: input.payload,
+    expiresAt: new Date(input.now.getTime() + 7 * 86_400_000),
+    createdAt: input.now,
+  });
 }
 
 async function listInvitations(
@@ -1893,7 +3081,9 @@ async function listInvitations(
       ),
     )
     .orderBy(desc(invitations.createdAt));
-  return rows.map(projectInvitation);
+  return Promise.all(
+    rows.map((row) => projectInvitationWithAssignments(database, row)),
+  );
 }
 
 async function getInvitation(
@@ -1902,7 +3092,7 @@ async function getInvitation(
   id: string,
 ) {
   const row = await getInvitationRow(database, scope.organizationId, id);
-  return projectInvitation(row);
+  return projectInvitationWithAssignments(database, row);
 }
 
 async function getInvitationRow(
@@ -1934,7 +3124,7 @@ async function createInvitation(
   assertInvitationTokenHash(input.tokenHash);
   assertInvitationRole(input.role);
   const email = normalizeInvitationEmail(input.email);
-  return withIdempotency(
+  return withIdempotency<InvitationProjection>(
     transaction,
     scope,
     context,
@@ -1943,6 +3133,47 @@ async function createInvitation(
       await assertActorMembership(transaction, scope);
       const now = context.now ?? new Date();
       assertInvitationExpiry(input.expiresAt, now);
+      let assignedWorkspaceId = input.workspaceId;
+      if (input.teamId && input.role === "guest")
+        throw new RepositoryError(
+          "constraint_conflict",
+          "Guests cannot be assigned to internal Teams.",
+        );
+      if (input.teamId) {
+        const [team] = await transaction
+          .select({ workspaceId: teams.workspaceId })
+          .from(teams)
+          .where(
+            and(
+              eq(teams.organizationId, scope.organizationId),
+              eq(teams.id, input.teamId),
+              isNull(teams.archivedAt),
+              isNull(teams.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (
+          !team ||
+          (assignedWorkspaceId && assignedWorkspaceId !== team.workspaceId)
+        )
+          throw notFound();
+        assignedWorkspaceId = team.workspaceId;
+      }
+      if (assignedWorkspaceId) {
+        const [workspace] = await transaction
+          .select({ id: workspaces.id })
+          .from(workspaces)
+          .where(
+            and(
+              eq(workspaces.organizationId, scope.organizationId),
+              eq(workspaces.id, assignedWorkspaceId),
+              isNull(workspaces.archivedAt),
+              isNull(workspaces.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!workspace) throw notFound();
+      }
       const [existingMember] = await transaction
         .select({ userId: memberships.userId })
         .from(memberships)
@@ -1983,6 +3214,23 @@ async function createInvitation(
           "constraint_conflict",
           "An active invitation already exists for this email address or token.",
         );
+      if (assignedWorkspaceId)
+        await transaction.insert(invitationWorkspaceAssignments).values({
+          organizationId: scope.organizationId,
+          invitationId: created.id,
+          workspaceId: assignedWorkspaceId,
+          canManage: input.role === "workspace_lead",
+          createdAt: now,
+        });
+      if (assignedWorkspaceId && input.teamId)
+        await transaction.insert(invitationTeamAssignments).values({
+          organizationId: scope.organizationId,
+          invitationId: created.id,
+          workspaceId: assignedWorkspaceId,
+          teamId: input.teamId,
+          role: "member",
+          createdAt: now,
+        });
       await writeAuditAndOutbox(transaction, scope, {
         action: "invitation.created",
         aggregateType: "invitation",
@@ -1991,7 +3239,12 @@ async function createInvitation(
         payload: { email: created.email, role: created.role },
         now,
       });
-      return projectInvitation(created);
+      const projection: InvitationProjection = {
+        ...projectInvitation(created),
+        ...(assignedWorkspaceId ? { workspaceId: assignedWorkspaceId } : {}),
+        ...(input.teamId ? { teamId: input.teamId } : {}),
+      };
+      return projection;
     },
     restoreInvitationProjection,
     true,
@@ -2062,7 +3315,7 @@ async function resendInvitation(
         payload: { expiresAt: input.expiresAt.toISOString() },
         now,
       });
-      return projectInvitation(updated);
+      return projectInvitationWithAssignments(transaction, updated);
     },
     restoreInvitationProjection,
     true,
@@ -2120,7 +3373,7 @@ async function revokeInvitation(
         payload: {},
         now,
       });
-      return projectInvitation(revoked);
+      return projectInvitationWithAssignments(transaction, revoked);
     },
     restoreInvitationProjection,
   );
@@ -2192,7 +3445,7 @@ async function recordInvitationDelivery(
         payload: {},
         now,
       });
-      return projectInvitation(updated);
+      return projectInvitationWithAssignments(transaction, updated);
     },
     restoreInvitationProjection,
   );
@@ -2232,6 +3485,45 @@ function projectInvitation(
 ): InvitationProjection {
   const { tokenHash: _tokenHash, ...projection } = invitation;
   return projection;
+}
+
+async function projectInvitationWithAssignments(
+  database: TrevvDatabase,
+  invitation: typeof invitations.$inferSelect,
+): Promise<InvitationProjection> {
+  const [[workspace], [team]] = await Promise.all([
+    database
+      .select({ workspaceId: invitationWorkspaceAssignments.workspaceId })
+      .from(invitationWorkspaceAssignments)
+      .where(
+        and(
+          eq(
+            invitationWorkspaceAssignments.organizationId,
+            invitation.organizationId,
+          ),
+          eq(invitationWorkspaceAssignments.invitationId, invitation.id),
+        ),
+      )
+      .limit(1),
+    database
+      .select({ teamId: invitationTeamAssignments.teamId })
+      .from(invitationTeamAssignments)
+      .where(
+        and(
+          eq(
+            invitationTeamAssignments.organizationId,
+            invitation.organizationId,
+          ),
+          eq(invitationTeamAssignments.invitationId, invitation.id),
+        ),
+      )
+      .limit(1),
+  ]);
+  return {
+    ...projectInvitation(invitation),
+    ...(workspace ? { workspaceId: workspace.workspaceId } : {}),
+    ...(team ? { teamId: team.teamId } : {}),
+  };
 }
 
 async function lockOrganization(
