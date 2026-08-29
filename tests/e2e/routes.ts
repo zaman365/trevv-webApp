@@ -31,7 +31,24 @@ const escapeForRegExp = (value: string) =>
  * Asserting the landing URL keeps that class of false positive out.
  */
 export async function gotoCanonical(page: Page, route: string) {
-  await page.goto(route);
+  const current = page.url().startsWith("http") ? new URL(page.url()) : null;
+  const target = current ? new URL(route, current) : null;
+  const isFragmentNavigation =
+    current &&
+    target &&
+    current.origin === target.origin &&
+    current.pathname === target.pathname &&
+    current.search === target.search &&
+    current.hash !== target.hash;
+
+  if (isFragmentNavigation) {
+    // A second Page.navigate to the same Next.js document can race the first
+    // navigation's hydration and restore its old fragment. Use the browser's
+    // native same-document navigation so hash subscribers receive the change.
+    await page.evaluate((href) => window.location.assign(href), target.href);
+  } else {
+    await page.goto(route);
+  }
   await expect(page).toHaveURL(
     new RegExp(`${escapeForRegExp(route)}(?:[?#].*)?$`),
   );

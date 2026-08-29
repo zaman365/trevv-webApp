@@ -62,7 +62,14 @@ import {
   type WorkItem,
 } from "@founderhq/core";
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { CapabilityNotice } from "./capability-status";
 import { productCopy } from "@/lib/product-copy";
@@ -264,8 +271,20 @@ function BoardWorkspace({
       return next;
     });
   const [storageReady, setStorageReady] = useState(false);
+  const storageReadyRef = useRef(false);
+  const pendingItemMutations = useRef<
+    Array<(current: BoardItem[]) => BoardItem[]>
+  >([]);
   const storageKey = `trevv:board:${board.id}`;
+  const mutateItems = useCallback(
+    (mutation: (current: BoardItem[]) => BoardItem[]) => {
+      if (!storageReadyRef.current) pendingItemMutations.current.push(mutation);
+      setItems(mutation);
+    },
+    [],
+  );
   useEffect(() => {
+    if (storageReadyRef.current) return;
     let storedItems: BoardItem[] | null = null;
     try {
       const stored = window.localStorage.getItem(storageKey);
@@ -278,7 +297,15 @@ function BoardWorkspace({
       // Keep the server seed if client storage is unavailable or malformed.
     }
     const timer = window.setTimeout(() => {
-      if (storedItems) setItems(storedItems);
+      const pending = pendingItemMutations.current;
+      pendingItemMutations.current = [];
+      storageReadyRef.current = true;
+      setItems(
+        pending.reduce(
+          (current, mutation) => mutation(current),
+          storedItems ?? seedItems,
+        ),
+      );
       setStorageReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -305,10 +332,13 @@ function BoardWorkspace({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-  const updateItem = (id: string, patch: Partial<BoardItem>) =>
-    setItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-    );
+  const updateItem = useCallback(
+    (id: string, patch: Partial<BoardItem>) =>
+      mutateItems((current) =>
+        current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      ),
+    [mutateItems],
+  );
   const addItem = (status: Status = "planned", groupId?: string) => {
     const effectiveGroupId = groupId ?? boardGroups[0]?.id ?? UNGROUPED_ID;
     const item: BoardItem = {
@@ -326,7 +356,7 @@ function BoardWorkspace({
       groupId: effectiveGroupId,
       group: groupNameFor(effectiveGroupId),
     };
-    setItems((current) => [...current, item]);
+    mutateItems((current) => [...current, item]);
     setSelected(item);
     setNotice("New work item created. Add the details in the open panel.");
   };
@@ -416,6 +446,7 @@ function BoardWorkspace({
           <select
             className={`status-select status-${row.original.status}`}
             aria-label={`Status for ${row.original.title}`}
+            disabled={!storageReady}
             value={row.original.status}
             onChange={(event) =>
               updateItem(row.original.id, {
@@ -496,7 +527,7 @@ function BoardWorkspace({
         size: 80,
       },
     ],
-    [checked, copy, visibleItems],
+    [checked, copy, storageReady, updateItem, visibleItems],
   );
   const table = useLegacyTable({
     data: visibleItems,
@@ -512,7 +543,7 @@ function BoardWorkspace({
   });
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (over && active.id !== over.id)
-      setItems((current) => {
+      mutateItems((current) => {
         const oldIndex = current.findIndex((item) => item.id === active.id);
         const newIndex = current.findIndex((item) => item.id === over.id);
         return arrayMove(current, oldIndex, newIndex);
@@ -540,7 +571,7 @@ function BoardWorkspace({
       ),
     )?.title ?? "No dependency";
   const applyBulkMove = (groupId: string) => {
-    setItems((current) =>
+    mutateItems((current) =>
       current.map((item) =>
         checked.has(item.id)
           ? { ...item, groupId, group: groupNameFor(groupId) }
@@ -554,7 +585,7 @@ function BoardWorkspace({
     setBulkMode(null);
   };
   const applyBulkOwner = (owner: string) => {
-    setItems((current) =>
+    mutateItems((current) =>
       current.map((item) =>
         checked.has(item.id)
           ? { ...item, owner, initials: initialsFor(owner) }
@@ -1028,6 +1059,7 @@ function BoardWorkspace({
           workspaceName={workspace.name}
           boardName={board.name}
           dependencyTitle={dependencyTitle}
+          editingReady={storageReady}
           onNotice={setNotice}
         />
       )}
@@ -1263,6 +1295,7 @@ function ItemPanel({
   workspaceName,
   boardName,
   dependencyTitle,
+  editingReady,
   onNotice,
 }: {
   item: BoardItem;
@@ -1271,6 +1304,7 @@ function ItemPanel({
   workspaceName: string;
   boardName: string;
   dependencyTitle: string;
+  editingReady: boolean;
   onNotice: (message: string) => void;
 }) {
   const copy = productCopy.en.item;
@@ -1397,6 +1431,7 @@ function ItemPanel({
           <select
             aria-label={`Status for ${item.title}`}
             className={`status-select status-${item.status}`}
+            disabled={!editingReady}
             value={item.status}
             onChange={(event) =>
               updateItem(item.id, { status: event.target.value as Status })
