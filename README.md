@@ -16,7 +16,7 @@ TREVV is a commercial, portfolio-first operating system for people responsible f
 - polished Workspace Overview, board table/Kanban, inline editing, and item side panel
 - My Work, actionable Inbox, informational Notifications, Decision Center, Approval Center, search, integration previews, and a fictional onboarding walkthrough
 - English/German UI foundations, responsive mobile-browser layouts, dark mode, and installable PWA behavior
-- versioned Hono API contract, Better Auth configuration, PostgreSQL/Drizzle schema, worker boundaries, typed client, permission policy, events/outbox schema, sample browser exports, and safe integration mocks
+- versioned Hono API contract, an injected demo/live data plane, tenant-scoped PostgreSQL repositories, Better Auth configuration, worker boundaries, typed client, permission policy, transactional audit/outbox records, sample browser exports, and safe integration mocks
 - Expo mobile companion shell and Tauri desktop shell consuming the same hosted API contract
 
 ## Prerequisites
@@ -39,7 +39,7 @@ pnpm contracts:generate
 pnpm dev
 ```
 
-Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. Demo mode is on unless `DEMO_MODE=false`; it uses fictional data in the `TREVV Demo` organization and an unrestricted development entitlement set. Setting `DEMO_MODE=false` alone does not make the product production ready: Web authentication, membership-derived authorization, repositories, and the production API/worker/database topology are not yet connected end to end.
+Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1/health`, and API documentation at `http://localhost:8787/openapi.json`. `DEMO_MODE` must be set explicitly. The example environment uses `DEMO_MODE=true`, fictional data in the `TREVV Demo` organization, and an unrestricted development entitlement set. `DEMO_MODE=false` requires PostgreSQL and Better Auth configuration and selects the durable repository adapter; it does not make the hosted product production ready because Web account provisioning, Web-to-API migration, worker delivery, and production topology are not connected end to end.
 
 For a focused process, use `pnpm dev:web` or `pnpm dev:api`. Expo runs with `pnpm --filter @founderhq/mobile dev`; the Tauri shell runs with `pnpm --filter @founderhq/desktop tauri dev`.
 
@@ -55,6 +55,7 @@ Never commit `.env` files. Public Web, Expo, and Vite variables are intentionall
 pnpm lint
 pnpm typecheck
 pnpm test
+TEST_DATABASE_URL=postgresql://founderhq:founderhq@127.0.0.1:5432/postgres pnpm test:integration
 pnpm build
 pnpm test:e2e
 pnpm test:a11y
@@ -67,7 +68,7 @@ The CI workflow additionally migrates and seeds a clean PostgreSQL database, reg
 
 ```text
 apps/web       complete interactive Next.js Web/PWA demonstration
-apps/api       Hono demo/API-contract foundation and Better Auth endpoint
+apps/api       Hono API with explicit fictional-demo and PostgreSQL adapters
 apps/worker    unconnected outbox/reminder worker foundation
 apps/mobile    Expo companion shell
 apps/desktop   Tauri + React desktop shell
