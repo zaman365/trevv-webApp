@@ -14,6 +14,7 @@ import {
   webCanonicalUrl,
   webRuntimeMode,
 } from "./web-runtime-config";
+import { webRequestId } from "./security-headers";
 
 type ApiClient = ReturnType<typeof createApiClient>;
 export type WebAppSession = Awaited<ReturnType<ApiClient["session"]>>;
@@ -171,6 +172,7 @@ export async function serverAuthFetch(
   if (cookie) outgoing.set("cookie", cookie);
   const origin = requestHeaders.get("origin");
   if (origin) outgoing.set("origin", origin);
+  forwardOperationalHeaders(requestHeaders, outgoing);
   if (init.body && !outgoing.has("content-type"))
     outgoing.set("content-type", "application/json");
   return fetch(new URL(`/api/auth${path}`, webApiOrigin()), {
@@ -190,6 +192,7 @@ export async function serverApiFetch(
   if (cookie) outgoing.set("cookie", cookie);
   const origin = requestHeaders.get("origin");
   if (origin) outgoing.set("origin", origin);
+  forwardOperationalHeaders(requestHeaders, outgoing);
   if (init.body && !outgoing.has("content-type"))
     outgoing.set("content-type", "application/json");
   return fetch(new URL(`/api/v1${path}`, webApiOrigin()), {
@@ -209,6 +212,7 @@ async function serverApiClient() {
       if (cookie) outgoing.set("cookie", cookie);
       const origin = forwarded.get("origin");
       if (origin) outgoing.set("origin", origin);
+      forwardOperationalHeaders(forwarded, outgoing);
       return fetch(input, {
         ...init,
         headers: outgoing,
@@ -218,7 +222,7 @@ async function serverApiClient() {
   });
 }
 
-async function forwardedRequestHeaders(): Promise<Headers> {
+export async function forwardedRequestHeaders(): Promise<Headers> {
   const [requestHeaders, cookieStore] = await Promise.all([
     headers(),
     cookies(),
@@ -234,5 +238,21 @@ async function forwardedRequestHeaders(): Promise<Headers> {
   if (fetchSite) result.set("sec-fetch-site", fetchSite);
   const userAgent = requestHeaders.get("user-agent");
   if (userAgent) result.set("user-agent", userAgent);
+  result.set("x-request-id", webRequestId(requestHeaders.get("x-request-id")));
+  const trustedClientIpHeader =
+    process.env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
+  if (trustedClientIpHeader) {
+    const trustedClientIp = requestHeaders.get(trustedClientIpHeader);
+    if (trustedClientIp) result.set(trustedClientIpHeader, trustedClientIp);
+  }
   return result;
+}
+
+function forwardOperationalHeaders(source: Headers, destination: Headers) {
+  destination.set("x-request-id", webRequestId(source.get("x-request-id")));
+  const trustedClientIpHeader =
+    process.env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
+  if (!trustedClientIpHeader) return;
+  const trustedClientIp = source.get(trustedClientIpHeader);
+  if (trustedClientIp) destination.set(trustedClientIpHeader, trustedClientIp);
 }

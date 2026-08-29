@@ -33,6 +33,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { safeCsvCell } from "@founderhq/core";
 import { WorkspaceFrame } from "./workspace-frame";
 import { Hint } from "./learning-center";
 import { CapabilityNotice } from "./capability-status";
@@ -482,10 +483,6 @@ function downloadFile(name: string, body: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function csvCell(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
 function formatAuditTime(value: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium",
@@ -799,7 +796,7 @@ export function SettingsExperience({
     const header = ["name", "email", "role", "status"];
     const rows = settings.members.map((member) =>
       [member.name, member.email, member.role, member.status]
-        .map(csvCell)
+        .map(safeCsvCell)
         .join(","),
     );
     downloadFile(
@@ -821,7 +818,7 @@ export function SettingsExperience({
   const exportAudit = () => {
     const rows = settings.audit.map((event) =>
       [event.createdAt, event.actor, event.category, event.action, event.target]
-        .map(csvCell)
+        .map(safeCsvCell)
         .join(","),
     );
     downloadFile(

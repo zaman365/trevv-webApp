@@ -65,6 +65,15 @@ describe("browser API proxy boundary", () => {
     );
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
     expect(upstream).toHaveBeenCalledOnce();
+    const upstreamHeaders = new Headers(
+      (upstream.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+    );
+    expect(upstreamHeaders.get("x-request-id")).toMatch(
+      /^[a-z0-9][a-z0-9._:-]{7,127}$/iu,
+    );
+    expect(response.headers.get("x-request-id")).toBe(
+      upstreamHeaders.get("x-request-id"),
+    );
   });
 
   it("returns only public validation fields from failed auth operations", async () => {
@@ -95,6 +104,41 @@ describe("browser API proxy boundary", () => {
     });
     expect(text).not.toContain("must-not-cross-the-web-boundary");
   });
+
+  it.each([
+    ["declared", String(128 * 1_024 + 1), "{}"],
+    ["false-low", "1", "x".repeat(128 * 1_024 + 1)],
+    ["undeclared", undefined, "x".repeat(128 * 1_024 + 1)],
+  ])(
+    "rejects %s oversized bodies before the upstream fetch",
+    async (_, length, body) => {
+      const upstream = vi.fn();
+      vi.stubGlobal("fetch", upstream);
+      const headers = new Headers({
+        "content-type": "application/json",
+        "x-request-id": "request-body-limit-123",
+      });
+      if (length) headers.set("content-length", length);
+
+      const response = await proxyApiRequest(
+        new Request("https://trevv.test/api/v1/items", {
+          method: "POST",
+          headers,
+          body,
+        }),
+        ["v1", "items"],
+      );
+
+      expect(response.status).toBe(413);
+      expect(response.headers.get("x-request-id")).toBe(
+        "request-body-limit-123",
+      );
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "payload_too_large" },
+      });
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
 
   it("streams server events and aborts the upstream request when the browser disconnects", async () => {
     vi.stubEnv("API_ORIGIN", "https://api.trevv.test");

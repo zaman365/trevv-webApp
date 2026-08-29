@@ -215,7 +215,9 @@ for (const height of [768, 820, 900, 945] as const) {
       await item.scrollIntoViewIfNeeded();
       await expect(item).toBeInViewport();
       await item.focus();
-      await expect(item).toBeFocused();
+      expect(
+        await item.evaluate((element) => document.activeElement === element),
+      ).toBe(true);
 
       const [itemBox, navBox] = await Promise.all([
         item.boundingBox(),

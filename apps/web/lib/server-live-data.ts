@@ -1,9 +1,9 @@
 import "server-only";
 
 import { createApiClient } from "@founderhq/api-client";
-import { cookies, headers } from "next/headers";
 import type { LiveAppDataSnapshot } from "./live-app-data";
-import { webApiOrigin, webCanonicalUrl } from "./web-runtime-config";
+import { forwardedRequestHeaders } from "./server-auth";
+import { webApiOrigin } from "./web-runtime-config";
 
 export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
   const forwarded = await forwardedRequestHeaders();
@@ -15,6 +15,15 @@ export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
       if (cookie) outgoing.set("cookie", cookie);
       const origin = forwarded.get("origin");
       if (origin) outgoing.set("origin", origin);
+      const requestId = forwarded.get("x-request-id");
+      if (requestId) outgoing.set("x-request-id", requestId);
+      const trustedClientIpHeader =
+        process.env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
+      const trustedClientIp = trustedClientIpHeader
+        ? forwarded.get(trustedClientIpHeader)
+        : null;
+      if (trustedClientIpHeader && trustedClientIp)
+        outgoing.set(trustedClientIpHeader, trustedClientIp);
       return fetch(input, {
         ...init,
         headers: outgoing,
@@ -54,19 +63,4 @@ async function fetchEveryWorkItem(client: ReturnType<typeof createApiClient>) {
     cursor = response.nextCursor;
   }
   throw new Error("The work-item pagination limit was exceeded.");
-}
-
-async function forwardedRequestHeaders(): Promise<Headers> {
-  const [requestHeaders, cookieStore] = await Promise.all([
-    headers(),
-    cookies(),
-  ]);
-  const result = new Headers();
-  const cookie = cookieStore.toString();
-  if (cookie) result.set("cookie", cookie);
-  const origin = requestHeaders.get("origin");
-  if (origin) result.set("origin", origin);
-  else if (requestHeaders.get("sec-fetch-site") === "same-origin")
-    result.set("origin", webCanonicalUrl().origin);
-  return result;
 }

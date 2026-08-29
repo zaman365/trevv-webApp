@@ -41,7 +41,9 @@ test.describe.serial("live founder operating loop", () => {
     browser,
   }) => {
     test.setTimeout(360_000);
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+      extraHTTPHeaders: clientHeaders(111),
+    });
     const page = await context.newPage();
 
     await signUpAndVerify(
@@ -366,7 +368,9 @@ test.describe.serial("live founder operating loop", () => {
     browser,
   }) => {
     test.setTimeout(360_000);
-    const ownerContext = await browser.newContext();
+    const ownerContext = await browser.newContext({
+      extraHTTPHeaders: clientHeaders(112),
+    });
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto("/sign-in");
     await submitSignIn(ownerPage, ownerEmail, password);
@@ -390,7 +394,9 @@ test.describe.serial("live founder operating loop", () => {
       "You are invited to TREVV",
     );
 
-    const collaboratorContext = await browser.newContext();
+    const collaboratorContext = await browser.newContext({
+      extraHTTPHeaders: clientHeaders(113),
+    });
     const collaboratorPage = await collaboratorContext.newPage();
     const invitationLanding = await normalizeMailAction(
       collaboratorContext,
@@ -1004,14 +1010,20 @@ async function normalizeMailAction(
 ): Promise<string> {
   let current = new URL(actionUrl);
   if (current.origin !== webOrigin) {
-    const response = await fetch(current, { redirect: "manual" });
+    const response = await fetch(current, {
+      headers: clientHeaders(198),
+      redirect: "manual",
+    });
     const location = response.headers.get("location");
     if (!location)
       throw new Error("The mail action did not return a callback.");
     current = new URL(location, current);
   }
   if (current.origin === webOrigin && current.searchParams.has("token")) {
-    const response = await fetch(current, { redirect: "manual" });
+    const response = await fetch(current, {
+      headers: clientHeaders(198),
+      redirect: "manual",
+    });
     const cookie = response.headers.get("set-cookie");
     const location = response.headers.get("location");
     if (!cookie || !location)
@@ -1048,6 +1060,10 @@ function requiredMailSink(): string {
   const value = process.env.LIVE_E2E_MAIL_SINK_FILE?.trim();
   if (!value) throw new Error("LIVE_E2E_MAIL_SINK_FILE is not configured.");
   return value;
+}
+
+function clientHeaders(lastOctet: number): Record<string, string> {
+  return { "x-trevv-client-ip": `192.0.2.${lastOctet}` };
 }
 
 function requiredLiveDatabase(): string {

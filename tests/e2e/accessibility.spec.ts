@@ -30,8 +30,11 @@ const seriousViolations = (
 
 const routes = [
   "/sign-in",
+  "/privacy",
+  "/terms",
   "/onboarding",
   "/app/portfolio",
+  "/app/account/privacy",
   workspaceHome(),
   workspaceRoute("dashboard"),
   workspaceRoute("attention"),

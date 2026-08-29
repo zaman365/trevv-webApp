@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { RouteFailureState } from "@/components/live-state";
+import { reportClientError } from "@/lib/client-error-reporting";
 
 export default function AppError({
   error,
@@ -11,10 +12,7 @@ export default function AppError({
   retry: () => void;
 }) {
   useEffect(() => {
-    console.error("TREVV app route failed", {
-      digest: error.digest,
-      message: error.message,
-    });
+    reportClientError("app-route", error);
   }, [error]);
 
   return (

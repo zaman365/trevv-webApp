@@ -49,6 +49,7 @@ export default defineConfig({
         WEB_ORIGIN: webOrigin,
         MAIL_FROM: "no-reply@trevv.test",
         MAIL_SINK_FILE: mailSinkFile,
+        TRUSTED_CLIENT_IP_HEADER: "x-trevv-client-ip",
       },
     },
     {
@@ -62,6 +63,7 @@ export default defineConfig({
         API_ORIGIN: apiOrigin,
         BETTER_AUTH_URL: apiOrigin,
         NEXT_PUBLIC_APP_URL: webOrigin,
+        TRUSTED_CLIENT_IP_HEADER: "x-trevv-client-ip",
       },
     },
   ],

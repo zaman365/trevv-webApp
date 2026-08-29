@@ -30,6 +30,7 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   const workspaceName = `Operations ${suffix}`;
 
   const anonymous = await fetch(`${webOrigin}/app/portfolio`, {
+    headers: clientHeaders(100),
     redirect: "manual",
   });
   expect(anonymous.status).toBeGreaterThanOrEqual(300);
@@ -37,7 +38,9 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   expect(anonymous.headers.get("location")).toContain("/sign-in");
   expect(await anonymous.text()).not.toContain("Northstar Apparel");
 
-  const ownerContext = await browser.newContext();
+  const ownerContext = await browser.newContext({
+    extraHTTPHeaders: clientHeaders(101),
+  });
   const ownerPage = await ownerContext.newPage();
   await signUpAndVerify(
     ownerPage,
@@ -86,7 +89,41 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   expect(inaccessibleWorkspace?.status()).toBe(404);
   await ownerPage.goto("/app/portfolio");
 
-  const secondOwnerContext = await browser.newContext();
+  await ownerPage.goto("/app/account/privacy");
+  await expectNoSeriousAccessibilityViolations(ownerPage);
+  await expect(
+    ownerPage.getByRole("heading", { name: "Privacy center", level: 1 }),
+  ).toBeVisible();
+  await expect(ownerPage.getByText(/not enforced/).first()).toBeVisible();
+  const privacyRequestForm = ownerPage.getByRole("region", {
+    name: "Submit a privacy request",
+  });
+  await privacyRequestForm
+    .locator("select")
+    .first()
+    .selectOption("portability");
+  await privacyRequestForm
+    .getByRole("button", { name: "Submit for review" })
+    .click();
+  await expect(
+    ownerPage.getByRole("status").filter({
+      hasText:
+        "No export, erasure, restriction, or provider effect has happened yet.",
+    }),
+  ).toBeVisible();
+  await expect(
+    ownerPage.getByRole("heading", { name: "Portable export", level: 3 }),
+  ).toBeVisible();
+  await ownerPage.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    ownerPage
+      .getByRole("status")
+      .filter({ hasText: "Cancellation recorded durably." }),
+  ).toBeVisible();
+
+  const secondOwnerContext = await browser.newContext({
+    extraHTTPHeaders: clientHeaders(102),
+  });
   const secondOwnerPage = await secondOwnerContext.newPage();
   await secondOwnerPage.goto("/sign-in");
   await submitSignIn(secondOwnerPage, ownerEmail, originalPassword);
@@ -126,7 +163,9 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     "You are invited to TREVV",
   );
 
-  const inviteeContext = await browser.newContext();
+  const inviteeContext = await browser.newContext({
+    extraHTTPHeaders: clientHeaders(103),
+  });
   const inviteePage = await inviteeContext.newPage();
   const invitationLanding = await normalizeMailAction(
     inviteeContext,
@@ -212,7 +251,9 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     organizationId,
   });
 
-  const replayContext = await browser.newContext();
+  const replayContext = await browser.newContext({
+    extraHTTPHeaders: clientHeaders(104),
+  });
   const replayPage = await replayContext.newPage();
   const replayLanding = await normalizeMailAction(replayContext, resetUrl);
   await replayPage.goto(replayLanding);
@@ -369,14 +410,20 @@ async function normalizeMailAction(
 ): Promise<string> {
   let current = new URL(actionUrl);
   if (current.origin !== webOrigin) {
-    const response = await fetch(current, { redirect: "manual" });
+    const response = await fetch(current, {
+      headers: clientHeaders(199),
+      redirect: "manual",
+    });
     const location = response.headers.get("location");
     if (!location)
       throw new Error("The mail action did not return a callback.");
     current = new URL(location, current);
   }
   if (current.origin === webOrigin && current.searchParams.has("token")) {
-    const response = await fetch(current, { redirect: "manual" });
+    const response = await fetch(current, {
+      headers: clientHeaders(199),
+      redirect: "manual",
+    });
     const cookie = response.headers.get("set-cookie");
     const location = response.headers.get("location");
     if (!cookie || !location)
@@ -413,6 +460,10 @@ function requiredMailSink(): string {
   const value = process.env.LIVE_E2E_MAIL_SINK_FILE?.trim();
   if (!value) throw new Error("LIVE_E2E_MAIL_SINK_FILE is not configured.");
   return value;
+}
+
+function clientHeaders(lastOctet: number): Record<string, string> {
+  return { "x-trevv-client-ip": `192.0.2.${lastOctet}` };
 }
 
 async function expectNoSeriousAccessibilityViolations(page: Page) {

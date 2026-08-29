@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { webSecurityHeaders } from "./lib/security-headers";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -19,6 +20,7 @@ const sensitiveAuthHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
   outputFileTracingRoot: workspaceRoot,
   transpilePackages: [
     "@founderhq/api-client",
@@ -38,6 +40,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      { source: "/:path*", headers: webSecurityHeaders() },
       {
         source: "/app/:path*",
         headers: [

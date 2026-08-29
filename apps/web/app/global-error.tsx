@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportClientError } from "@/lib/client-error-reporting";
 
 export default function GlobalError({
   error,
@@ -10,10 +11,7 @@ export default function GlobalError({
   retry: () => void;
 }) {
   useEffect(() => {
-    console.error("TREVV root render failed", {
-      digest: error.digest,
-      message: error.message,
-    });
+    reportClientError("root-render", error);
   }, [error]);
 
   return (

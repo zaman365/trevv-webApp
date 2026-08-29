@@ -6,6 +6,11 @@ import {
   authActionCookies,
 } from "./lib/auth-action-cookies";
 import { safeReturnPath, webRuntimeMode } from "./lib/web-runtime-config";
+import {
+  webRequestId,
+  webTelemetryPath,
+  writeStructuredWebLog,
+} from "./lib/security-headers";
 
 const sessionCookieNames = [
   "trevv.session_token",
@@ -13,7 +18,25 @@ const sessionCookieNames = [
 ] as const;
 
 export function proxy(request: NextRequest) {
-  if (webRuntimeMode() === "demo") return NextResponse.next();
+  const requestId = webRequestId(request.headers.get("x-request-id"));
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-request-id", requestId);
+  const nextResponse = () =>
+    NextResponse.next({ request: { headers: requestHeaders } });
+  const finish = (response: NextResponse) => {
+    response.headers.set("x-request-id", requestId);
+    return response;
+  };
+  if (process.env.NODE_ENV === "production")
+    writeStructuredWebLog({
+      level: "info",
+      service: "trevv-web",
+      event: "request_received",
+      requestId,
+      method: request.method,
+      path: webTelemetryPath(request.nextUrl.pathname),
+    });
+  if (webRuntimeMode() === "demo") return finish(nextResponse());
   const tokenAction = tokenActionFor(request.nextUrl.pathname);
   const token = request.nextUrl.searchParams.get("token");
   if (tokenAction && token) {
@@ -37,20 +60,21 @@ export function proxy(request: NextRequest) {
         ),
       );
     }
-    return response;
+    return finish(response);
   }
-  if (!request.nextUrl.pathname.startsWith("/app")) return NextResponse.next();
+  if (!request.nextUrl.pathname.startsWith("/app"))
+    return finish(nextResponse());
   const hasSessionMarker = sessionCookieNames.some((name) =>
     request.cookies.has(name),
   );
-  if (hasSessionMarker) return NextResponse.next();
+  if (hasSessionMarker) return finish(nextResponse());
 
   const signIn = new URL("/sign-in", request.url);
   signIn.searchParams.set(
     "next",
     `${request.nextUrl.pathname}${request.nextUrl.search}`,
   );
-  return NextResponse.redirect(signIn);
+  return finish(NextResponse.redirect(signIn));
 }
 
 function tokenActionFor(
@@ -64,9 +88,6 @@ function tokenActionFor(
 
 export const config = {
   matcher: [
-    "/app/:path*",
-    "/invite/accept",
-    "/reset-password",
-    "/verify-email",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|og.png).*)",
   ],
 };

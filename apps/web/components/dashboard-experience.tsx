@@ -29,6 +29,7 @@ import {
   demoWorkspaces,
   demoItems,
   demoPortfolios,
+  safeCsvCell,
   type Workspace,
   type Portfolio,
   type WorkItem,
@@ -1681,7 +1682,7 @@ function exportDashboard(items: WorkItem[], scopeName?: string) {
       item.dueDate ?? "",
       workspaceForDashboard(item.workspaceId),
     ]
-      .map(csvValue)
+      .map(safeCsvCell)
       .join(","),
   );
   downloadDashboardFile(
@@ -1700,10 +1701,6 @@ function downloadDashboardFile(name: string, body: string, type: string) {
   anchor.download = name;
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-function csvValue(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
 }
 
 function workspaceForDashboard(workspaceId: string): string {

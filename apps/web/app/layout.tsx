@@ -16,6 +16,8 @@ export const metadata: Metadata = {
   title: { default: appName, template: `%s · ${appName}` },
   description:
     "A calm operating system for every business, project, decision, and next move.",
+  robots: { index: false, follow: false, noarchive: true, nocache: true },
+  alternates: { canonical: "/" },
   applicationName: appName,
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: appName, statusBarStyle: "default" },

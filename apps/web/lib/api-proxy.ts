@@ -1,5 +1,7 @@
 import { webApiOrigin } from "./web-runtime-config";
 import { appendSetCookieHeaders } from "./response-cookies";
+import { webRequestId } from "./security-headers";
+import { readBoundedRequestBody } from "./bounded-request-body";
 
 const allowedNamespaces = new Set(["auth", "v1"]);
 const browserAuthOperations = new Set([
@@ -49,11 +51,18 @@ export async function proxyApiRequest(
   for (const name of strippedRequestHeaders) headers.delete(name);
   headers.set("x-forwarded-host", incoming.host);
   headers.set("x-forwarded-proto", incoming.protocol.replace(":", ""));
+  const requestId = webRequestId(headers.get("x-request-id"));
+  headers.set("x-request-id", requestId);
 
   const body =
     request.method === "GET" || request.method === "HEAD"
       ? null
-      : await request.arrayBuffer();
+      : await boundedRequestBody(
+          request,
+          segments[0] === "auth" ? 64 * 1_024 : 128 * 1_024,
+          requestId,
+        );
+  if (body instanceof Response) return body;
   const upstream = await fetch(upstreamUrl, {
     method: request.method,
     headers,
@@ -63,6 +72,8 @@ export async function proxyApiRequest(
     signal: request.signal,
   });
   const responseHeaders = copyResponseHeaders(upstream.headers);
+  if (!responseHeaders.has("x-request-id"))
+    responseHeaders.set("x-request-id", requestId);
   responseHeaders.set("cache-control", "private, no-store, max-age=0");
   responseHeaders.set("pragma", "no-cache");
 
@@ -89,6 +100,51 @@ export async function proxyApiRequest(
     statusText: upstream.statusText,
     headers: responseHeaders,
   });
+}
+
+async function boundedRequestBody(
+  request: Request,
+  maximumBytes: number,
+  requestId: string,
+): Promise<ArrayBuffer | null | Response> {
+  const declared = request.headers.get("content-length");
+  if (declared) {
+    const parsed = Number(declared);
+    if (Number.isFinite(parsed) && parsed > maximumBytes)
+      return proxyFailure(
+        413,
+        "payload_too_large",
+        `The request cannot exceed ${maximumBytes / 1_024} KiB.`,
+        requestId,
+      );
+  }
+  const result = await readBoundedRequestBody(request, maximumBytes);
+  if (result.status === "too_large")
+    return proxyFailure(
+      413,
+      "payload_too_large",
+      `The request cannot exceed ${maximumBytes / 1_024} KiB.`,
+      requestId,
+    );
+  return result.bytes.buffer;
+}
+
+function proxyFailure(
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+): Response {
+  return Response.json(
+    { error: { code, message, requestId } },
+    {
+      status,
+      headers: {
+        "cache-control": "no-store",
+        "x-request-id": requestId,
+      },
+    },
+  );
 }
 
 export function browserApiOperationAllowed(

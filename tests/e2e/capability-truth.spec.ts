@@ -213,3 +213,33 @@ test("automation and uploads cannot imply a background or secure effect", async 
     panel.getByRole("button", { name: "Add sample comment" }),
   ).toBeVisible();
 });
+
+test("privacy and terms stay visibly draft and promise no completed effect", async ({
+  page,
+}) => {
+  await page.goto("/privacy");
+  await expect(
+    page.getByRole("heading", { name: "Privacy preview notice", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByText("Draft · legal review pending")).toBeVisible();
+  await expect(page.getByText(/accepted for human review only/)).toBeVisible();
+
+  await page.goto("/terms");
+  await expect(
+    page.getByRole("heading", { name: "Terms preview notice", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByText("Draft · legal review pending")).toBeVisible();
+  await expect(
+    page.getByText("External integrations and payments remain disabled."),
+  ).toBeVisible();
+
+  await page.goto("/app/account/privacy");
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "No real data lifecycle in demo mode" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Submit for review" }),
+  ).toHaveCount(0);
+});
