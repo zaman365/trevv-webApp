@@ -23,6 +23,7 @@ describe("tenant schema", () => {
       "attentionSignals",
       "waitingStates",
       "workspaceSnapshots",
+      "idempotencyRecords",
       "decisionOutcomes",
       "insights",
       "insightLinks",

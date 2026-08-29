@@ -272,14 +272,21 @@ for (const ritual of demoReviewRituals)
     })
     .onConflictDoNothing();
 
-for (const outcome of demoDecisionOutcomes)
+for (const outcome of demoDecisionOutcomes) {
+  const decisionItem = demoItems.find(
+    ({ id }) => id === outcome.decisionItemId,
+  );
+  if (!decisionItem)
+    throw new Error(`Unknown demo decision item: ${outcome.decisionItemId}`);
   await db
     .insert(decisionOutcomes)
     .values({
       ...outcome,
+      workspaceId: decisionItem.workspaceId,
       recordedAt: new Date(outcome.recordedAt),
     })
     .onConflictDoNothing();
+}
 
 for (const insight of demoInsights)
   await db

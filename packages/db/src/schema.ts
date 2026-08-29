@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -12,6 +13,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const roleEnum = pgEnum("membership_role", [
   "owner",
@@ -167,10 +169,16 @@ export const portfolios = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("portfolios_org_id_unique").on(table.organizationId, table.id),
     uniqueIndex("portfolios_org_slug_unique").on(
       table.organizationId,
       table.slug,
     ),
+    uniqueIndex("portfolios_org_single_default_unique")
+      .on(table.organizationId)
+      .where(
+        sql`${table.isDefault} = true and ${table.archivedAt} is null and ${table.deletedAt} is null`,
+      ),
     index("portfolios_org_default_idx").on(
       table.organizationId,
       table.isDefault,
@@ -213,6 +221,16 @@ export const portfolioMembers = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.portfolioId, table.userId] }),
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId],
+      foreignColumns: [portfolios.organizationId, portfolios.id],
+      name: "portfolio_members_org_portfolio_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "portfolio_members_org_membership_fk",
+    }),
     index("portfolio_members_user_idx").on(table.organizationId, table.userId),
   ],
 );
@@ -271,6 +289,22 @@ export const workspaces = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("workspaces_org_id_unique").on(table.organizationId, table.id),
+    uniqueIndex("workspaces_org_portfolio_id_unique").on(
+      table.organizationId,
+      table.portfolioId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId],
+      foreignColumns: [portfolios.organizationId, portfolios.id],
+      name: "workspaces_org_portfolio_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.leadUserId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "workspaces_org_lead_membership_fk",
+    }),
     uniqueIndex("workspaces_portfolio_slug_unique").on(
       table.portfolioId,
       table.slug,
@@ -301,6 +335,16 @@ export const workspaceMembers = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId] }),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "workspace_members_org_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "workspace_members_org_membership_fk",
+    }),
     index("workspace_members_user_idx").on(table.organizationId, table.userId),
   ],
 );
@@ -330,6 +374,17 @@ export const boards = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("boards_org_id_unique").on(table.organizationId, table.id),
+    uniqueIndex("boards_org_workspace_id_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "boards_org_workspace_fk",
+    }).onDelete("cascade"),
     index("boards_org_workspace_idx").on(
       table.organizationId,
       table.workspaceId,
@@ -353,6 +408,16 @@ export const boardGroups = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("board_groups_org_board_id_unique").on(
+      table.organizationId,
+      table.boardId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.boardId],
+      foreignColumns: [boards.organizationId, boards.id],
+      name: "board_groups_org_board_fk",
+    }).onDelete("cascade"),
     index("board_groups_board_idx").on(table.organizationId, table.boardId),
   ],
 );
@@ -374,6 +439,16 @@ export const statuses = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("statuses_org_board_id_unique").on(
+      table.organizationId,
+      table.boardId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.boardId],
+      foreignColumns: [boards.organizationId, boards.id],
+      name: "statuses_org_board_fk",
+    }).onDelete("cascade"),
     index("statuses_org_board_idx").on(table.organizationId, table.boardId),
   ],
 );
@@ -412,6 +487,46 @@ export const workItems = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("work_items_org_id_unique").on(table.organizationId, table.id),
+    uniqueIndex("work_items_org_workspace_id_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "work_items_org_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.boardId],
+      foreignColumns: [boards.organizationId, boards.workspaceId, boards.id],
+      name: "work_items_org_workspace_board_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.boardId, table.groupId],
+      foreignColumns: [
+        boardGroups.organizationId,
+        boardGroups.boardId,
+        boardGroups.id,
+      ],
+      name: "work_items_org_board_group_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.boardId, table.statusId],
+      foreignColumns: [statuses.organizationId, statuses.boardId, statuses.id],
+      name: "work_items_org_board_status_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.creatorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "work_items_org_creator_membership_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.parentItemId],
+      foreignColumns: [table.organizationId, table.workspaceId, table.id],
+      name: "work_items_org_workspace_parent_fk",
+    }),
     index("items_org_workspace_idx").on(
       table.organizationId,
       table.workspaceId,
@@ -444,6 +559,16 @@ export const itemAssignees = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.itemId, table.userId] }),
+    foreignKey({
+      columns: [table.organizationId, table.itemId],
+      foreignColumns: [workItems.organizationId, workItems.id],
+      name: "item_assignees_org_item_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "item_assignees_org_membership_fk",
+    }),
     index("assignees_org_user_idx").on(table.organizationId, table.userId),
   ],
 );
@@ -462,7 +587,19 @@ export const itemDependencies = pgTable(
       .references(() => workItems.id, { onDelete: "cascade" }),
     relation: text("relation").notNull().default("depends_on"),
   },
-  (table) => [primaryKey({ columns: [table.itemId, table.dependsOnItemId] })],
+  (table) => [
+    primaryKey({ columns: [table.itemId, table.dependsOnItemId] }),
+    foreignKey({
+      columns: [table.organizationId, table.itemId],
+      foreignColumns: [workItems.organizationId, workItems.id],
+      name: "item_dependencies_scoped_item_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.dependsOnItemId],
+      foreignColumns: [workItems.organizationId, workItems.id],
+      name: "item_dependencies_scoped_dependency_fk",
+    }).onDelete("cascade"),
+  ],
 );
 
 export const customFields = pgTable(
@@ -525,6 +662,16 @@ export const comments = pgTable(
     ...timestamps,
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.itemId],
+      foreignColumns: [workItems.organizationId, workItems.id],
+      name: "comments_org_item_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.authorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "comments_org_author_membership_fk",
+    }),
     index("comments_item_idx").on(table.organizationId, table.itemId),
   ],
 );
@@ -612,6 +759,16 @@ export const workspaceUpdates = pgTable(
     ...timestamps,
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "workspace_updates_org_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.authorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "workspace_updates_org_author_membership_fk",
+    }),
     index("workspace_updates_workspace_date_idx").on(
       table.organizationId,
       table.workspaceId,
@@ -684,6 +841,11 @@ export const activityEvents = pgTable(
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.actorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "activity_events_org_actor_membership_fk",
+    }),
     index("activity_org_aggregate_idx").on(
       table.organizationId,
       table.aggregateType,
@@ -695,7 +857,9 @@ export const auditLogs = pgTable(
   "audit_logs",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organization_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     actorId: text("actor_id").references(() => users.id),
     action: text("action").notNull(),
     targetType: text("target_type").notNull(),
@@ -707,6 +871,11 @@ export const auditLogs = pgTable(
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.actorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "audit_logs_org_actor_membership_fk",
+    }),
     index("audit_org_date_idx").on(table.organizationId, table.createdAt),
   ],
 );
@@ -768,10 +937,17 @@ export const outboxEvents = pgTable(
   "outbox_events",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organization_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull(),
     aggregateType: text("aggregate_type").notNull(),
     aggregateId: text("aggregate_id").notNull(),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    actorId: text("actor_id").references(() => users.id),
+    requestId: text("request_id").notNull(),
+    correlationId: text("correlation_id"),
+    dedupKey: text("dedup_key").notNull(),
     payload: jsonb("payload").notNull(),
     attempts: integer("attempts").notNull().default(0),
     availableAt: timestamp("available_at", { withTimezone: true })
@@ -784,6 +960,15 @@ export const outboxEvents = pgTable(
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.actorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "outbox_events_org_actor_membership_fk",
+    }),
+    uniqueIndex("outbox_events_org_dedup_unique").on(
+      table.organizationId,
+      table.dedupKey,
+    ),
     index("outbox_pending_idx").on(table.processedAt, table.availableAt),
   ],
 );
@@ -936,6 +1121,7 @@ export const attentionSignals = pgTable(
     dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
     snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
     actionReason: text("action_reason"),
+    version: integer("version").notNull().default(0),
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -945,6 +1131,20 @@ export const attentionSignals = pgTable(
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId],
+      foreignColumns: [portfolios.organizationId, portfolios.id],
+      name: "attention_signals_org_portfolio_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId, table.workspaceId],
+      foreignColumns: [
+        workspaces.organizationId,
+        workspaces.portfolioId,
+        workspaces.id,
+      ],
+      name: "attention_signals_org_portfolio_workspace_fk",
+    }).onDelete("cascade"),
     index("attention_org_portfolio_active_idx").on(
       table.organizationId,
       table.portfolioId,
@@ -985,20 +1185,88 @@ export const waitingStates = pgTable(
     nextFollowUp: date("next_follow_up"),
     waitingNote: text("waiting_note"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    version: integer("version").notNull().default(0),
     ...timestamps,
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId, table.workspaceId],
+      foreignColumns: [
+        workspaces.organizationId,
+        workspaces.portfolioId,
+        workspaces.id,
+      ],
+      name: "waiting_states_org_portfolio_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.followUpOwnerId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "waiting_states_org_owner_membership_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.entityId],
+      foreignColumns: [
+        workItems.organizationId,
+        workItems.workspaceId,
+        workItems.id,
+      ],
+      name: "waiting_states_org_workspace_item_fk",
+    }).onDelete("cascade"),
     index("waiting_org_portfolio_follow_up_idx").on(
       table.organizationId,
       table.portfolioId,
       table.nextFollowUp,
       table.resolvedAt,
     ),
-    uniqueIndex("waiting_active_entity_unique").on(
+    uniqueIndex("waiting_active_entity_unique")
+      .on(table.organizationId, table.entityType, table.entityId)
+      .where(sql`${table.resolvedAt} is null and ${table.deletedAt} is null`),
+  ],
+);
+
+export const idempotencyRecords = pgTable(
+  "idempotency_records",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    method: text("method").notNull(),
+    route: text("route").notNull(),
+    key: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    state: text("state").notNull().default("pending"),
+    responseStatus: integer("response_status"),
+    responseBody: jsonb("response_body"),
+    resultType: text("result_type"),
+    resultId: text("result_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "idempotency_records_org_membership_fk",
+    }),
+    uniqueIndex("idempotency_scope_key_unique").on(
       table.organizationId,
-      table.entityType,
-      table.entityId,
-      table.resolvedAt,
+      table.userId,
+      table.key,
+    ),
+    index("idempotency_expiry_idx").on(table.expiresAt),
+    index("idempotency_result_idx").on(
+      table.organizationId,
+      table.resultType,
+      table.resultId,
     ),
   ],
 );
@@ -1058,6 +1326,24 @@ export const workspaceSnapshots = pgTable(
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId, table.workspaceId],
+      foreignColumns: [
+        workspaces.organizationId,
+        workspaces.portfolioId,
+        workspaces.id,
+      ],
+      name: "workspace_snapshots_org_portfolio_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.nextMilestoneId],
+      foreignColumns: [
+        workItems.organizationId,
+        workItems.workspaceId,
+        workItems.id,
+      ],
+      name: "workspace_snapshots_org_workspace_milestone_fk",
+    }),
     uniqueIndex("workspace_snapshots_workspace_captured_unique").on(
       table.workspaceId,
       table.capturedAt,
@@ -1091,6 +1377,20 @@ export const reviewRituals = pgTable(
     ...timestamps,
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId],
+      foreignColumns: [portfolios.organizationId, portfolios.id],
+      name: "review_rituals_org_portfolio_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId, table.workspaceId],
+      foreignColumns: [
+        workspaces.organizationId,
+        workspaces.portfolioId,
+        workspaces.id,
+      ],
+      name: "review_rituals_org_portfolio_workspace_fk",
+    }).onDelete("cascade"),
     index("review_rituals_due_idx").on(
       table.organizationId,
       table.enabled,
@@ -1109,6 +1409,9 @@ export const decisionOutcomes = pgTable(
     portfolioId: text("portfolio_id")
       .notNull()
       .references(() => portfolios.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     decisionItemId: text("decision_item_id")
       .notNull()
       .references(() => workItems.id, { onDelete: "cascade" }),
@@ -1126,6 +1429,29 @@ export const decisionOutcomes = pgTable(
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.portfolioId, table.workspaceId],
+      foreignColumns: [
+        workspaces.organizationId,
+        workspaces.portfolioId,
+        workspaces.id,
+      ],
+      name: "decision_outcomes_org_portfolio_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.decisionItemId],
+      foreignColumns: [
+        workItems.organizationId,
+        workItems.workspaceId,
+        workItems.id,
+      ],
+      name: "decision_outcomes_org_workspace_item_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.recordedBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "decision_outcomes_org_recorder_membership_fk",
+    }),
     index("decision_outcomes_decision_idx").on(
       table.organizationId,
       table.decisionItemId,
@@ -1363,11 +1689,24 @@ export const inboxItems = pgTable(
     resource: jsonb("resource").notNull().default({}),
     doneAt: timestamp("done_at", { withTimezone: true }),
     snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
+    convertedItemId: text("converted_item_id").references(() => workItems.id),
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
+    version: integer("version").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "inbox_items_org_membership_fk",
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.convertedItemId],
+      foreignColumns: [workItems.organizationId, workItems.id],
+      name: "inbox_items_org_converted_item_fk",
+    }),
     index("inbox_items_user_actionable_idx").on(
       table.organizationId,
       table.userId,
