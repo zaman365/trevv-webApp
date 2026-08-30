@@ -87,6 +87,13 @@ the obsolete larger dark-theme fingerprints. Where Axe still returns
 or the identical already-reviewed light fingerprint. Reintroducing the removed
 layered styles therefore fails rather than matching an old allowance.
 
+The first Linux run after that follow-up reduced mobile Attention from its
+obsolete 13-node compositor sets to the same single Quick Capture label already
+observed on other mobile routes. It also returned the Board's reviewed
+three-node light set unchanged in dark Chromium. Both repeated identically on
+the initial attempt and two retries; the policy records those exact reduced
+sets and no longer accepts the larger Attention sets.
+
 This register does not satisfy the required keyboard, VoiceOver/NVDA, 200%
 zoom, reduced-motion, high-contrast, or touch-target evidence. Those remain
 separate release gates.
