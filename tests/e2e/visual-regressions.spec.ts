@@ -142,10 +142,16 @@ async function expectTechnicalPreviewBadgeFullyVisible(page: Page) {
 
 async function focusWithKeyboard(
   page: Page,
+  startingPoint: Locator,
   target: Locator,
   key: "Tab" | "Alt+Tab" = "Tab",
 ) {
-  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  // WebKit keeps a sequential-navigation starting point separately from
+  // document.activeElement. Blurring a Continue button that React replaces
+  // between onboarding steps can therefore strand later Tab presses on body.
+  // Start from the stable preceding link, then use only keyboard traversal to
+  // prove the choice control participates in the browser's tab order.
+  await startingPoint.focus();
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await page.keyboard.press(key);
     if (
@@ -195,13 +201,21 @@ test("onboarding choice controls stay compact, legible, and keyboard operable", 
     const firstControl = page
       .locator(`${scenario.selector} input[type="${scenario.control}"]`)
       .first();
+    const keyboardStartingPoint = page.getByRole("link", {
+      name: "Exit setup",
+    });
     // Safari on macOS may follow the platform's reduced tab-order default.
     // Try the portable Tab path first, then its Option+Tab fallback without
     // making Linux WebKit emulate a macOS-only keyboard convention.
     try {
-      await focusWithKeyboard(page, firstControl, "Tab");
+      await focusWithKeyboard(page, keyboardStartingPoint, firstControl, "Tab");
     } catch {
-      await focusWithKeyboard(page, firstControl, "Alt+Tab");
+      await focusWithKeyboard(
+        page,
+        keyboardStartingPoint,
+        firstControl,
+        "Alt+Tab",
+      );
     }
     await expect(firstControl).toBeFocused();
     await expect(firstControl.locator("xpath=..")).toHaveCSS(
