@@ -466,7 +466,7 @@ jobs:
           OUTPUT_DIR: ${{ runner.temp }}/staging-publication
           PUBLIC_ORIGIN: ${{ inputs.public_origin }}
         run: |
-          created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          created_at=$(node -p 'new Date().toISOString()')
           metadata_files=(
             "${EVIDENCE_DIR}/web.manifest.json"
             "${EVIDENCE_DIR}/api.manifest.json"

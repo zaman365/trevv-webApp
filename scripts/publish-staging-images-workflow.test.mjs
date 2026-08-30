@@ -277,6 +277,11 @@ test("digest publication consumes only the four target metadata files", async (t
   await runAssembly(assemble.run, context);
 
   const bundle = JSON.parse(await readFile(context.bundlePath, "utf8"));
+  assert.match(
+    bundle.createdAt,
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u,
+  );
+  assert.equal(new Date(bundle.createdAt).toISOString(), bundle.createdAt);
   assert.deepEqual(Object.keys(bundle.images).sort(), [
     "api",
     "migrate",
