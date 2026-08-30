@@ -125,13 +125,36 @@ jobs, an operator runs the exact `trevv-migrate@sha256:...` image from a local
 Docker host before enabling the API. There is no auxiliary edge image to
 publish or record.
 
-The checked-in `Publish staging images` workflow is deliberately a **one-time
-genesis publisher** for the first disposable-preview cohort. Dispatch requires
-the literal confirmation `create-first-disposable-preview-genesis`, and the
-resulting release ID begins with `rehearsal-baseline-`. Do not run it for a
-second cohort or a rollback predecessor. A later cohort requires a separately
-reviewed publisher path that consumes and authenticates the previous manifest,
-release ID, migration head, and digest instead of declaring genesis again.
+The first disposable-preview publication remains the only staging genesis.
+The checked-in `Publish staging images` workflow now publishes successors only;
+it cannot declare another baseline. Dispatch requires the currently deployed
+publication's GitHub artifact ID, artifact-ZIP SHA-256, exact manifest-file
+SHA-256, and a confirmation that explicitly binds those deployed manifest bytes
+to the candidate Git SHA. The workflow does not assume the latest successful
+publication was deployed. It authenticates the selected artifact and successful
+workflow run, verifies both GitHub provenance bundles, requires the predecessor
+commit to be an ancestor, and compares the selected release ID, Git SHA, and
+Web/API/Worker image IDs with the three fixed public Render readiness endpoints,
+without following redirects.
+It also confirms that all four predecessor image digests remain anonymously
+retrievable for rollback. It then generates a normal `rehearsal-candidate-*`
+manifest whose `previousRelease` names and hashes those exact bytes. The raw
+manifest-file digest includes its trailing newline and is distinct from the
+manifest's internal `integrity.payloadSha256`.
+
+The readiness identity is service-reported configuration; it is not independent
+proof of Render's active OCI digest. Before dispatch, an operator must also use
+authenticated Render state to compare each service's current image reference
+with the selected manifest. Stop on any mismatch.
+
+This successor publisher is intentionally same-migration-head-and-tree-only.
+The candidate migration journal head and the recursive Git tree for
+`packages/db/migrations` must both equal the selected deployed publication.
+Those comparisons authenticate publication compatibility only; they do not
+inspect or attest the live PostgreSQL migration journal. The guarded migration
+rehearsal remains separate and must prove the database state before cutover. Any
+future migration change requires a new reviewed path with explicit
+deployed-database evidence.
 
 ## Database transport and migration
 
@@ -236,8 +259,16 @@ compiled into the artifact.
 
 The checked-in template contains unresolved tokens so an accidental sync
 cannot deploy mutable tags. Run `Publish staging images` only from the exact
-`trevv-foundation` branch commit after CI succeeds, then download these four
-inputs from its `staging-image-digests-*` artifact:
+`trevv-foundation` branch commit after CI succeeds. Supply the currently
+deployed predecessor artifact ID and its GitHub-reported ZIP digest, hash the
+downloaded predecessor `staging-release-manifest.json` without rewriting it,
+and enter the literal confirmation
+`publish-successor-from-deployed:<candidate-sha>:<previous-manifest-sha256>`.
+Stop if the artifact has expired, the public readiness identities do not match,
+authenticated Render state does not match those identities, the migration head
+or tree changed, or any value cannot be recovered from the authenticated
+deployed publication. After the successor workflow succeeds, download these
+four inputs from its new `staging-image-digests-*` artifact:
 
 - `staging-release-manifest.json`;
 - `staging-release-manifest.provenance.bundle.json`;

@@ -179,7 +179,7 @@ test("security scans remain fail-closed for every published image", () => {
   ]);
 });
 
-test("dispatch and source verification enforce the fixed free-preview policy", () => {
+test("dispatch binds the candidate to the selected deployed publication", () => {
   const inputs = workflow.on.workflow_dispatch.inputs;
   assert.deepEqual(inputs.csp_mode, {
     description: "Fixed report-only CSP for this disposable free preview",
@@ -195,13 +195,33 @@ test("dispatch and source verification enforce the fixed free-preview policy", (
     type: "choice",
     options: ["false"],
   });
-  assert.deepEqual(inputs.genesis_confirmation, {
+  assert.deepEqual(inputs.previous_artifact_id, {
     description:
-      "Type create-first-disposable-preview-genesis; this workflow is not valid for later cohorts",
+      "GitHub artifact ID for the currently deployed predecessor publication",
     required: true,
     default: "",
     type: "string",
   });
+  assert.deepEqual(inputs.previous_artifact_sha256, {
+    description: "SHA-256 of the exact deployed predecessor artifact ZIP",
+    required: true,
+    default: "",
+    type: "string",
+  });
+  assert.deepEqual(inputs.previous_manifest_sha256, {
+    description: "SHA-256 of the exact predecessor manifest file bytes",
+    required: true,
+    default: "",
+    type: "string",
+  });
+  assert.deepEqual(inputs.successor_confirmation, {
+    description:
+      "Type publish-successor-from-deployed:<candidate-sha>:<previous-manifest-sha256>",
+    required: true,
+    default: "",
+    type: "string",
+  });
+  assert.equal(inputs.genesis_confirmation, undefined);
 
   const verify = stepNamed(
     job("verify-source").steps,
@@ -209,15 +229,158 @@ test("dispatch and source verification enforce the fixed free-preview policy", (
   );
   assert.equal(verify.env.CSP_MODE, "${{ inputs.csp_mode }}");
   assert.equal(
-    verify.env.GENESIS_CONFIRMATION,
-    "${{ inputs.genesis_confirmation }}",
+    verify.env.PREVIOUS_ARTIFACT_ID,
+    "${{ inputs.previous_artifact_id }}",
+  );
+  assert.equal(
+    verify.env.PREVIOUS_ARTIFACT_SHA256,
+    "${{ inputs.previous_artifact_sha256 }}",
+  );
+  assert.equal(
+    verify.env.PREVIOUS_MANIFEST_SHA256,
+    "${{ inputs.previous_manifest_sha256 }}",
+  );
+  assert.equal(
+    verify.env.SUCCESSOR_CONFIRMATION,
+    "${{ inputs.successor_confirmation }}",
   );
   assert.equal(verify.env.HSTS_ENABLED, "${{ inputs.hsts_enabled }}");
   assert.match(verify.run, /"\$CSP_MODE" != "report-only"/u);
   assert.match(verify.run, /"\$HSTS_ENABLED" != "false"/u);
+  assert.match(verify.run, /\^\[1-9\]\[0-9\]\*\$/u);
+  assert.match(verify.run, /\^sha256:\[0-9a-f\]\{64\}\$/u);
   assert.match(
     verify.run,
-    /"\$GENESIS_CONFIRMATION" != "create-first-disposable-preview-genesis"/u,
+    /publish-successor-from-deployed:\$\{source_sha\}:\$\{PREVIOUS_MANIFEST_SHA256\}/u,
+  );
+  assert.doesNotMatch(verify.run, /genesis/iu);
+});
+
+test("successor manifest authenticates and binds the deployed predecessor", () => {
+  const digestJob = job("digest-bundle");
+  assert.equal(digestJob.name, "Publish digest bundle and successor manifest");
+  assert.deepEqual(digestJob.permissions, {
+    actions: "read",
+    attestations: "write",
+    contents: "read",
+    "id-token": "write",
+  });
+
+  const checkout = stepNamed(
+    digestJob.steps,
+    "Check out the exact verified source",
+  );
+  assert.equal(checkout.with["fetch-depth"], 0);
+
+  const predecessor = stepNamed(
+    digestJob.steps,
+    "Authenticate the selected deployed predecessor",
+  );
+  const predecessorBuildx = stepNamed(
+    digestJob.steps,
+    "Set up Docker Buildx for deployed-predecessor availability checks",
+  );
+  assert.match(
+    predecessorBuildx.uses,
+    /^docker\/setup-buildx-action@[0-9a-f]{40}$/u,
+  );
+  assert.ok(predecessor?.run);
+  assert.equal(
+    predecessor.env.PREVIOUS_ARTIFACT_ID,
+    "${{ inputs.previous_artifact_id }}",
+  );
+  assert.equal(
+    predecessor.env.PREVIOUS_ARTIFACT_SHA256,
+    "${{ inputs.previous_artifact_sha256 }}",
+  );
+  assert.equal(
+    predecessor.env.PREVIOUS_MANIFEST_SHA256,
+    "${{ inputs.previous_manifest_sha256 }}",
+  );
+  for (const requiredPattern of [
+    /actions\/artifacts\/\$\{PREVIOUS_ARTIFACT_ID\}/u,
+    /actions\/runs\/\$\{previous_run_id\}/u,
+    /predecessor_migration_tree=\$\(git rev-parse/u,
+    /"\$\{previous_source_sha\}:packages\/db\/migrations"/u,
+    /candidate_migration_tree=\$\(git rev-parse/u,
+    /"\$\{SOURCE_SHA\}:packages\/db\/migrations"/u,
+    /git merge-base --is-ancestor "\$previous_sha" "\$SOURCE_SHA"/u,
+    /sha256sum "\$predecessor_archive"/u,
+    /The predecessor publication has an unexpected file inventory/u,
+    /sha256sum "\$previous_manifest"/u,
+    /node scripts\/staging-publication-predecessor\.mjs/u,
+    /--artifact-metadata "\$artifact_metadata"/u,
+    /--run-metadata "\$run_metadata"/u,
+    /--migration-journal packages\/db\/migrations\/meta\/_journal\.json/u,
+    /--predecessor-migration-tree "\$predecessor_migration_tree"/u,
+    /--candidate-migration-tree "\$candidate_migration_tree"/u,
+    /\.publication\.publishedMigrationHead/u,
+    /\.migrationPolicy\.candidateHead/u,
+    /\.migrationPolicy\.predecessorMigrationTreeId/u,
+    /readinessReportedCohort/u,
+    /readinessObservedAt/u,
+    /GITHUB_STEP_SUMMARY/u,
+    /gh attestation verify "\$previous_manifest"/u,
+    /staging-image-digests\.provenance\.bundle\.json/u,
+    /--source-ref refs\/heads\/trevv-foundation/u,
+    /--source-digest "\$previous_sha"/u,
+    /--deny-self-hosted-runners/u,
+    /printf '\{"auths":\{\}\}\\n'/u,
+    /DOCKER_CONFIG="\$predecessor_docker_config"/u,
+    /docker buildx imagetools inspect "\$reference"/u,
+  ]) {
+    assert.match(predecessor.run, requiredPattern);
+  }
+  assert.doesNotMatch(
+    predecessor.run,
+    /latest_successful_run|immediate previous successful publication/u,
+  );
+  const summaryIndex = predecessor.run.indexOf("GITHUB_STEP_SUMMARY");
+  assert.ok(
+    summaryIndex > predecessor.run.lastIndexOf("gh attestation verify"),
+  );
+  assert.ok(
+    summaryIndex >
+      predecessor.run.indexOf('docker buildx imagetools inspect "$reference"'),
+  );
+
+  const successor = stepNamed(
+    digestJob.steps,
+    "Generate the authenticated non-production successor manifest",
+  );
+  assert.ok(successor?.run);
+  assert.equal(
+    successor.env.REHEARSAL_PREVIOUS_MANIFEST_PATH,
+    "${{ steps.predecessor.outputs.manifest_path }}",
+  );
+  assert.equal(
+    successor.env.REHEARSAL_PREVIOUS_MANIFEST_SHA256,
+    "${{ steps.predecessor.outputs.manifest_sha256 }}",
+  );
+  assert.equal(
+    successor.env.REHEARSAL_PREVIOUS_MIGRATION_HEAD,
+    "${{ steps.predecessor.outputs.published_migration_head }}",
+  );
+  assert.equal(
+    successor.env.REHEARSAL_PREVIOUS_RELEASE_ID,
+    "${{ steps.predecessor.outputs.release_id }}",
+  );
+  assert.equal(
+    successor.env.REHEARSAL_RELEASE_ID,
+    "rehearsal-candidate-${{ github.run_id }}-${{ github.run_attempt }}",
+  );
+  assert.equal(successor.env.REHEARSAL_GENESIS, undefined);
+  assert.match(
+    successor.run,
+    /\.previousRelease\.manifestDigest == \$previousManifestDigest/u,
+  );
+  assert.match(
+    successor.run,
+    /\.database\.previousReleaseMigrationHead == \$previousMigrationHead/u,
+  );
+  assert.doesNotMatch(
+    JSON.stringify(digestJob),
+    /create-first-disposable-preview-genesis|REHEARSAL_GENESIS/u,
   );
 });
 

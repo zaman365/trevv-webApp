@@ -165,33 +165,66 @@ warmed, or an outbox that does not drain and advance within the bounded polling
 window. A warmed Worker pass applies only to that run and does not establish
 durable Worker availability.
 
-## First full-topology manifest
+## Successor publication and release lineage
 
-Only the first complete remote-staging cohort may declare genesis, and its ID
-must begin with `rehearsal-baseline-`. Genesis explicitly records that no prior
-full-topology cohort exists; it cannot contain a previous manifest/release or
-migration head, and the production validator always rejects it.
+The first complete remote-staging cohort is the only genesis. The checked-in
+`Publish staging images` workflow now refuses to create another baseline and
+publishes only a successor of the cohort whose readiness identity matches the
+selected publication and whose Render image state the operator separately
+verified.
+
+Before dispatch, retain the currently deployed publication ZIP without
+extracting or rewriting it and record all three identities:
+
+1. the GitHub artifact ID;
+2. GitHub's `sha256:` digest of the exact artifact ZIP; and
+3. the `sha256:` digest of the exact
+   `staging-release-manifest.json` file bytes, including its trailing newline.
+
+The third value is not the manifest's internal
+`integrity.payloadSha256`. Hash the downloaded file itself. The workflow uses
+the artifact ID to authenticate the successful predecessor workflow run and
+requires the supplied ZIP digest, exact five-file inventory, both GitHub
+provenance bundles, a structurally valid non-production manifest, matching
+image evidence, and Git ancestry. It does not equate the latest successful
+publication with the deployed cohort. The fixed public Web, API, and Worker
+readiness endpoints must all report the selected manifest's release ID, Git
+SHA, and service image IDs without a redirect. These values are service-reported
+runtime configuration, not independent proof of Render's active OCI digest.
+Before dispatch, compare the current image reference for each service with the
+manifest through authenticated Render state and stop on any mismatch.
+
+This publisher accepts only a candidate with the same checked-in migration
+journal head and the same recursive `packages/db/migrations` Git tree as the
+deployed publication. It emits no claim about the live database journal; the
+guarded migration rehearsal is separate evidence. Stop and design a reviewed
+deployed-database evidence path before publishing a candidate that changes any
+migration file or metadata.
+
+After the candidate is the exact successful `trevv-foundation` CI head,
+dispatch with:
 
 ```sh
-REHEARSAL_GENESIS=true \
-REHEARSAL_RELEASE_ID=rehearsal-baseline-<unique-id> \
-REHEARSAL_CREATED_AT=<UTC-ISO-timestamp> \
-REHEARSAL_GIT_SHA=<full-40-character-sha> \
-TREV_WEB_IMAGE_ID=sha256:<64-hex> \
-TREV_API_IMAGE_ID=sha256:<64-hex> \
-TREV_WORKER_IMAGE_ID=sha256:<64-hex> \
-TREV_MIGRATE_IMAGE_ID=sha256:<64-hex> \
-pnpm release:rehearsal-input > /secure/path/baseline-a-input.json
+candidate_sha=<full-40-character-candidate-sha>
+previous_artifact_id=<deployed-predecessor-artifact-id>
+previous_artifact_sha256=sha256:<artifact-zip-64-hex>
+previous_manifest_sha256=sha256:<manifest-file-64-hex>
 
-node scripts/phase6-release-manifest.mjs generate \
-  --input /secure/path/baseline-a-input.json \
-  --output /secure/path/baseline-a-manifest.json
+gh workflow run publish-staging-images.yml \
+  --ref trevv-foundation \
+  -f source_sha="$candidate_sha" \
+  -f public_origin=https://trevv-free-preview-web-zaman365.onrender.com \
+  -f csp_mode=report-only \
+  -f hsts_enabled=false \
+  -f previous_artifact_id="$previous_artifact_id" \
+  -f previous_artifact_sha256="$previous_artifact_sha256" \
+  -f previous_manifest_sha256="$previous_manifest_sha256" \
+  -f successor_confirmation="publish-successor-from-deployed:${candidate_sha}:${previous_manifest_sha256}"
 ```
 
-The next candidate must use the normal path and reference baseline A by exact
-release ID, migration head, immutable manifest bytes, and digest. Never
-self-reference or synthesize a predecessor. The checked-in `Publish staging
-images` workflow is intentionally restricted to baseline A and requires the
-literal dispatch confirmation `create-first-disposable-preview-genesis`; it
-must not be reused for the next candidate. Implement and review an
-authenticated predecessor-input publication path before any second cohort.
+The resulting release ID begins with `rehearsal-candidate-`. Its
+`previousRelease.releaseId`, raw manifest digest, and
+`database.previousReleaseMigrationHead` are derived from the authenticated
+predecessor instead of dispatch text. Never self-reference, synthesize a
+predecessor, select a publication whose readiness identity is not currently
+deployed, or regenerate a release ID.

@@ -29,8 +29,23 @@ on:
         type: choice
         options:
           - "false"
-      genesis_confirmation:
-        description: Type create-first-disposable-preview-genesis; this workflow is not valid for later cohorts
+      previous_artifact_id:
+        description: GitHub artifact ID for the currently deployed predecessor publication
+        required: true
+        default: ""
+        type: string
+      previous_artifact_sha256:
+        description: SHA-256 of the exact deployed predecessor artifact ZIP
+        required: true
+        default: ""
+        type: string
+      previous_manifest_sha256:
+        description: SHA-256 of the exact predecessor manifest file bytes
+        required: true
+        default: ""
+        type: string
+      successor_confirmation:
+        description: Type publish-successor-from-deployed:<candidate-sha>:<previous-manifest-sha256>
         required: true
         default: ""
         type: string
@@ -64,10 +79,13 @@ jobs:
         id: source
         env:
           CSP_MODE: ${{ inputs.csp_mode }}
-          GENESIS_CONFIRMATION: ${{ inputs.genesis_confirmation }}
           HSTS_ENABLED: ${{ inputs.hsts_enabled }}
+          PREVIOUS_ARTIFACT_ID: ${{ inputs.previous_artifact_id }}
+          PREVIOUS_ARTIFACT_SHA256: ${{ inputs.previous_artifact_sha256 }}
+          PREVIOUS_MANIFEST_SHA256: ${{ inputs.previous_manifest_sha256 }}
           PUBLIC_ORIGIN: ${{ inputs.public_origin }}
           REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          SUCCESSOR_CONFIRMATION: ${{ inputs.successor_confirmation }}
         run: |
           source_sha="${REQUESTED_SOURCE_SHA:-$GITHUB_SHA}"
           if ! printf '%s' "$source_sha" | grep -Eq '^[0-9a-f]{40}$'; then
@@ -88,8 +106,19 @@ jobs:
             echo "::error::The disposable free preview requires csp_mode=report-only and hsts_enabled=false."
             exit 1
           fi
-          if [ "$GENESIS_CONFIRMATION" != "create-first-disposable-preview-genesis" ]; then
-            echo "::error::This publisher is restricted to the first disposable-preview genesis cohort."
+          if ! printf '%s' "$PREVIOUS_ARTIFACT_ID" | grep -Eq '^[1-9][0-9]*$'; then
+            echo "::error::previous_artifact_id must be a positive GitHub artifact ID."
+            exit 1
+          fi
+          for digest in "$PREVIOUS_ARTIFACT_SHA256" "$PREVIOUS_MANIFEST_SHA256"; do
+            if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+              echo "::error::Predecessor digests must be lowercase sha256 values."
+              exit 1
+            fi
+          done
+          expected_confirmation="publish-successor-from-deployed:${source_sha}:${PREVIOUS_MANIFEST_SHA256}"
+          if [ "$SUCCESSOR_CONFIRMATION" != "$expected_confirmation" ]; then
+            echo "::error::successor_confirmation does not bind this candidate to the deployed predecessor manifest."
             exit 1
           fi
           test "$(git rev-parse origin/trevv-foundation)" = "$GITHUB_SHA"
@@ -427,11 +456,12 @@ jobs:
           retention-days: 30
 
   digest-bundle:
-    name: Publish digest bundle and genesis manifest
+    name: Publish digest bundle and successor manifest
     needs: [verify-source, attest-images]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      actions: read
       attestations: write
       contents: read
       id-token: write
@@ -442,6 +472,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ needs.verify-source.outputs.source_sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Use the manifest-declared Node runtime
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -452,6 +483,148 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           test -z "$(git status --porcelain)"
           mkdir -p "$RUNNER_TEMP/staging-evidence" "$RUNNER_TEMP/staging-publication"
+      - name: Set up Docker Buildx for deployed-predecessor availability checks
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Authenticate the selected deployed predecessor
+        id: predecessor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_ARTIFACT_ID: ${{ inputs.previous_artifact_id }}
+          PREVIOUS_ARTIFACT_SHA256: ${{ inputs.previous_artifact_sha256 }}
+          PREVIOUS_MANIFEST_SHA256: ${{ inputs.previous_manifest_sha256 }}
+        run: |
+          predecessor_root="$RUNNER_TEMP/staging-predecessor"
+          predecessor_archive="$predecessor_root/publication.zip"
+          predecessor_files="$predecessor_root/files"
+          artifact_metadata="$predecessor_root/artifact.json"
+          run_metadata="$predecessor_root/run.json"
+          predecessor_report="$predecessor_root/verified-deployed-predecessor.json"
+          mkdir -p "$predecessor_files"
+
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${PREVIOUS_ARTIFACT_ID}" \
+            > "$artifact_metadata"
+          previous_run_id=$(jq -er \
+            '.workflow_run.id | select(type == "number" and . > 0)' \
+            "$artifact_metadata")
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${previous_run_id}" \
+            > "$run_metadata"
+          previous_source_sha=$(jq -er \
+            '.head_sha | select(type == "string" and test("^[0-9a-f]{40}$"))' \
+            "$run_metadata")
+          git cat-file -e "${previous_source_sha}^{commit}"
+          predecessor_migration_tree=$(git rev-parse \
+            "${previous_source_sha}:packages/db/migrations")
+          candidate_migration_tree=$(git rev-parse \
+            "${SOURCE_SHA}:packages/db/migrations")
+
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${PREVIOUS_ARTIFACT_ID}/zip" \
+            > "$predecessor_archive"
+          archive_digest="sha256:$(sha256sum "$predecessor_archive" | cut -d ' ' -f 1)"
+          if [ "$archive_digest" != "$PREVIOUS_ARTIFACT_SHA256" ]; then
+            echo "::error::The downloaded predecessor artifact digest is not the confirmed digest."
+            exit 1
+          fi
+          unzip -tqq "$predecessor_archive"
+          expected_inventory=$(printf '%s\n' \
+            staging-image-digests.json \
+            staging-image-digests.provenance.bundle.json \
+            staging-publication-attestations.json \
+            staging-release-manifest.json \
+            staging-release-manifest.provenance.bundle.json)
+          actual_inventory=$(unzip -Z1 "$predecessor_archive" | LC_ALL=C sort)
+          if [ "$actual_inventory" != "$expected_inventory" ]; then
+            echo "::error::The predecessor publication has an unexpected file inventory."
+            exit 1
+          fi
+          unzip -q "$predecessor_archive" -d "$predecessor_files"
+
+          previous_manifest="$predecessor_files/staging-release-manifest.json"
+          manifest_digest="sha256:$(sha256sum "$previous_manifest" | cut -d ' ' -f 1)"
+          if [ "$manifest_digest" != "$PREVIOUS_MANIFEST_SHA256" ]; then
+            echo "::error::The predecessor manifest raw-byte digest is not the confirmed digest."
+            exit 1
+          fi
+
+          node scripts/staging-publication-predecessor.mjs \
+            --artifact-metadata "$artifact_metadata" \
+            --run-metadata "$run_metadata" \
+            --archive "$predecessor_archive" \
+            --manifest "$previous_manifest" \
+            --digest-bundle "$predecessor_files/staging-image-digests.json" \
+            --migration-journal packages/db/migrations/meta/_journal.json \
+            --artifact-id "$PREVIOUS_ARTIFACT_ID" \
+            --artifact-sha256 "$PREVIOUS_ARTIFACT_SHA256" \
+            --manifest-sha256 "$PREVIOUS_MANIFEST_SHA256" \
+            --candidate-sha "$SOURCE_SHA" \
+            --predecessor-migration-tree "$predecessor_migration_tree" \
+            --candidate-migration-tree "$candidate_migration_tree" \
+            --repository "$GITHUB_REPOSITORY" \
+            > "$predecessor_report"
+
+          previous_sha=$(jq -er '.publication.sourceSha' "$predecessor_report")
+          test "$previous_sha" = "$previous_source_sha"
+          previous_release_id=$(jq -er '.publication.releaseId' "$predecessor_report")
+          published_migration_head=$(jq -er \
+            '.publication.publishedMigrationHead' "$predecessor_report")
+          candidate_migration_head=$(jq -er \
+            '.migrationPolicy.candidateHead' "$predecessor_report")
+          test "$published_migration_head" = "$candidate_migration_head"
+          test "$(jq -er '.migrationPolicy.predecessorMigrationTreeId' \
+            "$predecessor_report")" = "$candidate_migration_tree"
+
+          git cat-file -e "${previous_sha}^{commit}"
+          if ! git merge-base --is-ancestor "$previous_sha" "$SOURCE_SHA"; then
+            echo "::error::The authenticated deployed predecessor is not an ancestor of the candidate source."
+            exit 1
+          fi
+
+          signer_workflow="${GITHUB_REPOSITORY}/.github/workflows/publish-staging-images.yml"
+          gh attestation verify "$previous_manifest" \
+            --bundle "$predecessor_files/staging-release-manifest.provenance.bundle.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$signer_workflow" \
+            --source-ref refs/heads/trevv-foundation \
+            --source-digest "$previous_sha" \
+            --deny-self-hosted-runners
+          gh attestation verify "$predecessor_files/staging-image-digests.json" \
+            --bundle "$predecessor_files/staging-image-digests.provenance.bundle.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$signer_workflow" \
+            --source-ref refs/heads/trevv-foundation \
+            --source-digest "$previous_sha" \
+            --deny-self-hosted-runners
+
+          predecessor_docker_config="$RUNNER_TEMP/trevv-predecessor-docker-config"
+          install -d -m 0700 "$predecessor_docker_config"
+          printf '{"auths":{}}\n' > "$predecessor_docker_config/config.json"
+          chmod 0600 "$predecessor_docker_config/config.json"
+          for service in api migrate web worker; do
+            reference=$(jq -r ".images.${service}.reference" \
+              "$predecessor_files/staging-image-digests.json")
+            DOCKER_CONFIG="$predecessor_docker_config" \
+              docker buildx imagetools inspect "$reference" >/dev/null
+          done
+
+          {
+            printf '### Authenticated predecessor readiness\n\n```json\n'
+            jq '{
+              publication,
+              readinessReportedCohort,
+              migrationPolicy,
+              databaseState,
+              deploymentState,
+              readinessObservedAt
+            }' "$predecessor_report"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "manifest_path=$previous_manifest" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256=$manifest_digest" >> "$GITHUB_OUTPUT"
+          echo "published_migration_head=$published_migration_head" >> "$GITHUB_OUTPUT"
+          echo "release_id=$previous_release_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$previous_sha" >> "$GITHUB_OUTPUT"
       - name: Download service evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -548,13 +721,16 @@ jobs:
             ([.images[].verification.status == "attested-security-gates-passed"] | all) and
             ([.images[].verification.githubProvenanceIssued == true] | all)
           ' "${OUTPUT_DIR}/staging-image-digests.json"
-      - name: Generate the one-time first non-production genesis release manifest
+      - name: Generate the authenticated non-production successor manifest
         env:
           DIGEST_BUNDLE: ${{ runner.temp }}/staging-publication/staging-image-digests.json
           OUTPUT_DIR: ${{ runner.temp }}/staging-publication
-          REHEARSAL_GENESIS: "true"
           REHEARSAL_GIT_SHA: ${{ needs.verify-source.outputs.source_sha }}
-          REHEARSAL_RELEASE_ID: rehearsal-baseline-${{ github.run_id }}-${{ github.run_attempt }}
+          REHEARSAL_PREVIOUS_MANIFEST_PATH: ${{ steps.predecessor.outputs.manifest_path }}
+          REHEARSAL_PREVIOUS_MANIFEST_SHA256: ${{ steps.predecessor.outputs.manifest_sha256 }}
+          REHEARSAL_PREVIOUS_MIGRATION_HEAD: ${{ steps.predecessor.outputs.published_migration_head }}
+          REHEARSAL_PREVIOUS_RELEASE_ID: ${{ steps.predecessor.outputs.release_id }}
+          REHEARSAL_RELEASE_ID: rehearsal-candidate-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           test -z "$(git status --porcelain)"
           export TREV_API_IMAGE_ID
@@ -568,19 +744,28 @@ jobs:
           TREV_WEB_IMAGE_ID=$(jq -r '.images.web.digest' "$DIGEST_BUNDLE")
           TREV_WORKER_IMAGE_ID=$(jq -r '.images.worker.digest' "$DIGEST_BUNDLE")
           node scripts/nonproduction-release-input.mjs \
-            > "$RUNNER_TEMP/staging-genesis-input.json"
+            > "$RUNNER_TEMP/staging-successor-input.json"
           node scripts/phase6-release-manifest.mjs generate \
-            --input "$RUNNER_TEMP/staging-genesis-input.json" \
+            --input "$RUNNER_TEMP/staging-successor-input.json" \
             --output "${OUTPUT_DIR}/staging-release-manifest.json"
           node scripts/phase6-release-manifest.mjs validate \
             --manifest "${OUTPUT_DIR}/staging-release-manifest.json"
+          jq -e \
+            --arg previousReleaseId "$REHEARSAL_PREVIOUS_RELEASE_ID" \
+            --arg previousManifestDigest "$REHEARSAL_PREVIOUS_MANIFEST_SHA256" \
+            --arg previousMigrationHead "$REHEARSAL_PREVIOUS_MIGRATION_HEAD" \
+            '
+              .previousRelease.releaseId == $previousReleaseId and
+              .previousRelease.manifestDigest == $previousManifestDigest and
+              .database.previousReleaseMigrationHead == $previousMigrationHead
+            ' "${OUTPUT_DIR}/staging-release-manifest.json" >/dev/null
           test -z "$(git status --porcelain)"
       - name: Attest the digest bundle
         id: attest-bundle
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-path: ${{ runner.temp }}/staging-publication/staging-image-digests.json
-      - name: Attest the one-time non-production genesis release manifest
+      - name: Attest the non-production successor release manifest
         id: attest-release
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:

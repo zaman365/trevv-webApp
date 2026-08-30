@@ -39,6 +39,32 @@ TREV_MIGRATE_IMAGE_ID=sha256:REPLACE \
 pnpm release:rehearsal-input > /tmp/trevv-rehearsal-input.json
 ```
 
+For the remote disposable preview, the checked-in publication workflow obtains
+`REHEARSAL_PREVIOUS_MANIFEST_PATH`, release ID, and migration head only from the
+authenticated publication that the operator identifies as currently deployed.
+Dispatch supplies its GitHub artifact ID, GitHub-reported ZIP digest, and the
+SHA-256 of the exact manifest file bytes. Do not substitute
+`integrity.payloadSha256`: the lineage digest is over the complete stored file,
+including its trailing newline. The explicit confirmation begins with
+`publish-successor-from-deployed:`. The workflow does not select the latest
+successful publication because a published cohort may never have been deployed.
+Instead, it compares the selected release ID, Git SHA, and Web/API/Worker image
+IDs with the three fixed public Render readiness endpoints without following
+redirects. Those values are service-reported configuration, not independent
+proof of Render's active OCI digest; authenticated Render state must separately
+confirm each current image reference before dispatch. The workflow also verifies
+the successful predecessor run, both provenance bundles, exact artifact
+inventory, image/manifest binding, anonymous availability of every predecessor
+image digest, and Git ancestry before it creates a successor manifest.
+
+The publisher separately reports that it has not verified PostgreSQL state. For
+this iteration it rejects every migration change: the current checked-in journal
+head and recursive `packages/db/migrations` Git tree must equal the deployed
+publication. A guarded migration rehearsal must still authenticate the database
+journal before cutover. Supporting a future changed migration tree requires
+reviewed deployed-database evidence rather than treating publication metadata
+as database proof.
+
 The generator deliberately emits report-only CSP, no HSTS, disabled external error reporting, no evidence links, and `not_authorized`. It accepts only a `rehearsal-*` release ID. The normal release-manifest validator therefore accepts its non-production shape while continuing to reject it for production.
 
 ## Aligned rollback and forward-fix procedure

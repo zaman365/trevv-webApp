@@ -523,26 +523,34 @@ test("rejects the retired auxiliary edge option", async () => {
 });
 
 test("the publication workflow requires source SHA to equal the branch workflow SHA", async () => {
-  const workflow = await readFile(
+  const workflowSource = await readFile(
     resolve(repositoryRoot, ".github/workflows/publish-staging-images.yml"),
     "utf8",
   );
+  const workflow = YAML.parse(workflowSource);
+  const sourceStep = workflow.jobs["verify-source"].steps.find(
+    (step) => step.name === "Resolve and verify the source commit",
+  );
+  assert.ok(sourceStep?.run);
   assert.match(
-    workflow,
+    sourceStep.run,
     /test "\$\(git rev-parse origin\/trevv-foundation\)" = "\$GITHUB_SHA"/u,
   );
-  assert.match(workflow, /if \[ "\$source_sha" != "\$GITHUB_SHA" \]; then/u);
   assert.match(
-    workflow,
+    sourceStep.run,
+    /if \[ "\$source_sha" != "\$GITHUB_SHA" \]; then/u,
+  );
+  assert.match(
+    sourceStep.run,
     /origin\.origin !== "https:\/\/trevv-free-preview-web-zaman365\.onrender\.com"/u,
   );
-  assert.match(workflow, /image: \.image,/u);
-  assert.doesNotMatch(workflow, /\n\s+name: \.image,/u);
+  assert.doesNotMatch(sourceStep.run, /merge-base --is-ancestor/u);
+  assert.match(workflowSource, /image: \.image,/u);
+  assert.doesNotMatch(workflowSource, /\n\s+name: \.image,/u);
   assert.match(
-    workflow,
+    workflowSource,
     /\.value\.image == \("ghcr\.io\/zaman365\/trevv-" \+ \.key\)/u,
   );
-  assert.doesNotMatch(workflow, /merge-base --is-ancestor/u);
 });
 
 function renderService(blueprint, suffix) {
