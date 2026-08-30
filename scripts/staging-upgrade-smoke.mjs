@@ -485,6 +485,9 @@ try {
   );
 
   result = {
+    schemaVersion: 1,
+    classification: "synthetic-non-production",
+    releaseDecision: "NO_GO",
     status: "ok",
     previousMigration,
     appliedMigrations: migrationFiles.length - previousIndex - 1,
@@ -496,6 +499,20 @@ try {
     retentionScheduled: retentionCoverage.event_count,
     quarantinedMetadata: true,
     invalidParticipantBoundary: "rejected-atomically",
+    rollbackAndForwardFix: {
+      migration0009BoundaryFailure: "rolled-back-atomically",
+      migrationJournalAfterBoundaryFailure: previousMigration.replace(
+        /\.sql$/u,
+        "",
+      ),
+      downMigrationUsed: false,
+      expectedProductionResponse:
+        "stop promotion and forward-fix; use restore only under a separately authorized corruption decision",
+    },
+    limitations: [
+      "This is synthetic local/CI evidence, not a production backup or restore drill.",
+      "This record cannot authorize a production release.",
+    ],
   };
 } catch (error) {
   primaryError = error;

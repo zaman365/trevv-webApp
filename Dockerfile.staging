@@ -57,6 +57,9 @@ CMD ["node", "scripts/staging-smoke.mjs"]
 FROM service-runtime AS upgrade-smoke
 CMD ["node", "scripts/staging-upgrade-smoke.mjs"]
 
+FROM service-runtime AS foundation-upgrade-smoke
+CMD ["node", "scripts/synthetic-migration-rehearsal.mjs"]
+
 FROM node:${NODE_VERSION}-alpine AS web
 RUN apk add --no-cache dumb-init
 ENV NODE_ENV=production

@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "template": true,
+  "classification": "synthetic-non-production",
+  "releaseDecision": "NO_GO",
+  "releaseId": "REPLACE_WITH_REHEARSAL_RELEASE_ID",
+  "gitSha": "REPLACE_WITH_FULL_GIT_SHA",
+  "completedAt": null,
+  "checks": [
+    {
+      "id": "source.clean_candidate",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "source.generated_contract_no_drift",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "ci.quality_e2e_accessibility_live_identity_topology",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "artifacts.web_api_worker_migrate_immutable_ids",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "artifacts.running_identity_matches_candidate",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "manifest.nonproduction_input_and_manifest_valid",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "migration.0004_to_current_synthetic_fixture",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "migration.0004_to_current_second_pass_noop",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "migration.0009_legacy_collaboration_preserved",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "migration.0009_invalid_boundary_atomic_rollback",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "migration.injected_failure_database_cleanup",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "topology.trusted_tls_boundary",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "topology.web_api_worker_readiness",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.auth_verify_recover_revoke",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.two_tenant_idor_denied",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.founder_loop_restart_and_concurrency",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.team_room_and_message_two_browser",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.worker_retry_exactly_once_dead_letter_recovery",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.privacy_export_delete_retention",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.service_worker_logout_private_cache",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "smoke.headers_rate_limits_logs_redacted",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "rollback.previous_web_api_worker_migrate_images_available",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "rollback.previous_cohort_current_schema_compatibility",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "rollback.worker_drain_and_coordinated_service_rollback",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "rollback.forward_fix_path_rehearsed",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "operations.backup_restore_rpo_rto_drill",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "operations.alert_incident_support_on_call",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "cleanup.disposable_databases_and_topology_removed",
+      "required": true,
+      "result": "not_run",
+      "evidence": null
+    }
+  ],
+  "limitations": [
+    "A completed copy is rehearsal evidence only and cannot authorize production.",
+    "External security, legal, commercial, availability, support, and restore evidence remains separate and mandatory.",
+    "Do not convert this file into a PASS record without immutable evidence for every required check."
+  ]
+}

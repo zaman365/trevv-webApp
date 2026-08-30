@@ -267,6 +267,18 @@ services:
       STAGING_UPGRADE_DATABASE: trevv_previous_release_upgrade
       STAGING_PREVIOUS_MIGRATION: 0008_lumpy_sasquatch.sql
 
+  foundation-upgrade-smoke:
+    profiles: ["smoke"]
+    build:
+      <<: *runtime-build
+      target: foundation-upgrade-smoke
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      STAGING_DATABASE_ADMIN_URL: postgresql://founderhq:founderhq@postgres:5432/postgres
+      STAGING_FOUNDATION_UPGRADE_DATABASE: trevv_foundation_synthetic_rehearsal
+
 volumes:
   staging-mail:
   staging-postgres:

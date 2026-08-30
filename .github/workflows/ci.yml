@@ -223,6 +223,18 @@ jobs:
           fi
           remaining=$(docker compose -f compose.staging.yaml exec -T postgres psql -U founderhq -d postgres -Atc "select count(*) from pg_database where datname = 'trevv_previous_release_upgrade'")
           test "$remaining" = "0"
+      - name: Prove failed foundation rehearsals clean their isolated database
+        run: |
+          if docker compose -f compose.staging.yaml --profile smoke run --rm -e STAGING_FOUNDATION_FAILURE_INJECTION=after_fixture foundation-upgrade-smoke; then
+            echo "::error::The injected foundation migration failure unexpectedly succeeded."
+            exit 1
+          fi
+          remaining=$(docker compose -f compose.staging.yaml exec -T postgres psql -U founderhq -d postgres -Atc "select count(*) from pg_database where datname = 'trevv_foundation_synthetic_rehearsal'")
+          test "$remaining" = "0"
+      - name: Verify the complete 0004-to-current migration path
+        run: >-
+          docker compose -f compose.staging.yaml --profile smoke
+          run --rm foundation-upgrade-smoke
       - name: Verify previous-release database upgrade
         run: >-
           docker compose -f compose.staging.yaml --profile smoke
