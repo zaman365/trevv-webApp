@@ -733,7 +733,7 @@ async function verifyProcessedExactlyOnce(eventId, label) {
 async function verifyNoUnsupportedBacklog(observedAfter) {
   for (const workerOrigin of workerOrigins) {
     const snapshot = await poll(async () => {
-      const response = await fetch(new URL("/metrics", workerOrigin), {
+      const response = await fetch(new URL("/metrics.json", workerOrigin), {
         cache: "no-store",
       });
       if (!response.ok) return null;
