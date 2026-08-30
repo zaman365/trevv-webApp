@@ -586,11 +586,16 @@ async function verifyRetentionEffect({
     );
 
   await database.begin(async (transaction) => {
-    await transaction`
+    const [acceleratedMessage] = await transaction`
       update conversation_messages
-      set expires_at = now() - interval '1 second'
+      set expires_at = created_at + interval '1 millisecond'
       where organization_id = ${organizationId} and id = ${messageId}
+      returning expires_at <= now() as retention_due
     `;
+    if (!acceleratedMessage?.retention_due)
+      throw new Error(
+        "Could not accelerate message retention while preserving the expiry invariant.",
+      );
     await transaction`
       update outbox_events
       set available_at = now()
