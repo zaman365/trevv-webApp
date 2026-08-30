@@ -6,7 +6,11 @@ const webUrl = new URL(webBaseUrl);
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  snapshotPathTemplate: "{testDir}/visual-baselines/{arg}-{projectName}{ext}",
+  // Browser screenshots are not byte-identical across host rasterizers. Keep
+  // reviewed baselines per OS so local macOS checks and Linux CI both compare
+  // against an image captured by the same rendering stack.
+  snapshotPathTemplate:
+    "{testDir}/visual-baselines/{arg}-{projectName}-{platform}{ext}",
   // The demo gate intentionally exercises Next's development server. Keep one
   // browser worker so concurrent cold-route compilation cannot corrupt or
   // temporarily empty Next's route manifest and masquerade as a product 500.

@@ -109,6 +109,13 @@ jobs:
           name: playwright-report-e2e
           path: playwright-report
           retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: visual-baseline-candidates-linux
+          path: tests/e2e/visual-baselines/*-linux.png
+          if-no-files-found: warn
+          retention-days: 14
 
   accessibility:
     runs-on: ubuntu-latest

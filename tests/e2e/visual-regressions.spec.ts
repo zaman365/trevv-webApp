@@ -1,9 +1,21 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import {
+  expect,
+  type BrowserContext,
+  type Locator,
+  type Page,
+  test,
+  type TestInfo,
+} from "@playwright/test";
 import { themePreferenceCookie } from "../../apps/web/lib/display-preferences";
 import { gotoCanonical, workspaceRoute } from "./routes";
 
 const onboardingWidths = [320, 390, 768, 1280] as const;
 const visualDiffPixelRatio = 0.005;
+const visualScreenshotOptions = {
+  animations: "disabled",
+  caret: "hide",
+  maxDiffPixelRatio: visualDiffPixelRatio,
+} as const;
 
 const rectanglesOverlap = (
   first: { top: number; right: number; bottom: number; left: number },
@@ -75,6 +87,25 @@ async function expectDeterministicVisualFont(page: Page) {
     await page.evaluate(() => document.fonts.check('16px "TREVV Sans"')),
   ).toBe(true);
   await expect(page.locator("body")).toHaveCSS("font-family", /TREVV Sans/);
+}
+
+function requireChromiumVisualBaseline(testInfo: TestInfo) {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Chromium is the visual-baseline project; WebKit remains a behavioral and accessibility gate.",
+  );
+}
+
+async function enableDarkTheme(context: BrowserContext, page: Page) {
+  await context.addCookies([
+    {
+      name: themePreferenceCookie,
+      value: "dark",
+      url: new URL("/", page.url()).href,
+    },
+  ]);
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 }
 
 async function expectTechnicalPreviewBadgeFullyVisible(page: Page) {
@@ -491,54 +522,62 @@ test("the global technical-preview badge remains fully visible at constrained wi
   }
 });
 
-test("representative release screens match the reviewed visual baselines", async ({
-  context,
+test("Portfolio light matches its reviewed visual baseline", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "chromium",
-    "Chromium is the visual-baseline project; WebKit remains a behavioral and accessibility gate.",
-  );
-
+  requireChromiumVisualBaseline(testInfo);
   await page.setViewportSize({ width: 1280, height: 900 });
   await gotoCanonical(page, "/app/portfolio");
   await expectDeterministicVisualFont(page);
-  await expect(page).toHaveScreenshot("portfolio-light.png", {
-    animations: "disabled",
-    caret: "hide",
-    maxDiffPixelRatio: visualDiffPixelRatio,
-  });
+  await expect(page).toHaveScreenshot(
+    "portfolio-light.png",
+    visualScreenshotOptions,
+  );
+});
 
-  await context.addCookies([
-    {
-      name: themePreferenceCookie,
-      value: "dark",
-      url: new URL("/", page.url()).href,
-    },
-  ]);
-  await page.reload({ waitUntil: "networkidle" });
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page).toHaveScreenshot("portfolio-dark.png", {
-    animations: "disabled",
-    caret: "hide",
-    maxDiffPixelRatio: visualDiffPixelRatio,
-  });
+test("Portfolio dark matches its reviewed visual baseline", async ({
+  context,
+  page,
+}, testInfo) => {
+  requireChromiumVisualBaseline(testInfo);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await gotoCanonical(page, "/app/portfolio");
+  await enableDarkTheme(context, page);
+  await expectDeterministicVisualFont(page);
+  await expect(page).toHaveScreenshot(
+    "portfolio-dark.png",
+    visualScreenshotOptions,
+  );
+});
 
+test("Messages medium dark matches its reviewed visual baseline", async ({
+  context,
+  page,
+}, testInfo) => {
+  requireChromiumVisualBaseline(testInfo);
   await page.setViewportSize({ width: 1024, height: 820 });
   await gotoCanonical(page, workspaceRoute("messages"));
+  await enableDarkTheme(context, page);
+  await expectDeterministicVisualFont(page);
   await page.getByRole("button", { name: "Open room context" }).click();
   await expect(page.locator(".conversation-context")).toBeVisible();
-  await expect(page).toHaveScreenshot("messages-medium-dark.png", {
-    animations: "disabled",
-    caret: "hide",
-    maxDiffPixelRatio: visualDiffPixelRatio,
-  });
+  await expect(page).toHaveScreenshot(
+    "messages-medium-dark.png",
+    visualScreenshotOptions,
+  );
+});
 
+test("Teams mobile dark matches its reviewed visual baseline", async ({
+  context,
+  page,
+}, testInfo) => {
+  requireChromiumVisualBaseline(testInfo);
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoCanonical(page, workspaceRoute("teams"));
-  await expect(page).toHaveScreenshot("teams-mobile-dark.png", {
-    animations: "disabled",
-    caret: "hide",
-    maxDiffPixelRatio: visualDiffPixelRatio,
-  });
+  await enableDarkTheme(context, page);
+  await expectDeterministicVisualFont(page);
+  await expect(page).toHaveScreenshot(
+    "teams-mobile-dark.png",
+    visualScreenshotOptions,
+  );
 });
