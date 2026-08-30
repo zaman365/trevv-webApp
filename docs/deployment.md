@@ -14,7 +14,13 @@ Web, Mobile, and Desktop point to one public HTTPS API. Only the API and private
 
 ## Current deployment truth
 
-The hosted `trevv.de` experience is still the fictional-data, browser-local technical preview. The live `DEMO_MODE=false` Web/API/PostgreSQL/worker/mail system, including persistent Teams and Messages, has not been deployed remotely. No production or remote-staging database was migrated and no customer data was used.
+The hosted `trevv.de` experience is still the fictional-data, browser-local
+technical preview. No qualifying production-shaped or real-data remote staging
+system is release evidence, no production/customer database has been migrated,
+and no customer data is authorized. A disposable, fictional-data `$0` Render
+preview may be provisioned for bounded functional rehearsal; its sleeping
+public services and expiring database do not close any managed-staging,
+backup/restore, private-networking, availability, or production gate.
 
 The repository now defines a production-shaped local/CI topology in `compose.staging.yaml`:
 
@@ -108,7 +114,7 @@ Before closed-alpha traffic, connect the private metric endpoints to a selected 
 
 ## Required production variables
 
-Use `.env.example` as the implemented catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database, request-protection, mail, or future provider credentials to Next.js, Expo, or Vite bundles. The API, Worker, and migration job require a production `DATABASE_URL` with exactly one `sslmode=verify-full`; `sslmode=require` encrypts transport but does not verify the server identity in the pinned driver and is rejected. The runtime trust store must contain the managed database CA. The API also requires a non-placeholder 32+ character `BETTER_AUTH_SECRET`, HTTPS `BETTER_AUTH_URL` and `WEB_ORIGIN`, `MAIL_FROM`, authenticated TLS SMTP settings, and `AUTH_COOKIE_DOMAIN` when the Web and auth hosts differ. Production refuses the test mail sink.
+Use `.env.example` as the implemented catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database, request-protection, mail, or future provider credentials to Next.js, Expo, or Vite bundles. The API, Worker, and migration job require a production `DATABASE_URL` with exactly one `sslmode=verify-full`; `sslmode=require` encrypts transport but does not verify the server identity in the pinned driver and is rejected. The runtime trust store must contain the managed database CA. The API also requires a non-placeholder 32+ character `BETTER_AUTH_SECRET`, HTTPS `BETTER_AUTH_URL` and `WEB_ORIGIN`, `MAIL_FROM`, and authenticated TLS SMTP settings. Production requires host-only authentication cookies: leave `AUTH_COOKIE_DOMAIN` unset and route browser authentication through the same-origin Web API boundary. A parent-domain bearer cookie would be exposed to every lower-assurance subdomain. Production refuses the test mail sink.
 
 Set the same `REGISTRATION_MODE` on Web and API. `invite_only` is the intended
 live default and validates a matching, unexpired, unrevoked, unconsumed

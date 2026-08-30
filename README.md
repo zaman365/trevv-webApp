@@ -67,7 +67,7 @@ pnpm dev:web
 WORKER_ID=trevv-local-worker-1 pnpm --filter @founderhq/worker dev
 ```
 
-Do not seed a pilot or alpha database. `pnpm db:seed` is restricted to a disposable fictional-demo database. Live mode enables real accounts, onboarding, invitations, sessions, server-derived tenant access, a persistent work-management loop, and durable collaboration: Teams, synchronized Team rooms, Workspace/private/direct/external conversations, messages, replies, reactions, response state, read checkpoints, retention, and server-scoped invalidation. Feature presets shape the Team experience but never grant data access. Other product surfaces remain preview-only, and the API/worker/database/mail topology is not deployed end to end.
+Do not seed a pilot or alpha database. `pnpm db:seed` is restricted to a disposable fictional-demo database. Live mode enables real accounts, onboarding, invitations, sessions, server-derived tenant access, a persistent work-management loop, and durable collaboration: Teams, synchronized Team rooms, Workspace/private/direct/external conversations, messages, replies, reactions, response state, read checkpoints, retention, and server-scoped invalidation. Feature presets shape the Team experience but never grant data access. Other product surfaces remain preview-only. No customer-facing or qualifying production-shaped API/worker/database/mail topology is deployed; a disposable fictional-data `$0` Render rehearsal may exercise the path end to end without closing production gates. See [the Render preview limits](deploy/render/README.md).
 
 For a focused process, use `pnpm dev:web` or `pnpm dev:api`. Expo runs with `pnpm --filter @founderhq/mobile dev`; the Tauri shell runs with `pnpm --filter @founderhq/desktop tauri dev`.
 

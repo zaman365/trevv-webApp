@@ -118,7 +118,7 @@
       "ownerRole": "Platform Operations",
       "targetDate": "2026-10-31",
       "reviewDate": "2026-09-15",
-      "rationale": "Only a self-signed local/CI topology exists. No managed remote staging or production Web/API/worker/PostgreSQL runtime is provisioned.",
+      "rationale": "No qualifying managed, production-shaped remote staging or production Web/API/worker/PostgreSQL runtime is provisioned. A disposable fictional-data $0 preview does not satisfy private-networking, backup/restore, availability, or operations gates.",
       "evidence": [
         {
           "path": "docs/deployment.md",
