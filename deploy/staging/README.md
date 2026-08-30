@@ -35,9 +35,16 @@ docker compose -f compose.staging.yaml --profile smoke down --volumes --remove-o
 
 The topology smoke creates a disposable fictional account and tenant, verifies a Team room and durable message, confirms API-created outbox state, proves the private router reaches both API processes, and proves only one of two workers acknowledges each event. It also validates the local CA/TLS identity, Secure/HTTP-only/SameSite session cookies, cross-origin mutation rejection, real retention redaction, expired-lease recovery, query-free edge logging, and authenticated Web rendering. The upgrade smoke creates and destroys only the explicitly named `trevv_*_upgrade` database, upgrades through the real Drizzle migration journal, verifies a second migration pass is a no-op, and fails loudly if cleanup cannot remove its resources. CI also injects a failure after the previous-release fixture is populated and verifies that the isolated database was still removed.
 
-Nginx access logs record the normalized `$uri`, never request arguments,
-cookies, authorization headers, or referrers. CI sends a known query sentinel and
-fails if the value appears in captured proxy logs.
+Nginx access logs record a fixed route family, never request arguments, cookies,
+authorization headers, or referrers. Open-source Nginx request-error messages
+cannot use that bounded format and may include the original request line, so the
+HTTP context discards its built-in error stream while main-process lifecycle and
+configuration diagnostics remain on stderr. This deliberately trades Nginx's
+request-level error detail for query confidentiality; bounded access status,
+upstream address, request ID, service logs, and readiness remain available for
+diagnosis. CI sends query sentinels through both a successful local response and
+a deliberate upstream failure, then fails if either value appears anywhere in
+the captured proxy logs.
 
 This is a local and CI topology, not a remote staging deployment. Its TLS
 certificate is generated in an isolated local volume and trusted only inside the

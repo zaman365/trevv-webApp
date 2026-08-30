@@ -33,6 +33,8 @@ const email = `topology-${suffix}@example.test`;
 const password = "Topology-smoke-password-1";
 const cookieJar = new Map();
 const queryLogSentinel = "TREVV_QUERY_SENTINEL_MUST_NOT_APPEAR";
+const failedUpstreamQueryLogSentinel =
+  "TREVV_FAILED_UPSTREAM_QUERY_SENTINEL_MUST_NOT_APPEAR";
 
 const requireFromDatabasePackage = createRequire(
   new URL("../packages/db/package.json", import.meta.url),
@@ -45,7 +47,7 @@ try {
   await verifyTlsBoundary();
   await verifyServiceHealth();
   await verifyTwoApiRouting();
-  await emitQueryLogSentinel();
+  await emitQueryLogSentinels();
   await verifyAnonymousBoundary();
   await verifyHeaderlessRegistrationRejected();
   await signUpAndVerify();
@@ -163,6 +165,7 @@ try {
         "cross-origin-rejection",
         "two-api-routing",
         "query-free-log-sentinel",
+        "query-free-upstream-error-log-sentinel",
         "tenant-read-write",
         "team-room",
         "message",
@@ -341,12 +344,28 @@ function verifyReleaseMetadata(value, expectedImageId, label) {
     );
 }
 
-async function emitQueryLogSentinel() {
-  const url = new URL("/topology/log-sentinel", internalProxyOrigin);
-  url.searchParams.set("sensitive", queryLogSentinel);
-  const response = await fetch(url, { cache: "no-store" });
-  if (response.status !== 204)
+async function emitQueryLogSentinels() {
+  const successfulUrl = new URL("/topology/log-sentinel", internalProxyOrigin);
+  successfulUrl.searchParams.set("sensitive", queryLogSentinel);
+  const successfulResponse = await fetch(successfulUrl, { cache: "no-store" });
+  if (successfulResponse.status !== 204)
     throw new Error("The query-log sentinel endpoint did not respond.");
+
+  const failedUpstreamUrl = new URL(
+    "/topology/log-failure-sentinel",
+    internalProxyOrigin,
+  );
+  failedUpstreamUrl.searchParams.set(
+    "sensitive",
+    failedUpstreamQueryLogSentinel,
+  );
+  const failedUpstreamResponse = await fetch(failedUpstreamUrl, {
+    cache: "no-store",
+  });
+  if (failedUpstreamResponse.status !== 502)
+    throw new Error(
+      "The upstream-failure query-log sentinel did not return HTTP 502.",
+    );
 }
 
 async function verifyAnonymousBoundary() {
