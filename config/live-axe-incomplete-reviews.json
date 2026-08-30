@@ -25,15 +25,15 @@
       "browsers": ["chromium", "webkit"],
       "surfaces": ["board"],
       "ruleId": "color-contrast",
-      "nodeCount": 5,
-      "sha256": "4b0f28feaf3e0c92c42b1301d4b8e8c258b59aac1eee8de454e2609867ad1533"
+      "nodeCount": 4,
+      "sha256": "d0fddfecba53049fd38f3526e714d8a71784030c9cc14e989b779f4e3d00b6a2"
     },
     {
       "browsers": ["chromium", "webkit"],
       "surfaces": ["attention"],
       "ruleId": "color-contrast",
-      "nodeCount": 5,
-      "sha256": "c901040370c6f955265c08b39a0403ec0494c131adcaa672b1dc9ddacf06e0ef"
+      "nodeCount": 4,
+      "sha256": "4135f876bea4e9794e2fc32f3acfca6eadaa2c001e3363ebe2b7ca67076e1c93"
     },
     {
       "browsers": ["chromium", "webkit"],
@@ -46,8 +46,8 @@
       "browsers": ["chromium", "webkit"],
       "surfaces": ["reviews"],
       "ruleId": "color-contrast",
-      "nodeCount": 5,
-      "sha256": "9a8d1e2544730c21c87a607b606b1b2f03fa0c4902e0444d8108e54cf6fc697b"
+      "nodeCount": 4,
+      "sha256": "0217ba5352ced7e5133127ad53787d52351fe6d801cec3b40d65feec80a15e3e"
     }
   ]
 }

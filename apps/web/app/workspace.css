@@ -2464,6 +2464,7 @@
   border-radius: 12px;
 }
 .blueprint-tabs button {
+  flex: 0 0 auto;
   min-width: 100px;
   height: 34px;
   display: flex;
@@ -3062,6 +3063,7 @@
   border-radius: 13px;
 }
 .attention-tabs button {
+  flex: 0 0 auto;
   min-width: 94px;
   height: 35px;
   display: flex;
@@ -14299,6 +14301,7 @@
 }
 .attention-tabs-complete button {
   position: relative;
+  flex: 0 0 auto;
   min-width: 90px;
   min-height: 39px;
   display: flex;

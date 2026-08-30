@@ -2310,7 +2310,8 @@
   font-variant-numeric: tabular-nums;
 }
 .summary-cell {
-  color: var(--fh-muted);
+  color: var(--fh-ink-soft);
+  background: var(--fh-surface-subtle);
   font-size: var(--fh-text-xs);
   font-variant-numeric: tabular-nums;
 }

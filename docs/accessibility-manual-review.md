@@ -26,6 +26,18 @@ effective colors. The current automated scans report no contrast violations,
 and targeted light/dark visual inspection found no illegible text. That is not
 the same as a recorded numerical contrast review.
 
+The 30 August browser-gate review also corrected product defects instead of
+allowlisting them: mobile navigation and text-action backgrounds are now
+opaque theme surfaces, navigation items declare their background explicitly,
+Board header and summary text use the stronger `--fh-ink-soft` token, and
+compact Blueprint and Attention tabs no longer shrink into overlapping labels.
+The remaining Board-table fingerprints are limited to horizontally clipped,
+off-screen header/summary cells. Their declared pair is `--fh-ink-soft` on
+`--fh-surface-subtle`; the exact selector sets are recorded separately for the
+platform layouts CI and local browsers produce. This source review explains
+why Axe cannot measure the cells, but it is not independent manual contrast or
+assistive-technology evidence.
+
 WebKit additionally reports the item-panel status and priority native selects
 as partially obscured, so it cannot determine their effective backgrounds. The
 declared light-theme pairs are `--fh-primary-strong` on
