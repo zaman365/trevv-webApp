@@ -30,6 +30,7 @@ x-api-environment: &api-environment
   ERROR_REPORTING_MODE: disabled
 
 x-api-service: &api-service
+  image: trevv-staging-api:${TREV_CANDIDATE_GIT_SHA:-local}
   build:
     <<: *runtime-build
     target: api
@@ -69,6 +70,7 @@ x-worker-environment: &worker-environment
   WORKER_READINESS_MAX_DEAD_LETTERS: "0"
 
 x-worker-service: &worker-service
+  image: trevv-staging-worker:${TREV_CANDIDATE_GIT_SHA:-local}
   build:
     <<: *runtime-build
     target: worker
@@ -129,6 +131,7 @@ services:
       - staging-mail:/mail
 
   migrate:
+    image: trevv-staging-migrate:${TREV_CANDIDATE_GIT_SHA:-local}
     build:
       <<: *runtime-build
       target: migrate
@@ -159,6 +162,7 @@ services:
       WORKER_ID: staging-worker-2
 
   web:
+    image: trevv-staging-web:${TREV_CANDIDATE_GIT_SHA:-local}
     build:
       <<: *runtime-build
       target: web

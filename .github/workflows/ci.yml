@@ -187,18 +187,14 @@ jobs:
         run: docker compose -f compose.staging.yaml --profile smoke build
       - name: Bind candidate services to the built Docker image IDs
         run: |
-          api_id=$(docker compose -f compose.staging.yaml images -q api-1)
-          worker_id=$(docker compose -f compose.staging.yaml images -q worker-1)
-          web_id=$(docker compose -f compose.staging.yaml images -q web)
-          migrate_id=$(docker compose -f compose.staging.yaml images -q migrate)
-          test -n "$api_id"
-          test -n "$worker_id"
-          test -n "$web_id"
-          test -n "$migrate_id"
-          echo "TREV_API_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$api_id")" >> "$GITHUB_ENV"
-          echo "TREV_WORKER_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$worker_id")" >> "$GITHUB_ENV"
-          echo "TREV_WEB_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$web_id")" >> "$GITHUB_ENV"
-          echo "TREV_MIGRATE_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$migrate_id")" >> "$GITHUB_ENV"
+          api_ref="trevv-staging-api:${TREV_CANDIDATE_GIT_SHA}"
+          worker_ref="trevv-staging-worker:${TREV_CANDIDATE_GIT_SHA}"
+          web_ref="trevv-staging-web:${TREV_CANDIDATE_GIT_SHA}"
+          migrate_ref="trevv-staging-migrate:${TREV_CANDIDATE_GIT_SHA}"
+          echo "TREV_API_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$api_ref")" >> "$GITHUB_ENV"
+          echo "TREV_WORKER_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$worker_ref")" >> "$GITHUB_ENV"
+          echo "TREV_WEB_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$web_ref")" >> "$GITHUB_ENV"
+          echo "TREV_MIGRATE_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$migrate_ref")" >> "$GITHUB_ENV"
       - name: Start the live-mode topology
         run: >-
           docker compose -f compose.staging.yaml --profile smoke
