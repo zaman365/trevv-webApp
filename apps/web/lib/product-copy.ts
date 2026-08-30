@@ -162,7 +162,7 @@ export const productCopy = {
       demo: "Explore fictional sample workspace",
       noAccount: "Want to preview onboarding?",
       hasAccount: "Want to open the sample?",
-      onboardingTitle: "Shape your operating system",
+      onboardingTitle: "Shape your workspace",
       onboardingSubtitle:
         "A few focused choices, then you land in a useful Portfolio.",
       continue: "Continue",

@@ -1,11 +1,13 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { readFile, rm } from "node:fs/promises";
+import { expectNoLiveWcagFindings } from "./live-accessibility";
 
 const webOrigin = "http://127.0.0.1:3200";
 const originalPassword = "Live-e2e-owner-password-1";
 const replacementPassword = "Live-e2e-owner-password-2";
 const inviteePassword = "Live-e2e-invitee-password-1";
+const registrationBootstrapSecret =
+  "live-e2e-registration-bootstrap-secret-only";
 
 interface MailRecord {
   message: { to: string; subject: string; text: string };
@@ -49,10 +51,12 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     ownerEmail,
     originalPassword,
     "/onboarding",
+    true,
+    true,
   );
 
   await ownerPage.goto("/sign-in?next=%2Fonboarding");
-  await expectNoSeriousAccessibilityViolations(ownerPage);
+  await expectNoLiveWcagFindings(ownerPage, "sign-in");
   await submitSignIn(ownerPage, ownerEmail, "incorrect-test-password");
   await expect(ownerPage.getByRole("status")).toContainText(
     "Email or password is incorrect",
@@ -90,7 +94,7 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   await ownerPage.goto("/app/portfolio");
 
   await ownerPage.goto("/app/account/privacy");
-  await expectNoSeriousAccessibilityViolations(ownerPage);
+  await expectNoLiveWcagFindings(ownerPage, "privacy-center");
   await expect(
     ownerPage.getByRole("heading", { name: "Privacy center", level: 1 }),
   ).toBeVisible();
@@ -149,7 +153,7 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   await secondOwnerContext.close();
 
   await ownerPage.goto("/app/account/invitations");
-  await expectNoSeriousAccessibilityViolations(ownerPage);
+  await expectNoLiveWcagFindings(ownerPage, "invitations");
   await ownerPage
     .getByRole("textbox", { name: "Email", exact: true })
     .fill(inviteeEmail);
@@ -173,7 +177,9 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   );
   await inviteePage.goto(invitationLanding);
   await inviteePage.waitForURL("**/sign-in?next=**");
-  await inviteePage.getByRole("link", { name: "Create an account" }).click();
+  await inviteePage
+    .getByRole("link", { name: "Create invited account" })
+    .click();
   await signUpAndVerify(
     inviteePage,
     inviteeContext,
@@ -223,7 +229,7 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   await inviteeContext.close();
 
   await ownerPage.goto("/forgot-password");
-  await expectNoSeriousAccessibilityViolations(ownerPage);
+  await expectNoLiveWcagFindings(ownerPage, "forgot-password");
   await ownerPage.getByLabel("Email").fill(ownerEmail);
   await ownerPage.getByRole("button", { name: "Send reset link" }).click();
   await expect(
@@ -301,16 +307,28 @@ async function signUpAndVerify(
   password: string,
   returnTo: string,
   navigate = true,
+  bootstrapRegistration = false,
 ) {
   if (navigate) {
     await page.goto(`/sign-up?next=${encodeURIComponent(returnTo)}`);
-    await expectNoSeriousAccessibilityViolations(page);
+    await expectNoLiveWcagFindings(page, "sign-up");
   }
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm password").fill(password);
+  if (bootstrapRegistration) {
+    await page.route("**/api/auth/sign-up/email", (route) =>
+      route.continue({
+        headers: {
+          ...route.request().headers(),
+          "x-trevv-test-registration-bootstrap": registrationBootstrapSecret,
+        },
+      }),
+    );
+  }
   await page.getByRole("button", { name: "Create account" }).click();
+  if (bootstrapRegistration) await page.unroute("**/api/auth/sign-up/email");
   await page.waitForURL("**/verify-email?**");
   const verificationUrl = await waitForMailAction(
     email,
@@ -424,14 +442,23 @@ async function normalizeMailAction(
       headers: clientHeaders(199),
       redirect: "manual",
     });
-    const cookie = response.headers.get("set-cookie");
+    const cookies = setCookieValues(response.headers);
     const location = response.headers.get("location");
-    if (!cookie || !location)
+    if (!cookies.length || !location)
       throw new Error("The Web boundary did not normalize the action token.");
-    await installActionCookie(context, cookie);
+    for (const cookie of cookies) await installActionCookie(context, cookie);
     current = new URL(location, current);
   }
   return `${current.pathname}${current.search}`;
+}
+
+function setCookieValues(headers: Headers): string[] {
+  const values = headers.getSetCookie?.() ?? [];
+  if (values.length) return values;
+  const combined = headers.get("set-cookie");
+  return combined
+    ? combined.split(/,(?=\s*[^;,=\s]+=[^;,]*)/u).map((value) => value.trim())
+    : [];
 }
 
 async function installActionCookie(context: BrowserContext, header: string) {
@@ -463,22 +490,8 @@ function requiredMailSink(): string {
 }
 
 function clientHeaders(lastOctet: number): Record<string, string> {
-  return { "x-trevv-client-ip": `192.0.2.${lastOctet}` };
-}
-
-async function expectNoSeriousAccessibilityViolations(page: Page) {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(
-    results.violations
-      .filter((violation) =>
-        ["serious", "critical"].includes(violation.impact ?? ""),
-      )
-      .map((violation) => ({
-        id: violation.id,
-        impact: violation.impact,
-        targets: violation.nodes.map((node) => node.target.join(" ")),
-      })),
-  ).toEqual([]);
+  const projectOffset = test.info().project.name.includes("webkit") ? 40 : 0;
+  return {
+    "x-trevv-client-ip": `192.0.2.${lastOctet + projectOffset}`,
+  };
 }

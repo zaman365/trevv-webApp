@@ -803,7 +803,11 @@ function DashboardMain() {
         </header>
 
         <div className="dashboard-lens-controls">
-          <div className="dashboard-lens-presets" aria-label="Work lenses">
+          <div
+            className="dashboard-lens-presets"
+            aria-label="Work lenses"
+            role="group"
+          >
             <LensButton
               active={lens.kind === "attention"}
               label="Needs intervention"

@@ -47,7 +47,20 @@ export async function gotoCanonical(page: Page, route: string) {
     // native same-document navigation so hash subscribers receive the change.
     await page.evaluate((href) => window.location.assign(href), target.href);
   } else {
-    await page.goto(route, { waitUntil: "networkidle" });
+    try {
+      await page.goto(route, { waitUntil: "networkidle" });
+    } catch (error) {
+      // Next's development server can abort the first document request while
+      // it adds a newly compiled nested route to the route manifest. Retry
+      // exactly that transient once; the URL and shell assertions below still
+      // prove that the requested canonical document actually rendered.
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes("net::ERR_ABORTED")
+      )
+        throw error;
+      await page.goto(route, { waitUntil: "networkidle" });
+    }
   }
   await expect(page).toHaveURL(
     new RegExp(`${escapeForRegExp(route)}(?:[?#].*)?$`),

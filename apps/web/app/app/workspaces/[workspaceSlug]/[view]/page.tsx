@@ -1,22 +1,5 @@
 import { notFound } from "next/navigation";
-import { DashboardExperience } from "@/components/dashboard-experience";
-import { FocusExperience } from "@/components/focus-experience";
-import { LiveWorkspaceOverview } from "@/components/live-workspace-overview";
-import { LiveWorkView } from "@/components/live-work-views";
-import { LiveMessagingWorkspace } from "@/components/live-messaging-workspace";
-import { LiveTeamWorkflow } from "@/components/live-team-workflow";
-import {
-  AttentionExperience,
-  BlueprintsExperience,
-  IdeasExperience,
-  NotificationsExperience,
-  ReviewsExperience,
-  TeamExperience,
-  WaitingExperience,
-} from "@/components/management-experience";
-import { MessagingWorkspace } from "@/components/messaging-workspace";
-import { SettingsExperience } from "@/components/settings-experience";
-import { WorkspaceFrame } from "@/components/workspace-frame";
+import { WorkspaceModuleLoader } from "@/components/workspace-module-loader";
 import { requireWorkspaceAccess } from "@/lib/server-auth";
 import { webRuntimeMode } from "@/lib/web-runtime-config";
 import { isWorkspaceView, workspaceHref } from "@/lib/workspace-routes";
@@ -33,53 +16,11 @@ export default async function WorkspaceModulePage({
   await requireWorkspaceAccess(workspaceSlug, returnTo);
   if (!isWorkspaceView(view)) notFound();
 
-  if (webRuntimeMode() === "live") {
-    if (view === "dashboard") {
-      return <LiveWorkspaceOverview dashboard workspaceSlug={workspaceSlug} />;
-    }
-    if (view === "messages") {
-      return <LiveMessagingWorkspace workspaceSlug={workspaceSlug} />;
-    }
-    if (view === "teams") {
-      return <LiveTeamWorkflow workspaceSlug={workspaceSlug} />;
-    }
-    return <LiveWorkView view={view} workspaceSlug={workspaceSlug} />;
-  }
-
-  switch (view) {
-    case "dashboard":
-      return <DashboardExperience workspaceSlug={workspaceSlug} />;
-    case "attention":
-      return <AttentionExperience workspaceSlug={workspaceSlug} />;
-    case "my-work":
-      return <FocusExperience kind="myWork" workspaceSlug={workspaceSlug} />;
-    case "inbox":
-      return <FocusExperience kind="inbox" workspaceSlug={workspaceSlug} />;
-    case "messages":
-      return (
-        <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
-          <MessagingWorkspace />
-        </WorkspaceFrame>
-      );
-    case "decisions":
-      return <FocusExperience kind="decisions" workspaceSlug={workspaceSlug} />;
-    case "approvals":
-      return <FocusExperience kind="approvals" workspaceSlug={workspaceSlug} />;
-    case "ideas":
-      return <IdeasExperience workspaceSlug={workspaceSlug} />;
-    case "reviews":
-      return <ReviewsExperience workspaceSlug={workspaceSlug} />;
-    case "waiting":
-      return <WaitingExperience workspaceSlug={workspaceSlug} />;
-    case "teams":
-      return <TeamExperience workspaceSlug={workspaceSlug} />;
-    case "blueprints":
-      return <BlueprintsExperience workspaceSlug={workspaceSlug} />;
-    case "notifications":
-      return <NotificationsExperience workspaceSlug={workspaceSlug} />;
-    case "search":
-      return <FocusExperience kind="search" workspaceSlug={workspaceSlug} />;
-    case "settings":
-      return <SettingsExperience workspaceSlug={workspaceSlug} />;
-  }
+  return (
+    <WorkspaceModuleLoader
+      runtimeMode={webRuntimeMode()}
+      view={view}
+      workspaceSlug={workspaceSlug}
+    />
+  );
 }

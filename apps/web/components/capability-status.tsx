@@ -16,7 +16,12 @@ export function TechnicalPreviewBadge({
     ? "Authenticated preview · canonical changes save to TREVV"
     : productPreview.conciseLabel;
   return (
-    <span className={styles.previewBadge} aria-label={label} title={label}>
+    <span
+      className={styles.previewBadge}
+      aria-label={label}
+      role="note"
+      title={label}
+    >
       <span className={styles.previewBadgeDot} aria-hidden="true" />
       <span className={styles.previewBadgeText}>
         <strong>{live ? "Authenticated preview" : productPreview.stage}</strong>

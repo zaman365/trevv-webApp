@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "@founderhq/design-tokens/css";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
+import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { trevvBrand } from "@/lib/branding";
+import { themePreferenceBootstrap } from "@/lib/display-preferences";
 import "./globals.css";
 import "./workspace.css";
 import "./design-system.css";
@@ -15,7 +17,7 @@ export const metadata: Metadata = {
   ),
   title: { default: appName, template: `%s · ${appName}` },
   description:
-    "A calm operating system for every business, project, decision, and next move.",
+    "Fictional-data technical preview of a focused founder workflow for attention, ownership, decisions, and coordination.",
   robots: { index: false, follow: false, noarchive: true, nocache: true },
   alternates: { canonical: "/" },
   applicationName: appName,
@@ -24,12 +26,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     title: appName,
-    description: "Everything you're running. One clear view.",
+    description:
+      "Fictional-data technical preview of TREVV's founder workflow.",
     images: [
       {
         url: "/og.png",
-        width: 1728,
-        height: 910,
+        width: 1200,
+        height: 630,
         alt: "TREVV attention-first portfolio overview",
       },
     ],
@@ -37,7 +40,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: appName,
-    description: "Everything you're running. One clear view.",
+    description:
+      "Fictional-data technical preview of TREVV's founder workflow.",
     images: ["/og.png"],
   },
 };
@@ -57,7 +61,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
+        <script
+          dangerouslySetInnerHTML={{ __html: themePreferenceBootstrap }}
+        />
         {children}
+        <WebVitalsReporter />
         <ServiceWorkerRegistration />
       </body>
     </html>

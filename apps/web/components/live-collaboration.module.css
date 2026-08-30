@@ -36,13 +36,9 @@
   padding: clamp(1rem, 2vw, 1.5rem);
   border: 1px solid var(--border, #dfe3ec);
   border-radius: 16px;
-  background:
-    radial-gradient(
-      circle at 92% 8%,
-      color-mix(in srgb, var(--fh-primary, #5b56db) 10%, transparent),
-      transparent 36%
-    ),
-    var(--surface, #fff);
+  /* Keep the text surface solid so automated and assistive contrast checks can
+     resolve the actual foreground/background pair in every theme. */
+  background: var(--surface, #fff);
 }
 
 .pageHeader > div {

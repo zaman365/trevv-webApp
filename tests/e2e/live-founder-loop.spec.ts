@@ -1,12 +1,14 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
+import { expectNoLiveWcagFindings } from "./live-accessibility";
 
 const webOrigin = "http://127.0.0.1:3200";
 const password = "Live-founder-loop-password-1";
 const collaboratorPassword = "Live-collaborator-password-1";
+const registrationBootstrapSecret =
+  "live-e2e-registration-bootstrap-secret-only";
 const suffix = crypto.randomUUID().slice(0, 8);
 const ownerEmail = `loop-owner-${suffix}@example.test`;
 const collaboratorEmail = `loop-collaborator-${suffix}@example.test`;
@@ -52,12 +54,14 @@ test.describe.serial("live founder operating loop", () => {
       "Founder Loop Owner",
       ownerEmail,
       password,
+      true,
+      true,
     );
     await submitSignIn(page, ownerEmail, password);
     await page.waitForURL("**/onboarding");
     await completeOnboarding(page);
     await expect(page.getByTestId("live-portfolio")).toBeVisible();
-    await expectNoSeriousAccessibilityViolations(page);
+    await expectNoLiveWcagFindings(page, "portfolio");
 
     const session = await browserJson(page, "/api/v1/session");
     expect(session.status).toBe(200);
@@ -177,7 +181,7 @@ test.describe.serial("live founder operating loop", () => {
       `/app/workspaces/${workspaceSlug}/boards/${encodeURIComponent(boardId)}`,
     );
     await expect(page.getByTestId("live-board")).toBeVisible();
-    await expectNoSeriousAccessibilityViolations(page);
+    await expectNoLiveWcagFindings(page, "board");
     await page.getByRole("button", { name: capturedTitle }).click();
     const detail = page.getByTestId("work-item-detail");
     await detail.getByTestId(`assign-item-${capturedItemId}`).click();
@@ -188,9 +192,7 @@ test.describe.serial("live founder operating loop", () => {
       .getByLabel("Reason or follow-up note")
       .fill("Waiting on the signed launch terms");
     await detail.getByTestId(`block-item-${capturedItemId}`).click();
-    await expect(
-      page.getByText(/Attention recomputation is queued/),
-    ).toBeVisible();
+    await expect(page.getByText(/Block state is durable/)).toBeVisible();
     await detail
       .getByLabel("Reason or follow-up note")
       .fill("Launch partner confirmation");
@@ -212,7 +214,7 @@ test.describe.serial("live founder operating loop", () => {
     await expect(blockedSignal).toBeVisible();
     await expect(blockedSignal).toContainText(capturedTitle);
     await expect(blockedSignal).toContainText(capturedItemId);
-    await expectNoSeriousAccessibilityViolations(page);
+    await expectNoLiveWcagFindings(page, "attention");
 
     await page.goto(`/app/workspaces/${workspaceSlug}/waiting`);
     const waitingRecord = page
@@ -351,7 +353,7 @@ test.describe.serial("live founder operating loop", () => {
     await expect(page.getByTestId("weekly-review-history")).toContainText(
       "Validated the complete capture-to-resolution loop.",
     );
-    await expectNoSeriousAccessibilityViolations(page);
+    await expectNoLiveWcagFindings(page, "reviews");
 
     await browserJson(page, "/api/web/sign-out", { method: "POST" });
     await page.goto("/sign-in");
@@ -405,7 +407,7 @@ test.describe.serial("live founder operating loop", () => {
     await collaboratorPage.goto(invitationLanding);
     await collaboratorPage.waitForURL("**/sign-in?next=**");
     await collaboratorPage
-      .getByRole("link", { name: "Create an account" })
+      .getByRole("link", { name: "Create invited account" })
       .click();
     await signUpAndVerify(
       collaboratorPage,
@@ -589,7 +591,7 @@ test.describe.serial("live founder operating loop", () => {
     await expect(
       ownerPage.getByRole("button", { name: "Collapse conversations" }),
     ).toBeVisible();
-    await expectNoSeriousAccessibilityViolations(ownerPage);
+    await expectNoLiveWcagFindings(ownerPage, "messages-medium");
     await ownerPage.setViewportSize({ width: 1_280, height: 720 });
 
     await ownerPage.goto(`/app/workspaces/${workspaceSlug}/teams`);
@@ -918,13 +920,25 @@ async function signUpAndVerify(
   email: string,
   accountPassword: string,
   navigate = true,
+  bootstrapRegistration = false,
 ) {
   if (navigate) await page.goto("/sign-up?next=%2Fonboarding");
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(accountPassword);
   await page.getByLabel("Confirm password").fill(accountPassword);
+  if (bootstrapRegistration) {
+    await page.route("**/api/auth/sign-up/email", (route) =>
+      route.continue({
+        headers: {
+          ...route.request().headers(),
+          "x-trevv-test-registration-bootstrap": registrationBootstrapSecret,
+        },
+      }),
+    );
+  }
   await page.getByRole("button", { name: "Create account" }).click();
+  if (bootstrapRegistration) await page.unroute("**/api/auth/sign-up/email");
   await page.waitForURL("**/verify-email?**");
   const verificationUrl = await waitForMailAction(
     email,
@@ -1024,14 +1038,23 @@ async function normalizeMailAction(
       headers: clientHeaders(198),
       redirect: "manual",
     });
-    const cookie = response.headers.get("set-cookie");
+    const cookies = setCookieValues(response.headers);
     const location = response.headers.get("location");
-    if (!cookie || !location)
+    if (!cookies.length || !location)
       throw new Error("The Web boundary did not normalize the action token.");
-    await installActionCookie(context, cookie);
+    for (const cookie of cookies) await installActionCookie(context, cookie);
     current = new URL(location, current);
   }
   return `${current.pathname}${current.search}`;
+}
+
+function setCookieValues(headers: Headers): string[] {
+  const values = headers.getSetCookie?.() ?? [];
+  if (values.length) return values;
+  const combined = headers.get("set-cookie");
+  return combined
+    ? combined.split(/,(?=\s*[^;,=\s]+=[^;,]*)/u).map((value) => value.trim())
+    : [];
 }
 
 async function installActionCookie(context: BrowserContext, header: string) {
@@ -1063,7 +1086,10 @@ function requiredMailSink(): string {
 }
 
 function clientHeaders(lastOctet: number): Record<string, string> {
-  return { "x-trevv-client-ip": `192.0.2.${lastOctet}` };
+  const projectOffset = test.info().project.name.includes("webkit") ? 40 : 0;
+  return {
+    "x-trevv-client-ip": `192.0.2.${lastOctet + projectOffset}`,
+  };
 }
 
 function requiredLiveDatabase(): string {
@@ -1080,21 +1106,4 @@ function todayDate() {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-}
-
-async function expectNoSeriousAccessibilityViolations(page: Page) {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(
-    results.violations
-      .filter((violation) =>
-        ["serious", "critical"].includes(violation.impact ?? ""),
-      )
-      .map((violation) => ({
-        id: violation.id,
-        impact: violation.impact,
-        targets: violation.nodes.map((node) => node.target.join(" ")),
-      })),
-  ).toEqual([]);
 }

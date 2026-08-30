@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name,
     short_name: name,
     description:
-      "Portfolio-first operating system for businesses, projects, teams, and everything else you are responsible for.",
+      "Fictional-data technical preview of a focused founder workflow for attention, ownership, decisions, and coordination.",
     start_url: "/app/portfolio",
     display: "standalone",
     background_color: "#f5f6fa",

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "status": "accepted_deferred",
+  "ownerRole": "Accessibility QA",
+  "reviewedOn": "2026-08-30",
+  "expiresOn": "2026-09-15",
+  "rationale": "Live-mode Axe incomplete results are accepted only after execution against isolated PostgreSQL state and are bound to an explicit semantic surface, browser engine, node count, and exact selector fingerprint. Violations and every changed or unlisted incomplete result still fail.",
+  "evidence": "docs/accessibility-manual-review.md",
+  "fingerprints": [
+    {
+      "browsers": ["chromium", "webkit"],
+      "surfaces": ["sign-in", "sign-up"],
+      "ruleId": "color-contrast",
+      "nodeCount": 19,
+      "sha256": "fba6b6be0bb13e4f733c05deb7d5bd96a20fd21a247affb3b6258196c3b52951"
+    },
+    {
+      "browsers": ["chromium", "webkit"],
+      "surfaces": ["portfolio"],
+      "ruleId": "color-contrast",
+      "nodeCount": 3,
+      "sha256": "4f4d06fbd33176b88691b6d4d5f20dffe45c7b53dda9e57ad6c7f5ba7686a49b"
+    },
+    {
+      "browsers": ["chromium", "webkit"],
+      "surfaces": ["board"],
+      "ruleId": "color-contrast",
+      "nodeCount": 5,
+      "sha256": "4b0f28feaf3e0c92c42b1301d4b8e8c258b59aac1eee8de454e2609867ad1533"
+    },
+    {
+      "browsers": ["chromium", "webkit"],
+      "surfaces": ["attention"],
+      "ruleId": "color-contrast",
+      "nodeCount": 5,
+      "sha256": "c901040370c6f955265c08b39a0403ec0494c131adcaa672b1dc9ddacf06e0ef"
+    },
+    {
+      "browsers": ["chromium", "webkit"],
+      "surfaces": ["forgot-password"],
+      "ruleId": "color-contrast",
+      "nodeCount": 1,
+      "sha256": "a1a713bd8b3872e3260b643793a5a81170e73de0f9d1a118e9ce5167a57a1dcb"
+    },
+    {
+      "browsers": ["chromium", "webkit"],
+      "surfaces": ["reviews"],
+      "ruleId": "color-contrast",
+      "nodeCount": 5,
+      "sha256": "9a8d1e2544730c21c87a607b606b1b2f03fa0c4902e0444d8108e54cf6fc697b"
+    }
+  ]
+}

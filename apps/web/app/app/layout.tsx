@@ -9,6 +9,10 @@ import {
 import { requireAppSession } from "@/lib/server-auth";
 import { loadLiveAppData } from "@/lib/server-live-data";
 import { webRuntimeMode } from "@/lib/web-runtime-config";
+import {
+  parseThemePreference,
+  themePreferenceCookie,
+} from "@/lib/display-preferences";
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false, noarchive: true },
@@ -24,6 +28,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const liveData = mode === "live" ? await loadLiveAppData() : undefined;
   const storedSelection = parseWorkspaceSelection(
     store.get(workspaceSelectionCookie)?.value,
+  );
+  const initialTheme = parseThemePreference(
+    store.get(themePreferenceCookie)?.value,
   );
 
   return (
@@ -56,6 +63,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         },
       }}
       {...(storedSelection ? { storedSelection } : {})}
+      {...(initialTheme ? { initialTheme } : {})}
       {...(liveData ? { liveData } : {})}
     >
       {children}

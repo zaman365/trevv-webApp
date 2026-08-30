@@ -148,7 +148,7 @@ function workspaceViewForCapturedType(
 
 /**
  * The one workspace shell. Every screen renders inside it, so the navigation,
- * the theme and language controls, Quick capture and — critically — the
+ * the theme control, Quick capture and — critically — the
  * attention badge are defined once and cannot drift between screens.
  */
 export function WorkspaceFrame({
@@ -200,8 +200,6 @@ function WorkspaceChrome({
     scope,
     theme,
     toggleTheme,
-    locale,
-    toggleLocale,
     captureOpen,
     setCaptureOpen,
     portfolioId,
@@ -803,6 +801,26 @@ function WorkspaceChrome({
                 <Settings2 size={17} />
                 <span>{copy.nav.settings}</span>
               </Link>
+              <button
+                className="nav-item nav-button mobile-only"
+                aria-label="Language: English only"
+                disabled
+              >
+                <Languages size={17} />
+                <span>Language: English only</span>
+              </button>
+              <button
+                className="nav-item nav-button mobile-only"
+                onClick={() => {
+                  toggleTheme();
+                  setOpen(false);
+                }}
+              >
+                {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
+                <span>
+                  Switch to {theme === "light" ? "dark" : "light"} mode
+                </span>
+              </button>
             </>
           )}
           {contextPortfolio && (
@@ -1137,13 +1155,11 @@ function WorkspaceChrome({
                   ) : null}
                   <button
                     role="menuitem"
-                    onClick={() => {
-                      toggleLocale();
-                      setUserMenuOpen(false);
-                    }}
+                    aria-label="Language: English only"
+                    disabled
                   >
                     <Languages size={14} />
-                    Switch to {locale === "en" ? "German" : "English"}
+                    Language: English only
                   </button>
                   <button
                     role="menuitem"
@@ -1364,7 +1380,10 @@ function WorkspaceChrome({
               setWorkspaceCreateOpen(false);
               selectProject(record.workspace.id, record.workspace.portfolioId);
               setOpen(false);
-              router.push(workspaceHref(record.workspace.slug));
+              // A hard navigation makes creation completion unambiguous. A
+              // second click must not race the still-pending client transition
+              // and be overwritten by the original Workspace navigation.
+              window.location.assign(workspaceHref(record.workspace.slug));
               return true;
             }
             if (!liveData) return false;

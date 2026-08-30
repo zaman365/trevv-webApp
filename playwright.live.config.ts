@@ -14,6 +14,8 @@ const mailSinkFile =
   process.env.LIVE_E2E_MAIL_SINK_FILE?.trim() ||
   join(tmpdir(), `trevv-live-e2e-mail-${process.pid}.jsonl`);
 process.env.LIVE_E2E_MAIL_SINK_FILE = mailSinkFile;
+const registrationBootstrapSecret =
+  "live-e2e-registration-bootstrap-secret-only";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -26,23 +28,32 @@ export default defineConfig({
   reporter: process.env.CI ? [["html", { open: "never" }], ["github"]] : "list",
   use: {
     baseURL: webOrigin,
+    locale: "en-US",
+    timezoneId: "Europe/Berlin",
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  projects: [{ name: "live-chromium", use: { ...devices["Desktop Chrome"] } }],
+  // A single worker keeps the shared isolated database and private mail sink
+  // deterministic while each engine generates unique tenant/user identifiers.
+  projects: [
+    { name: "live-chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "live-webkit", use: { ...devices["Desktop Safari"] } },
+  ],
   webServer: [
     {
       command: "pnpm --filter @founderhq/api exec tsx src/index.ts",
       url: `${apiOrigin}/api/v1/health`,
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
         PORT: "8887",
         NODE_ENV: "test",
         DEMO_MODE: "false",
+        REGISTRATION_MODE: "invite_only",
+        TEST_REGISTRATION_BOOTSTRAP_SECRET: registrationBootstrapSecret,
         DATABASE_URL: databaseUrl,
         BETTER_AUTH_SECRET: "live-e2e-only-secret-with-more-than-32-characters",
         BETTER_AUTH_URL: apiOrigin,
@@ -56,10 +67,11 @@ export default defineConfig({
       command:
         "pnpm --filter @founderhq/web exec next dev --webpack --hostname 127.0.0.1 --port 3200",
       url: `${webOrigin}/sign-up`,
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
         DEMO_MODE: "false",
+        REGISTRATION_MODE: "invite_only",
         API_ORIGIN: apiOrigin,
         BETTER_AUTH_URL: apiOrigin,
         NEXT_PUBLIC_APP_URL: webOrigin,

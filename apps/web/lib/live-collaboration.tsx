@@ -399,6 +399,7 @@ export function LiveUnreadBadge({ workspaceId }: { workspaceId: string }) {
 /** Focus trap shared by live collaboration dialogs and responsive drawers. */
 export function useAccessibleDialog(
   onClose: () => void,
+  returnFocusRef?: RefObject<HTMLElement | null>,
 ): RefObject<HTMLDivElement | null> {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -411,6 +412,7 @@ export function useAccessibleDialog(
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
+    const returnFocusTarget = returnFocusRef?.current ?? previouslyFocused;
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusable = focusableElements(dialog);
@@ -443,9 +445,11 @@ export function useAccessibleDialog(
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousBodyOverflow;
-      previouslyFocused?.focus();
+      // WebKit does not consistently focus a button after a pointer click, so
+      // callers with a known trigger must not rely on activeElement alone.
+      returnFocusTarget?.focus();
     };
-  }, []);
+  }, [returnFocusRef]);
 
   return dialogRef;
 }

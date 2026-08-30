@@ -72,7 +72,7 @@ interface OrganizationSettings {
   name: string;
   slug: string;
   timezone: string;
-  language: "English" | "Deutsch";
+  language: "English";
   weekStartsOn: "Monday" | "Sunday";
 }
 
@@ -1197,19 +1197,10 @@ function OrganizationPanel({
         </label>
         <label>
           <span>Default language</span>
-          <select
-            value={draft.language}
-            onChange={(event) =>
-              onChange({
-                ...draft,
-                language: event.target
-                  .value as OrganizationSettings["language"],
-              })
-            }
-          >
+          <select value={draft.language} disabled>
             <option>English</option>
-            <option>Deutsch</option>
           </select>
+          <small>English only in this release.</small>
         </label>
         <label>
           <span>Week starts on</span>

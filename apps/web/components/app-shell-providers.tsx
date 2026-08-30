@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { WorkspaceProvider } from "@/lib/workspace-context";
+import type { Theme } from "@/lib/display-preferences";
 import type { StoredWorkspaceSelection } from "@/lib/workspace-selection";
 import {
   AppSessionProvider,
@@ -41,17 +42,20 @@ export function AppShellProviders({
   children,
   session,
   storedSelection,
+  initialTheme,
   liveData,
 }: {
   children: ReactNode;
   session: AppSessionView;
   storedSelection?: StoredWorkspaceSelection;
+  initialTheme?: Theme;
   liveData?: LiveAppDataSnapshot;
 }) {
   const content = (
     <AppShellProviderContent
       session={session}
       {...(storedSelection ? { storedSelection } : {})}
+      {...(initialTheme ? { initialTheme } : {})}
     >
       {children}
     </AppShellProviderContent>
@@ -67,10 +71,12 @@ function AppShellProviderContent({
   children,
   session,
   storedSelection,
+  initialTheme,
 }: {
   children: ReactNode;
   session: AppSessionView;
   storedSelection?: StoredWorkspaceSelection;
+  initialTheme?: Theme;
 }) {
   const pathname = usePathname() ?? "";
   const customWorkspaceRecords = useCustomWorkspaces();
@@ -111,6 +117,7 @@ function AppShellProviderContent({
       <WorkspaceProvider
         portfolioScoped={pathname === "/app/portfolio"}
         {...(storedSelection ? { storedSelection } : {})}
+        {...(initialTheme ? { initialTheme } : {})}
         {...(routeProject
           ? {
               routePortfolioId: routeProject.portfolioId,

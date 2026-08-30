@@ -1,6 +1,6 @@
 "use client";
 
-import { getMessages, type Locale } from "@founderhq/i18n";
+import { getMessages } from "@founderhq/i18n";
 import type {
   AttentionSignal,
   Portfolio,
@@ -33,13 +33,16 @@ import {
   writeWorkspaceSelection,
   type StoredWorkspaceSelection,
 } from "./workspace-selection";
+import {
+  darkThemeMediaQuery,
+  resolveTheme,
+  writeThemePreference,
+  type Theme,
+} from "./display-preferences";
 
-type Theme = "light" | "dark";
 export type WorkspaceLevel = "portfolio" | "project";
 
 interface WorkspaceContextValue {
-  locale: Locale;
-  toggleLocale: () => void;
   theme: Theme;
   toggleTheme: () => void;
   copy: ReturnType<typeof getMessages>;
@@ -77,6 +80,7 @@ export function WorkspaceProvider({
   routePortfolioId,
   routeProjectId,
   storedSelection,
+  initialTheme,
   portfolioScoped = false,
   liveSource,
 }: {
@@ -86,6 +90,8 @@ export function WorkspaceProvider({
   routeProjectId?: string;
   /** Selection read from the cookie on the server, so SSR paints it. */
   storedSelection?: StoredWorkspaceSelection;
+  /** Explicit preference read from the cookie for the first render. */
+  initialTheme?: Theme;
   /** Report across the whole portfolio even while a workspace is selected. */
   portfolioScoped?: boolean;
   liveSource?: WorkspaceLiveSource;
@@ -94,8 +100,11 @@ export function WorkspaceProvider({
     liveSource?.portfolios.find((portfolio) => portfolio.isDefault)?.id ??
     liveSource?.portfolios[0]?.id ??
     DEFAULT_PORTFOLIO_ID;
-  const [locale, setLocale] = useState<Locale>("en");
-  const [theme, setTheme] = useState<Theme>("light");
+  const [themePreference, setThemePreference] = useState<Theme | undefined>(
+    initialTheme,
+  );
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
+  const theme = resolveTheme(themePreference, systemPrefersDark);
   const [portfolioId, setPortfolioState] = useState(
     routePortfolioId ?? storedSelection?.portfolioId ?? defaultPortfolioId,
   );
@@ -148,6 +157,23 @@ export function WorkspaceProvider({
     });
   }, [activePortfolioId, activeProjectId, activeWorkspaceLevel]);
 
+  useEffect(() => {
+    const media = window.matchMedia(darkThemeMediaQuery);
+    const syncSystemTheme = () => setSystemPrefersDark(media.matches);
+
+    syncSystemTheme();
+    media.addEventListener("change", syncSystemTheme);
+    return () => media.removeEventListener("change", syncSystemTheme);
+  }, []);
+
+  useEffect(() => {
+    if (themePreference) {
+      document.documentElement.dataset.theme = themePreference;
+    } else {
+      delete document.documentElement.dataset.theme;
+    }
+  }, [themePreference]);
+
   const setPortfolioId = useCallback(
     (id: string) => {
       // Switching portfolios is the only thing that clears the workspace.
@@ -173,17 +199,11 @@ export function WorkspaceProvider({
   );
 
   const toggleTheme = useCallback(() => {
-    setTheme((current) => {
-      const next = current === "light" ? "dark" : "light";
-      document.documentElement.dataset.theme = next;
-      return next;
-    });
-  }, []);
-
-  const toggleLocale = useCallback(
-    () => setLocale((current) => (current === "en" ? "de" : "en")),
-    [],
-  );
+    const next = theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    writeThemePreference(next);
+    setThemePreference(next);
+  }, [theme]);
 
   const scope = useMemo(
     () =>
@@ -218,11 +238,9 @@ export function WorkspaceProvider({
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({
-      locale,
-      toggleLocale,
       theme,
       toggleTheme,
-      copy: getMessages(locale),
+      copy: getMessages("en"),
       portfolioId: activePortfolioId,
       setPortfolioId,
       workspaceLevel: activeWorkspaceLevel,
@@ -250,14 +268,12 @@ export function WorkspaceProvider({
       activeProjectId,
       activeWorkspaceLevel,
       captureOpen,
-      locale,
       allWorkspaces,
       liveSource,
       scope,
       selectProject,
       setPortfolioId,
       theme,
-      toggleLocale,
       toggleTheme,
     ],
   );

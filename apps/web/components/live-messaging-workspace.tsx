@@ -43,6 +43,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import {
@@ -218,6 +219,7 @@ export function LiveMessagingWorkspace({
   const [hydratedDraftKey, setHydratedDraftKey] = useState("");
   const markedReadRef = useRef("");
   const timelineRef = useRef<HTMLDivElement>(null);
+  const contextToggleRef = useRef<HTMLButtonElement>(null);
   const loadingHistoryRef = useRef(false);
   const followTimelineRef = useRef(true);
   const previousConversationRef = useRef<string | null>(null);
@@ -1179,6 +1181,7 @@ export function LiveMessagingWorkspace({
                     aria-label="Open conversation context"
                     className={styles.contextToggle}
                     onClick={() => setContextOpen(true)}
+                    ref={contextToggleRef}
                     type="button"
                   >
                     <Info size={17} /> Context
@@ -1424,6 +1427,7 @@ export function LiveMessagingWorkspace({
           conversation={selectedConversation}
           currentUserId={session.user.id}
           pendingAction={pendingAction}
+          returnFocusRef={contextToggleRef}
           onClose={() => setContextOpen(false)}
           onRemoveParticipant={removeConversationParticipant}
           onTransferOwnership={transferConversationOwnership}
@@ -1805,6 +1809,7 @@ function ConversationContextDrawer({
   conversation,
   currentUserId,
   pendingAction,
+  returnFocusRef,
   onClose,
   onRemoveParticipant,
   onTransferOwnership,
@@ -1813,11 +1818,12 @@ function ConversationContextDrawer({
   conversation: ConversationDto;
   currentUserId: string;
   pendingAction: string;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onRemoveParticipant: (userId: string) => Promise<void>;
   onTransferOwnership: (userId: string) => Promise<void>;
 }) {
-  const dialogRef = useAccessibleDialog(onClose);
+  const dialogRef = useAccessibleDialog(onClose, returnFocusRef);
   return (
     <div className={styles.drawerBackdrop}>
       <div

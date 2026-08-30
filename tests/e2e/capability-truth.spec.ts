@@ -67,7 +67,7 @@ test("sample email and invitations cannot imply external delivery", async ({
 test("real security surfaces replace simulated controls while import stays a preview", async ({
   page,
 }) => {
-  await page.goto("/app/workspaces/centralops/settings#security");
+  await gotoCanonical(page, "/app/workspaces/centralops/settings#security");
   await expect(
     page.getByRole("heading", { name: "Account protection" }),
   ).toBeVisible();
@@ -81,11 +81,12 @@ test("real security surfaces replace simulated controls while import stays a pre
   ).toBeVisible();
 
   await page.getByRole("link", { name: /Review and revoke sessions/ }).click();
+  await page.waitForURL("**/app/account/sessions");
   await expect(
     page.getByRole("heading", { name: "No real sessions in demo mode" }),
   ).toBeVisible();
 
-  await page.goto("/app/workspaces/centralops/settings/import");
+  await gotoCanonical(page, "/app/workspaces/centralops/settings/import");
   await expect(
     page.getByLabel("Preview capability: Import is a dry-run preview"),
   ).toBeVisible();

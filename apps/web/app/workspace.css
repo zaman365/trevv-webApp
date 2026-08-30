@@ -22,7 +22,7 @@
   height: 46px;
   display: grid;
   place-items: center;
-  color: var(--workspace-accent);
+  color: var(--fh-primary-strong);
   background: color-mix(
     in srgb,
     var(--workspace-accent) 12%,
@@ -68,7 +68,7 @@
   font-weight: 650;
 }
 .workspace-page-actions a {
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   border-color: var(--fh-primary);
 }
@@ -98,7 +98,7 @@
 }
 .workspace-tabs a.active,
 .workspace-tabs button.active {
-  color: var(--workspace-accent);
+  color: var(--fh-primary-strong);
   font-weight: 700;
 }
 .workspace-tabs a.active::after,
@@ -156,7 +156,7 @@
   justify-content: space-between;
 }
 .executive-card > header span {
-  color: var(--workspace-accent);
+  color: var(--fh-primary-strong);
   font-size: var(--fh-text-xs);
   font-weight: 750;
   letter-spacing: 0.08em;
@@ -3741,9 +3741,9 @@
   font-size: var(--fh-text-xs);
 }
 .pressure-note {
-  color: #9a5d15;
-  background: #fff7ea;
-  border-color: #f0d9b8;
+  color: var(--fh-warning);
+  background: var(--fh-warning-soft);
+  border-color: var(--fh-warning-border);
 }
 .pressure-note > div {
   flex: 1;
@@ -3764,7 +3764,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #9a5d15;
+  color: var(--fh-warning);
   font-size: var(--fh-text-xs);
   font-weight: 700;
 }
@@ -5185,13 +5185,13 @@
   gap: 7px;
   margin-right: 4px;
   padding: 0 12px;
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   border-color: var(--fh-primary);
   box-shadow: 0 5px 13px color-mix(in srgb, var(--fh-primary) 22%, transparent);
 }
 .topbar-create-button:hover {
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary-strong);
 }
 .topbar-create-shortcut {
@@ -5616,6 +5616,12 @@
   .topbar {
     height: 58px;
     padding-inline: 13px;
+  }
+  /* These shortcuts are duplicated by the mobile bottom navigation and More
+     drawer. Removing the duplicate row keeps the global preview disclosure
+     fully visible at narrow widths. */
+  .topbar-actions {
+    display: none;
   }
   .portfolio-main,
   .focus-main {
@@ -8434,7 +8440,7 @@
   display: grid;
   place-items: center;
   margin-left: -5px;
-  color: white;
+  color: var(--fh-on-primary) !important;
   background: var(--fh-primary);
   border: 2px solid var(--fh-surface-muted);
   font-size: 9px;
@@ -8468,7 +8474,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #9a5d15;
+  color: var(--fh-warning);
   background: transparent;
   border: 0;
   font-size: var(--fh-text-xs);
@@ -8516,7 +8522,7 @@
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  color: white;
+  color: var(--fh-ink) !important;
   font-size: var(--fh-text-xs);
 }
 .team-person-cell strong,
@@ -12396,7 +12402,7 @@
   align-items: center;
   gap: 4px;
   margin-top: 9px;
-  color: var(--room-accent);
+  color: var(--fh-primary-strong);
   font-size: var(--fh-text-xs);
   font-weight: 700;
 }
@@ -12709,7 +12715,7 @@
   }
 }
 
-@media (max-width: 1020px) {
+@media (max-width: 1320px) {
   .messaging-shell {
     grid-template-columns: 250px minmax(0, 1fr);
   }
@@ -12760,7 +12766,7 @@
   }
 }
 
-@media (max-width: 660px) {
+@media (max-width: 963px) {
   .messaging-toast {
     inset: auto 10px 82px;
   }
@@ -14626,7 +14632,7 @@
   justify-content: center;
   gap: 5px;
   padding: 0 9px;
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   border: 1px solid var(--fh-primary);
   border-radius: 9px;

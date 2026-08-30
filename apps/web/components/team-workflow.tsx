@@ -341,6 +341,7 @@ export function TeamWorkflow() {
                 <div
                   className="team-capability-chips"
                   aria-label={`${team.name} features`}
+                  role="group"
                 >
                   {team.capabilities.slice(0, 3).map((capability) => (
                     <span key={capability}>
@@ -355,6 +356,7 @@ export function TeamWorkflow() {
                   <div
                     className="team-avatar-stack"
                     aria-label={`${team.name} members`}
+                    role="group"
                   >
                     {teamMembers.slice(0, 4).map((member) => (
                       <span

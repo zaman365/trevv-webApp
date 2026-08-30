@@ -6,19 +6,26 @@ const webUrl = new URL(webBaseUrl);
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  fullyParallel: true,
+  snapshotPathTemplate: "{testDir}/visual-baselines/{arg}-{projectName}{ext}",
+  // The demo gate intentionally exercises Next's development server. Keep one
+  // browser worker so concurrent cold-route compilation cannot corrupt or
+  // temporarily empty Next's route manifest and masquerade as a product 500.
+  fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  workers: 1,
   reporter: process.env.CI ? [["html", { open: "never" }], ["github"]] : "list",
   use: {
     baseURL: webBaseUrl,
+    locale: "en-US",
+    timezoneId: "Europe/Berlin",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
   ],
   webServer: [

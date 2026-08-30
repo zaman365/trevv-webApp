@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "criticalRoutes": [
+    "/sign-in",
+    "/app/portfolio",
+    "/app/workspaces/:workspace",
+    "/app/workspaces/:workspace/work",
+    "/app/workspaces/:workspace/messages",
+    "/app/workspaces/:workspace/teams",
+    "/app/workspaces/:workspace/settings",
+    "/app/workspaces/:workspace/boards/:board"
+  ],
+  "routes": {
+    "/sign-in": {
+      "manifest": "server/app/sign-in/page_client-reference-manifest.js",
+      "maximumInitialJavaScriptGzipBytes": 175000,
+      "maximumInitialCssGzipBytes": 75000
+    },
+    "/app/portfolio": {
+      "manifest": "server/app/app/portfolio/page_client-reference-manifest.js",
+      "selectedDynamicImports": [
+        "components/portfolio-loader.tsx -> ./live-portfolio-experience"
+      ],
+      "maximumInitialJavaScriptGzipBytes": 275000,
+      "maximumInitialCssGzipBytes": 75000
+    },
+    "/app/workspaces/:workspace": {
+      "manifest": "server/app/app/workspaces/[workspaceSlug]/page_client-reference-manifest.js",
+      "selectedDynamicImports": [
+        "components/workspace-overview-loader.tsx -> ./live-workspace-overview"
+      ],
+      "maximumInitialJavaScriptGzipBytes": 275000,
+      "maximumInitialCssGzipBytes": 75000
+    },
+    "/app/workspaces/:workspace/work": {
+      "manifest": "server/app/app/workspaces/[workspaceSlug]/[view]/page_client-reference-manifest.js",
+      "selectedDynamicImports": [
+        "components/workspace-module-loader.tsx -> ./live-work-views"
+      ],
+      "maximumInitialJavaScriptGzipBytes": 300000,
+      "maximumInitialCssGzipBytes": 75000
+    },
+    "/app/workspaces/:workspace/messages": {
+      "manifest": "server/app/app/workspaces/[workspaceSlug]/[view]/page_client-reference-manifest.js",
+      "selectedDynamicImports": [
+        "components/workspace-module-loader.tsx -> ./live-messaging-workspace"
+      ],
+      "maximumInitialJavaScriptGzipBytes": 300000,
+      "maximumInitialCssGzipBytes": 75000
+    },
+    "/app/workspaces/:workspace/teams": {
+      "manifest": "server/app/app/workspaces/[workspaceSlug]/[view]/page_client-reference-manifest.js",
+      "selectedDynamicImports": [
+        "components/workspace-module-loader.tsx -> ./live-team-workflow"
+      ],
+      "maximumInitialJavaScriptGzipBytes": 300000,
+      "maximumInitialCssGzipBytes": 75000
+    },
+    "/app/workspaces/:workspace/settings": {
+      "manifest": "server/app/app/workspaces/[workspaceSlug]/[view]/page_client-reference-manifest.js",
+      "selectedDynamicImports": [
+        "components/workspace-module-loader.tsx -> ./settings-experience"
+      ],
+      "maximumInitialJavaScriptGzipBytes": 300000,
+      "maximumInitialCssGzipBytes": 75000
+    },
+    "/app/workspaces/:workspace/boards/:board": {
+      "manifest": "server/app/app/workspaces/[workspaceSlug]/boards/[boardId]/page_client-reference-manifest.js",
+      "selectedDynamicImports": [
+        "components/board-loader.tsx -> ./live-board-experience"
+      ],
+      "maximumInitialJavaScriptGzipBytes": 300000,
+      "maximumInitialCssGzipBytes": 75000
+    }
+  },
+  "maximumSingleInitialAssetGzipBytes": 70000,
+  "publicImages": {
+    "maximumSingleBytes": 1200000,
+    "maximumTotalBytes": 1500000
+  }
+}

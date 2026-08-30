@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --fh-canvas: #f5f6fa;
   --fh-canvas-deep: #ebeef5;
   --fh-surface: #ffffff;
@@ -22,6 +23,10 @@
   --fh-parked-soft: #eef0f4;
   --fh-info: #1f5e9b;
   --fh-info-soft: #e8f2fb;
+  --fh-success-border: #b7d9c5;
+  --fh-warning-border: #dccb98;
+  --fh-danger-border: #e4b8b8;
+  --fh-info-border: #b8c8f0;
   --fh-shadow-sm: 0 1px 2px rgb(23 32 51 / 4%);
   --fh-shadow-md: 0 12px 32px rgb(23 32 51 / 8%);
   --fh-radius-control: 11px;
@@ -50,9 +55,20 @@
   --fh-weight-medium: 500;
   --fh-weight-strong: 600;
   --fh-weight-heavy: 700;
+
+  /* Compatibility aliases used by the live workflow CSS modules. Keeping
+     them token-backed prevents their light fallbacks from leaking into the
+     dark theme. */
+  --surface: var(--fh-surface);
+  --surface-subtle: var(--fh-surface-subtle);
+  --text: var(--fh-ink);
+  --text-secondary: var(--fh-muted);
+  --border: var(--fh-border);
+  --focus-ring: var(--fh-primary);
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --fh-canvas: #111522;
   --fh-canvas-deep: #0b0e17;
   --fh-surface: #191e2d;
@@ -81,4 +97,43 @@
   --fh-parked-soft: #252b36;
   --fh-info: #84bdf0;
   --fh-info-soft: #152736;
+  --fh-success-border: #4d8c75;
+  --fh-warning-border: #946f3d;
+  --fh-danger-border: #9d6070;
+  --fh-info-border: #4f7da7;
+}
+
+/* With no explicit preference, the platform colour scheme is authoritative.
+   An explicit data-theme attribute always wins and is persisted by the app. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --fh-canvas: #111522;
+    --fh-canvas-deep: #0b0e17;
+    --fh-surface: #191e2d;
+    --fh-surface-subtle: #151a28;
+    --fh-ink: #f4f6fb;
+    --fh-ink-soft: #d9deea;
+    --fh-muted: #9da5ba;
+    --fh-border: #2a3143;
+    --fh-border-strong: #384157;
+    --fh-primary: #8b88ff;
+    --fh-primary-strong: #a4a2ff;
+    --fh-primary-soft: #29294d;
+    --fh-on-primary: #111522;
+    --fh-success: #6cc5a3;
+    --fh-success-soft: #16302a;
+    --fh-warning: #e0b070;
+    --fh-warning-soft: #33280f;
+    --fh-danger: #f2909f;
+    --fh-danger-soft: #3a1f27;
+    --fh-parked: #a3acbe;
+    --fh-parked-soft: #252b36;
+    --fh-info: #84bdf0;
+    --fh-info-soft: #152736;
+    --fh-success-border: #4d8c75;
+    --fh-warning-border: #946f3d;
+    --fh-danger-border: #9d6070;
+    --fh-info-border: #4f7da7;
+  }
 }

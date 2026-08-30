@@ -1,7 +1,9 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { themePreferenceCookie } from "../../apps/web/lib/display-preferences";
 import { gotoCanonical, workspaceRoute } from "./routes";
 
 const onboardingWidths = [320, 390, 768, 1280] as const;
+const visualDiffPixelRatio = 0.005;
 
 const rectanglesOverlap = (
   first: { top: number; right: number; bottom: number; left: number },
@@ -67,10 +69,54 @@ async function goToOnboardingStep(page: Page, step: number) {
   }
 }
 
-async function focusWithKeyboard(page: Page, target: Locator) {
+async function expectDeterministicVisualFont(page: Page) {
+  await page.evaluate(() => document.fonts.ready);
+  expect(
+    await page.evaluate(() => document.fonts.check('16px "TREVV Sans"')),
+  ).toBe(true);
+  await expect(page.locator("body")).toHaveCSS("font-family", /TREVV Sans/);
+}
+
+async function expectTechnicalPreviewBadgeFullyVisible(page: Page) {
+  const badge = page.getByRole("note", {
+    name: /Technical preview · fictional data · changes stay in this browser/i,
+  });
+  await expect(badge).toBeVisible();
+
+  const geometry = await badge.evaluate((element) => {
+    const badgeRect = element.getBoundingClientRect();
+    const text = element.querySelector<HTMLElement>("span:last-child");
+    const textRects = [...element.querySelectorAll("strong, small")].map(
+      (node) => node.getBoundingClientRect(),
+    );
+    return {
+      badgeLeft: badgeRect.left,
+      badgeRight: badgeRect.right,
+      contentLeft: Math.min(...textRects.map((rect) => rect.left)),
+      contentRight: Math.max(...textRects.map((rect) => rect.right)),
+      textClientWidth: text?.clientWidth ?? 0,
+      textScrollWidth: text?.scrollWidth ?? 1,
+      viewportWidth: document.documentElement.clientWidth,
+    };
+  });
+
+  expect(geometry.badgeLeft).toBeGreaterThanOrEqual(0);
+  expect(geometry.badgeRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+  expect(geometry.contentLeft).toBeGreaterThanOrEqual(geometry.badgeLeft - 1);
+  expect(geometry.contentRight).toBeLessThanOrEqual(geometry.badgeRight + 1);
+  expect(geometry.textClientWidth).toBeGreaterThanOrEqual(
+    geometry.textScrollWidth,
+  );
+}
+
+async function focusWithKeyboard(
+  page: Page,
+  target: Locator,
+  key: "Tab" | "Alt+Tab" = "Tab",
+) {
   await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    await page.keyboard.press("Tab");
+    await page.keyboard.press(key);
     if (
       await target.evaluate((element) => document.activeElement === element)
     ) {
@@ -118,7 +164,14 @@ test("onboarding choice controls stay compact, legible, and keyboard operable", 
     const firstControl = page
       .locator(`${scenario.selector} input[type="${scenario.control}"]`)
       .first();
-    await focusWithKeyboard(page, firstControl);
+    // Safari on macOS may follow the platform's reduced tab-order default.
+    // Try the portable Tab path first, then its Option+Tab fallback without
+    // making Linux WebKit emulate a macOS-only keyboard convention.
+    try {
+      await focusWithKeyboard(page, firstControl, "Tab");
+    } catch {
+      await focusWithKeyboard(page, firstControl, "Alt+Tab");
+    }
     await expect(firstControl).toBeFocused();
     await expect(firstControl.locator("xpath=..")).toHaveCSS(
       "outline-width",
@@ -240,3 +293,252 @@ for (const height of [768, 820, 900, 945] as const) {
     ).toBeVisible();
   });
 }
+
+test("theme follows the system until an explicit choice and then persists", async ({
+  context,
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await gotoCanonical(page, workspaceRoute("dashboard"));
+
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("lang", "en");
+  await expect(html).not.toHaveAttribute("data-theme");
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(17, 21, 34)",
+  );
+
+  const userMenuButton = page.getByRole("button", { name: "Open user menu" });
+  let preferenceRegion: Locator;
+  if (await userMenuButton.isVisible()) {
+    await userMenuButton.click();
+    preferenceRegion = page.getByRole("menu");
+  } else {
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    preferenceRegion = page.locator("aside.sidebar");
+    await expect(preferenceRegion).toHaveClass(/sidebar-open/);
+  }
+  const languageStatus = preferenceRegion.getByLabel("Language: English only");
+  await expect(languageStatus).toBeVisible();
+  await expect(languageStatus).toBeDisabled();
+  await expect(preferenceRegion).not.toContainText("German");
+
+  await preferenceRegion
+    .getByText("Switch to light mode", { exact: true })
+    .click();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(245, 246, 250)",
+  );
+  expect(
+    (await context.cookies()).find(
+      (cookie) => cookie.name === themePreferenceCookie,
+    )?.value,
+  ).toBe("light");
+
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await gotoCanonical(page, workspaceRoute("attention"));
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  await gotoCanonical(page, `${workspaceRoute("settings")}#organization`);
+  const languageSelect = page.getByLabel("Default language");
+  await expect(languageSelect).toBeDisabled();
+  await expect(languageSelect).toHaveValue("English");
+  await expect(languageSelect.locator("option")).toHaveCount(1);
+  await expect(page.getByText("English only in this release.")).toBeVisible();
+});
+
+test("Messages keeps its context drawer inside a 1024px viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 820 });
+  await gotoCanonical(page, workspaceRoute("messages"));
+
+  const contextAside = page.locator(".conversation-context");
+  const openContext = page.getByRole("button", { name: "Open room context" });
+  const expectNoHorizontalOverflow = async () => {
+    const metrics = await page.evaluate(() => {
+      const shell = document.querySelector(".messaging-shell");
+      return {
+        bodyWidth: document.body.scrollWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        shellRight: shell?.getBoundingClientRect().right ?? 0,
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    expect(metrics.bodyWidth).toBeLessThanOrEqual(metrics.viewportWidth + 1);
+    expect(metrics.documentWidth).toBeLessThanOrEqual(
+      metrics.viewportWidth + 1,
+    );
+    expect(metrics.shellRight).toBeLessThanOrEqual(metrics.viewportWidth + 1);
+  };
+
+  await expect(openContext).toBeVisible();
+  await expect(contextAside).toBeHidden();
+  await expect(contextAside).toHaveCSS("display", "none");
+  await expectNoHorizontalOverflow();
+
+  await openContext.click();
+  await expect(contextAside).toBeVisible();
+  const drawer = await contextAside.boundingBox();
+  expect(drawer).not.toBeNull();
+  expect(drawer!.x).toBeGreaterThanOrEqual(0);
+  expect(drawer!.x + drawer!.width).toBeLessThanOrEqual(1025);
+  expect(drawer!.y).toBeGreaterThanOrEqual(0);
+  expect(drawer!.y + drawer!.height).toBeLessThanOrEqual(821);
+  await expectNoHorizontalOverflow();
+
+  await page.getByRole("button", { name: "Close room context" }).click();
+  await expect(contextAside).toBeHidden();
+  await expect(contextAside).toHaveCSS("display", "none");
+});
+
+test("Messages preserves a readable thread at sidebar and context breakpoints", async ({
+  page,
+}) => {
+  for (const width of [
+    820, 821, 900, 901, 961, 962, 963, 964, 1281, 1300, 1340,
+  ] as const) {
+    await page.setViewportSize({ width, height: 820 });
+    await gotoCanonical(page, workspaceRoute("messages"));
+
+    const layout = await page.evaluate(() => {
+      const context = document.querySelector<HTMLElement>(
+        ".conversation-context",
+      );
+      const thread = document.querySelector<HTMLElement>(".message-column");
+      return {
+        bodyWidth: document.body.scrollWidth,
+        contextDisplay: context ? getComputedStyle(context).display : "missing",
+        documentWidth: document.documentElement.scrollWidth,
+        threadWidth: thread?.getBoundingClientRect().width ?? 0,
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.threadWidth).toBeGreaterThanOrEqual(420);
+    expect(layout.contextDisplay).toBe(width <= 1320 ? "none" : "flex");
+  }
+});
+
+test("pseudo-localized long content stays contained at a narrow viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoCanonical(page, workspaceRoute("messages"));
+
+  const pseudoTitle =
+    "⟦ Ŧḗȧḿ ḿḗşşȧɠḗş ƒőř ȧ ḿűƈħ łőƞɠḗř ƥřőḓűƈŧ ƞȧḿḗ ȧƞḓ ƈőƞŧḗẋŧ ⟧";
+  const pseudoMessage =
+    "⟦ Ŧħīş ḗẋƥȧƞḓḗḓ ƥşḗűḓő-łőƈȧłīzḗḓ ḿḗşşȧɠḗ ȧḓḓş ḓīȧƈřīŧīƈş ȧƞḓ ḗẋŧřȧ ŵőřḓş ŧő ƥřőṽḗ ŧħȧŧ łőƞɠ ƈőƞŧḗƞŧ ŵřȧƥş ŵīŧħőűŧ ƥűşħīƞɠ ƈőƞŧřőłş őƒƒ şƈřḗḗƞ. ⟧";
+
+  await page.locator(".conversation-header h2").evaluate((node, value) => {
+    node.textContent = value;
+  }, pseudoTitle);
+  await page
+    .locator(".message-content > p")
+    .first()
+    .evaluate((node, value) => {
+      node.textContent = value;
+    }, pseudoMessage);
+
+  await expect(page.locator(".conversation-header h2")).toHaveText(pseudoTitle);
+  await expect(page.locator(".message-content > p").first()).toHaveText(
+    pseudoMessage,
+  );
+  await expect(
+    page.getByRole("button", { name: "Open room context" }),
+  ).toBeVisible();
+  await expect(page.locator(".message-composer textarea")).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const title = document.querySelector(".conversation-header h2");
+    const message = document.querySelector(".message-content > p");
+    const viewportWidth = document.documentElement.clientWidth;
+    return {
+      bodyWidth: document.body.scrollWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      messageRight: message?.getBoundingClientRect().right ?? 0,
+      titleRight: title?.getBoundingClientRect().right ?? 0,
+      viewportWidth,
+    };
+  });
+
+  expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  expect(layout.titleRight).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  expect(layout.messageRight).toBeLessThanOrEqual(layout.viewportWidth + 1);
+});
+
+test("the global technical-preview badge remains fully visible at constrained widths", async ({
+  page,
+}) => {
+  for (const scenario of [
+    { width: 1024, height: 820, route: workspaceRoute("messages") },
+    { width: 390, height: 844, route: workspaceRoute("teams") },
+    { width: 320, height: 700, route: workspaceRoute("teams") },
+  ]) {
+    await page.setViewportSize(scenario);
+    await gotoCanonical(page, scenario.route);
+    await expectDeterministicVisualFont(page);
+    await expectTechnicalPreviewBadgeFullyVisible(page);
+  }
+});
+
+test("representative release screens match the reviewed visual baselines", async ({
+  context,
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Chromium is the visual-baseline project; WebKit remains a behavioral and accessibility gate.",
+  );
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await gotoCanonical(page, "/app/portfolio");
+  await expectDeterministicVisualFont(page);
+  await expect(page).toHaveScreenshot("portfolio-light.png", {
+    animations: "disabled",
+    caret: "hide",
+    maxDiffPixelRatio: visualDiffPixelRatio,
+  });
+
+  await context.addCookies([
+    {
+      name: themePreferenceCookie,
+      value: "dark",
+      url: new URL("/", page.url()).href,
+    },
+  ]);
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page).toHaveScreenshot("portfolio-dark.png", {
+    animations: "disabled",
+    caret: "hide",
+    maxDiffPixelRatio: visualDiffPixelRatio,
+  });
+
+  await page.setViewportSize({ width: 1024, height: 820 });
+  await gotoCanonical(page, workspaceRoute("messages"));
+  await page.getByRole("button", { name: "Open room context" }).click();
+  await expect(page.locator(".conversation-context")).toBeVisible();
+  await expect(page).toHaveScreenshot("messages-medium-dark.png", {
+    animations: "disabled",
+    caret: "hide",
+    maxDiffPixelRatio: visualDiffPixelRatio,
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoCanonical(page, workspaceRoute("teams"));
+  await expect(page).toHaveScreenshot("teams-mobile-dark.png", {
+    animations: "disabled",
+    caret: "hide",
+    maxDiffPixelRatio: visualDiffPixelRatio,
+  });
+});
