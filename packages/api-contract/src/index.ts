@@ -1,5 +1,64 @@
 import { z } from "zod";
 
+export const runtimeReleaseMetadataSchema = z
+  .object({
+    releaseId: z.string().regex(/^[a-z0-9][a-z0-9._+-]{7,127}$/u),
+    gitSha: z.string().regex(/^[a-f0-9]{40}$/u),
+    imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  })
+  .strict();
+
+type RuntimeReleaseEnvironment = Readonly<Record<string, string | undefined>>;
+
+/**
+ * Reads the immutable build identity injected by the deployment controller.
+ * Partial or malformed identity is always rejected. Production callers pass
+ * `required: true`; production-shaped test topology does the same. Local
+ * source-mode and unit-test runtimes may intentionally report `null` when no
+ * packaged artifact is involved.
+ */
+export function readRuntimeReleaseMetadata(
+  environment: RuntimeReleaseEnvironment,
+  options: { required: boolean } = { required: false },
+): RuntimeReleaseMetadata | null {
+  const candidate = {
+    releaseId: environment.RELEASE_ID?.trim(),
+    gitSha: environment.RELEASE_GIT_SHA?.trim().toLowerCase(),
+    imageId: environment.RELEASE_IMAGE_ID?.trim().toLowerCase(),
+  };
+  const present = Object.values(candidate).filter(Boolean).length;
+  if (present === 0) {
+    if (options.required)
+      throw new Error(
+        "RELEASE_ID, RELEASE_GIT_SHA, and RELEASE_IMAGE_ID are required for this runtime.",
+      );
+    return null;
+  }
+  if (present !== 3)
+    throw new Error(
+      "RELEASE_ID, RELEASE_GIT_SHA, and RELEASE_IMAGE_ID must be configured together.",
+    );
+
+  const parsed = runtimeReleaseMetadataSchema.safeParse(candidate);
+  if (!parsed.success)
+    throw new Error(
+      "Release metadata must use the manifest-compatible 8-128 character lowercase immutable release ID, a full 40-character Git SHA, and a sha256:<64 lowercase hex> image ID.",
+    );
+  return parsed.data;
+}
+
+export function runtimeReleaseMetadataRequired(
+  environment: RuntimeReleaseEnvironment,
+  production: boolean,
+): boolean {
+  const value = environment.RELEASE_METADATA_REQUIRED?.trim();
+  if (value && value !== "true" && value !== "false")
+    throw new Error(
+      "RELEASE_METADATA_REQUIRED must be explicitly true or false.",
+    );
+  return production || value === "true";
+}
+
 export const idSchema = z.string().min(3).max(128);
 export const cursorSchema = z.string().max(512).optional();
 export const roleSchema = z.enum([
@@ -15,7 +74,14 @@ export const readinessSchema = z.object({
   service: z.literal("trevv-api"),
   version: z.literal("v1"),
   mode: z.enum(["demo", "live"]),
+  registrationMode: z.enum([
+    "closed",
+    "invite_only",
+    "public",
+    "not_applicable",
+  ]),
   database: z.enum(["ready", "not_applicable", "unavailable"]),
+  release: runtimeReleaseMetadataSchema.nullable(),
   time: z.iso.datetime(),
 });
 export const workspaceHealthSchema = z.enum([
@@ -1492,6 +1558,9 @@ export const apiErrorSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export type RuntimeReleaseMetadata = z.infer<
+  typeof runtimeReleaseMetadataSchema
+>;
 export type Readiness = z.infer<typeof readinessSchema>;
 export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
 export type OrganizationContext = z.infer<typeof organizationContextSchema>;

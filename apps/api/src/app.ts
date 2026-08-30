@@ -38,6 +38,7 @@ import {
   type Invitation,
   type Membership,
   type OnboardingState,
+  type RuntimeReleaseMetadata,
   type Session,
 } from "@founderhq/api-contract";
 import { openApiDocument } from "@founderhq/api-contract/openapi";
@@ -47,6 +48,7 @@ import {
   createTrevvAuthRuntime,
   type AuthIdentityResolver,
   type MailDelivery,
+  type RegistrationMode,
   type ResolvedAuthIdentity,
 } from "@founderhq/auth-server";
 import {
@@ -120,6 +122,8 @@ export interface ApiAppDependencies {
   clock?: () => Date;
   idGenerator?: () => string;
   authHandler?: (request: Request) => Promise<Response>;
+  registrationMode?: RegistrationMode;
+  releaseMetadata?: RuntimeReleaseMetadata | null;
   authIdentityResolver?: AuthIdentityResolver;
   preMembershipPaths?: readonly string[];
   repositories?: PostgresRepositories;
@@ -290,6 +294,20 @@ export function createApiApp(dependencies: ApiAppDependencies) {
   );
 
   api.on(["GET", "POST"], "/api/auth/*", async (context) => {
+    if (
+      (dependencies.registrationMode ?? "closed") === "closed" &&
+      context.req.method === "POST" &&
+      withoutTrailingSlash(context.req.path) === "/api/auth/sign-up/email"
+    ) {
+      const response = failure(
+        context,
+        403,
+        "registration_closed",
+        "Account registration is not currently open.",
+      );
+      response.headers.set("cache-control", "private, no-store, max-age=0");
+      return response;
+    }
     if (!dependencies.authHandler)
       return failure(
         context,
@@ -405,7 +423,12 @@ export function createApiApp(dependencies: ApiAppDependencies) {
         service: "trevv-api" as const,
         version: "v1" as const,
         mode: dependencies.mode,
+        registrationMode:
+          dependencies.mode === "live"
+            ? (dependencies.registrationMode ?? "closed")
+            : ("not_applicable" as const),
         database: readiness.database,
+        release: dependencies.releaseMetadata ?? null,
         time,
       });
     } catch {
@@ -415,7 +438,12 @@ export function createApiApp(dependencies: ApiAppDependencies) {
           service: "trevv-api" as const,
           version: "v1" as const,
           mode: dependencies.mode,
+          registrationMode:
+            dependencies.mode === "live"
+              ? (dependencies.registrationMode ?? "closed")
+              : ("not_applicable" as const),
           database: "unavailable" as const,
+          release: dependencies.releaseMetadata ?? null,
           time,
         },
         503,
@@ -2485,6 +2513,7 @@ export function createRuntimeApi(
   } = {},
 ): {
   app: ReturnType<typeof createApiApp>;
+  releaseMetadata: RuntimeReleaseMetadata | null;
   close(): Promise<void>;
 } {
   const configuration = readRuntimeConfiguration();
@@ -2503,6 +2532,7 @@ export function createRuntimeApi(
             : {}),
         },
       }),
+      releaseMetadata: null,
       close: async () => undefined,
     };
   if (
@@ -2543,6 +2573,13 @@ export function createRuntimeApi(
     baseUrl: configuration.authBaseUrl,
     secret: configuration.authSecret,
     trustedOrigins: [configuration.webOrigin],
+    registrationMode: configuration.registrationMode,
+    ...(configuration.testRegistrationBootstrapSecret
+      ? {
+          testRegistrationBootstrapSecret:
+            configuration.testRegistrationBootstrapSecret,
+        }
+      : {}),
     mailDelivery,
     mailFrom: configuration.mailFrom,
     ...(configuration.cookieDomain
@@ -2565,6 +2602,8 @@ export function createRuntimeApi(
       mode: "live",
       ...live,
       authHandler: authRuntime.handler,
+      registrationMode: configuration.registrationMode,
+      releaseMetadata: configuration.releaseMetadata,
       authIdentityResolver: authRuntime.identityResolver,
       preMembershipPaths: [
         "/api/v1/session/organizations",
@@ -2590,6 +2629,7 @@ export function createRuntimeApi(
         metrics,
       },
     }),
+    releaseMetadata: configuration.releaseMetadata,
     async close() {
       await Promise.all([database.close(), authRuntime.close()]);
     },
@@ -2952,6 +2992,10 @@ function invitationToken(): string {
 
 function isUnsafeMethod(method: string): boolean {
   return !new Set(["GET", "HEAD", "OPTIONS"]).has(method.toUpperCase());
+}
+
+function withoutTrailingSlash(pathname: string): string {
+  return pathname.length > 1 ? pathname.replace(/\/+$/u, "") : pathname;
 }
 
 function hasTrustedMutationOrigin(

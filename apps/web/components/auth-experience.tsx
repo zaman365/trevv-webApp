@@ -15,12 +15,14 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
 import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";
+import type { WebRegistrationMode } from "@/lib/web-runtime-config";
 import { CapabilityNotice, TechnicalPreviewBadge } from "./capability-status";
 
 export function AuthExperience({
   demoEnabled,
   mode,
   passwordReset,
+  registrationMode,
   returnTo,
   signedOut,
   verified,
@@ -28,10 +30,13 @@ export function AuthExperience({
   demoEnabled: boolean;
   mode: "sign-in" | "sign-up";
   passwordReset?: boolean;
+  registrationMode: WebRegistrationMode;
   returnTo: string;
   signedOut?: string;
   verified?: boolean;
 }) {
+  const registrationOpen = registrationMode !== "closed";
+  const invitationOnly = registrationMode === "invite_only";
   const [pending, setPending] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState(
@@ -53,6 +58,10 @@ export function AuthExperience({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (mode === "sign-up" && !registrationOpen) {
+      setMessage("Account registration is not currently open.");
+      return;
+    }
     const form = event.currentTarget;
     const data = new FormData(form);
     const email = String(data.get("email") ?? "")
@@ -114,6 +123,16 @@ export function AuthExperience({
         },
       );
       const body: unknown = await response.json().catch(() => null);
+      if (
+        mode === "sign-up" &&
+        !response.ok &&
+        authResponseCode(body) === "REGISTRATION_VERIFICATION_DELIVERY_FAILED"
+      ) {
+        window.location.replace(
+          `/verify-email?email=${encodeURIComponent(email)}&next=${encodeURIComponent(returnTo)}&delivery=failed`,
+        );
+        return;
+      }
       if (!response.ok)
         throw new Error(authErrorMessage(body, response.status));
 
@@ -197,13 +216,14 @@ export function AuthExperience({
             <Sparkles size={17} />
           </span>
           <h1>
-            Everything you run.
+            {demoEnabled ? "Technical preview." : "Founder work."}
             <br />
-            One clear view.
+            One focused view.
           </h1>
           <p>
-            See what needs attention, why it matters, and who owns the work
-            across every business, client, product, and initiative.
+            {demoEnabled
+              ? "Explore fictional operational work, attention, ownership, and decisions. Changes in this hosted demonstration stay in this browser."
+              : "Bring attention, ownership, decisions, and Workspace context into one durable workflow."}
           </p>
           <ul>
             <li>
@@ -249,22 +269,30 @@ export function AuthExperience({
       </section>
       <section className="auth-form-panel">
         <div className="auth-form-wrap">
-          <TechnicalPreviewBadge />
+          <TechnicalPreviewBadge mode={demoEnabled ? "demo" : "live"} />
           <h2>
             {demoEnabled
               ? "Explore TREVV"
               : mode === "sign-in"
                 ? "Sign in to TREVV"
-                : "Create your account"}
+                : registrationOpen
+                  ? invitationOnly
+                    ? "Create your invited account"
+                    : "Create your account"
+                  : "Private beta access"}
           </h2>
           <p>
             {demoEnabled
               ? "Open the explicitly fictional technical preview without entering credentials."
               : mode === "sign-in"
                 ? "Use your verified email and password."
-                : "Your account stays separate from the fictional product samples."}
+                : registrationOpen
+                  ? invitationOnly
+                    ? "Use the email address named in your valid TREVV invitation. The invitation is checked securely before an account is created."
+                    : "Your account stays separate from the fictional product samples."
+                  : "TREVV is currently operating as a limited private beta. Self-service account registration is not open yet."}
           </p>
-          {!demoEnabled ? (
+          {!demoEnabled && (mode === "sign-in" || registrationOpen) ? (
             <form
               aria-busy={!hydrated || pending}
               method="post"
@@ -367,7 +395,11 @@ export function AuthExperience({
             {demoEnabled
               ? "Want to preview setup?"
               : mode === "sign-in"
-                ? "New to TREVV?"
+                ? registrationOpen
+                  ? invitationOnly
+                    ? "Have a TREVV invitation?"
+                    : "New to TREVV?"
+                  : "Private beta access is limited."
                 : "Already have an account?"}{" "}
             <a
               href={
@@ -379,7 +411,11 @@ export function AuthExperience({
               {demoEnabled
                 ? "View fictional onboarding"
                 : mode === "sign-in"
-                  ? "Create an account"
+                  ? registrationOpen
+                    ? invitationOnly
+                      ? "Create invited account"
+                      : "Create an account"
+                    : "View access status"
                   : "Sign in"}
             </a>
           </p>
@@ -390,10 +426,7 @@ export function AuthExperience({
 }
 
 function authErrorMessage(value: unknown, status: number): string {
-  const code =
-    value && typeof value === "object" && "code" in value
-      ? String((value as { code?: unknown }).code ?? "")
-      : "";
+  const code = authResponseCode(value);
   const serverMessage =
     value &&
     typeof value === "object" &&
@@ -414,6 +447,12 @@ function authErrorMessage(value: unknown, status: number): string {
   return (
     serverMessage || "Authentication is temporarily unavailable. Try again."
   );
+}
+
+function authResponseCode(value: unknown): string {
+  return value && typeof value === "object" && "code" in value
+    ? String((value as { code?: unknown }).code ?? "")
+    : "";
 }
 
 type LiveOnboardingDraft = {

@@ -49,6 +49,7 @@ import {
   searchResultSchema,
   privacyProgramStatusSchema,
   retentionPolicySchema,
+  readinessSchema,
   sessionSchema,
   setConversationParticipantSchema,
   setTeamMemberSchema,
@@ -116,6 +117,7 @@ import {
   type SearchResultDto,
   type PrivacyProgramStatusDto,
   type RetentionPolicyDto,
+  type Readiness,
   type Session,
   type SetTeamMemberInput,
   type TeamDirectoryDto,
@@ -218,6 +220,9 @@ export function createApiClient({
   };
 
   return {
+    readiness: async (): Promise<Readiness> =>
+      readinessSchema.parse((await request("/readyz")).body),
+
     session: async (): Promise<Session> =>
       sessionSchema.parse((await request("/session")).body),
 

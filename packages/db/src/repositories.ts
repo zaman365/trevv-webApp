@@ -877,6 +877,7 @@ export interface OrganizationScopedRepositories {
   };
   search: (
     query: string,
+    accessibleWorkspaceIds: readonly string[],
     limit?: number,
   ) => Promise<{
     workspaces: WorkspaceProjection[];
@@ -1501,7 +1502,8 @@ function createScopedRepositories(
           submitWeeklyReview(transaction, scope, input, context),
         ),
     },
-    search: (query, limit) => search(database, scope, query, limit),
+    search: (query, accessibleWorkspaceIds, limit) =>
+      search(database, scope, query, accessibleWorkspaceIds, limit),
     exportOrganization: () => exportOrganization(database, scope),
     unitOfWork: {
       run: (callback) =>
@@ -7409,12 +7411,20 @@ async function search(
   database: TrevvDatabase,
   scope: OrganizationScope,
   query: string,
+  accessibleWorkspaceIds: readonly string[],
   requestedLimit = 50,
 ) {
   const term = query.trim();
   if (term.length < 2) return { workspaces: [], items: [] };
+  if (accessibleWorkspaceIds.length === 0) return { workspaces: [], items: [] };
   const limit = Math.max(1, Math.min(requestedLimit, 100));
   const pattern = `%${term.replace(/[\\%_]/g, "\\$&")}%`;
+  const workspaceAccessPredicate = inArray(workspaces.id, [
+    ...accessibleWorkspaceIds,
+  ]);
+  const itemAccessPredicate = inArray(workItems.workspaceId, [
+    ...accessibleWorkspaceIds,
+  ]);
   const [workspaceRows, matchedItems] = await Promise.all([
     database
       .select({ workspace: workspaces })
@@ -7433,6 +7443,7 @@ async function search(
           isNull(workspaces.deletedAt),
           isNull(portfolios.archivedAt),
           isNull(portfolios.deletedAt),
+          workspaceAccessPredicate,
           or(
             ilike(workspaces.name, pattern),
             ilike(workspaces.currentPriority, pattern),
@@ -7448,6 +7459,7 @@ async function search(
       .where(
         and(
           workItemPredicate(scope.organizationId),
+          itemAccessPredicate,
           or(
             ilike(workItems.title, pattern),
             ilike(workItems.description, pattern),

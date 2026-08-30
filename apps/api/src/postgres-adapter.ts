@@ -1424,7 +1424,9 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
     },
 
     async search(context, query) {
-      const result = await scoped(options.repositories, context).search(query);
+      const result = await scoped(options.repositories, context).search(query, [
+        ...context.access.accessibleWorkspaceIds,
+      ]);
       return {
         workspaces: result.workspaces
           .filter((workspace) => canSeeWorkspace(context.access, workspace.id))

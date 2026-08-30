@@ -27,6 +27,7 @@ import {
   outboxEvents,
   portfolioMembers,
   portfolios,
+  registrationInvitationClaims,
   users,
   conversationParticipants,
   teamMembers,
@@ -124,6 +125,11 @@ interface IdentityBase {
     "id" | "name" | "email" | "emailVerified"
   >;
 }
+
+type ResolvedAuthUser = Omit<
+  typeof authUsers.$inferSelect,
+  "registrationInvitationTokenHash"
+>;
 
 export type IdentityResolution =
   | (IdentityBase & { status: "verification_required" })
@@ -746,6 +752,14 @@ async function acceptInvitation(
     )
       throw invalidInvitation();
 
+    const [registrationClaim] = await transaction
+      .select({ authUserId: registrationInvitationClaims.authUserId })
+      .from(registrationInvitationClaims)
+      .where(eq(registrationInvitationClaims.invitationId, invitation.id))
+      .limit(1);
+    if (registrationClaim && registrationClaim.authUserId !== scope.authUserId)
+      throw invalidInvitation();
+
     const appUser = await ensureApplicationUser(transaction, authUser, now);
     const [existingMembership] = await transaction
       .select()
@@ -1143,7 +1157,15 @@ async function getAuthUser(
   lock = false,
 ) {
   const query = database
-    .select()
+    .select({
+      id: authUsers.id,
+      name: authUsers.name,
+      email: authUsers.email,
+      emailVerified: authUsers.emailVerified,
+      image: authUsers.image,
+      createdAt: authUsers.createdAt,
+      updatedAt: authUsers.updatedAt,
+    })
     .from(authUsers)
     .where(eq(authUsers.id, authUserId))
     .limit(1);
@@ -1184,7 +1206,7 @@ async function getMappedAppUser(database: TrevvDatabase, authUserId: string) {
 
 async function ensureApplicationUser(
   database: TrevvDatabase,
-  authUser: typeof authUsers.$inferSelect,
+  authUser: ResolvedAuthUser,
   now: Date,
 ) {
   const mapped = await getMappedAppUser(database, authUser.id);
@@ -1329,7 +1351,7 @@ async function appendAuditAndOutbox(
   });
 }
 
-function projectAuthUser(authUser: typeof authUsers.$inferSelect) {
+function projectAuthUser(authUser: ResolvedAuthUser) {
   return {
     id: authUser.id,
     name: authUser.name,

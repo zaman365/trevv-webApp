@@ -59,6 +59,19 @@ export function proxy(request: NextRequest) {
             request.nextUrl.protocol === "https:",
         ),
       );
+      if (tokenAction === "invitation") {
+        // Registration and acceptance need the same opaque capability, but
+        // neither cookie should accompany unrelated API requests.
+        response.cookies.set(
+          authActionCookies.invitationRegistration,
+          token,
+          authActionCookieOptions(
+            authActionCookiePaths.invitationRegistration,
+            process.env.NODE_ENV === "production" ||
+              request.nextUrl.protocol === "https:",
+          ),
+        );
+      }
     }
     return finish(response);
   }

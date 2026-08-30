@@ -9,6 +9,7 @@ const server = serve({ fetch: runtime.app.fetch, port }, (info) => {
       level: "info",
       message: "TREVV API ready",
       url: `http://localhost:${info.port}`,
+      release: runtime.releaseMetadata,
     }),
   );
 });

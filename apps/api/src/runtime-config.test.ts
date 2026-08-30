@@ -16,6 +16,11 @@ const validLiveEnvironment = {
   SMTP_SECURE: "false",
   SMTP_REQUIRE_TLS: "false",
 } as const;
+const releaseEnvironment = {
+  RELEASE_ID: "release-2026.08.30.1",
+  RELEASE_GIT_SHA: "a".repeat(40),
+  RELEASE_IMAGE_ID: `sha256:${"b".repeat(64)}`,
+} as const;
 
 describe("live runtime configuration", () => {
   it("requires an explicit mode and rejects demo production", () => {
@@ -44,7 +49,67 @@ describe("live runtime configuration", () => {
       },
       rateLimitBackend: "memory",
       errorReportingMode: "disabled",
+      registrationMode: "invite_only",
     });
+  });
+
+  it("defaults to invite-only, permits an explicit close, and never permits public production registration", () => {
+    expect(readRuntimeConfiguration(validLiveEnvironment)).toMatchObject({
+      mode: "live",
+      registrationMode: "invite_only",
+    });
+    expect(
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        REGISTRATION_MODE: "closed",
+      }),
+    ).toMatchObject({ mode: "live", registrationMode: "closed" });
+    expect(
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        REGISTRATION_MODE: "public",
+      }),
+    ).toMatchObject({ mode: "live", registrationMode: "public" });
+    expect(
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        REGISTRATION_MODE: "invite_only",
+      }),
+    ).toMatchObject({ mode: "live", registrationMode: "invite_only" });
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        REGISTRATION_MODE: "public",
+      }),
+    ).toThrow(/must be closed or invite_only/);
+  });
+
+  it("allows the first-owner smoke bootstrap secret only in test mode", () => {
+    const secret = "test-topology-registration-bootstrap-secret";
+    expect(
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        NODE_ENV: "test",
+        TEST_REGISTRATION_BOOTSTRAP_SECRET: secret,
+      }),
+    ).toMatchObject({
+      mode: "live",
+      registrationMode: "invite_only",
+      testRegistrationBootstrapSecret: secret,
+    });
+    expect(() =>
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        TEST_REGISTRATION_BOOTSTRAP_SECRET: secret,
+      }),
+    ).toThrow(/allowed only when NODE_ENV=test/);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        NODE_ENV: "test",
+        TEST_REGISTRATION_BOOTSTRAP_SECRET: "too-short",
+      }),
+    ).toThrow(/at least 32 characters/);
   });
 
   it("requires an explicit runtime environment for live mode", () => {
@@ -54,6 +119,35 @@ describe("live runtime configuration", () => {
         NODE_ENV: undefined,
       }),
     ).toThrow(/NODE_ENV must be explicitly set/);
+  });
+
+  it("enforces release identity for production-shaped test topology", () => {
+    expect(() =>
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        RELEASE_METADATA_REQUIRED: "true",
+      }),
+    ).toThrow(/RELEASE_ID.*required for this runtime/);
+    expect(
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        RELEASE_METADATA_REQUIRED: "true",
+        RELEASE_ID: "release-2026.08.30.1",
+        RELEASE_GIT_SHA: "a".repeat(40),
+        RELEASE_IMAGE_ID: `sha256:${"b".repeat(64)}`,
+      }),
+    ).toMatchObject({
+      mode: "live",
+      releaseMetadata: { releaseId: "release-2026.08.30.1" },
+    });
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        RELEASE_ID: undefined,
+        RELEASE_GIT_SHA: undefined,
+        RELEASE_IMAGE_ID: undefined,
+      }),
+    ).toThrow(/RELEASE_ID.*required for this runtime/);
   });
 
   it("rejects weak or placeholder authentication secrets", () => {
@@ -76,6 +170,7 @@ describe("live runtime configuration", () => {
       readRuntimeConfiguration({
         ...validLiveEnvironment,
         NODE_ENV: "production",
+        ...releaseEnvironment,
       }),
     ).toThrow(/BETTER_AUTH_URL must use HTTPS/);
 
@@ -131,6 +226,7 @@ describe("live runtime configuration", () => {
       rateLimitBackend: "postgres",
       rateLimitHashSecret: "private-rate-limit-hmac-material-2026",
       trustedClientIpHeader: "x-trevv-client-ip",
+      registrationMode: "invite_only",
     });
   });
 
@@ -251,5 +347,6 @@ function productionEnvironment() {
     RATE_LIMIT_HASH_SECRET: "private-rate-limit-hmac-material-2026",
     TRUSTED_CLIENT_IP_HEADER: "x-trevv-client-ip",
     ERROR_REPORTING_MODE: "disabled",
+    ...releaseEnvironment,
   } as const;
 }

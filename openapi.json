@@ -54,7 +54,7 @@
         "security": [],
         "tags": ["System"],
         "operationId": "readiness",
-        "description": "Reports whether the API can serve its configured data plane. Live mode probes PostgreSQL; demo mode explicitly reports that a database is not applicable.",
+        "description": "Reports whether the API can serve its configured data plane and identifies the packaged release artifact. Live mode probes PostgreSQL; demo or source-mode development may report null release metadata when no deployed artifact exists.",
         "responses": {
           "200": {
             "description": "The configured data plane is ready",
@@ -2671,7 +2671,9 @@
           "service",
           "version",
           "mode",
+          "registrationMode",
           "database",
+          "release",
           "time"
         ],
         "additionalProperties": false,
@@ -2680,11 +2682,34 @@
           "service": { "type": "string", "const": "trevv-api" },
           "version": { "type": "string", "const": "v1" },
           "mode": { "type": "string", "enum": ["demo", "live"] },
+          "registrationMode": {
+            "type": "string",
+            "enum": ["closed", "invite_only", "public", "not_applicable"]
+          },
           "database": {
             "type": "string",
             "enum": ["ready", "not_applicable", "unavailable"]
           },
+          "release": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/RuntimeReleaseMetadata" },
+              { "type": "null" }
+            ]
+          },
           "time": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RuntimeReleaseMetadata": {
+        "type": "object",
+        "required": ["releaseId", "gitSha", "imageId"],
+        "additionalProperties": false,
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._+-]{7,127}$"
+          },
+          "gitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+          "imageId": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
         }
       },
       "OpenApiDocument": {

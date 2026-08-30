@@ -72,6 +72,14 @@ describe("optimistic private-route boundary", () => {
         `Path=${cookiePath}`,
       );
       expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+      if (path === "/invite/accept") {
+        expect(response.headers.get("set-cookie")).toContain(
+          "trevv.registration_invitation=",
+        );
+        expect(response.headers.get("set-cookie")).toContain(
+          "Path=/api/auth/sign-up/email",
+        );
+      }
     },
   );
 

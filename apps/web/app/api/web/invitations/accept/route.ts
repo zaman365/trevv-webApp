@@ -75,12 +75,12 @@ function unavailable(status: number) {
 }
 
 function clearInvitationCookie(response: NextResponse, request: Request) {
-  response.cookies.set(authActionCookies.invitation, "", {
-    ...authActionCookieOptions(
-      authActionCookiePaths.invitation,
-      process.env.NODE_ENV === "production" ||
-        new URL(request.url).protocol === "https:",
-    ),
-    maxAge: 0,
-  });
+  const secure =
+    process.env.NODE_ENV === "production" ||
+    new URL(request.url).protocol === "https:";
+  for (const action of ["invitation", "invitationRegistration"] as const)
+    response.cookies.set(authActionCookies[action], "", {
+      ...authActionCookieOptions(authActionCookiePaths[action], secure),
+      maxAge: 0,
+    });
 }

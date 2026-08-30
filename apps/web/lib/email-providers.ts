@@ -1,15 +1,8 @@
 export type EmailProviderKey =
-  | "gmail"
-  | "microsoft"
-  | "yahoo"
-  | "icloud"
-  | "zoho"
-  | "custom";
+  "gmail" | "microsoft" | "yahoo" | "icloud" | "zoho" | "custom";
 
 export type EmailConnectionMode =
-  | "api-oauth"
-  | "imap-oauth"
-  | "imap-app-password";
+  "api-oauth" | "imap-oauth" | "imap-app-password";
 
 export interface EmailProviderDefinition {
   key: EmailProviderKey;

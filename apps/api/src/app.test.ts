@@ -14,6 +14,11 @@ import {
 import { DataPlaneError, type AccessResolver } from "./data-plane";
 
 const fixedNow = new Date("2026-08-24T12:00:00.000Z");
+const runtimeRelease = {
+  releaseId: "release-2026.08.30.1",
+  gitSha: "a".repeat(40),
+  imageId: `sha256:${"b".repeat(64)}`,
+};
 
 function freshDemoApp() {
   let sequence = 0;
@@ -181,6 +186,7 @@ describe("TREVV API v1 dependency boundaries", () => {
         ...live.dataPlane,
         readiness: async () => ({ database: "ready" as const }),
       },
+      releaseMetadata: runtimeRelease,
       clock: () => new Date(fixedNow),
     });
     const readyResponse = await ready.request("/api/v1/readyz");
@@ -190,13 +196,16 @@ describe("TREVV API v1 dependency boundaries", () => {
       service: "trevv-api",
       version: "v1",
       mode: "live",
+      registrationMode: "closed",
       database: "ready",
+      release: runtimeRelease,
       time: fixedNow.toISOString(),
     });
 
     const unavailable = createApiApp({
       mode: "live",
       ...live,
+      releaseMetadata: runtimeRelease,
       clock: () => new Date(fixedNow),
     });
     const unavailableResponse = await unavailable.request("/api/v1/readyz");
@@ -206,7 +215,9 @@ describe("TREVV API v1 dependency boundaries", () => {
       service: "trevv-api",
       version: "v1",
       mode: "live",
+      registrationMode: "closed",
       database: "unavailable",
+      release: runtimeRelease,
       time: fixedNow.toISOString(),
     });
   });

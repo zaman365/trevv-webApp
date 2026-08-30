@@ -8,7 +8,9 @@ import {
   createConversationSchema,
   createTeamSchema,
   createWaitingSchema,
+  readRuntimeReleaseMetadata,
   readinessSchema,
+  runtimeReleaseMetadataRequired,
   privacyProgramStatusSchema,
   sessionSchema,
   setConversationParticipantSchema,
@@ -20,6 +22,78 @@ import {
 import { openApiDocument } from "./openapi";
 
 const timestamp = "2026-08-29T12:00:00.000Z";
+
+describe("runtime release metadata", () => {
+  const valid = {
+    RELEASE_ID: "release-2026.08.30.1",
+    RELEASE_GIT_SHA: "A".repeat(40),
+    RELEASE_IMAGE_ID: `sha256:${"B".repeat(64)}`,
+  };
+
+  it("normalizes complete immutable artifact identity", () => {
+    expect(readRuntimeReleaseMetadata(valid)).toEqual({
+      releaseId: valid.RELEASE_ID,
+      gitSha: valid.RELEASE_GIT_SHA.toLowerCase(),
+      imageId: valid.RELEASE_IMAGE_ID.toLowerCase(),
+    });
+  });
+
+  it("rejects missing, partial, abbreviated, and mutable-looking identity", () => {
+    expect(() => readRuntimeReleaseMetadata({}, { required: true })).toThrow(
+      /required for this runtime/,
+    );
+    expect(() =>
+      readRuntimeReleaseMetadata({ RELEASE_ID: valid.RELEASE_ID }),
+    ).toThrow(/configured together/);
+    expect(() =>
+      readRuntimeReleaseMetadata({
+        ...valid,
+        RELEASE_GIT_SHA: "abc123",
+      }),
+    ).toThrow(/full 40-character Git SHA/);
+    expect(() =>
+      readRuntimeReleaseMetadata({
+        ...valid,
+        RELEASE_IMAGE_ID: "latest",
+      }),
+    ).toThrow(/sha256/);
+    expect(() =>
+      readRuntimeReleaseMetadata({
+        ...valid,
+        RELEASE_ID: "latest",
+      }),
+    ).toThrow(/manifest-compatible/);
+    expect(() =>
+      readRuntimeReleaseMetadata({
+        ...valid,
+        RELEASE_ID: "TREVV-2026.08.30",
+      }),
+    ).toThrow(/lowercase/);
+    expect(
+      readRuntimeReleaseMetadata({
+        ...valid,
+        RELEASE_ID: "trevv+2026.08.30",
+      }),
+    ).toMatchObject({ releaseId: "trevv+2026.08.30" });
+  });
+
+  it("requires metadata for production or an explicit topology gate", () => {
+    expect(runtimeReleaseMetadataRequired({}, false)).toBe(false);
+    expect(runtimeReleaseMetadataRequired({}, true)).toBe(true);
+    expect(
+      runtimeReleaseMetadataRequired(
+        { RELEASE_METADATA_REQUIRED: "true" },
+        false,
+      ),
+    ).toBe(true);
+    expect(() =>
+      runtimeReleaseMetadataRequired(
+        { RELEASE_METADATA_REQUIRED: "sometimes" },
+        false,
+      ),
+    ).toThrow(/explicitly true or false/);
+  });
+});
 
 describe("Phase 3 API contract", () => {
   it("requires organization timezone and durable Workspace versions", () => {
@@ -432,9 +506,18 @@ describe("Phase 4 collaboration contract", () => {
         service: "trevv-api",
         version: "v1",
         mode: "live",
+        registrationMode: "invite_only",
         database: "ready",
+        release: {
+          releaseId: "release-2026.08.30.1",
+          gitSha: "a".repeat(40),
+          imageId: `sha256:${"b".repeat(64)}`,
+        },
         time: timestamp,
       }),
-    ).toMatchObject({ database: "ready" });
+    ).toMatchObject({
+      database: "ready",
+      release: { releaseId: "release-2026.08.30.1" },
+    });
   });
 });

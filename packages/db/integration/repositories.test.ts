@@ -190,6 +190,88 @@ function createInput(fixture: TenantFixture, title: string, id?: string) {
 }
 
 describe("PostgreSQL repositories", () => {
+  it("keeps permission-filtered search bounded at 100 Workspaces and 10,000 items", async () => {
+    const fixture = await seedTenant("reference-volume");
+    const additionalWorkspaceIds = Array.from(
+      { length: 98 },
+      (_, index) =>
+        `workspace-reference-volume-${String(index + 2).padStart(3, "0")}`,
+    );
+    const workspaceIds = [
+      fixture.workspaceA,
+      fixture.workspaceB,
+      ...additionalWorkspaceIds,
+    ];
+    const boardIds = workspaceIds.map(
+      (_, index) => `board-reference-volume-${String(index).padStart(3, "0")}`,
+    );
+    await connection.db.transaction(async (transaction) => {
+      await transaction.insert(workspaces).values(
+        additionalWorkspaceIds.map((id, index) => ({
+          id,
+          organizationId: fixture.organizationId,
+          portfolioId: fixture.portfolioId,
+          name: `Reference volume Workspace ${String(index + 2).padStart(3, "0")}`,
+          slug: `reference-volume-${String(index + 2).padStart(3, "0")}`,
+          type: "business" as const,
+          accentColor: "#334455",
+          icon: "R",
+          lifecycleStage: "build" as const,
+          health: "on_track" as const,
+          leadUserId: fixture.userId,
+        })),
+      );
+      await transaction.insert(boards).values(
+        workspaceIds.map((workspaceId, index) => ({
+          id: boardIds[index]!,
+          organizationId: fixture.organizationId,
+          workspaceId,
+          name: "Reference volume Board",
+        })),
+      );
+      const items = workspaceIds.flatMap((workspaceId, workspaceIndex) =>
+        Array.from({ length: 100 }, (_, itemIndex) => ({
+          id: `item-reference-volume-${String(workspaceIndex).padStart(3, "0")}-${String(itemIndex).padStart(3, "0")}`,
+          organizationId: fixture.organizationId,
+          workspaceId,
+          boardId: boardIds[workspaceIndex]!,
+          title: `Reference volume item ${String(workspaceIndex).padStart(3, "0")}-${String(itemIndex).padStart(3, "0")}`,
+          itemType: "task" as const,
+          priority: "normal" as const,
+          status: "working" as const,
+          creatorId: fixture.userId,
+        })),
+      );
+      for (let offset = 0; offset < items.length; offset += 500)
+        await transaction
+          .insert(workItems)
+          .values(items.slice(offset, offset + 500));
+    });
+
+    const accessibleWorkspaceIds = workspaceIds.filter(
+      (_, index) => index % 10 === 0,
+    );
+    const repositories = createPostgresRepositories(
+      connection.db,
+    ).forOrganization(fixture.scope);
+    const started = performance.now();
+    const result = await repositories.search(
+      "Reference volume",
+      accessibleWorkspaceIds,
+      100,
+    );
+    const elapsedMs = performance.now() - started;
+
+    expect(result.workspaces).toHaveLength(9);
+    expect(result.items).toHaveLength(100);
+    expect(
+      result.items.every((item) =>
+        accessibleWorkspaceIds.includes(item.workspaceId),
+      ),
+    ).toBe(true);
+    expect(elapsedMs).toBeLessThan(5_000);
+  }, 60_000);
+
   it("survives connection restart and exposes scoped access truth", async () => {
     const fixture = await seedTenant("restart");
     const firstConnection = createDatabase(temporary.url);

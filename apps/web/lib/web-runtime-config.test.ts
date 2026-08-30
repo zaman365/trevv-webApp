@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   safeReturnPath,
   validateProductionWebConfiguration,
+  webReleaseMetadata,
+  webRegistrationMode,
   webRuntimeMode,
 } from "./web-runtime-config";
 
@@ -10,9 +12,26 @@ const secureProduction = {
   DEMO_MODE: "false",
   NEXT_PUBLIC_APP_URL: "https://trevv.test",
   API_ORIGIN: "https://api.service.internal",
+  CSP_MODE: "report-only",
+  HSTS_ENABLED: "false",
 };
 
 describe("Web runtime configuration", () => {
+  it("requires complete release identity only for a production artifact", () => {
+    expect(webReleaseMetadata({ NODE_ENV: "test" })).toBeNull();
+    expect(() => webReleaseMetadata({ NODE_ENV: "production" })).toThrow(
+      /required for this runtime/,
+    );
+    expect(
+      webReleaseMetadata({
+        NODE_ENV: "production",
+        RELEASE_ID: "release-2026.08.30.1",
+        RELEASE_GIT_SHA: "a".repeat(40),
+        RELEASE_IMAGE_ID: `sha256:${"b".repeat(64)}`,
+      }),
+    ).toMatchObject({ releaseId: "release-2026.08.30.1" });
+  });
+
   it("allows demo mode only when it is explicit and never in production", () => {
     expect(webRuntimeMode({ NODE_ENV: "development", DEMO_MODE: "true" })).toBe(
       "demo",
@@ -34,6 +53,36 @@ describe("Web runtime configuration", () => {
     ).toThrow(/explicitly set/);
   });
 
+  it("defaults to invite-only, allows an explicit close, and rejects public production registration", () => {
+    expect(webRegistrationMode({ NODE_ENV: "development" })).toBe(
+      "invite_only",
+    );
+    expect(
+      webRegistrationMode({
+        NODE_ENV: "test",
+        REGISTRATION_MODE: "closed",
+      }),
+    ).toBe("closed");
+    expect(
+      webRegistrationMode({
+        NODE_ENV: "test",
+        REGISTRATION_MODE: "public",
+      }),
+    ).toBe("public");
+    expect(
+      webRegistrationMode({
+        NODE_ENV: "test",
+        REGISTRATION_MODE: "invite_only",
+      }),
+    ).toBe("invite_only");
+    expect(() =>
+      webRegistrationMode({
+        NODE_ENV: "production",
+        REGISTRATION_MODE: "public",
+      }),
+    ).toThrow(/must be closed or invite_only/);
+  });
+
   it("requires a secure public URL and a path-free private API upstream", () => {
     expect(() =>
       validateProductionWebConfiguration(secureProduction),
@@ -44,6 +93,30 @@ describe("Web runtime configuration", () => {
         NEXT_PUBLIC_APP_URL: "http://trevv.test",
       }),
     ).toThrow(/HTTPS/);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        CSP_MODE: undefined,
+      }),
+    ).toThrow(/CSP_MODE is required/);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        HSTS_ENABLED: undefined,
+      }),
+    ).toThrow(/HSTS_ENABLED is required/);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        CSP_MODE: "disabled",
+      }),
+    ).toThrow(/CSP_MODE must be/);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        HSTS_ENABLED: "sometimes",
+      }),
+    ).toThrow(/HSTS_ENABLED must be/);
     expect(() =>
       validateProductionWebConfiguration({
         ...secureProduction,

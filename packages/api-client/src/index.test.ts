@@ -53,6 +53,32 @@ const item = {
 } as const;
 
 describe("Phase 3 API client", () => {
+  it("parses immutable runtime identity from readiness", async () => {
+    const release = {
+      releaseId: "release-2026.08.30.1",
+      gitSha: "a".repeat(40),
+      imageId: `sha256:${"b".repeat(64)}`,
+    };
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        status: "ready",
+        service: "trevv-api",
+        version: "v1",
+        mode: "live",
+        registrationMode: "invite_only",
+        database: "ready",
+        release,
+        time: timestamp,
+      }),
+    ) as unknown as typeof fetch;
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl,
+    });
+
+    await expect(client.readiness()).resolves.toMatchObject({ release });
+  });
+
   it("parses atomic Workspace creation and forwards idempotency", async () => {
     const fetchMock = vi.fn(
       async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>

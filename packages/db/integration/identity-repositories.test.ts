@@ -28,6 +28,7 @@ import {
   outboxEvents,
   portfolioMembers,
   portfolios,
+  registrationInvitationClaims,
   teamMembers,
   teamRooms,
   teams,
@@ -512,6 +513,190 @@ describe("Phase 2 identity repositories", () => {
         ),
       });
     expect(selection?.organizationId).toBe(owner.result.organizationId);
+  });
+
+  it("rolls back auth-user creation when an invitation is revoked across the admission race", async () => {
+    const suffix = randomUUID();
+    const organizationId = `org-registration-race-${suffix}`;
+    const invitationId = `invitation-registration-race-${suffix}`;
+    const authUserId = `auth-registration-race-${suffix}`;
+    const email = `${authUserId}@example.test`;
+    const tokenHash = hashInvitationToken(opaqueToken());
+    await connection.db.insert(organizations).values({
+      id: organizationId,
+      name: "Registration race test",
+      slug: `registration-race-${suffix}`,
+    });
+    await connection.db.insert(invitations).values({
+      id: invitationId,
+      organizationId,
+      email,
+      role: "member",
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1_000),
+    });
+
+    const locker = createDatabase(temporary.url);
+    const contender = createDatabase(temporary.url);
+    let creation:
+      | Promise<
+          | { ok: true }
+          | {
+              ok: false;
+              error: unknown;
+            }
+        >
+      | undefined;
+    try {
+      await locker.db.transaction(async (transaction) => {
+        await transaction
+          .select({ id: invitations.id })
+          .from(invitations)
+          .where(eq(invitations.id, invitationId))
+          .for("update");
+        creation = contender.db
+          .insert(authUsers)
+          .values({
+            id: authUserId,
+            name: "Registration race contender",
+            email,
+            emailVerified: false,
+            registrationInvitationTokenHash: tokenHash,
+          })
+          .then(
+            () => ({ ok: true }) as const,
+            (error: unknown) => ({ ok: false, error }) as const,
+          );
+        await transaction
+          .update(invitations)
+          .set({ revokedAt: new Date() })
+          .where(eq(invitations.id, invitationId));
+      });
+
+      const result = await creation;
+      expect(result?.ok).toBe(false);
+      expect(
+        await connection.db.query.authUsers.findFirst({
+          where: eq(authUsers.id, authUserId),
+        }),
+      ).toBeUndefined();
+      expect(
+        await connection.db.query.registrationInvitationClaims.findFirst({
+          where: eq(registrationInvitationClaims.invitationId, invitationId),
+        }),
+      ).toBeUndefined();
+    } finally {
+      await Promise.all([locker.close(), contender.close()]);
+    }
+  });
+
+  it("binds a registration claim to the auth identity that may accept the invitation", async () => {
+    const suffix = randomUUID();
+    const organizationId = `org-registration-claim-${suffix}`;
+    const invitationId = `invitation-registration-claim-${suffix}`;
+    const claimedAuthUserId = `auth-registration-claim-${suffix}`;
+    const otherAuthUserId = `auth-registration-other-${suffix}`;
+    const email = `${claimedAuthUserId}@example.test`;
+    const tokenHash = hashInvitationToken(opaqueToken());
+    await connection.db.insert(organizations).values({
+      id: organizationId,
+      name: "Registration claim test",
+      slug: `registration-claim-${suffix}`,
+    });
+    await connection.db.insert(invitations).values({
+      id: invitationId,
+      organizationId,
+      email,
+      role: "member",
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1_000),
+    });
+    await connection.db.insert(authUsers).values({
+      id: claimedAuthUserId,
+      name: "Claimed invitation identity",
+      email,
+      emailVerified: true,
+      registrationInvitationTokenHash: tokenHash,
+    });
+    await connection.db.insert(authUsers).values({
+      id: otherAuthUserId,
+      name: "Case-variant identity",
+      email: email.toUpperCase(),
+      emailVerified: true,
+    });
+
+    const claim =
+      await connection.db.query.registrationInvitationClaims.findFirst({
+        where: eq(registrationInvitationClaims.invitationId, invitationId),
+      });
+    expect(claim).toMatchObject({ authUserId: claimedAuthUserId });
+    await expect(
+      createPostgresRepositories(connection.db)
+        .forIdentity(identityScope(otherAuthUserId, "wrong-claim-owner"))
+        .invitations.accept(tokenHash),
+    ).rejects.toMatchObject({ code: "invitation_invalid" });
+    await expect(
+      createPostgresRepositories(connection.db)
+        .forIdentity(identityScope(claimedAuthUserId, "claim-owner"))
+        .invitations.accept(tokenHash),
+    ).resolves.toMatchObject({
+      invitationId,
+      organizationId,
+    });
+  });
+
+  it("keeps a one-time registration claim consumed after auth-account deletion", async () => {
+    const suffix = randomUUID();
+    const organizationId = `org-deleted-registration-${suffix}`;
+    const invitationId = `invitation-deleted-registration-${suffix}`;
+    const originalAuthUserId = `auth-deleted-registration-${suffix}`;
+    const replacementAuthUserId = `auth-replacement-registration-${suffix}`;
+    const email = `${originalAuthUserId}@example.test`;
+    const tokenHash = hashInvitationToken(opaqueToken());
+    await connection.db.insert(organizations).values({
+      id: organizationId,
+      name: "Deleted registration account test",
+      slug: `deleted-registration-${suffix}`,
+    });
+    await connection.db.insert(invitations).values({
+      id: invitationId,
+      organizationId,
+      email,
+      role: "member",
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1_000),
+    });
+    await connection.db.insert(authUsers).values({
+      id: originalAuthUserId,
+      name: "Original invited account",
+      email,
+      emailVerified: false,
+      registrationInvitationTokenHash: tokenHash,
+    });
+
+    await connection.db
+      .delete(authUsers)
+      .where(eq(authUsers.id, originalAuthUserId));
+    await expect(
+      connection.db.query.registrationInvitationClaims.findFirst({
+        where: eq(registrationInvitationClaims.invitationId, invitationId),
+      }),
+    ).resolves.toMatchObject({ authUserId: null });
+
+    await expect(
+      connection.db.insert(authUsers).values({
+        id: replacementAuthUserId,
+        name: "Replacement invited account",
+        email,
+        emailVerified: false,
+        registrationInvitationTokenHash: tokenHash,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      connection.db.query.authUsers.findFirst({
+        where: eq(authUsers.id, replacementAuthUserId),
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("rotates, records delivery, accepts once, and never exposes token hashes", async () => {

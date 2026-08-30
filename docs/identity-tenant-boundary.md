@@ -75,6 +75,40 @@ before the completion attempt.
 
 ## Invitation lifecycle
 
+`REGISTRATION_MODE` has three server-enforced values. `invite_only` is the
+live default: Better Auth account creation proceeds only when the request has a
+short-lived HttpOnly invitation capability whose SHA-256 digest, normalized
+email, expiry, revocation, deletion, and acceptance state are validated in
+PostgreSQL. `closed` disables all new account creation, including for invited
+people. `public` is available only to development/test bootstrap flows and is
+rejected by production startup until the public-release gates are explicitly
+approved. Client flags, roles, tenant identifiers, and capability labels never
+select or bypass the mode.
+
+Invite-only admission is not a check-then-create decision. Better Auth injects
+the exact invitation digest into a server-only transient user field, and the
+auth-user insert trigger locks the invitation and creates a unique durable
+registration claim inside the same PostgreSQL transaction. A concurrent claim,
+revocation, deletion, acceptance, or expiry aborts and rolls back auth-user
+creation. The transient digest is cleared before commit, acceptance is bound to
+the claimed auth identity, and deleting that auth account leaves a tombstoned
+claim rather than making the one-time invitation reusable. The header-based
+first-owner bootstrap omits this claim and exists only in the validated test
+topology.
+
+Credential-link failure rolls the entire Better Auth transaction back. Better
+Auth deliberately contains verification-delivery exceptions, so a mail failure
+commits the account and invitation claim and attempts to remove the unusable
+verification marker. A cleanup fault cannot suppress the request-local failure
+signal; any retained marker remains undisclosed and expires independently. The
+response explicitly says that the account exists and delivery failed; the Web
+flow then opens the verification screen, where resend issues a fresh token.
+Resend and password-recovery responses stay identical for existing and unknown
+addresses and never claim that external mail was sent. Delivery still runs
+while the sign-up transaction and invitation row lock are open. At the current
+invite-only volume that is an accepted operational tradeoff, and lock duration
+must be monitored before registration volume grows.
+
 Raw invitation tokens are generated outside the repository with at least 256
 bits of entropy. Only a SHA-256 digest enters PostgreSQL. Projections, audit
 records, outbox events, error messages, and delivery metadata never contain the

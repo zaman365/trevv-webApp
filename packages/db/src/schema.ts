@@ -3000,8 +3000,33 @@ export const authUsers = pgTable(
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Better Auth injects this server-only digest while an invite-only account
+    // is being created. A database trigger atomically consumes it into
+    // registration_invitation_claims and clears the transient value before the
+    // transaction commits.
+    registrationInvitationTokenHash: text("registrationInvitationTokenHash"),
   },
   (table) => [uniqueIndex("auth_user_email_unique").on(table.email)],
+);
+
+export const registrationInvitationClaims = pgTable(
+  "registration_invitation_claims",
+  {
+    invitationId: text("invitation_id")
+      .primaryKey()
+      .references(() => invitations.id, { onDelete: "cascade" }),
+    authUserId: text("auth_user_id").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("registration_invitation_claims_auth_user_unique").on(
+      table.authUserId,
+    ),
+  ],
 );
 
 export const authSessions = pgTable(

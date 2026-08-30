@@ -538,6 +538,11 @@ describe("PostgreSQL-backed API", () => {
       );
       expect(crossTenantSearch.items).toEqual([]);
       expect(crossTenantSearch.workspaces).toEqual([]);
+      const accessFilteredSearch =
+        await memberClient.search("Search saturation");
+      expect(accessFilteredSearch.items).toEqual([
+        expect.objectContaining({ title: "Search saturation visible" }),
+      ]);
 
       const organizationExport = await live.app.request(
         "/api/v1/export/organization.json",
@@ -2025,7 +2030,10 @@ async function seedLiveApiFixture(): Promise<void> {
         organizationId: first.organizationId,
         workspaceId: first.visibleWorkspaceId,
         boardId: first.visibleBoardId,
-        title: `Visible item ${index + 1}`,
+        title:
+          index === 0
+            ? "Search saturation visible"
+            : `Visible item ${index + 1}`,
         itemType: "task" as const,
         priority: "normal" as const,
         status: "working" as const,
@@ -2042,6 +2050,17 @@ async function seedLiveApiFixture(): Promise<void> {
         status: "working",
         creatorId: first.ownerId,
       },
+      ...Array.from({ length: 60 }, (_, index) => ({
+        id: `item-api-hidden-search-${String(index).padStart(3, "0")}`,
+        organizationId: first.organizationId,
+        workspaceId: first.hiddenWorkspaceId,
+        boardId: first.hiddenBoardId,
+        title: `Search saturation ${String(index).padStart(3, "0")}`,
+        itemType: "task" as const,
+        priority: "normal" as const,
+        status: "working" as const,
+        creatorId: first.ownerId,
+      })),
       {
         id: second.itemId,
         organizationId: second.organizationId,

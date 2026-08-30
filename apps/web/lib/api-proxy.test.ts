@@ -76,6 +76,99 @@ describe("browser API proxy boundary", () => {
     );
   });
 
+  it("blocks closed registration before contacting the API upstream", async () => {
+    vi.stubEnv("REGISTRATION_MODE", "closed");
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "x-request-id": "closed-registration-request" },
+      }),
+      ["auth", "sign-up", "email"],
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "registration_closed",
+        message: "Account registration is not currently open.",
+        requestId: "closed-registration-request",
+      },
+    });
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it("forwards invite-only sign-up and its HTTP-only capability to server admission", async () => {
+    vi.stubEnv("REGISTRATION_MODE", "invite_only");
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi.fn().mockResolvedValue(
+      Response.json(
+        {
+          code: "REGISTRATION_INVITATION_REQUIRED",
+          message: "A valid, unconsumed invitation for this email is required.",
+        },
+        { status: 403 },
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/auth/sign-up/email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "trevv.registration_invitation=opaque-server-validated-token",
+        },
+        body: JSON.stringify({
+          name: "Invited Test Registration",
+          email: "invited@example.test",
+          password: "test-only-password",
+        }),
+      }),
+      ["auth", "sign-up", "email"],
+    );
+
+    expect(response.status).toBe(403);
+    expect(upstream).toHaveBeenCalledOnce();
+    const upstreamHeaders = new Headers(
+      (upstream.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+    );
+    expect(upstreamHeaders.get("cookie")).toContain(
+      "trevv.registration_invitation=opaque-server-validated-token",
+    );
+  });
+
+  it("forwards sign-up when a non-production suite explicitly enables it", async () => {
+    vi.stubEnv("REGISTRATION_MODE", "public");
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ user: { id: "sensitive-upstream-id" } }),
+      );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Public Test Registration",
+          email: "public@example.test",
+          password: "test-only-password",
+        }),
+      }),
+      ["auth", "sign-up", "email"],
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(upstream).toHaveBeenCalledOnce();
+  });
+
   it("returns only public validation fields from failed auth operations", async () => {
     const upstream = vi.fn().mockResolvedValue(
       Response.json(

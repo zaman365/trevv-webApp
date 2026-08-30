@@ -1,5 +1,9 @@
 import { AuthExperience } from "@/components/auth-experience";
-import { safeReturnPath, webRuntimeMode } from "@/lib/web-runtime-config";
+import {
+  safeReturnPath,
+  webRegistrationMode,
+  webRuntimeMode,
+} from "@/lib/web-runtime-config";
 
 export default async function SignInPage({
   searchParams,
@@ -17,6 +21,7 @@ export default async function SignInPage({
       demoEnabled={webRuntimeMode() === "demo"}
       mode="sign-in"
       passwordReset={query.reset === "1"}
+      registrationMode={webRegistrationMode()}
       returnTo={safeReturnPath(query.next)}
       {...(query.signedOut ? { signedOut: query.signedOut } : {})}
       verified={query.verified === "1"}

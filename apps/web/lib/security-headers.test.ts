@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cspMode,
+  hstsEnabled,
   sanitizedCspReport,
   webRequestId,
   webSecurityHeaders,
@@ -13,6 +14,12 @@ describe("Web security headers", () => {
     expect(cspMode({ NODE_ENV: "production" })).toBe("report-only");
     expect(cspMode({ CSP_MODE: "enforce" })).toBe("enforce");
     expect(() => cspMode({ CSP_MODE: "disabled" })).toThrow(/CSP_MODE/);
+    expect(hstsEnabled({ NODE_ENV: "production" })).toBe(false);
+    expect(hstsEnabled({ HSTS_ENABLED: "true" })).toBe(true);
+    expect(hstsEnabled({ HSTS_ENABLED: "false" })).toBe(false);
+    expect(() => hstsEnabled({ HSTS_ENABLED: "sometimes" })).toThrow(
+      /HSTS_ENABLED/,
+    );
 
     const reportOnly = Object.fromEntries(
       webSecurityHeaders({ NODE_ENV: "production" }).map(({ key, value }) => [
@@ -27,14 +34,20 @@ describe("Web security headers", () => {
       "report-uri /api/web/csp-report",
     );
     expect(reportOnly["Permissions-Policy"]).toContain("payment=()");
+    expect(reportOnly["Strict-Transport-Security"]).toBeUndefined();
 
     const enforced = Object.fromEntries(
-      webSecurityHeaders({ NODE_ENV: "production", CSP_MODE: "enforce" }).map(
-        ({ key, value }) => [key, value],
-      ),
+      webSecurityHeaders({
+        NODE_ENV: "production",
+        CSP_MODE: "enforce",
+        HSTS_ENABLED: "true",
+      }).map(({ key, value }) => [key, value]),
     );
     expect(enforced["Content-Security-Policy"]).toBeTruthy();
     expect(enforced["Content-Security-Policy-Report-Only"]).toBeUndefined();
+    expect(enforced["Strict-Transport-Security"]).toContain(
+      "includeSubDomains",
+    );
 
     const localStaging = Object.fromEntries(
       webSecurityHeaders({
@@ -85,6 +98,7 @@ describe("Web security headers", () => {
       "/app/workspaces/:workspace/:view",
     );
     expect(webTelemetryPath("/api/web/csp-report")).toBe("/api/web/csp-report");
+    expect(webTelemetryPath("/api/web/vitals")).toBe("/api/web/vitals");
     expect(webTelemetryPath("/private-token/path")).toBe("/:unmatched");
     expect(webTelemetryPath("/api/web/private-token")).toBe(
       "/api/web/:unmatched",

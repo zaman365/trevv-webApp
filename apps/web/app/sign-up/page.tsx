@@ -1,5 +1,9 @@
 import { AuthExperience } from "@/components/auth-experience";
-import { safeReturnPath, webRuntimeMode } from "@/lib/web-runtime-config";
+import {
+  safeReturnPath,
+  webRegistrationMode,
+  webRuntimeMode,
+} from "@/lib/web-runtime-config";
 
 export default async function SignUpPage({
   searchParams,
@@ -11,6 +15,7 @@ export default async function SignUpPage({
     <AuthExperience
       demoEnabled={webRuntimeMode() === "demo"}
       mode="sign-up"
+      registrationMode={webRegistrationMode()}
       returnTo={safeReturnPath(next ?? "/onboarding")}
     />
   );

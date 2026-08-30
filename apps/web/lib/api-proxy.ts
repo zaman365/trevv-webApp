@@ -1,4 +1,4 @@
-import { webApiOrigin } from "./web-runtime-config";
+import { webApiOrigin, webRegistrationMode } from "./web-runtime-config";
 import { appendSetCookieHeaders } from "./response-cookies";
 import { webRequestId } from "./security-headers";
 import { readBoundedRequestBody } from "./bounded-request-body";
@@ -42,6 +42,18 @@ export async function proxyApiRequest(
 ): Promise<Response> {
   if (!browserApiOperationAllowed(segments, request.method)) {
     return notFoundResponse();
+  }
+  if (
+    request.method.toUpperCase() === "POST" &&
+    segments.join("/") === "auth/sign-up/email" &&
+    webRegistrationMode() === "closed"
+  ) {
+    return proxyFailure(
+      403,
+      "registration_closed",
+      "Account registration is not currently open.",
+      webRequestId(request.headers.get("x-request-id")),
+    );
   }
   const incoming = new URL(request.url);
   const upstreamUrl = upstreamApiUrl(segments, incoming.search);

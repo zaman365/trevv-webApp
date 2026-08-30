@@ -1,4 +1,12 @@
-import type { SmtpMailConfiguration } from "@founderhq/auth-server";
+import type {
+  RegistrationMode,
+  SmtpMailConfiguration,
+} from "@founderhq/auth-server";
+import {
+  readRuntimeReleaseMetadata,
+  runtimeReleaseMetadataRequired,
+  type RuntimeReleaseMetadata,
+} from "@founderhq/api-contract";
 import { validatePostgresDatabaseUrl } from "@founderhq/db";
 import { tmpdir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
@@ -11,6 +19,8 @@ export type RuntimeConfiguration =
       authBaseUrl: string;
       authSecret: string;
       webOrigin: string;
+      registrationMode: RegistrationMode;
+      releaseMetadata: RuntimeReleaseMetadata | null;
       mailFrom: string;
       mailTransport:
         | { kind: "smtp"; configuration: SmtpMailConfiguration }
@@ -20,6 +30,7 @@ export type RuntimeConfiguration =
       rateLimitHashSecret?: string;
       trustedClientIpHeader?: string;
       errorReportingMode: "disabled" | "external";
+      testRegistrationBootstrapSecret?: string;
     };
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>;
@@ -44,6 +55,10 @@ export function readRuntimeConfiguration(
       "NODE_ENV must be explicitly set to development, test, or production when DEMO_MODE=false.",
     );
 
+  const releaseMetadata = readRuntimeReleaseMetadata(environment, {
+    required: runtimeReleaseMetadataRequired(environment, production),
+  });
+
   const databaseUrl = required(environment, "DATABASE_URL");
   const authBaseUrl = canonicalOrigin(
     "BETTER_AUTH_URL",
@@ -58,6 +73,31 @@ export function readRuntimeConfiguration(
   const authSecret = required(environment, "BETTER_AUTH_SECRET");
   validateAuthSecret(authSecret);
   validatePostgresDatabaseUrl(databaseUrl, { production });
+  const registrationMode = enumValue(
+    environment,
+    "REGISTRATION_MODE",
+    ["closed", "invite_only", "public"] as const,
+    "invite_only",
+  );
+  if (production && registrationMode === "public")
+    throw new Error(
+      "Production REGISTRATION_MODE must be closed or invite_only until public-release gates pass.",
+    );
+  const testRegistrationBootstrapSecret = optional(
+    environment,
+    "TEST_REGISTRATION_BOOTSTRAP_SECRET",
+  );
+  if (testRegistrationBootstrapSecret && nodeEnvironment !== "test")
+    throw new Error(
+      "TEST_REGISTRATION_BOOTSTRAP_SECRET is allowed only when NODE_ENV=test.",
+    );
+  if (
+    testRegistrationBootstrapSecret &&
+    testRegistrationBootstrapSecret.length < 32
+  )
+    throw new Error(
+      "TEST_REGISTRATION_BOOTSTRAP_SECRET must contain at least 32 characters.",
+    );
 
   const cookieDomain = optional(environment, "AUTH_COOKIE_DOMAIN");
   validateCookieTopology(authBaseUrl, webOrigin, cookieDomain, production);
@@ -141,6 +181,11 @@ export function readRuntimeConfiguration(
     authBaseUrl,
     authSecret,
     webOrigin,
+    registrationMode,
+    releaseMetadata,
+    ...(testRegistrationBootstrapSecret
+      ? { testRegistrationBootstrapSecret }
+      : {}),
     mailFrom,
     mailTransport: testMailSinkFile
       ? { kind: "test_file", filePath: testMailSinkFile }

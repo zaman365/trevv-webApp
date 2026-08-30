@@ -10,6 +10,9 @@ import {
 } from "react";
 import { trevvBrand } from "@/lib/branding";
 
+export const passwordResetDeliveryMessage =
+  "If an account exists and delivery succeeds, a time-limited reset link may arrive. If no message arrives, wait a moment and try again. The response is intentionally the same for every address.";
+
 export function ForgotPasswordExperience() {
   const [pending, setPending] = useState(false);
   const [complete, setComplete] = useState(false);
@@ -51,10 +54,7 @@ export function ForgotPasswordExperience() {
         <div className="auth-confirmation" role="status">
           <MailCheck size={22} />
           <h2>Check your email</h2>
-          <p>
-            If an account exists for that address, TREVV sent a time-limited
-            reset link. The message is intentionally the same for every address.
-          </p>
+          <p>{passwordResetDeliveryMessage}</p>
           <a href="/sign-in">Return to sign in</a>
         </div>
       ) : (
@@ -194,17 +194,25 @@ export function ResetPasswordExperience({
 }
 
 export function VerifyEmailExperience({
+  deliveryFailed = false,
   email,
   resume,
   returnTo,
 }: {
+  deliveryFailed?: boolean;
   email?: string;
   resume: boolean;
   returnTo: string;
 }) {
   const attempted = useRef(false);
   const [pending, setPending] = useState(resume);
-  const [message, setMessage] = useState(resume ? "Verifying your email…" : "");
+  const [message, setMessage] = useState(
+    resume
+      ? "Verifying your email…"
+      : deliveryFailed
+        ? "Your account was created, but the verification email could not be delivered. Request another link below."
+        : "",
+  );
 
   useEffect(() => {
     if (!resume || attempted.current) return;
@@ -249,11 +257,7 @@ export function VerifyEmailExperience({
           callbackURL: new URL(returnTo, window.location.origin).toString(),
         }),
       });
-      setMessage(
-        response.status < 500
-          ? "If that address has a pending account, TREVV will send another link. Each link is one-time and time-limited."
-          : "The verification request is temporarily unavailable. Try again shortly.",
-      );
+      setMessage(verificationResendMessage(response));
     } catch {
       setMessage(
         "The verification request is temporarily unavailable. Try again shortly.",
@@ -269,7 +273,9 @@ export function VerifyEmailExperience({
         <p>
           {resume
             ? "TREVV is validating this one-time link."
-            : `Open the time-limited verification link sent${email ? ` to ${email}` : " to your email"}.`}
+            : deliveryFailed
+              ? "No verification email was delivered for this account."
+              : `Open the time-limited verification link sent${email ? ` to ${email}` : " to your email"}.`}
         </p>
         {message ? (
           <p className="auth-message" role="status">
@@ -297,6 +303,17 @@ export function VerifyEmailExperience({
       </div>
     </PublicAuthShell>
   );
+}
+
+export function verificationResendMessage(response: {
+  ok: boolean;
+  status: number;
+}): string {
+  if (response.ok)
+    return "If that address has a pending account and delivery succeeds, a new one-time link may arrive. If no link arrives, wait a moment and try again.";
+  if (response.status === 429)
+    return "Too many verification requests. Wait a moment and try again.";
+  return "The verification request is temporarily unavailable. Try again shortly.";
 }
 
 function publicAuthError(value: unknown, fallback: string): string {

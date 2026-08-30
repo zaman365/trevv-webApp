@@ -11,12 +11,18 @@ export const metadata: Metadata = {
 export default async function VerifyEmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; next?: string; resume?: string }>;
+  searchParams: Promise<{
+    delivery?: string;
+    email?: string;
+    next?: string;
+    resume?: string;
+  }>;
 }) {
   if (webRuntimeMode() === "demo") redirect("/sign-in");
-  const { email, next, resume } = await searchParams;
+  const { delivery, email, next, resume } = await searchParams;
   return (
     <VerifyEmailExperience
+      deliveryFailed={delivery === "failed"}
       resume={resume === "1"}
       returnTo={safeReturnPath(next ?? "/onboarding")}
       {...(email ? { email } : {})}

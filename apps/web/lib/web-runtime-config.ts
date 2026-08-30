@@ -1,4 +1,12 @@
+import {
+  readRuntimeReleaseMetadata,
+  runtimeReleaseMetadataRequired,
+  type RuntimeReleaseMetadata,
+} from "@founderhq/api-contract";
+import { cspMode, hstsEnabled } from "./security-headers";
+
 export type WebRuntimeMode = "demo" | "live";
+export type WebRegistrationMode = "closed" | "invite_only" | "public";
 
 type Environment = Record<string, string | undefined>;
 
@@ -16,6 +24,32 @@ export function webRuntimeMode(
       ? "DEMO_MODE must be explicitly false for a production Web runtime."
       : "DEMO_MODE must be explicitly set to true or false.",
   );
+}
+
+export function webRegistrationMode(
+  environment: Environment = process.env,
+): WebRegistrationMode {
+  const mode = environment.REGISTRATION_MODE?.trim() || "invite_only";
+  if (mode !== "closed" && mode !== "invite_only" && mode !== "public")
+    throw new Error(
+      "REGISTRATION_MODE must be one of: closed, invite_only, public.",
+    );
+  if (environment.NODE_ENV === "production" && mode === "public")
+    throw new Error(
+      "Production REGISTRATION_MODE must be closed or invite_only until public-release gates pass.",
+    );
+  return mode;
+}
+
+export function webReleaseMetadata(
+  environment: Environment = process.env,
+): RuntimeReleaseMetadata | null {
+  return readRuntimeReleaseMetadata(environment, {
+    required: runtimeReleaseMetadataRequired(
+      environment,
+      environment.NODE_ENV === "production",
+    ),
+  });
 }
 
 export function webCanonicalUrl(environment: Environment = process.env): URL {
@@ -47,8 +81,13 @@ export function validateProductionWebConfiguration(
 ): void {
   if (environment.NODE_ENV !== "production") return;
   webRuntimeMode(environment);
+  webRegistrationMode(environment);
   requireConfigured("NEXT_PUBLIC_APP_URL", environment);
   requireConfigured("API_ORIGIN", environment);
+  requireConfigured("CSP_MODE", environment);
+  requireConfigured("HSTS_ENABLED", environment);
+  cspMode(environment);
+  hstsEnabled(environment);
 
   const canonical = webCanonicalUrl(environment);
   webApiOrigin(environment);

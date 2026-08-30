@@ -21,7 +21,12 @@ const publicTelemetryPaths = new Set([
   "verify-email",
 ]);
 const appTelemetryPaths = new Set(["account", "portfolio"]);
-const webApiTelemetryPaths = new Set(["client-error", "csp-report", "readyz"]);
+const webApiTelemetryPaths = new Set([
+  "client-error",
+  "csp-report",
+  "readyz",
+  "vitals",
+]);
 
 export function webRequestId(
   candidate: string | null,
@@ -69,6 +74,14 @@ export function cspMode(environment: Environment = process.env): CspMode {
   return value;
 }
 
+export function hstsEnabled(environment: Environment = process.env): boolean {
+  const value = environment.HSTS_ENABLED?.trim();
+  if (!value) return false;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error("HSTS_ENABLED must be true or false.");
+}
+
 export function webSecurityHeaders(
   environment: Environment = process.env,
 ): WebSecurityHeader[] {
@@ -100,14 +113,14 @@ export function webSecurityHeaders(
           : "Content-Security-Policy-Report-Only",
       value: policy,
     },
-    ...(environment.HSTS_ENABLED === "false"
-      ? []
-      : [
+    ...(hstsEnabled(environment)
+      ? [
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains",
           },
-        ]),
+        ]
+      : []),
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "X-Frame-Options", value: "DENY" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
