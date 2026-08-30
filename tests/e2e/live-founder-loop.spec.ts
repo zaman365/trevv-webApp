@@ -184,24 +184,54 @@ test.describe.serial("live founder operating loop", () => {
     await expectNoLiveWcagFindings(page, "board");
     await page.getByRole("button", { name: capturedTitle }).click();
     const detail = page.getByTestId("work-item-detail");
-    await detail.getByTestId(`assign-item-${capturedItemId}`).click();
+    const reasonField = detail.getByLabel("Reason or follow-up note");
+    const evidenceField = detail.getByRole("textbox", {
+      name: "Evidence",
+      exact: true,
+    });
+    const assignmentReasonDraft = "Keep this reason draft after assignment";
+    const assignmentEvidenceDraft = "Keep this evidence draft after assignment";
+    await reasonField.fill(assignmentReasonDraft);
+    await evidenceField.fill(assignmentEvidenceDraft);
+    const assignItem = detail.getByTestId(`assign-item-${capturedItemId}`);
+    await assignItem.click();
     await expect(
       page.getByText(/Assignment to Founder Loop Owner is durable/),
     ).toBeVisible();
-    await detail
-      .getByLabel("Reason or follow-up note")
-      .fill("Waiting on the signed launch terms");
-    await detail.getByTestId(`block-item-${capturedItemId}`).click();
+    await expect(assignItem).toBeEnabled({ timeout: 60_000 });
+    await expect(reasonField).toHaveValue(assignmentReasonDraft);
+    await expect(evidenceField).toHaveValue(assignmentEvidenceDraft);
+
+    const blockedReason = "Waiting on the signed launch terms";
+    await reasonField.fill(blockedReason);
+    const blockRefresh = await holdNextItemDetailRefresh(page, capturedItemId);
+    const blockItem = detail.getByTestId(`block-item-${capturedItemId}`);
+    await blockItem.click();
     await expect(page.getByText(/Block state is durable/)).toBeVisible();
-    await detail
-      .getByLabel("Reason or follow-up note")
-      .fill("Launch partner confirmation");
+    await blockRefresh.waitUntilHeld();
+    await expect(blockItem).toBeDisabled();
+    await reasonField.fill(
+      "A newer reason draft while confirmation is pending",
+    );
+    await reasonField.fill(blockedReason);
+    blockRefresh.release();
+    await expect(blockItem).toBeEnabled({ timeout: 60_000 });
+    await expect(reasonField).toHaveValue(blockedReason);
+    await expect(evidenceField).toHaveValue(assignmentEvidenceDraft);
+    await blockRefresh.dispose();
+
+    await reasonField.fill("Launch partner confirmation");
     const followUp = detail.getByLabel("Next follow-up");
     if (await followUp.count()) {
       await followUp.fill(todayDate());
     }
-    await detail.getByTestId(`waiting-item-${capturedItemId}`).click();
+    const waitingItem = detail.getByTestId(`waiting-item-${capturedItemId}`);
+    await expect(waitingItem).toBeEnabled({ timeout: 60_000 });
+    await expect(reasonField).toHaveValue("Launch partner confirmation");
+    await waitingItem.click();
     await expect(page.getByText(/Waiting record .* is durable/)).toBeVisible();
+    await expect(reasonField).toHaveValue("");
+    await expect(evidenceField).toHaveValue(assignmentEvidenceDraft);
     await detail
       .getByRole("button", { name: "Close work item details" })
       .click();
@@ -305,18 +335,47 @@ test.describe.serial("live founder operating loop", () => {
     );
     await expect(page.getByTestId("work-item-detail")).toBeVisible();
     const freshDetail = page.getByTestId("work-item-detail");
-    await freshDetail
-      .getByRole("textbox", { name: "Evidence", exact: true })
-      .fill("Signed launch terms are stored in the approved contract record.");
-    await freshDetail.getByTestId(`evidence-item-${capturedItemId}`).click();
+    await expect(freshDetail.getByText("item_blocked")).toBeVisible();
+    const freshReasonField = freshDetail.getByLabel("Reason or follow-up note");
+    const freshEvidenceField = freshDetail.getByRole("textbox", {
+      name: "Evidence",
+      exact: true,
+    });
+    const evidenceReasonDraft = "Keep this reason draft after evidence writes";
+    const submittedEvidence =
+      "Signed launch terms are stored in the approved contract record.";
+    await freshReasonField.fill(evidenceReasonDraft);
+    await freshEvidenceField.fill(submittedEvidence);
+    const evidenceRefresh = await holdNextItemDetailRefresh(
+      page,
+      capturedItemId,
+    );
+    const addEvidence = freshDetail.getByTestId(
+      `evidence-item-${capturedItemId}`,
+    );
+    await addEvidence.click();
     await expect(page.getByText(/Evidence .* is durable/)).toBeVisible();
-    await freshDetail
-      .getByRole("textbox", { name: "Evidence", exact: true })
-      .fill("Launch partner acknowledged the signed terms and start date.");
+    await evidenceRefresh.waitUntilHeld();
+    await expect(addEvidence).toBeDisabled();
+    await freshEvidenceField.fill(
+      "A newer evidence draft while confirmation is pending",
+    );
+    await freshEvidenceField.fill(submittedEvidence);
+    evidenceRefresh.release();
+    await expect(addEvidence).toBeEnabled({ timeout: 60_000 });
+    await expect(freshEvidenceField).toHaveValue(submittedEvidence);
+    await expect(freshReasonField).toHaveValue(evidenceReasonDraft);
+    await evidenceRefresh.dispose();
+
+    await freshEvidenceField.fill(
+      "Launch partner acknowledged the signed terms and start date.",
+    );
     await freshDetail.getByTestId(`resolve-item-${capturedItemId}`).click();
     await expect(
       page.getByText(/Resolution and evidence are durable/),
     ).toBeVisible();
+    await expect(freshEvidenceField).toHaveValue("");
+    await expect(freshReasonField).toHaveValue(evidenceReasonDraft);
     await expect(
       freshDetail.getByRole("heading", { name: "Change history" }),
     ).toBeVisible();
@@ -982,6 +1041,49 @@ async function browserJson(
     },
     { requestPath: path, requestInit: init },
   );
+}
+
+async function holdNextItemDetailRefresh(page: Page, itemId: string) {
+  const pattern = `**/api/v1/items/${itemId}/history`;
+  let held = false;
+  let released = false;
+  let releaseRequest = () => {};
+  const releaseSignal = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+
+  await page.route(pattern, async (route) => {
+    if (held) {
+      await route.continue();
+      return;
+    }
+    held = true;
+    await releaseSignal;
+    await route.continue();
+  });
+
+  return {
+    async waitUntilHeld() {
+      await expect
+        .poll(() => held, {
+          message: `Waiting to hold the post-confirmation detail refresh for ${itemId}`,
+          timeout: 60_000,
+        })
+        .toBe(true);
+    },
+    release() {
+      if (released) return;
+      released = true;
+      releaseRequest();
+    },
+    async dispose() {
+      if (!released) {
+        released = true;
+        releaseRequest();
+      }
+      await page.unroute(pattern);
+    },
+  };
 }
 
 async function waitForMailAction(email: string, subject: string) {

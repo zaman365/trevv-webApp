@@ -724,6 +724,9 @@ function WorkItemDetail({
   const [assigneeId, setAssigneeId] = useState(session.user.id);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const pendingRef = useRef(false);
+  const reasonRevision = useRef(0);
+  const evidenceRevision = useRef(0);
   const retryKeys = useRef(new Map<string, string>());
 
   useEffect(() => {
@@ -747,21 +750,42 @@ function WorkItemDetail({
 
   async function run(
     operation: () => Promise<{ item: WorkItemDto; confirmation: string }>,
-    { preserveDraft = false }: { preserveDraft?: boolean } = {},
+    {
+      consumeReason = false,
+      consumeEvidence = false,
+    }: { consumeReason?: boolean; consumeEvidence?: boolean } = {},
   ) {
-    if (pending) return;
+    if (pendingRef.current) return;
+    const submittedReason = reason;
+    const submittedEvidenceBody = evidenceBody;
+    const submittedReasonRevision = reasonRevision.current;
+    const submittedEvidenceRevision = evidenceRevision.current;
+    pendingRef.current = true;
     setPending(true);
     setError(null);
     try {
       const result = await operation();
       await onConfirmed(result.item, result.confirmation);
-      if (!preserveDraft) {
-        setReason("");
-        setEvidenceBody("");
+      if (consumeReason) {
+        setReason((current) =>
+          reasonRevision.current === submittedReasonRevision &&
+          current === submittedReason
+            ? ""
+            : current,
+        );
+      }
+      if (consumeEvidence) {
+        setEvidenceBody((current) =>
+          evidenceRevision.current === submittedEvidenceRevision &&
+          current === submittedEvidenceBody
+            ? ""
+            : current,
+        );
       }
     } catch (failure) {
       setError(failure);
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
   }
@@ -803,16 +827,13 @@ function WorkItemDetail({
                 presented.kind === "version-conflict" ? (
                   <button
                     onClick={() =>
-                      void run(
-                        async () => {
-                          const latest = await liveData.client.item(item.id);
-                          return {
-                            item: latest,
-                            confirmation: `Loaded canonical version ${latest.version}. Your form values are still available to reapply.`,
-                          };
-                        },
-                        { preserveDraft: true },
-                      )
+                      void run(async () => {
+                        const latest = await liveData.client.item(item.id);
+                        return {
+                          item: latest,
+                          confirmation: `Loaded canonical version ${latest.version}. Your form values are still available to reapply.`,
+                        };
+                      })
                     }
                     type="button"
                   >
@@ -847,7 +868,10 @@ function WorkItemDetail({
           <label className={styles.field}>
             <span>Reason or follow-up note</span>
             <textarea
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                reasonRevision.current += 1;
+                setReason(event.target.value);
+              }}
               rows={3}
               value={reason}
             />
@@ -855,7 +879,10 @@ function WorkItemDetail({
           <label className={styles.field}>
             <span>Evidence</span>
             <textarea
-              onChange={(event) => setEvidenceBody(event.target.value)}
+              onChange={(event) => {
+                evidenceRevision.current += 1;
+                setEvidenceBody(event.target.value);
+              }}
               placeholder="Record observable proof, a link, or the resolved outcome"
               rows={3}
               value={evidenceBody}
@@ -916,26 +943,29 @@ function WorkItemDetail({
               data-testid={`block-item-${item.id}`}
               disabled={pending || !reason.trim()}
               onClick={() =>
-                void run(async () => {
-                  const response = await liveData.client.setItemBlocked(
-                    item.id,
-                    {
-                      blocked: item.status !== "blocked",
-                      reason: reason.trim(),
-                    },
-                    item.version,
-                    retainedKey(
-                      retryKeys.current,
-                      `block:${item.id}:${item.version}:${item.status !== "blocked"}:${reason.trim()}`,
-                    ),
-                  );
-                  return {
-                    item: response.data.item,
-                    confirmation: response.data.attentionRefreshQueued
-                      ? "Block state is durable; deterministic Attention recomputation is queued."
-                      : "Block state is durable.",
-                  };
-                })
+                void run(
+                  async () => {
+                    const response = await liveData.client.setItemBlocked(
+                      item.id,
+                      {
+                        blocked: item.status !== "blocked",
+                        reason: reason.trim(),
+                      },
+                      item.version,
+                      retainedKey(
+                        retryKeys.current,
+                        `block:${item.id}:${item.version}:${item.status !== "blocked"}:${reason.trim()}`,
+                      ),
+                    );
+                    return {
+                      item: response.data.item,
+                      confirmation: response.data.attentionRefreshQueued
+                        ? "Block state is durable; deterministic Attention recomputation is queued."
+                        : "Block state is durable.",
+                    };
+                  },
+                  { consumeReason: true },
+                )
               }
               type="button"
             >
@@ -946,22 +976,25 @@ function WorkItemDetail({
               data-testid={`evidence-item-${item.id}`}
               disabled={pending || !evidenceBody.trim()}
               onClick={() =>
-                void run(async () => {
-                  const response = await liveData.client.addItemEvidence(
-                    item.id,
-                    { body: evidenceBody.trim() },
-                    item.version,
-                    retainedKey(
-                      retryKeys.current,
-                      `evidence:${item.id}:${item.version}:${evidenceBody.trim()}`,
-                    ),
-                  );
-                  const latest = await liveData.client.item(item.id);
-                  return {
-                    item: latest,
-                    confirmation: `Evidence ${response.data.evidence.id} is durable at item version ${response.data.itemVersion}.`,
-                  };
-                })
+                void run(
+                  async () => {
+                    const response = await liveData.client.addItemEvidence(
+                      item.id,
+                      { body: evidenceBody.trim() },
+                      item.version,
+                      retainedKey(
+                        retryKeys.current,
+                        `evidence:${item.id}:${item.version}:${evidenceBody.trim()}`,
+                      ),
+                    );
+                    const latest = await liveData.client.item(item.id);
+                    return {
+                      item: latest,
+                      confirmation: `Evidence ${response.data.evidence.id} is durable at item version ${response.data.itemVersion}.`,
+                    };
+                  },
+                  { consumeEvidence: true },
+                )
               }
               type="button"
             >
@@ -973,23 +1006,26 @@ function WorkItemDetail({
                 pending || !evidenceBody.trim() || item.status === "done"
               }
               onClick={() =>
-                void run(async () => {
-                  const response = await liveData.client.resolveItem(
-                    item.id,
-                    { evidence: evidenceBody.trim() },
-                    item.version,
-                    retainedKey(
-                      retryKeys.current,
-                      `resolve:${item.id}:${item.version}:${evidenceBody.trim()}`,
-                    ),
-                  );
-                  return {
-                    item: response.data.item,
-                    confirmation: response.data.attentionRefreshQueued
-                      ? "Resolution and evidence are durable; Attention recomputation is queued."
-                      : "Resolution and evidence are durable.",
-                  };
-                })
+                void run(
+                  async () => {
+                    const response = await liveData.client.resolveItem(
+                      item.id,
+                      { evidence: evidenceBody.trim() },
+                      item.version,
+                      retainedKey(
+                        retryKeys.current,
+                        `resolve:${item.id}:${item.version}:${evidenceBody.trim()}`,
+                      ),
+                    );
+                    return {
+                      item: response.data.item,
+                      confirmation: response.data.attentionRefreshQueued
+                        ? "Resolution and evidence are durable; Attention recomputation is queued."
+                        : "Resolution and evidence are durable.",
+                    };
+                  },
+                  { consumeEvidence: true },
+                )
               }
               type="button"
             >
@@ -999,32 +1035,35 @@ function WorkItemDetail({
               data-testid={`waiting-item-${item.id}`}
               disabled={pending || !reason.trim() || item.status === "done"}
               onClick={() =>
-                void run(async () => {
-                  const response = await liveData.client.createWaiting(
-                    {
-                      workspaceId: item.workspaceId,
-                      entityType: "work_item",
-                      entityId: item.id,
-                      title: item.title,
-                      waitingType: "other",
-                      waitingLabel: reason.trim().slice(0, 200),
-                      followUpOwnerId: session.user.id,
-                      expectedBy: waitingDate,
-                      nextFollowUp: waitingDate,
-                      note: reason.trim(),
-                    },
-                    item.version,
-                    retainedKey(
-                      retryKeys.current,
-                      `waiting:${item.id}:${item.version}:${reason.trim()}:${waitingDate}`,
-                    ),
-                  );
-                  const latest = await liveData.client.item(item.id);
-                  return {
-                    item: latest,
-                    confirmation: `Waiting record ${response.data.id} is durable at version ${response.data.version}; WorkItem version ${latest.version} is canonical.`,
-                  };
-                })
+                void run(
+                  async () => {
+                    const response = await liveData.client.createWaiting(
+                      {
+                        workspaceId: item.workspaceId,
+                        entityType: "work_item",
+                        entityId: item.id,
+                        title: item.title,
+                        waitingType: "other",
+                        waitingLabel: reason.trim().slice(0, 200),
+                        followUpOwnerId: session.user.id,
+                        expectedBy: waitingDate,
+                        nextFollowUp: waitingDate,
+                        note: reason.trim(),
+                      },
+                      item.version,
+                      retainedKey(
+                        retryKeys.current,
+                        `waiting:${item.id}:${item.version}:${reason.trim()}:${waitingDate}`,
+                      ),
+                    );
+                    const latest = await liveData.client.item(item.id);
+                    return {
+                      item: latest,
+                      confirmation: `Waiting record ${response.data.id} is durable at version ${response.data.version}; WorkItem version ${latest.version} is canonical.`,
+                    };
+                  },
+                  { consumeReason: true },
+                )
               }
               type="button"
             >
