@@ -1,8 +1,8 @@
 # TREVV persistent data-plane contract
 
-**Status:** Phase 1 implementation specification  
-**Source:** `docs/problem-resolution-audit.md`, especially P0-03, P0-04, and the phased resolution sequence  
-**Phase window:** Weeks 1-4  
+**Status:** Phase 1 implementation specification<br>
+**Source:** `docs/problem-resolution-audit.md`, especially P0-03, P0-04, and the phased resolution sequence<br>
+**Phase window:** Weeks 1-4<br>
 **Exit gate:** API data survives restarts and horizontal instances, and every successful mutation commits its domain change, audit record, and outbox event atomically.
 
 ## 1. Purpose and phase boundary
