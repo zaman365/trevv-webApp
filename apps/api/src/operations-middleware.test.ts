@@ -76,6 +76,49 @@ describe("API operations middleware", () => {
     expect(accessResolutionCount).toBe(0);
   });
 
+  it("uses only one valid Cloudflare client IP and fails closed otherwise", async () => {
+    const consumedKeys: string[] = [];
+    const store: ApiRateLimitStore = {
+      scope: "shared",
+      async consume(input) {
+        consumedKeys.push(input.key);
+        return {
+          allowed: true,
+          limit: input.limit,
+          remaining: input.limit - 1,
+          resetAt: new Date("2026-08-29T12:01:00.000Z"),
+        };
+      },
+    };
+    const app = createApiApp({
+      mode: "demo",
+      ...createDemoAdapter(),
+      clock: () => new Date("2026-08-29T12:00:00.000Z"),
+      operations: {
+        rateLimitStore: store,
+        trustedClientIpHeader: "cf-connecting-ip",
+      },
+    });
+
+    const accepted = await app.request("/api/v1/portfolios", {
+      headers: {
+        "cf-connecting-ip": "2001:db8::17",
+        "x-forwarded-for": "203.0.113.44, 10.0.0.2",
+      },
+    });
+    expect(accepted.status).not.toBe(503);
+    expect(consumedKeys).toEqual(["ip:2001:db8::17"]);
+
+    const rejected = await app.request("/api/v1/portfolios", {
+      headers: {
+        "cf-connecting-ip": "203.0.113.44, 10.0.0.2",
+        "x-forwarded-for": "198.51.100.99",
+      },
+    });
+    expect(rejected.status).toBe(503);
+    expect(consumedKeys).toEqual(["ip:2001:db8::17"]);
+  });
+
   it("fails closed without exposing store failures", async () => {
     const app = createApiApp({
       mode: "demo",

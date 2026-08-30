@@ -142,8 +142,9 @@ Production API request protection requires:
 - `RATE_LIMIT_BACKEND=postgres` for cross-replica enforcement;
 - a non-placeholder 32+ character `RATE_LIMIT_HASH_SECRET`, stored only in the
   secret manager and identical across the active API cohort; and
-- `TRUSTED_CLIENT_IP_HEADER` naming an explicit `X-` header that the public edge
-  always strips and overwrites. Never trust a caller-supplied forwarding value.
+- `TRUSTED_CLIENT_IP_HEADER` naming an explicitly allowed header that the public
+  edge always strips and overwrites. Never trust a caller-supplied forwarding
+  value or a proxy-appended chain.
 
 Changing the hash secret changes limiter identities and requires a coordinated
 rotation plan. The process-local memory backend is development/test only.

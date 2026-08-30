@@ -25,17 +25,52 @@ describe("API operational controls", () => {
 
   it("uses only a configured, valid proxy header as a client key", () => {
     const headers = new Headers({
+      "cf-connecting-ip": "198.51.100.7",
       "x-forwarded-for": "198.51.100.1, 10.0.0.2",
       "x-trevv-client-ip": "198.51.100.9",
     });
     expect(trustedClientKey(headers, undefined)).toBe("client:unresolved");
+    expect(trustedClientKey(headers, "cf-connecting-ip")).toBe(
+      "ip:198.51.100.7",
+    );
     expect(trustedClientKey(headers, "x-trevv-client-ip")).toBe(
       "ip:198.51.100.9",
+    );
+    expect(() => trustedClientKey(headers, "x-forwarded-for")).toThrow(
+      /missing or invalid/,
     );
     expect(() => trustedClientKey(new Headers(), "x-trevv-client-ip")).toThrow(
       /missing or invalid/,
     );
-    expect(() => trustedClientKey(headers, "forwarded")).toThrow(/X- header/);
+    expect(() => trustedClientKey(headers, "forwarded")).toThrow(
+      /allowed edge header/,
+    );
+  });
+
+  it("accepts one Cloudflare client IP and rejects ambiguous or invalid values", () => {
+    expect(
+      trustedClientKey(
+        new Headers({ "cf-connecting-ip": "2001:db8::7" }),
+        " CF-Connecting-IP ",
+      ),
+    ).toBe("ip:2001:db8::7");
+
+    for (const value of [
+      "198.51.100.7, 10.0.0.2",
+      "unknown",
+      "198.51.100.7:443",
+      "",
+    ])
+      expect(() =>
+        trustedClientKey(
+          new Headers({ "cf-connecting-ip": value }),
+          "cf-connecting-ip",
+        ),
+      ).toThrow(/missing or invalid/);
+
+    expect(() => trustedClientKey(new Headers(), "cf-connecting-ip")).toThrow(
+      /missing or invalid/,
+    );
   });
 
   it("assigns stricter authentication and mutation policies", () => {

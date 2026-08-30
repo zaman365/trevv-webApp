@@ -118,6 +118,7 @@ export async function runRemoteStagingSmoke(configuration) {
   await verifyPublicBoundary(configuration);
   await wakeAndVerifyPublicWorker(configuration);
   await verifyAnonymousBoundary(configuration.origin);
+  await verifyClientIpSpoofResistance(configuration, inviteeEmail);
   await verifyInviteOnlyAdmission(configuration, inviteeEmail, cookieJar);
   await signIn(configuration, cookieJar);
 
@@ -238,6 +239,7 @@ export async function runRemoteStagingSmoke(configuration) {
       "public-worker-wake-readiness",
       "security-headers",
       "anonymous-private-route-guard",
+      "caller-client-ip-spoof-resistance",
       "invite-only-headerless-rejection",
       "real-owner-sign-in",
       "tenant-read",
@@ -513,6 +515,46 @@ async function verifyAnonymousBoundary(origin) {
     throw new Error("Anonymous remote app access did not redirect to sign-in.");
   if ((await response.text()).includes("Northstar Apparel"))
     throw new Error("Anonymous remote app access leaked demo data.");
+}
+
+async function verifyClientIpSpoofResistance(configuration, inviteeEmail) {
+  const response = await remoteFetch(
+    new URL("/api/auth/sign-up/email", approvedPreviewApiOrigin),
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        origin: configuration.origin.origin,
+        "cf-connecting-ip": "not-a-valid-ip",
+        "x-forwarded-for": "also-not-a-valid-ip",
+      },
+      redirect: "manual",
+      cache: "no-store",
+      body: JSON.stringify({
+        name: "Rejected trusted-edge smoke registration",
+        email: inviteeEmail,
+        password: `Rejected-trusted-edge-smoke-${crypto.randomUUID()}`,
+        callbackURL: new URL("/onboarding", configuration.origin).toString(),
+      }),
+    },
+  );
+  await assertClientIpSpoofProbeResponse(response);
+}
+
+export async function assertClientIpSpoofProbeResponse(response) {
+  const body = await response.json().catch(() => null);
+  if (
+    response.status !== 403 ||
+    apiErrorCode(body) !== "REGISTRATION_INVITATION_REQUIRED"
+  )
+    throw new Error(
+      "The preview edge and API did not safely handle caller-supplied client IP headers.",
+    );
+  if (setCookieValues(response.headers).length > 0)
+    throw new Error(
+      "The client-IP spoof-resistance probe created auth cookies.",
+    );
 }
 
 async function verifyInviteOnlyAdmission(

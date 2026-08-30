@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertClientIpSpoofProbeResponse,
   assertHostOnlySessionCookie,
   inviteeEmailForRun,
   readRemoteStagingSmokeConfiguration,
@@ -161,6 +162,36 @@ test("session-cookie verification rejects parent-domain and weak cookies", () =>
         "__Secure-trevv.session_token=fixture; Path=/; HttpOnly; SameSite=Lax",
       ),
     /host-only Path/u,
+  );
+});
+
+test("client-IP spoof probe fails on unavailability, bypass, or cookies", async () => {
+  await assert.rejects(
+    assertClientIpSpoofProbeResponse(
+      json({ code: "operations_unavailable" }, { status: 503 }),
+    ),
+    /safely handle/u,
+  );
+  await assert.rejects(
+    assertClientIpSpoofProbeResponse(
+      json({ code: "registration_open" }, { status: 403 }),
+    ),
+    /safely handle/u,
+  );
+  await assert.rejects(
+    assertClientIpSpoofProbeResponse(
+      json(
+        { code: "REGISTRATION_INVITATION_REQUIRED" },
+        {
+          status: 403,
+          headers: {
+            "set-cookie":
+              "__Secure-trevv.session_token=unexpected; Path=/; HttpOnly; Secure; SameSite=Lax",
+          },
+        },
+      ),
+    ),
+    /created auth cookies/u,
   );
 });
 
@@ -341,6 +372,7 @@ test("remote smoke proves public auth, collaboration, worker drain, and authenti
   assert.ok(result.checks.includes("public-worker-outbox-drain"));
   assert.ok(result.checks.includes("public-worker-wake-readiness"));
   assert.ok(result.checks.includes("api-public-metrics-disabled"));
+  assert.ok(result.checks.includes("caller-client-ip-spoof-resistance"));
   assert.equal(webReadinessReads, 2);
   assert.equal(workerReadinessReads, 2);
   assert.equal(operationReads, 2);
@@ -350,6 +382,18 @@ test("remote smoke proves public auth, collaboration, worker drain, and authenti
         url.protocol === "https:" &&
         !headers.has("x-trevv-test-registration-bootstrap"),
     ),
+  );
+  const trustedEdgeProbe = requests.find(
+    ({ url, method, headers }) =>
+      url.origin === "https://trevv-free-preview-api-zaman365.onrender.com" &&
+      url.pathname === "/api/auth/sign-up/email" &&
+      method === "POST" &&
+      headers.get("cf-connecting-ip") === "not-a-valid-ip",
+  );
+  assert.ok(trustedEdgeProbe);
+  assert.equal(
+    trustedEdgeProbe.headers.get("x-forwarded-for"),
+    "also-not-a-valid-ip",
   );
   const messageWrite = requests.find(
     ({ url, method }) =>

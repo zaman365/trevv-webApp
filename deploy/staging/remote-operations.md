@@ -133,6 +133,14 @@ submission was accepted; it does not prove recipient-inbox delivery. The Team
 and message remain as clearly labeled fictional records containing the emitted
 `runId`; the invitation is revoked.
 
+The smoke also sends invalid caller-supplied `CF-Connecting-IP` and
+`X-Forwarded-For` values directly to the fixed API origin. It requires the
+normal invite-only `403 REGISTRATION_INVITATION_REQUIRED` response and no auth
+cookie. This proves that the deployed edge/API combination neither became
+unavailable nor bypassed invite-only admission for that spoof attempt. It does
+not independently prove the configured trusted-header name, continuous edge
+enforcement, or representative per-client rate limiting.
+
 ```sh
 REMOTE_STAGING_ORIGIN=https://trevv-free-preview-web-zaman365.onrender.com \
 REMOTE_STAGING_WORKER_ORIGIN=https://trevv-free-preview-worker-zaman365.onrender.com \

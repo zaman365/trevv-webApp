@@ -166,9 +166,11 @@ export function readRuntimeConfiguration(
     throw new Error("TRUSTED_CLIENT_IP_HEADER is required in production.");
   if (
     trustedClientIpHeader &&
-    !/^x-[a-z0-9-]{1,62}$/u.test(trustedClientIpHeader)
+    !/^(?:cf-connecting-ip|x-[a-z0-9-]{1,62})$/u.test(trustedClientIpHeader)
   )
-    throw new Error("TRUSTED_CLIENT_IP_HEADER must be an explicit X- header.");
+    throw new Error(
+      "TRUSTED_CLIENT_IP_HEADER must name an explicitly allowed edge header.",
+    );
   const errorReportingMode = enumValue(
     environment,
     "ERROR_REPORTING_MODE",

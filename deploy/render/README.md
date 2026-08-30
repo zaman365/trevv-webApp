@@ -68,15 +68,22 @@ status fields; a probe can still wake the API and consume Free hours. This is
 liveness-only preview behavior, not private-metrics or availability evidence.
 The preview deliberately stays on separate `onrender.com` origins instead of a
 `trevv.de` subdomain. That prevents a production `trevv.de` parent-domain
-cookie left in a browser from reaching this lower-assurance preview. Render's
-edge supplies `X-Forwarded-For`; TREVV
-accepts only a single IP value, so a caller-supplied comma-separated chain
-fails closed. The Web proxy strips every caller-supplied network-identity
-header before making its independent outbound request. As a result, API calls
-through Web intentionally share the Web service's egress identity and rate-
-limit bucket in this preview. This is safe but not representative per-client
-rate-limit evidence. The bounded preview smoke does not claim per-client rate-
-limit or trusted-edge validation.
+cookie left in a browser from reaching this lower-assurance preview.
+[Render documents](https://render.com/articles/host-pocketbase-on-render) that
+its Cloudflare edge overwrites `CF-Connecting-IP` with one validated client
+address, so the preview configures that header as its trusted limiter identity.
+`X-Forwarded-For` is intentionally not trusted because Cloudflare appends to a
+caller-supplied chain, which makes its leftmost value spoofable. The Web proxy
+strips every caller-supplied network-identity header before making its
+independent outbound request. As a result, API calls through Web intentionally
+share the Web service's egress identity and rate-limit bucket in this preview.
+This is safe but not representative per-client rate-limit evidence. The
+bounded preview smoke sends invalid caller-supplied `CF-Connecting-IP` and
+`X-Forwarded-For` values directly to the API and requires the normal
+invite-only rejection. That proves the deployed edge/API combination neither
+became unavailable nor bypassed invite-only admission for that spoof attempt;
+it does not independently prove the configured header name, continuous edge
+enforcement, or representative per-client rate-limit behavior.
 
 `AUTH_COOKIE_DOMAIN` is deliberately absent. Authentication responses pass
 through the same-origin Web API boundary, so the browser stores a host-only
@@ -357,9 +364,10 @@ last guard against creating a different or billable topology.
    submission recorded as sent plus revocation, host-only secure cookies, one
    authenticated tenant read, release metadata, Web-to-API correlation, and
    absence of demo fallback. A submitted message does not prove recipient-
-   inbox delivery. This bounded smoke does not prove cross-tenant isolation or
-   trusted client-IP behavior; the CI suites remain the available evidence for
-   those properties.
+   inbox delivery. The client-IP spoof probe covers only one deployed request;
+   this bounded smoke does not prove cross-tenant isolation, continuous edge
+   enforcement, or representative rate-limit behavior. The CI suites remain
+   the available evidence for those properties.
 8. Verify the UI explains that asynchronous behavior can pause and that all
    data is fictional and disposable.
 9. Record how to delete all four resources before database expiry. Do not

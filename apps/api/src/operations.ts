@@ -62,7 +62,8 @@ interface RequestMetric {
 const sensitiveKey =
   /(?:authorization|cookie|credential|email|password|secret|session|token)/iu;
 const safeRequestId = /^[a-z0-9][a-z0-9._:-]{7,127}$/iu;
-const safeHeaderName = /^x-[a-z0-9-]{1,62}$/u;
+const safeTrustedClientIpHeaderName =
+  /^(?:cf-connecting-ip|x-[a-z0-9-]{1,62})$/u;
 const durationBucketsMs = [25, 50, 100, 250, 500, 1_000, 2_500, 5_000];
 const maximumRequestSeries = 512;
 const metricMethods = new Set([
@@ -234,9 +235,9 @@ export function trustedClientKey(
 ): string {
   if (trustedClientIpHeader) {
     const normalizedHeader = trustedClientIpHeader.trim().toLowerCase();
-    if (!safeHeaderName.test(normalizedHeader))
+    if (!safeTrustedClientIpHeaderName.test(normalizedHeader))
       throw new Error(
-        "The trusted client IP header must be an explicit X- header name.",
+        "The trusted client IP header must be an explicitly allowed edge header name.",
       );
     const value = headers.get(normalizedHeader)?.trim();
     if (value && isIP(value) > 0) return `ip:${value}`;

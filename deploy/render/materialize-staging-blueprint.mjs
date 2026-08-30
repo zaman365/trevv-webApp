@@ -580,7 +580,7 @@ function validateRuntimeContract(blueprint, releaseManifest, services) {
     { key: "SMTP_PASSWORD", sync: false },
     { key: "RATE_LIMIT_BACKEND", value: "postgres" },
     { key: "RATE_LIMIT_HASH_SECRET", generateValue: true },
-    { key: "TRUSTED_CLIENT_IP_HEADER", value: "x-forwarded-for" },
+    { key: "TRUSTED_CLIENT_IP_HEADER", value: "cf-connecting-ip" },
     { key: "ERROR_REPORTING_MODE", value: "disabled" },
     { key: "INTERNAL_METRICS_ENABLED", value: "false" },
   ]);

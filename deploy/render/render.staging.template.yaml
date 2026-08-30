@@ -94,10 +94,11 @@ services:
         value: postgres
       - key: RATE_LIMIT_HASH_SECRET
         generateValue: true
-      # Render's edge sets the real address first. TREVV accepts only a single
-      # IP, so a caller-supplied comma-separated chain fails closed.
+      # Cloudflare overwrites this single-value header at Render's edge.
+      # X-Forwarded-For is intentionally not trusted because callers can
+      # supply a spoofed leftmost value before Cloudflare appends to it.
       - key: TRUSTED_CLIENT_IP_HEADER
-        value: x-forwarded-for
+        value: cf-connecting-ip
       - key: ERROR_REPORTING_MODE
         value: disabled
       - key: INTERNAL_METRICS_ENABLED

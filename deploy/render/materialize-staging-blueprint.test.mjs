@@ -253,6 +253,16 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
       /API environment is outside/u,
     ],
     [
+      "append-only forwarded client IP header",
+      (copy) => {
+        findEnv(
+          renderService(copy, "api").envVars,
+          "TRUSTED_CLIENT_IP_HEADER",
+        ).value = "x-forwarded-for";
+      },
+      /API environment is outside/u,
+    ],
+    [
       "blocked SMTP port",
       (copy) => {
         findEnv(renderService(copy, "api").envVars, "SMTP_PORT").value = "587";

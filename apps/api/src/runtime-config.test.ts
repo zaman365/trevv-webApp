@@ -270,6 +270,15 @@ describe("live runtime configuration", () => {
   });
 
   it("requires shared request protection in production", () => {
+    expect(
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        TRUSTED_CLIENT_IP_HEADER: "cf-connecting-ip",
+      }),
+    ).toMatchObject({
+      mode: "live",
+      trustedClientIpHeader: "cf-connecting-ip",
+    });
     expect(() =>
       readRuntimeConfiguration({
         ...productionEnvironment(),
@@ -294,6 +303,12 @@ describe("live runtime configuration", () => {
         RATE_LIMIT_HASH_SECRET: "short",
       }),
     ).toThrow(/at least 32/);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        TRUSTED_CLIENT_IP_HEADER: "forwarded",
+      }),
+    ).toThrow(/allowed edge header/);
     expect(() =>
       readRuntimeConfiguration({
         ...productionEnvironment(),
