@@ -255,6 +255,11 @@ artifact must already be built for
 origin, and the manifest's CSP/HSTS modes because those Next.js values are
 compiled into the artifact.
 
+The Web image does not set `NODE_EXTRA_CA_CERTS`. Local Compose injects
+`/etc/trevv-local-tls/ca.crt` only into the Web container that mounts the
+self-signed local CA. Render Web uses Render-managed public TLS and must not be
+configured with that nonexistent local path.
+
 ## Materialize and validate
 
 The checked-in template contains unresolved tokens so an accidental sync

@@ -194,6 +194,7 @@ services:
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       API_ORIGIN: https://proxy:8444
+      NODE_EXTRA_CA_CERTS: /etc/trevv-local-tls/ca.crt
       NEXT_PUBLIC_APP_URL: https://127.0.0.1:8443
       TRUSTED_CLIENT_IP_HEADER: x-trevv-client-ip
     volumes:

@@ -207,6 +207,12 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
   assert.doesNotThrow(() =>
     validateBlueprint(blueprint, context.manifest, "zaman365"),
   );
+  assert.equal(
+    renderService(blueprint, "web").envVars.some(
+      ({ key }) => key === "NODE_EXTRA_CA_CERTS",
+    ),
+    false,
+  );
 
   const cases = [
     [
@@ -290,6 +296,16 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
       (copy) => {
         findEnv(renderService(copy, "web").envVars, "HSTS_ENABLED").value =
           "true";
+      },
+      /Web environment is outside/u,
+    ],
+    [
+      "local-only Web CA path",
+      (copy) => {
+        renderService(copy, "web").envVars.push({
+          key: "NODE_EXTRA_CA_CERTS",
+          value: "/etc/trevv-local-tls/ca.crt",
+        });
       },
       /Web environment is outside/u,
     ],

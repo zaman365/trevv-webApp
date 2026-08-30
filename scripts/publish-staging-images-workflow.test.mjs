@@ -115,6 +115,25 @@ test("final service images omit unused package managers", () => {
   assert.equal(dockerfileSource.split("/opt/yarn-v1.22.22").length - 1, 2);
 });
 
+test("injects the self-signed Web CA only in the local Compose runtime", () => {
+  const compose = YAML.parse(composeSource);
+  const web = compose.services.web;
+  const webStage = dockerfileSource.match(
+    / AS web\s[\s\S]*?\sFROM [^\n]+ AS proxy/u,
+  )?.[0];
+
+  assert.ok(webStage);
+  assert.doesNotMatch(webStage, /ENV NODE_EXTRA_CA_CERTS=/u);
+  assert.equal(
+    web.environment.NODE_EXTRA_CA_CERTS,
+    "/etc/trevv-local-tls/ca.crt",
+  );
+  assert.equal(
+    web.volumes.includes("staging-tls:/etc/trevv-local-tls:ro"),
+    true,
+  );
+});
+
 test("published services contain only isolated production deployments", () => {
   for (const [workspacePackage, directory] of [
     ["@founderhq/api", "api"],
