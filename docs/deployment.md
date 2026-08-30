@@ -3,7 +3,7 @@
 ## Recommended EU topology
 
 - Web/PWA: a Node-compatible Next.js host in an EU region
-- API and Worker: separate long-running Node 22 services in the same private EU network
+- API and Worker: separate long-running Node 22.23.2+ services in the same private EU network
 - Database: managed PostgreSQL 17 with point-in-time recovery and encrypted connections
 - Files: not required for the current alpha because no upload API accepts attachment bytes; add a private S3-compatible EU bucket, scanning, quotas, signed downloads, and lifecycle rules before enabling attachments
 - Observability: a reviewed EU-region metrics, structured-log, error-tracking,

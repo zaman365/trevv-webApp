@@ -94,6 +94,7 @@ x-worker-service: &worker-service
 
 services:
   tls-init:
+    image: trevv-staging-tls-init:${TREV_CANDIDATE_GIT_SHA:-local}
     build:
       <<: *runtime-build
       target: tls-init
@@ -102,7 +103,10 @@ services:
       - staging-tls:/tls
 
   postgres:
-    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    image: trevv-staging-postgres:${TREV_CANDIDATE_GIT_SHA:-local}
+    build:
+      <<: *runtime-build
+      target: postgres-runtime
     restart: unless-stopped
     environment:
       POSTGRES_USER: founderhq
@@ -117,7 +121,10 @@ services:
       retries: 20
 
   mail-init:
-    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    image: trevv-staging-mail-init:${TREV_CANDIDATE_GIT_SHA:-local}
+    build:
+      <<: *runtime-build
+      target: mail-init
     restart: "no"
     command:
       - sh
@@ -205,6 +212,7 @@ services:
       start_period: 10s
 
   proxy:
+    image: trevv-staging-proxy:${TREV_CANDIDATE_GIT_SHA:-local}
     build:
       <<: *runtime-build
       target: proxy

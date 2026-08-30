@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.staging
+      target: postgres-runtime
     environment:
       POSTGRES_USER: founderhq
       POSTGRES_PASSWORD: founderhq

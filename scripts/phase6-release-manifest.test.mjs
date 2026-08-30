@@ -61,7 +61,7 @@ function candidateInput() {
       previousReleaseMigrationHead: "0015_silky_sharon_ventura",
       strategy: "additive-forward-only",
     },
-    runtimes: { node: "22.19.0", pnpm: "11.22.0" },
+    runtimes: { node: "22.23.2", pnpm: "11.22.0" },
     securityModes: {
       demoMode: false,
       registrationMode: "closed",

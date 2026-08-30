@@ -11,19 +11,6 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
-        env:
-          POSTGRES_USER: founderhq
-          POSTGRES_PASSWORD: founderhq
-          POSTGRES_DB: founderhq_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U founderhq -d founderhq_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_test
@@ -33,12 +20,35 @@ jobs:
       DEMO_MODE: "true"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Start the patched, pinned PostgreSQL test service
+        run: |
+          docker build \
+            --file Dockerfile.staging \
+            --target postgres-runtime \
+            --tag "trevv-ci-postgres:${GITHUB_SHA}" \
+            .
+          docker run --detach \
+            --name trevv-ci-postgres \
+            --publish 5432:5432 \
+            --env POSTGRES_USER=founderhq \
+            --env POSTGRES_PASSWORD=founderhq \
+            --env POSTGRES_DB=founderhq_test \
+            "trevv-ci-postgres:${GITHUB_SHA}"
+          for attempt in {1..30}; do
+            if docker exec trevv-ci-postgres \
+              pg_isready -U founderhq -d founderhq_test; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs trevv-ci-postgres
+          exit 1
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 11.22.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.19.0
+          node-version: 22.23.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verify formatting baseline
@@ -85,6 +95,9 @@ jobs:
         run: pnpm performance:budget
       - name: Dependency security scan
         run: pnpm security:audit
+      - name: Remove the PostgreSQL test service
+        if: always()
+        run: docker rm --force trevv-ci-postgres
 
   # e2e and accessibility run as independent gates so a failure in one
   # never hides the other's result.
@@ -98,7 +111,7 @@ jobs:
           version: 11.22.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.19.0
+          node-version: 22.23.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium webkit
@@ -119,7 +132,7 @@ jobs:
           version: 11.22.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.19.0
+          node-version: 22.23.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium webkit
@@ -134,31 +147,41 @@ jobs:
   live-identity:
     runs-on: ubuntu-latest
     needs: quality
-    services:
-      postgres:
-        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
-        env:
-          POSTGRES_USER: founderhq
-          POSTGRES_PASSWORD: founderhq
-          POSTGRES_DB: founderhq_live_e2e
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U founderhq -d founderhq_live_e2e"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
       LIVE_E2E_DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Start the patched, pinned PostgreSQL test service
+        run: |
+          docker build \
+            --file Dockerfile.staging \
+            --target postgres-runtime \
+            --tag "trevv-ci-postgres:${GITHUB_SHA}" \
+            .
+          docker run --detach \
+            --name trevv-ci-postgres \
+            --publish 5432:5432 \
+            --env POSTGRES_USER=founderhq \
+            --env POSTGRES_PASSWORD=founderhq \
+            --env POSTGRES_DB=founderhq_live_e2e \
+            "trevv-ci-postgres:${GITHUB_SHA}"
+          for attempt in {1..30}; do
+            if docker exec trevv-ci-postgres \
+              pg_isready -U founderhq -d founderhq_live_e2e; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs trevv-ci-postgres
+          exit 1
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 11.22.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.19.0
+          node-version: 22.23.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:migrate
@@ -171,6 +194,9 @@ jobs:
           name: playwright-report-live-identity
           path: playwright-report
           retention-days: 14
+      - name: Remove the PostgreSQL test service
+        if: always()
+        run: docker rm --force trevv-ci-postgres
 
   staging-topology:
     runs-on: ubuntu-latest

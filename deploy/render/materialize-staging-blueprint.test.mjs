@@ -733,7 +733,7 @@ function releaseManifest() {
       openapiSha256: `sha256:${"e".repeat(64)}`,
     },
     runtimes: {
-      node: "22.19.0",
+      node: "22.23.2",
       pnpm: "11.22.0",
     },
     securityModes: {

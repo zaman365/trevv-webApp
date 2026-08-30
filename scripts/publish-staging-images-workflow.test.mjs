@@ -23,9 +23,161 @@ const composeSource = await readFile(
   resolve(repositoryRoot, "compose.staging.yaml"),
   "utf8",
 );
+const developmentComposeSource = await readFile(
+  resolve(repositoryRoot, "compose.yaml"),
+  "utf8",
+);
+const ciSource = await readFile(
+  resolve(repositoryRoot, ".github/workflows/ci.yml"),
+  "utf8",
+);
+const nonProductionReleaseInputSource = await readFile(
+  resolve(repositoryRoot, "scripts/nonproduction-release-input.mjs"),
+  "utf8",
+);
+const releaseManifestTemplate = JSON.parse(
+  await readFile(
+    resolve(repositoryRoot, "release/release-manifest-input.template.json"),
+    "utf8",
+  ),
+);
+const packageManifest = JSON.parse(
+  await readFile(resolve(repositoryRoot, "package.json"), "utf8"),
+);
 
 const job = (name) => workflow.jobs[name];
 const stepNamed = (steps, name) => steps.find((step) => step.name === name);
+
+test("keeps the reviewed Node security baseline consistent", () => {
+  const nodeVersion = "22.23.2";
+  const nodeImage =
+    "node:${NODE_VERSION}-alpine3.24@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32";
+
+  assert.match(dockerfileSource, /ARG NODE_VERSION=22\.23\.2/u);
+  assert.equal(dockerfileSource.split(nodeImage).length - 1, 3);
+  assert.equal(
+    [...ciSource.matchAll(/node-version: ([^\n]+)/gu)].every(
+      ([, version]) => version.trim() === nodeVersion,
+    ),
+    true,
+  );
+  assert.equal(
+    [...workflowSource.matchAll(/node-version: ([^\n]+)/gu)].every(
+      ([, version]) => version.trim() === nodeVersion,
+    ),
+    true,
+  );
+  assert.match(
+    nonProductionReleaseInputSource,
+    /configuration\.nodeVersion \?\? "22\.23\.2"/u,
+  );
+  assert.equal(releaseManifestTemplate.runtimes.node, nodeVersion);
+  assert.equal(packageManifest.engines.node, ">=22.23.2");
+});
+
+test("deployment images patch pinned Alpine-family bases", () => {
+  assert.equal(dockerfileSource.split("apk upgrade --no-cache").length - 1, 6);
+  assert.match(
+    dockerfileSource,
+    /FROM alpine:3\.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS alpine-runtime\s+RUN apk upgrade --no-cache/u,
+  );
+  assert.match(dockerfileSource, /FROM alpine-runtime AS mail-init/u);
+  assert.match(
+    dockerfileSource,
+    /FROM postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 AS postgres-runtime\s+RUN apk upgrade --no-cache/u,
+  );
+  assert.match(
+    dockerfileSource,
+    /FROM nginx:stable-alpine-slim@sha256:ddde39c6e51f02fde7410c2e9c234cf2d0a4c7bdbbe176aeb37d8ad7ab4eb58c AS proxy\s+RUN apk upgrade --no-cache && \\\s+install -d -m 0755 \/run\/nginx/u,
+  );
+  assert.match(composeSource, /target: postgres-runtime/u);
+  assert.match(composeSource, /target: mail-init/u);
+  assert.doesNotMatch(composeSource, /^\s+image: (?:alpine|postgres):/mu);
+  assert.match(developmentComposeSource, /target: postgres-runtime/u);
+  assert.doesNotMatch(developmentComposeSource, /image: postgres:/u);
+  assert.doesNotMatch(ciSource, /image: postgres:/u);
+  assert.equal(ciSource.split("--target postgres-runtime").length - 1, 2);
+  assert.equal(
+    ciSource.split("docker rm --force trevv-ci-postgres").length - 1,
+    2,
+  );
+});
+
+test("final service images omit unused package managers", () => {
+  assert.equal(
+    dockerfileSource.split("/usr/local/lib/node_modules/npm").length - 1,
+    2,
+  );
+  assert.equal(
+    dockerfileSource.split("/usr/local/lib/node_modules/corepack").length - 1,
+    2,
+  );
+  assert.equal(dockerfileSource.split("/opt/yarn-v1.22.22").length - 1, 2);
+});
+
+test("published services contain only isolated production deployments", () => {
+  for (const [workspacePackage, directory] of [
+    ["@founderhq/api", "api"],
+    ["@founderhq/worker", "worker"],
+    ["@founderhq/db", "db"],
+  ]) {
+    assert.match(
+      dockerfileSource,
+      new RegExp(
+        `--filter=${workspacePackage.replace("/", "\\/")} --prod deploy --no-optional /runtime/${directory}`,
+        "u",
+      ),
+    );
+  }
+
+  assert.match(
+    dockerfileSource,
+    /FROM service-runtime AS api\s+COPY --from=build --chown=node:node \/runtime\/api \/app\/apps\/api\s+COPY --from=build --chown=node:node \/app\/scripts\/api-readiness\.mjs \/app\/scripts\/api-readiness\.mjs/u,
+  );
+  assert.match(
+    dockerfileSource,
+    /FROM service-runtime AS worker\s+COPY --from=build --chown=node:node \/runtime\/worker \/app\/apps\/worker/u,
+  );
+  assert.match(
+    dockerfileSource,
+    /FROM service-runtime AS remote-migrate\s+COPY --from=build --chown=node:node \/runtime\/db \/app\/packages\/db/u,
+  );
+  assert.match(
+    dockerfileSource,
+    /FROM service-runtime AS topology-runtime\s+COPY --from=build --chown=node:node \/app \/app/u,
+  );
+  assert.doesNotMatch(
+    dockerfileSource.match(
+      /FROM service-runtime AS api[\s\S]*?FROM service-runtime AS topology-runtime/u,
+    )[0],
+    /COPY --from=build --chown=node:node \/app \/app/u,
+  );
+});
+
+test("security scans remain fail-closed for every published image", () => {
+  const scanJob = job("scan-images");
+  assert.deepEqual(scanJob.strategy.matrix.target, [
+    "web",
+    "api",
+    "worker",
+    "migrate",
+  ]);
+  const scan = stepNamed(
+    scanJob.steps,
+    "Scan the local image for high and critical vulnerabilities",
+  );
+  assert.equal(scan.with["fail-build"], true);
+  assert.equal(scan.with["severity-cutoff"], "high");
+  assert.equal(scan.with["output-format"], "sarif");
+  assert.deepEqual(job("attest-images").needs, [
+    "verify-source",
+    "scan-images",
+  ]);
+  assert.deepEqual(job("digest-bundle").needs, [
+    "verify-source",
+    "attest-images",
+  ]);
+});
 
 test("dispatch and source verification enforce the fixed free-preview policy", () => {
   const inputs = workflow.on.workflow_dispatch.inputs;
@@ -85,11 +237,11 @@ test("publishes the guarded remote migrator while compose retains its test-only 
 
   assert.match(
     dockerfileSource,
-    /FROM service-runtime AS migrate\s+CMD \["node", "packages\/db\/dist\/migrate\.js"\]/u,
+    /FROM service-runtime AS migrate\s+COPY --from=build --chown=node:node \/runtime\/db \/app\/packages\/db\s+CMD \["node", "packages\/db\/dist\/migrate\.js"\]/u,
   );
   assert.match(
     dockerfileSource,
-    /FROM service-runtime AS remote-migrate\s+CMD \["node", "packages\/db\/dist\/staging-migrate\.js"\]/u,
+    /FROM service-runtime AS remote-migrate\s+COPY --from=build --chown=node:node \/runtime\/db \/app\/packages\/db\s+CMD \["node", "packages\/db\/dist\/staging-migrate\.js"\]/u,
   );
   assert.match(
     composeSource,

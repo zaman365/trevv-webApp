@@ -2,6 +2,9 @@
   "name": "@founderhq/auth-server",
   "version": "0.1.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "exports": {
     ".": {

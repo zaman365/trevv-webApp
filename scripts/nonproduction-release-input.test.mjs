@@ -27,7 +27,7 @@ function previousManifest(releaseId = "rehearsal-previous") {
         previousReleaseMigrationHead: "0016_shared_api_rate_limits",
         strategy: "additive-forward-only",
       },
-      runtimes: { node: "22.19.0", pnpm: "11.22.0" },
+      runtimes: { node: "22.23.2", pnpm: "11.22.0" },
       securityModes: {
         demoMode: false,
         registrationMode: "invite_only",
@@ -75,6 +75,7 @@ test("non-production input is structurally valid and remains production NO_GO", 
   const input = createNonProductionReleaseInput(candidateConfiguration(), {
     previousManifestText: previousText,
   });
+  assert.equal(input.runtimes.node, "22.23.2");
   const manifest = createReleaseManifest(input, { worktreeStatus: "" });
 
   assert.deepEqual(

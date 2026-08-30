@@ -21,7 +21,7 @@ TREVV is an experimental, fictional-data technical preview of a portfolio-orient
 
 ## Prerequisites
 
-- Node.js 22+
+- Node.js 22.23.2+
 - pnpm 11.22.0 (`corepack enable` is sufficient)
 - PostgreSQL 17, or Docker/Podman Compose for the included local service
 - Rust stable only when packaging the Tauri desktop shell
@@ -54,7 +54,7 @@ Open Web at `http://localhost:3000`, API health at `http://localhost:8787/api/v1
 For the persistent implementation, first set `DEMO_MODE=false` and provide the complete PostgreSQL, Better Auth, canonical Web/API origin, and SMTP or private test-mail configuration. Then migrate a dedicated local database and start API, Web, and one uniquely identified worker in separate terminals:
 
 ```bash
-docker compose up -d postgres
+docker compose up --build -d postgres
 pnpm db:migrate
 pnpm dev:api
 ```

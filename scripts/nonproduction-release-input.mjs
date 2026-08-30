@@ -115,7 +115,7 @@ export function createNonProductionReleaseInput(
       strategy: "additive-forward-only",
     },
     runtimes: {
-      node: configuration.nodeVersion ?? "22.19.0",
+      node: configuration.nodeVersion ?? "22.23.2",
       pnpm: configuration.pnpmVersion ?? "11.22.0",
     },
     securityModes: {
