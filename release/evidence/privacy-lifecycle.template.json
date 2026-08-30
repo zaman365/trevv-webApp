@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "privacy",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "reviewReference": null,
+  "checks": {
+    "dataInventoryReviewed": false,
+    "subprocessorsPublished": false,
+    "retentionEnforced": false,
+    "organizationExport": false,
+    "userExport": false,
+    "accountDeletion": false,
+    "providerRevocation": false,
+    "dsarAudit": false,
+    "backupLifecycleDocumented": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

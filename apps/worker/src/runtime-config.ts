@@ -1,8 +1,14 @@
+import {
+  readRuntimeReleaseMetadata,
+  runtimeReleaseMetadataRequired,
+  type RuntimeReleaseMetadata,
+} from "@founderhq/api-contract";
 import { validatePostgresDatabaseUrl } from "@founderhq/db";
 import { isIP } from "node:net";
 
 export interface WorkerRuntimeConfiguration {
   databaseUrl: string;
+  releaseMetadata: RuntimeReleaseMetadata | null;
   workerId: string;
   enabled: boolean;
   disabledHandlerNames: readonly string[];
@@ -55,6 +61,9 @@ export function readWorkerRuntimeConfiguration(
 
   return {
     databaseUrl,
+    releaseMetadata: readRuntimeReleaseMetadata(environment, {
+      required: runtimeReleaseMetadataRequired(environment, production),
+    }),
     workerId: normalizeWorkerId(required(environment, "WORKER_ID")),
     enabled: optionalBoolean(environment, "WORKER_ENABLED", true),
     disabledHandlerNames: disabledHandlers(

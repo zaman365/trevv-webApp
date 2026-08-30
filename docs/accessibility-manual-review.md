@@ -2,8 +2,8 @@
 
 Status: **accepted deferral; GA blocker**
 
-Review date: 30 August 2026  
-Owner: Accessibility QA  
+Review date: 30 August 2026
+Owner: Accessibility QA
 Expiry: 15 September 2026
 
 The browser accessibility gate fails every Axe WCAG A/AA violation. It also

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "deployment",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "environment": "remote-production-shaped-staging",
+  "changeTicket": null,
+  "startedAt": null,
+  "completedAt": null,
+  "roles": {
+    "releaseOperator": null,
+    "incidentCommander": null,
+    "securityLead": null,
+    "communicationsOwner": null
+  },
+  "artifactCorrelation": {
+    "artifactIdentityDigest": null,
+    "gitSha": null,
+    "webImageDigest": null,
+    "apiImageDigest": null,
+    "workerImageDigest": null,
+    "migrationImageDigest": null,
+    "migrationHead": null,
+    "openapiDigest": null
+  },
+  "stages": [
+    { "name": "api-canary", "result": "UNVERIFIED", "artifact": null },
+    { "name": "api-cohort", "result": "UNVERIFIED", "artifact": null },
+    { "name": "worker-canary", "result": "UNVERIFIED", "artifact": null },
+    { "name": "worker-cohort", "result": "UNVERIFIED", "artifact": null },
+    { "name": "web", "result": "UNVERIFIED", "artifact": null },
+    { "name": "public-smoke", "result": "UNVERIFIED", "artifact": null },
+    { "name": "traffic-1-percent", "result": "UNVERIFIED", "artifact": null },
+    { "name": "traffic-10-percent", "result": "UNVERIFIED", "artifact": null },
+    { "name": "traffic-25-percent", "result": "UNVERIFIED", "artifact": null },
+    { "name": "traffic-50-percent", "result": "UNVERIFIED", "artifact": null },
+    { "name": "traffic-100-percent", "result": "UNVERIFIED", "artifact": null }
+  ],
+  "checks": {
+    "registrationMatchesManifest": false,
+    "demoModeFalse": false,
+    "serviceReleaseIdsCorrelate": false,
+    "tenantReadWritePassed": false,
+    "workerExactlyOncePassed": false,
+    "cspAndHstsPassed": false,
+    "supportAndStatusLinksPassed": false,
+    "observationWindowPassed": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

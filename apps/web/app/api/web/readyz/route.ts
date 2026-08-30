@@ -1,5 +1,11 @@
 import {
+  readinessSchema,
+  type RuntimeReleaseMetadata,
+} from "@founderhq/api-contract";
+import {
   webApiOrigin,
+  webReleaseMetadata,
+  webRegistrationMode,
   webRuntimeMode,
 } from "../../../../lib/web-runtime-config";
 
@@ -18,25 +24,32 @@ export async function GET() {
         status: "ready",
         service: "trevv-web",
         mode,
+        registrationMode: "not_applicable",
         api: "not_required",
+        release: null,
+        apiRelease: null,
       },
       { headers },
     );
   }
 
+  const registrationMode = webRegistrationMode();
+  let release: RuntimeReleaseMetadata | null = null;
   try {
+    release = webReleaseMetadata();
     const response = await fetch(new URL("/api/v1/readyz", webApiOrigin()), {
       cache: "no-store",
       signal: AbortSignal.timeout(3_000),
     });
-    const body: unknown = await response.json();
+    const parsed = readinessSchema.safeParse(await response.json());
     if (
       !response.ok ||
-      !body ||
-      typeof body !== "object" ||
-      (body as { status?: unknown }).status !== "ready" ||
-      (body as { mode?: unknown }).mode !== "live" ||
-      (body as { database?: unknown }).database !== "ready"
+      !parsed.success ||
+      parsed.data.status !== "ready" ||
+      parsed.data.mode !== "live" ||
+      parsed.data.registrationMode !== registrationMode ||
+      parsed.data.database !== "ready" ||
+      (process.env.NODE_ENV === "production" && parsed.data.release === null)
     ) {
       throw new Error("The live API is not ready.");
     }
@@ -45,7 +58,10 @@ export async function GET() {
         status: "ready",
         service: "trevv-web",
         mode,
+        registrationMode,
         api: "ready",
+        release,
+        apiRelease: parsed.data.release,
       },
       { headers },
     );
@@ -55,7 +71,10 @@ export async function GET() {
         status: "unavailable",
         service: "trevv-web",
         mode,
+        registrationMode,
         api: "unavailable",
+        release,
+        apiRelease: null,
       },
       { status: 503, headers },
     );

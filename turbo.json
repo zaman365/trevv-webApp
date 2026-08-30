@@ -3,9 +3,19 @@
   "globalEnv": [
     "API_ORIGIN",
     "BETTER_AUTH_URL",
+    "CSP_MODE",
     "DEMO_MODE",
+    "HSTS_ENABLED",
     "NEXT_PUBLIC_API_URL",
-    "NEXT_PUBLIC_APP_URL"
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_RUM_ENABLED",
+    "NEXT_PUBLIC_RUM_SAMPLE_RATE",
+    "NODE_ENV",
+    "REGISTRATION_MODE",
+    "RELEASE_ID",
+    "RELEASE_GIT_SHA",
+    "RELEASE_IMAGE_ID",
+    "RELEASE_METADATA_REQUIRED"
   ],
   "tasks": {
     "build": {

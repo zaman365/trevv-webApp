@@ -1,0 +1,540 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-08-30",
+  "decision": "NO_GO",
+  "supportedPublicScope": "Fictional-data technical preview only",
+  "publicSurfacePolicy": {
+    "files": [
+      "README.md",
+      "apps/web/app/layout.tsx",
+      "apps/web/app/manifest.ts",
+      "apps/web/app/privacy/page.tsx",
+      "apps/web/app/terms/page.tsx",
+      "apps/web/lib/product-copy.ts",
+      "apps/web/components/auth-experience.tsx",
+      "apps/web/components/capability-status.tsx"
+    ],
+    "forbiddenPatterns": [
+      {
+        "claimId": "CLAIM-008",
+        "pattern": "(?:\\b99\\.9% (?:available|availability)\\b|\\bactive production SLO\\b)",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-009",
+        "pattern": "(?:\\bGDPR compliant\\b|\\bindependently secure\\b|\\bpenetration-tested\\b|\\bcertified\\b)",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-011",
+        "pattern": "English/German",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-012",
+        "pattern": "\\bend-to-end encrypted\\b",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-013",
+        "pattern": "(?:\\bAI autonomously runs?\\b|\\bAI (?:performs?|executes?) external actions?\\b)",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-014",
+        "pattern": "Everything you run\\. One clear view\\.",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-015",
+        "pattern": "\\bfounder operating system\\b",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-016",
+        "pattern": "(?:\\bworks offline with private customer data\\b|\\bqueued offline writes?\\b)",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-017",
+        "pattern": "(?:\\bpublic registration is (?:available|open)\\b|\\bno-card trial\\b|\\bFounder plan is available\\b|\\bStartup plan is available\\b)",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-018",
+        "pattern": "(?:\\bloads? in under two seconds\\b|\\bsub-two-second (?:Portfolio|load)\\b)",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-019",
+        "pattern": "(?:customer export|account deletion|retention enforcement|provider revocation)[^\\n]{0,120}\\b(?:is|are) complete\\b",
+        "flags": "iu"
+      },
+      {
+        "claimId": "CLAIM-020",
+        "pattern": "No production-critical demo fallback remains\\.",
+        "flags": "iu"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "CLAIM-001",
+      "claim": "TREVV is currently a fictional-data technical preview.",
+      "status": "required_disclosure",
+      "publicUse": true,
+      "releaseBlocker": false,
+      "scope": "Every hosted preview entry, legal notice, and product-evaluation surface.",
+      "limitations": "The undeployed live-mode runtime and local CI evidence do not make the hosted demo a production service.",
+      "ownerRole": "Product Scope",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": [
+        "apps/web/components/capability-status.tsx",
+        "apps/web/app/terms/page.tsx"
+      ],
+      "evidence": [
+        {
+          "path": "docs/known-limitations.md",
+          "detail": "Hosted preview truth."
+        },
+        {
+          "path": "docs/deployment.md",
+          "detail": "No remotely deployed live topology."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-002",
+      "claim": "Authenticated live-mode founder-loop changes are canonical and server-saved.",
+      "status": "approved_scoped",
+      "publicUse": false,
+      "releaseBlocker": false,
+      "scope": "Authenticated DEMO_MODE=false engineering environments only.",
+      "limitations": "May not be generalized to hosted production availability, backup, privacy effects, integrations, billing, or every preview surface.",
+      "ownerRole": "Web Product",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": ["apps/web/components/capability-status.tsx"],
+      "evidence": [
+        {
+          "path": "tests/e2e/live-founder-loop.spec.ts",
+          "detail": "Production-mode canonical workflow coverage."
+        },
+        {
+          "path": "docs/implementation-report.md",
+          "detail": "Scoped live-mode implementation boundary."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-003",
+      "claim": "Email/password authentication, verification, recovery, and server sessions work in live mode.",
+      "status": "approved_scoped",
+      "publicUse": false,
+      "releaseBlocker": false,
+      "scope": "Configured DEMO_MODE=false environments with PostgreSQL and mail delivery.",
+      "limitations": "No public production service, MFA, passkey, native-session, or staffed account-recovery promise is implied.",
+      "ownerRole": "Identity and Security",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": ["apps/web/components/auth-experience.tsx"],
+      "evidence": [
+        {
+          "path": "tests/e2e/live-identity.spec.ts",
+          "detail": "Live identity browser tests."
+        },
+        {
+          "path": "docs/identity-tenant-boundary.md",
+          "detail": "Identity boundary documentation."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-004",
+      "claim": "Teams and contextual Messages are durable and permissioned in live mode.",
+      "status": "approved_scoped",
+      "publicUse": false,
+      "releaseBlocker": false,
+      "scope": "Configured live-mode Web/API/PostgreSQL/worker environments.",
+      "limitations": "This is not a Slack replacement, delivery-receipt service, presence system, file service, or end-to-end encrypted messenger.",
+      "ownerRole": "Collaboration",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": [
+        "apps/web/components/live-messaging-workspace.tsx",
+        "apps/web/components/live-team-workflow.tsx"
+      ],
+      "evidence": [
+        {
+          "path": "docs/phase-4-collaboration-runtime.md",
+          "detail": "Collaboration scope and authorization."
+        },
+        {
+          "path": "packages/db/integration/collaboration-repositories.test.ts",
+          "detail": "Durability and permission coverage."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-005",
+      "claim": "No production provider integration is connected or enabled.",
+      "status": "required_disclosure",
+      "publicUse": true,
+      "releaseBlocker": false,
+      "scope": "All preview integration, email, resource-link, and settings surfaces.",
+      "limitations": "Smart links, provider names, and picker seams are previews and must never be described as synchronization or revocation.",
+      "ownerRole": "Integrations and Data Portability",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": [
+        "apps/web/lib/product-capabilities.ts",
+        "docs/integrations.md"
+      ],
+      "evidence": [
+        {
+          "path": "docs/integrations.md",
+          "detail": "No provider is approved."
+        },
+        {
+          "path": "packages/integrations/src/index.ts",
+          "detail": "Fail-closed provider readiness foundation."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-006",
+      "claim": "Billing, checkout, subscriptions, trials, invoices, and paid plans are not enabled.",
+      "status": "required_disclosure",
+      "publicUse": true,
+      "releaseBlocker": false,
+      "scope": "Every pricing, account, signup, entitlement, and commercial surface.",
+      "limitations": "Prices in planning artifacts are experiments and must not appear as an offer.",
+      "ownerRole": "Commercial and Legal",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": [
+        "packages/core/src/commercial.ts",
+        "docs/phase-5-private-beta-foundations.md"
+      ],
+      "evidence": [
+        {
+          "path": "packages/core/src/commercial.ts",
+          "detail": "Checkout-disabled entitlement baseline."
+        },
+        {
+          "path": "docs/phase-5-private-beta-foundations.md",
+          "detail": "No signed pricing decision."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-007",
+      "claim": "Privacy and Terms are engineering previews pending qualified review.",
+      "status": "required_disclosure",
+      "publicUse": true,
+      "releaseBlocker": false,
+      "scope": "Privacy, terms, signup, account privacy, and data-inventory surfaces.",
+      "limitations": "They are not a reviewed privacy notice, contract, DPA, compliance opinion, or completed data-lifecycle service.",
+      "ownerRole": "Commercial and Legal",
+      "reviewDate": "2026-09-15",
+      "sourceLocations": [
+        "apps/web/app/privacy/page.tsx",
+        "apps/web/app/terms/page.tsx"
+      ],
+      "evidence": [
+        {
+          "path": "docs/data-inventory.md",
+          "detail": "Legal and processor review pending."
+        },
+        {
+          "path": "docs/security.md",
+          "detail": "Deletion-safe evidence and effects missing."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-008",
+      "claim": "TREVV is 99.9% available or backed by an active production SLO.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "All public, contractual, sales, support, status, and product surfaces.",
+      "limitations": "Bounded local RUM ingestion exists, but no remote operating window, production collector, pager, staffed response, or error-budget evidence exists.",
+      "ownerRole": "Platform Operations",
+      "reviewDate": "2026-10-31",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "docs/operations.md",
+          "detail": "Repository SLO definitions are inactive."
+        },
+        {
+          "path": "deploy/observability/README.md",
+          "detail": "No collector or on-call destination."
+        },
+        {
+          "path": "apps/web/app/api/web/vitals/route.ts",
+          "detail": "Local RUM ingestion is not production SLO evidence."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-009",
+      "claim": "TREVV is GDPR compliant, independently secure, penetration-tested, or certified.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "All marketing, legal, security, procurement, sales, and product surfaces.",
+      "limitations": "Engineering controls are not legal compliance, certification, or an independent security opinion.",
+      "ownerRole": "Identity and Security",
+      "reviewDate": "2026-10-31",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "docs/security.md",
+          "detail": "Independent security and legal gates remain open."
+        },
+        {
+          "path": "docs/data-inventory.md",
+          "detail": "Qualified review remains pending."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-010",
+      "claim": "The intended GA client scope is Web/PWA only.",
+      "status": "required_disclosure",
+      "publicUse": true,
+      "releaseBlocker": false,
+      "scope": "Download, platform, compatibility, help, onboarding, and marketing surfaces.",
+      "limitations": "Native mobile and desktop are companion foundations and are not release artifacts.",
+      "ownerRole": "Product Scope",
+      "reviewDate": "2026-11-30",
+      "sourceLocations": [
+        "apps/mobile/app/index.tsx",
+        "apps/desktop/src/desktop-app.tsx"
+      ],
+      "evidence": [
+        {
+          "path": "docs/known-limitations.md",
+          "detail": "Native signing and workflow limitations."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-011",
+      "claim": "The intended GA locale scope is English only.",
+      "status": "required_disclosure",
+      "publicUse": true,
+      "releaseBlocker": false,
+      "scope": "Language, help, onboarding, legal, support, and marketing surfaces.",
+      "limitations": "German support must not be advertised until complete extraction, persistence, translation, and responsive QA pass.",
+      "ownerRole": "Product Scope",
+      "reviewDate": "2026-11-30",
+      "sourceLocations": ["README.md", "apps/web/lib/product-copy.ts"],
+      "evidence": [
+        {
+          "path": "docs/phase-6-ga-readiness.md",
+          "detail": "Accepted English-only release scope."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-012",
+      "claim": "Messages are end-to-end encrypted.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": false,
+      "scope": "All collaboration, security, sales, and legal surfaces.",
+      "limitations": "No end-to-end encryption design or verification exists.",
+      "ownerRole": "Collaboration",
+      "reviewDate": "2026-12-15",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "docs/phase-4-collaboration-runtime.md",
+          "detail": "Implemented collaboration boundary makes no E2EE claim."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-013",
+      "claim": "AI autonomously runs a company or performs external actions.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": false,
+      "scope": "All product, marketing, sales, pricing, automation, and integration surfaces.",
+      "limitations": "No model or automated external effect is enabled; deterministic controls retain authority.",
+      "ownerRole": "Product Scope",
+      "reviewDate": "2026-12-15",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "packages/core/src/release-safety.ts",
+          "detail": "Fail-closed automation and approval policy."
+        },
+        {
+          "path": "docs/phase-5-private-beta-foundations.md",
+          "detail": "No AI acceptance or reversal evidence."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-014",
+      "claim": "Everything you run. One clear view.",
+      "status": "draft",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "Future positioning research only; this phrase is absent from current public product surfaces.",
+      "limitations": "Removed from public metadata and authentication copy. It remains an unapproved governance draft requiring a supported-scope qualifier and usability/retention evidence before any future marketing use.",
+      "ownerRole": "Product Marketing",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": ["docs/claims-audit.md"],
+      "evidence": [
+        {
+          "path": "docs/claims-audit.md",
+          "detail": "Records the withdrawn phrase as an unapproved future positioning draft."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-015",
+      "claim": "TREVV is a founder operating system.",
+      "status": "draft",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "Future category-positioning research only; this phrase is absent from current public product surfaces.",
+      "limitations": "Removed from public metadata, the PWA manifest, and authentication copy. It may be tested again only with a precise supported-workflow qualifier and customer evidence; it is not proof of full business-system coverage.",
+      "ownerRole": "Product Marketing",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": ["docs/claims-audit.md"],
+      "evidence": [
+        {
+          "path": "docs/claims-audit.md",
+          "detail": "Records the withdrawn category phrase as an unapproved future positioning draft."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-016",
+      "claim": "The PWA works offline with private customer data and queued writes.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": false,
+      "scope": "PWA, help, product, reliability, and marketing surfaces.",
+      "limitations": "Only safe immutable assets and a content-free fallback are cached; private app/API data are not an offline source of truth.",
+      "ownerRole": "Web Product",
+      "reviewDate": "2026-12-15",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "apps/web/public/sw.js",
+          "detail": "Content-free offline policy."
+        },
+        {
+          "path": "apps/web/lib/service-worker.test.ts",
+          "detail": "Private cache safety regression coverage."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-017",
+      "claim": "Public registration, a no-card trial, Founder plan, or Startup plan is available.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "Registration, pricing, onboarding, billing, sales, and marketing surfaces.",
+      "limitations": "Production permits only closed or server-validated invite_only admission; public mode is rejected. No billing gate, plan approval, authorization to enable public registration, or trial lifecycle exists.",
+      "ownerRole": "Commercial and Legal",
+      "reviewDate": "2026-09-30",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "packages/core/src/commercial.ts",
+          "detail": "Checkout and paid effects disabled."
+        },
+        {
+          "path": "apps/api/src/runtime-config.ts",
+          "detail": "Production rejects public registration and defaults live admission to invite_only."
+        },
+        {
+          "path": "packages/auth-server/src/index.ts",
+          "detail": "Invite-only signup requires a matching valid unconsumed invitation in PostgreSQL."
+        },
+        {
+          "path": "docs/phase-5-private-beta-foundations.md",
+          "detail": "Pricing direction has no approval evidence."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-018",
+      "claim": "Portfolio loads in under two seconds at production reference volume.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "Performance, sales, support, status, procurement, and marketing surfaces.",
+      "limitations": "Route/asset budgets, local RUM ingestion, and a PostgreSQL 100-Workspace/10,000-item search harness are configured, but the new CI gate has not run remotely and no representative mobile, Portfolio/browser reference-volume, or production result exists.",
+      "ownerRole": "Web Performance",
+      "reviewDate": "2026-11-15",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "docs/performance.md",
+          "detail": "Only directional local evidence is recorded."
+        },
+        {
+          "path": "packages/db/integration/repositories.test.ts",
+          "detail": "Local database search reference-volume harness only."
+        },
+        {
+          "path": "config/web-performance-budgets.json",
+          "detail": "Configured route and asset limits without production proof."
+        },
+        {
+          "path": "apps/web/app/api/web/vitals/route.ts",
+          "detail": "Configured local RUM ingestion without measured operating evidence."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-019",
+      "claim": "Customer export, account deletion, retention enforcement, and provider revocation are complete.",
+      "status": "prohibited",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "Privacy, account, organization, legal, procurement, support, and marketing surfaces.",
+      "limitations": "Only durable review requests and cancellation exist; no lifecycle effect is implemented.",
+      "ownerRole": "Commercial and Legal",
+      "reviewDate": "2026-10-31",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "apps/api/src/postgres-adapter.ts",
+          "detail": "Live exports explicitly unsupported."
+        },
+        {
+          "path": "docs/data-inventory.md",
+          "detail": "Lifecycle completion prerequisites."
+        }
+      ]
+    },
+    {
+      "id": "CLAIM-020",
+      "claim": "No production-critical demo fallback remains.",
+      "status": "draft",
+      "publicUse": false,
+      "releaseBlocker": true,
+      "scope": "GA release manifest and production claims only.",
+      "limitations": "This can be approved only after release-artifact scans, production configuration checks, native exclusion, and remote smoke evidence pass.",
+      "ownerRole": "Quality Engineering",
+      "reviewDate": "2026-10-31",
+      "sourceLocations": [],
+      "evidence": [
+        {
+          "path": "docs/known-limitations.md",
+          "detail": "Demo/live boundary and remaining native fallback limitation."
+        },
+        {
+          "path": "apps/desktop/src/desktop-app.tsx",
+          "detail": "Desktop foundation still substitutes demo Workspaces on API failure."
+        }
+      ]
+    }
+  ]
+}

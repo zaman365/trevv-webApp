@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "accessibility",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "criticalPathCount": null,
+  "unreviewedFindings": null,
+  "checks": {
+    "wcagA": false,
+    "wcagAA": false,
+    "chromiumCriticalPaths": false,
+    "webkitCriticalPaths": false,
+    "keyboard": false,
+    "screenReader": false,
+    "zoom200Percent": false,
+    "reducedMotion": false,
+    "highContrast": false,
+    "touchTargets": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

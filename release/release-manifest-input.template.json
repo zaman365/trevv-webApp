@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "template": true,
+  "releaseId": "REPLACE_WITH_IMMUTABLE_RELEASE_ID",
+  "createdAt": "REPLACE_WITH_UTC_ISO_TIMESTAMP",
+  "gitSha": "AUTO",
+  "imageDigests": {
+    "web": "sha256:REPLACE_WITH_64_HEX_CHARACTERS",
+    "api": "sha256:REPLACE_WITH_64_HEX_CHARACTERS",
+    "worker": "sha256:REPLACE_WITH_64_HEX_CHARACTERS",
+    "migrate": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+  },
+  "database": {
+    "previousReleaseMigrationHead": "REPLACE_WITH_PREVIOUS_HEAD",
+    "strategy": "additive-forward-only"
+  },
+  "runtimes": {
+    "node": "22.19.0",
+    "pnpm": "11.22.0"
+  },
+  "securityModes": {
+    "demoMode": false,
+    "registrationMode": "invite_only",
+    "cspMode": "enforce",
+    "hstsEnabled": true,
+    "rateLimitBackend": "postgres",
+    "errorReportingMode": "external"
+  },
+  "previousRelease": {
+    "releaseId": "REPLACE_WITH_PREVIOUS_RELEASE_ID",
+    "manifestDigest": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+  },
+  "evidenceLinks": [
+    {
+      "kind": "ci",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "deployment",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "migration",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "rollback",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "restore",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "incident",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "legal",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "security_review",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "availability",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "performance",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "accessibility",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "privacy",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "product_metrics",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "billing",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "provider_scope",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "support",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    },
+    {
+      "kind": "claims",
+      "uri": "REPLACE_WITH_IMMUTABLE_EVIDENCE_URI",
+      "sha256": "sha256:REPLACE_WITH_64_HEX_CHARACTERS"
+    }
+  ],
+  "authorization": {
+    "status": "not_authorized",
+    "environment": "production",
+    "authorizedBy": null,
+    "authorizedAt": null,
+    "changeTicket": null,
+    "scopeDigest": null
+  }
+}

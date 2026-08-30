@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "product_metrics",
+  "template": true,
+  "status": "not_measured",
+  "releaseId": null,
+  "measurementWindow": {
+    "startedAt": null,
+    "endedAt": null,
+    "minimumDays": null
+  },
+  "approvedGateReference": null,
+  "cohortDefinition": null,
+  "metrics": {
+    "eligibleOrganizations": null,
+    "activatedOrganizations": null,
+    "retainedPayingOrganizations": null,
+    "referenceablePayingOrganizations": null,
+    "weeklyCoreLoopOrganizations": null,
+    "retentionRatePercent": null
+  },
+  "thresholds": {
+    "retainedPayingOrganizations": null,
+    "referenceablePayingOrganizations": null,
+    "retentionRatePercent": null
+  },
+  "dataSource": null,
+  "queryReference": null,
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

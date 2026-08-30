@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "performance",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "referenceVolume": {
+    "workspaces": null,
+    "workItems": null
+  },
+  "mobileP75": {
+    "lcpMs": null,
+    "inpMs": null,
+    "cls": null
+  },
+  "checks": {
+    "routeSplitting": false,
+    "paginationAndVirtualization": false,
+    "assetBudget": false,
+    "queryBudget": false,
+    "rumOperatingWindow": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

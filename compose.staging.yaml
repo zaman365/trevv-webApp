@@ -9,6 +9,14 @@ x-runtime-build: &runtime-build
 x-api-environment: &api-environment
   NODE_ENV: test
   DEMO_MODE: "false"
+  RELEASE_METADATA_REQUIRED: "true"
+  RELEASE_ID: ${TREV_CANDIDATE_RELEASE_ID:-}
+  RELEASE_GIT_SHA: ${TREV_CANDIDATE_GIT_SHA:-}
+  RELEASE_IMAGE_ID: ${TREV_API_IMAGE_ID:-}
+  REGISTRATION_MODE: invite_only
+  # The smoke's first-owner bypass is accepted only by a NODE_ENV=test API and
+  # never changes the user-visible or production admission mode.
+  TEST_REGISTRATION_BOOTSTRAP_SECRET: staging-registration-bootstrap-secret-only
   PORT: "8787"
   DATABASE_URL: postgresql://founderhq:founderhq@postgres:5432/founderhq
   BETTER_AUTH_SECRET: staging-ci-only-secret-with-more-than-32-characters
@@ -44,6 +52,10 @@ x-api-service: &api-service
 x-worker-environment: &worker-environment
   NODE_ENV: test
   DEMO_MODE: "false"
+  RELEASE_METADATA_REQUIRED: "true"
+  RELEASE_ID: ${TREV_CANDIDATE_RELEASE_ID:-}
+  RELEASE_GIT_SHA: ${TREV_CANDIDATE_GIT_SHA:-}
+  RELEASE_IMAGE_ID: ${TREV_WORKER_IMAGE_ID:-}
   DATABASE_URL: postgresql://founderhq:founderhq@postgres:5432/founderhq
   WORKER_ENABLED: "true"
   WORKER_HEALTH_HOST: 0.0.0.0
@@ -161,6 +173,13 @@ services:
     environment:
       NODE_ENV: production
       DEMO_MODE: "false"
+      RELEASE_METADATA_REQUIRED: "true"
+      RELEASE_ID: ${TREV_CANDIDATE_RELEASE_ID:-}
+      RELEASE_GIT_SHA: ${TREV_CANDIDATE_GIT_SHA:-}
+      RELEASE_IMAGE_ID: ${TREV_WEB_IMAGE_ID:-}
+      REGISTRATION_MODE: invite_only
+      CSP_MODE: report-only
+      HSTS_ENABLED: "false"
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       API_ORIGIN: https://proxy:8444
@@ -224,6 +243,13 @@ services:
       STAGING_INTERNAL_PROXY_ORIGIN: http://proxy:8080
       DATABASE_URL: postgresql://founderhq:founderhq@postgres:5432/founderhq
       MAIL_SINK_FILE: /tmp/trevv-staging/mail.jsonl
+      TEST_REGISTRATION_BOOTSTRAP_SECRET: staging-registration-bootstrap-secret-only
+      EXPECTED_RELEASE_ID: ${TREV_CANDIDATE_RELEASE_ID:-}
+      EXPECTED_RELEASE_GIT_SHA: ${TREV_CANDIDATE_GIT_SHA:-}
+      EXPECTED_API_IMAGE_ID: ${TREV_API_IMAGE_ID:-}
+      EXPECTED_WORKER_IMAGE_ID: ${TREV_WORKER_IMAGE_ID:-}
+      EXPECTED_WEB_IMAGE_ID: ${TREV_WEB_IMAGE_ID:-}
+      EXPECTED_MIGRATE_IMAGE_ID: ${TREV_MIGRATE_IMAGE_ID:-}
     volumes:
       - staging-mail:/tmp/trevv-staging:ro
       - staging-tls:/etc/trevv-local-tls:ro

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "support",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "owners": {
+    "support": null,
+    "onCall": null,
+    "incidentCommander": null,
+    "communications": null
+  },
+  "responseTargetsMinutes": {
+    "critical": null,
+    "high": null
+  },
+  "checks": {
+    "onCallStaffed": false,
+    "incidentEscalationExercised": false,
+    "statusPagePublished": false,
+    "supportChannelPublished": false,
+    "securityContactPublished": false,
+    "helpPublished": false,
+    "changelogPublished": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

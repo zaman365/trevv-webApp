@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "restore",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "environment": "isolated-managed-restore",
+  "operator": null,
+  "incidentObserver": null,
+  "backup": {
+    "providerReference": null,
+    "recoveryPointAt": null,
+    "restoreStartedAt": null,
+    "serviceValidatedAt": null,
+    "sourceWritesFrozenAt": null
+  },
+  "measured": {
+    "rpoMinutes": null,
+    "rtoMinutes": null,
+    "rpoTargetMinutes": 15,
+    "rtoTargetMinutes": 240
+  },
+  "reconciliation": {
+    "organizations": null,
+    "memberships": null,
+    "workspaces": null,
+    "workItems": null,
+    "historyAndEvidence": null,
+    "messages": null,
+    "auditEvents": null,
+    "outboxByState": null,
+    "attachmentsIfInScope": "NOT_APPLICABLE_UNLESS_FILES_ENABLED"
+  },
+  "functionalChecks": {
+    "migrationsSucceeded": false,
+    "testIdentityAuthenticated": false,
+    "portfolioLoaded": false,
+    "tenantWriteSucceeded": false,
+    "workerProcessedExactlyOnce": false,
+    "organizationExportVerified": false,
+    "noExternalProviderContact": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

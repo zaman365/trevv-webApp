@@ -5,6 +5,11 @@ import {
 } from "./health-server";
 
 const observedAt = new Date("2026-08-29T10:00:00.000Z");
+const release = {
+  releaseId: "release-2026.08.30.1",
+  gitSha: "a".repeat(40),
+  imageId: `sha256:${"b".repeat(64)}`,
+};
 const queue = {
   observedAt,
   ready: 2,
@@ -25,6 +30,7 @@ describe("worker health server", () => {
       enabled: true,
       activeHandlerNames: ["attention"],
       disabledHandlerNames: [],
+      releaseMetadata: release,
       readinessMaxStalenessMs: 1_000,
       readinessMaxUnsupportedAgeMs: 300_000,
       clock: () => current,
@@ -43,6 +49,7 @@ describe("worker health server", () => {
       expect(ready.status).toBe(200);
       await expect(ready.json()).resolves.toMatchObject({
         status: "ready",
+        release,
         queue: { ready: 2, unsupported: 1 },
       });
       await expect(

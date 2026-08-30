@@ -41,6 +41,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Verify formatting baseline
+        run: pnpm format:check
+      - name: Validate release-scope and claims registers
+        run: |
+          pnpm phase6:readiness
+          pnpm phase6:claims
+          pnpm test:phase6
       - name: Generate and verify API contract
         run: |
           pnpm contracts:generate
@@ -57,12 +64,25 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Define a non-deployable production-build identity
+        run: |
+          build_digest=$(printf 'quality-build-only:%s:%s:%s' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" | sha256sum | cut -d ' ' -f 1)
+          echo "RELEASE_ID=ci-build-only-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "RELEASE_GIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "RELEASE_IMAGE_ID=sha256:${build_digest}" >> "$GITHUB_ENV"
       - name: Build live-safe production artifacts
         env:
+          NODE_ENV: production
           DEMO_MODE: "false"
+          REGISTRATION_MODE: invite_only
           NEXT_PUBLIC_APP_URL: https://trevv.test
           API_ORIGIN: https://api.service.internal
+          CSP_MODE: report-only
+          HSTS_ENABLED: "false"
+          RELEASE_METADATA_REQUIRED: "true"
         run: pnpm build
+      - name: Enforce route and asset performance budgets
+        run: pnpm performance:budget
       - name: Dependency security scan
         run: pnpm security:audit
 
@@ -81,7 +101,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -103,7 +123,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm test:a11y
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -143,7 +163,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:migrate
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Verify live identity and tenant boundaries
         run: pnpm test:e2e:live
       - uses: actions/upload-artifact@v4
@@ -159,12 +179,38 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Define the immutable candidate identity
+        run: |
+          echo "TREV_CANDIDATE_RELEASE_ID=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "TREV_CANDIDATE_GIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
       - name: Build production-shaped service artifacts
         run: docker compose -f compose.staging.yaml --profile smoke build
+      - name: Bind candidate services to the built Docker image IDs
+        run: |
+          api_id=$(docker compose -f compose.staging.yaml images -q api-1)
+          worker_id=$(docker compose -f compose.staging.yaml images -q worker-1)
+          web_id=$(docker compose -f compose.staging.yaml images -q web)
+          migrate_id=$(docker compose -f compose.staging.yaml images -q migrate)
+          test -n "$api_id"
+          test -n "$worker_id"
+          test -n "$web_id"
+          test -n "$migrate_id"
+          echo "TREV_API_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$api_id")" >> "$GITHUB_ENV"
+          echo "TREV_WORKER_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$worker_id")" >> "$GITHUB_ENV"
+          echo "TREV_WEB_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$web_id")" >> "$GITHUB_ENV"
+          echo "TREV_MIGRATE_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$migrate_id")" >> "$GITHUB_ENV"
       - name: Start the live-mode topology
         run: >-
           docker compose -f compose.staging.yaml --profile smoke
           up --wait --wait-timeout 180 -d proxy worker-1 worker-2
+      - name: Prove injected image IDs match the running containers
+        run: |
+          test "$(docker inspect --format '{{.Image}}' "$(docker compose -f compose.staging.yaml ps -q api-1)")" = "$TREV_API_IMAGE_ID"
+          test "$(docker inspect --format '{{.Image}}' "$(docker compose -f compose.staging.yaml ps -q api-2)")" = "$TREV_API_IMAGE_ID"
+          test "$(docker inspect --format '{{.Image}}' "$(docker compose -f compose.staging.yaml ps -q worker-1)")" = "$TREV_WORKER_IMAGE_ID"
+          test "$(docker inspect --format '{{.Image}}' "$(docker compose -f compose.staging.yaml ps -q worker-2)")" = "$TREV_WORKER_IMAGE_ID"
+          test "$(docker inspect --format '{{.Image}}' "$(docker compose -f compose.staging.yaml ps -q web)")" = "$TREV_WEB_IMAGE_ID"
+          test "$(docker inspect --format '{{.Image}}' "$(docker compose -f compose.staging.yaml ps --all -q migrate)")" = "$TREV_MIGRATE_IMAGE_ID"
       - name: Verify the host-published trusted TLS boundary
         run: |
           docker compose -f compose.staging.yaml cp proxy:/etc/trevv-local-tls/ca.crt /tmp/trevv-staging-ca.crt

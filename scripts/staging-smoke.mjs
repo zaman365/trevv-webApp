@@ -8,6 +8,18 @@ const publicOrigin = requiredUrl("STAGING_PUBLIC_ORIGIN");
 const internalProxyOrigin = requiredUrl("STAGING_INTERNAL_PROXY_ORIGIN");
 const databaseUrl = required("DATABASE_URL");
 const mailSinkFile = required("MAIL_SINK_FILE");
+const registrationBootstrapSecret = required(
+  "TEST_REGISTRATION_BOOTSTRAP_SECRET",
+);
+const expectedRelease = {
+  releaseId: required("EXPECTED_RELEASE_ID"),
+  gitSha: required("EXPECTED_RELEASE_GIT_SHA").toLowerCase(),
+  apiImageId: required("EXPECTED_API_IMAGE_ID").toLowerCase(),
+  workerImageId: required("EXPECTED_WORKER_IMAGE_ID").toLowerCase(),
+  webImageId: required("EXPECTED_WEB_IMAGE_ID").toLowerCase(),
+  migrateImageId: required("EXPECTED_MIGRATE_IMAGE_ID").toLowerCase(),
+};
+validateExpectedRelease(expectedRelease);
 const apiOrigins = serviceOrigins("STAGING_API_ORIGINS", [
   "http://api-1:8787",
   "http://api-2:8787",
@@ -35,6 +47,7 @@ try {
   await verifyTwoApiRouting();
   await emitQueryLogSentinel();
   await verifyAnonymousBoundary();
+  await verifyHeaderlessRegistrationRejected();
   await signUpAndVerify();
   await signIn();
   await verifyAuthProxyBoundary();
@@ -140,7 +153,11 @@ try {
       status: "ok",
       checks: [
         "auth",
+        "invite-only-registration",
+        "headerless-signup-rejection",
         "trusted-tls",
+        "report-only-csp",
+        "hsts-disabled",
         "secure-cookie",
         "auth-response-boundary",
         "cross-origin-rejection",
@@ -152,6 +169,7 @@ try {
         "outbox",
         "worker-event-catalog",
         "two-workers",
+        "release-correlation",
         "retention-effect",
         "expired-lease-recovery",
         "web-rendering",
@@ -210,11 +228,17 @@ async function verifyServiceHealth() {
       !isRecord(body) ||
       body.status !== "ready" ||
       body.mode !== "live" ||
+      body.registrationMode !== "invite_only" ||
       body.database !== "ready"
     )
       throw new Error(
         `API ${serviceOrigin.host} does not have a ready live data plane.`,
       );
+    verifyReleaseMetadata(
+      body.release,
+      expectedRelease.apiImageId,
+      `API ${serviceOrigin.host}`,
+    );
   }
   const webResponse = await fetch(new URL("/api/web/readyz", origin), {
     cache: "no-store",
@@ -225,9 +249,16 @@ async function verifyServiceHealth() {
     !isRecord(webBody) ||
     webBody.status !== "ready" ||
     webBody.mode !== "live" ||
+    webBody.registrationMode !== "invite_only" ||
     webBody.api !== "ready"
   )
     throw new Error("The standalone Web runtime is not dependency-ready.");
+  verifyReleaseMetadata(webBody.release, expectedRelease.webImageId, "Web");
+  verifyReleaseMetadata(
+    webBody.apiRelease,
+    expectedRelease.apiImageId,
+    "Web upstream API",
+  );
 
   const edgeResponse = await fetch(new URL("/readyz", internalProxyOrigin), {
     cache: "no-store",
@@ -243,6 +274,14 @@ async function verifyServiceHealth() {
       throw new Error(
         `Worker readiness failed at ${workerOrigin} with HTTP ${response.status}.`,
       );
+    const body = await response.json();
+    if (!isRecord(body) || body.status !== "ready")
+      throw new Error(`Worker ${workerOrigin} returned invalid readiness.`);
+    verifyReleaseMetadata(
+      body.release,
+      expectedRelease.workerImageId,
+      `Worker ${workerOrigin}`,
+    );
   }
 }
 
@@ -259,14 +298,47 @@ async function verifyTwoApiRouting() {
       !response.ok ||
       !isRecord(body) ||
       body.status !== "ready" ||
+      body.registrationMode !== "invite_only" ||
       body.database !== "ready" ||
       !upstream
     )
       throw new Error("The private API router returned an invalid response.");
+    verifyReleaseMetadata(
+      body.release,
+      expectedRelease.apiImageId,
+      `routed API ${upstream}`,
+    );
     upstreams.add(upstream);
   }
   if (upstreams.size !== 2)
     throw new Error("The private API router did not reach both API instances.");
+}
+
+function validateExpectedRelease(value) {
+  if (!/^[a-z0-9][a-z0-9._+-]{7,127}$/u.test(value.releaseId))
+    throw new Error("EXPECTED_RELEASE_ID is not a valid immutable release ID.");
+  if (!/^[a-f0-9]{40}$/u.test(value.gitSha))
+    throw new Error("EXPECTED_RELEASE_GIT_SHA must be a full Git SHA.");
+  for (const [name, imageId] of [
+    ["EXPECTED_API_IMAGE_ID", value.apiImageId],
+    ["EXPECTED_WORKER_IMAGE_ID", value.workerImageId],
+    ["EXPECTED_WEB_IMAGE_ID", value.webImageId],
+    ["EXPECTED_MIGRATE_IMAGE_ID", value.migrateImageId],
+  ])
+    if (!/^sha256:[a-f0-9]{64}$/u.test(imageId))
+      throw new Error(`${name} must be Docker's immutable sha256 image ID.`);
+}
+
+function verifyReleaseMetadata(value, expectedImageId, label) {
+  if (
+    !isRecord(value) ||
+    value.releaseId !== expectedRelease.releaseId ||
+    value.gitSha !== expectedRelease.gitSha ||
+    value.imageId !== expectedImageId
+  )
+    throw new Error(
+      `${label} does not report the candidate artifact identity.`,
+    );
 }
 
 async function emitQueryLogSentinel() {
@@ -283,6 +355,24 @@ async function verifyAnonymousBoundary() {
   });
   if (!publicPage.ok || !(await publicPage.text()).includes("TREVV"))
     throw new Error("The built Web sign-in page did not render.");
+  const reportOnlyPolicy = publicPage.headers.get(
+    "content-security-policy-report-only",
+  );
+  if (
+    !reportOnlyPolicy?.includes("default-src 'self'") ||
+    !reportOnlyPolicy.includes("report-uri /api/web/csp-report")
+  )
+    throw new Error(
+      "The local staging Web document did not return the expected report-only CSP.",
+    );
+  if (publicPage.headers.has("content-security-policy"))
+    throw new Error(
+      "The local staging Web document unexpectedly returned an enforcing CSP.",
+    );
+  if (publicPage.headers.has("strict-transport-security"))
+    throw new Error(
+      "The self-signed local staging Web document unexpectedly enabled HSTS.",
+    );
 
   const privatePage = await fetch(new URL("/app/portfolio", origin), {
     redirect: "manual",
@@ -297,9 +387,40 @@ async function verifyAnonymousBoundary() {
     throw new Error("Anonymous private Web access leaked fictional app data.");
 }
 
+async function verifyHeaderlessRegistrationRejected() {
+  if (cookieJar.size !== 0)
+    throw new Error(
+      "The headerless registration check must run before an authenticated session exists.",
+    );
+  const response = await apiJson("/api/auth/sign-up/email", {
+    method: "POST",
+    body: {
+      name: "Rejected Topology Owner",
+      email,
+      password,
+      callbackURL: new URL("/onboarding", publicOrigin).toString(),
+    },
+    authenticated: false,
+  });
+  if (
+    response.status !== 403 ||
+    apiErrorCode(response.body) !== "REGISTRATION_INVITATION_REQUIRED"
+  )
+    throw new Error(
+      "Invite-only staging accepted a headerless first-owner sign-up.",
+    );
+  if (response.headers.has("set-cookie") || cookieJar.size !== 0)
+    throw new Error(
+      "Rejected headerless registration unexpectedly created authentication state.",
+    );
+}
+
 async function signUpAndVerify() {
   const signup = await apiJson("/api/auth/sign-up/email", {
     method: "POST",
+    headers: {
+      "x-trevv-test-registration-bootstrap": registrationBootstrapSecret,
+    },
     body: {
       name: "Topology Owner",
       email,

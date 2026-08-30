@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "claims",
+  "template": true,
+  "status": "not_reviewed",
+  "releaseId": null,
+  "reviewer": null,
+  "claimsInventoryDigest": null,
+  "openPublicClaims": null,
+  "checks": {
+    "allPublicClaimsApproved": false,
+    "marketingMatchesImplementation": false,
+    "prohibitedClaimsAbsent": false,
+    "requiredDisclosuresPresent": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

@@ -16,6 +16,11 @@ import {
 } from "./index";
 
 const now = new Date("2026-08-29T10:00:00.000Z");
+const runtimeRelease = {
+  releaseId: "release-2026.08.30.1",
+  gitSha: "a".repeat(40),
+  imageId: `sha256:${"b".repeat(64)}`,
+};
 
 function lease(attempt = 1, eventId = "event-1"): WorkerLease {
   return {
@@ -304,6 +309,7 @@ describe("PostgreSQL worker orchestration", () => {
     await expect(
       runWorkerLoop(
         dependencies(repositories, {
+          releaseMetadata: runtimeRelease,
           log: (record) => records.push(record),
         }),
         {
@@ -320,6 +326,11 @@ describe("PostgreSQL worker orchestration", () => {
       "sweep_failed",
       "ready",
     ]);
+    expect(records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ release: runtimeRelease }),
+      ]),
+    );
   });
 
   it("drains an in-flight bounded pass after shutdown without taking another lease", async () => {

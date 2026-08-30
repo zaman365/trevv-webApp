@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "template": true,
+  "status": "not_verified",
+  "releaseId": null,
+  "gates": {
+    "ci": { "result": "UNVERIFIED", "reference": null },
+    "performance": { "result": "UNVERIFIED", "reference": null },
+    "accessibility": { "result": "UNVERIFIED", "reference": null },
+    "privacyExportDeletion": { "result": "UNVERIFIED", "reference": null },
+    "billingLifecycle": { "result": "UNVERIFIED", "reference": null },
+    "providerScopeAndRevocation": { "result": "UNVERIFIED", "reference": null },
+    "supportStaffing": { "result": "UNVERIFIED", "reference": null },
+    "claimsReview": { "result": "UNVERIFIED", "reference": null },
+    "legalReview": { "result": "UNVERIFIED", "reference": null },
+    "retainedPayingOrganizations": {
+      "result": "UNVERIFIED",
+      "reference": null,
+      "referenceablePayingOrganizations": null,
+      "minimumRequired": null,
+      "approvedThresholdReference": null
+    }
+  },
+  "result": "NO_GO"
+}

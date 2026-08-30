@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "migration",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "environment": "remote-production-shaped-staging",
+  "startedAt": null,
+  "completedAt": null,
+  "operator": null,
+  "database": {
+    "sourceReleaseId": null,
+    "sourceMigrationHead": null,
+    "targetMigrationHead": null,
+    "backupRecoveryPoint": null,
+    "dedicatedMigrationIdentity": false,
+    "verifiedTls": false
+  },
+  "checks": {
+    "previousApplicationReadsAndWritesBeforeMigration": false,
+    "migrationAppliedOnce": false,
+    "secondMigrationPassNoOp": false,
+    "previousApiReadsNewSchema": false,
+    "previousWorkerProcessesNewSchema": false,
+    "currentApiReadsAndWritesNewSchema": false,
+    "currentWorkerProcessesNewSchema": false,
+    "webSmokePassed": false,
+    "tenantAndOutboxReconciliationPassed": false,
+    "failureInjectionRolledBackTransaction": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

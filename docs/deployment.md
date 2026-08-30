@@ -51,7 +51,38 @@ Apply `NODE_ENV=production DATABASE_URL='postgresql://…?sslmode=verify-full' p
 
 The root `pnpm build` validates every workspace through Turborepo. A Sites environment that deliberately launches the root script through npm compiles the same Web/PWA through the official Vinext/Cloudflare adapter and stages its Worker artifact at the repository root. This deployment-only target does not change the normal Next.js development or production build.
 
-CI's `staging-topology` gate builds the production-shaped images, starts the Web/API/PostgreSQL/two-worker/mail/edge topology, upgrades a populated schema from migration `0008` through the real Drizzle journal, verifies a second migration pass is a no-op, and smokes anonymous guarding, trusted local TLS, secure auth cookies, cross-origin rejection, onboarding, a tenant-scoped Workspace read, both API instances, atomic Team-to-room creation, message round-trip, query-free proxy logs, real retention redaction, expired-lease recovery, exactly-one-worker processing, and authenticated Web rendering without demo substitution. Failure logs are captured and cleanup failures fail the gate. This does not provision or deploy remote infrastructure.
+CI's `staging-topology` gate builds the production-shaped images, derives each
+Web/API/Worker/migration artifact's actual immutable Docker `sha256:` image ID,
+injects the service IDs together with
+the full Git SHA and one candidate release ID, and proves the running
+containers match those IDs and the completed migration container ran the
+expected migration image. It then starts the Web/API/PostgreSQL/two-worker/
+mail/edge topology, upgrades a populated schema from migration `0008` through
+the real Drizzle journal, verifies a second migration pass is a no-op, and
+smokes anonymous guarding, trusted local TLS, secure auth cookies, cross-origin
+rejection, onboarding, a tenant-scoped Workspace read, both API instances,
+both Worker instances, Web-to-API release correlation, atomic Team-to-room
+creation, message round-trip, query-free proxy logs, real retention redaction,
+expired-lease recovery, exactly-one-worker processing, and authenticated Web
+rendering without demo substitution. Web and API both report
+`REGISTRATION_MODE=invite_only`; before using the test-only first-owner
+bootstrap, the smoke proves that the same sign-up without the bootstrap header
+is rejected and creates no auth state. The smoke can create only its first test
+owner through a dedicated 32+ character bootstrap header whose secret is
+accepted by the API only under `NODE_ENV=test`; no production configuration
+accepts that bypass. Invite-only admission is also covered separately by the
+PostgreSQL auth integration suite. The local Web document must expose the
+build's report-only CSP, no enforcing CSP, and no HSTS, matching the deliberately
+self-signed local topology. Failure logs are captured and cleanup failures fail
+the gate. This does not provision or deploy remote infrastructure.
+
+A future production-release smoke is a distinct trusted-HTTPS gate. It must
+assert the response headers actually contain an enforcing
+`Content-Security-Policy`, omit `Content-Security-Policy-Report-Only`, and
+contain the reviewed `Strict-Transport-Security` policy. Recording those values
+in a manifest or setting runtime variables is not sufficient because both modes
+are compiled into the Web artifact. The local topology does not run or satisfy
+that production-release smoke.
 
 ## Release order
 
@@ -63,13 +94,42 @@ CI's `staging-topology` gate builds the production-shaped images, starts the Web
 6. Run Web smoke, Playwright, axe, tenant/Team/message/outbox smoke, retention, export, and rollback tests.
 7. Point Expo/Tauri builds at the same API only after API compatibility is confirmed.
 
-Use rolling API/Worker deploys. Database changes must be backwards-compatible for one release. Roll Web back independently; never roll database state back by applying destructive SQL. Create a forward fix instead.
+Database changes must be backwards-compatible for one release and Workers may
+roll only after mixed-version lease behavior is rehearsed. The current
+candidate is a Web/API compatibility boundary: the previous API lacks the new
+readiness envelope and invite-only admission guard. It therefore requires the
+coordinated blue/green procedure in `docs/ga-release-runbook.md`, with signup
+closed at the trusted edge and old Web/API and candidate Web/API kept as aligned
+pairs. Do not roll this Web back independently over a candidate API, or a
+candidate Web over the previous API. Never roll database state back with
+destructive SQL; use the rehearsed application pair or a reviewed forward fix.
 
 Before closed-alpha traffic, connect the private metric endpoints to a selected collector, validate the repository-owned rules, import the dashboard, and route test alerts to named responders. Configure alert thresholds for readiness staleness, oldest ready queue age, failed attempts, dead-letter count, unsupported events, handler-paused events, missing scrape targets, and request-protection failure. Provide a reviewed dead-letter inspection/replay procedure; the worker records these states but the repository does not yet include an operator replay console. Exercise SIGTERM draining and a worker replacement while messages continue to be accepted.
 
 ## Required production variables
 
 Use `.env.example` as the implemented catalog. Secrets belong in the provider secret manager. Public client variables may contain URLs/IDs only. Set `DEMO_MODE=false`; do not expose database, request-protection, mail, or future provider credentials to Next.js, Expo, or Vite bundles. The API, Worker, and migration job require a production `DATABASE_URL` with exactly one `sslmode=verify-full`; `sslmode=require` encrypts transport but does not verify the server identity in the pinned driver and is rejected. The runtime trust store must contain the managed database CA. The API also requires a non-placeholder 32+ character `BETTER_AUTH_SECRET`, HTTPS `BETTER_AUTH_URL` and `WEB_ORIGIN`, `MAIL_FROM`, authenticated TLS SMTP settings, and `AUTH_COOKIE_DOMAIN` when the Web and auth hosts differ. Production refuses the test mail sink.
+
+Set the same `REGISTRATION_MODE` on Web and API. `invite_only` is the intended
+live default and validates a matching, unexpired, unrevoked, unconsumed
+invitation in PostgreSQL before Better Auth account creation. `closed` also
+blocks invited people from creating an account. `public` is confined to
+development/test bootstrap flows and production startup rejects it until the
+public-release gates are explicitly approved.
+
+Set `RELEASE_ID`, the full `RELEASE_GIT_SHA`, and the actual immutable
+`RELEASE_IMAGE_ID` on every packaged Web, API, and Worker process. Each service
+has its own image digest/ID; do not substitute an image tag. Production requires
+all three values. A test topology can set `RELEASE_METADATA_REQUIRED=true` to
+enforce the same rule despite its nonproduction transport allowances. The
+public promotion smoke must compare readiness from every API and Worker
+instance plus the Web's own and upstream-API metadata with the signed manifest.
+
+The quality workflow's `ci-build-only-*` identity is a deterministic
+configuration-validation fixture. That build output is not uploaded or
+promotable and its synthetic digest must never be used as a deployment image
+identity. The topology job separately binds each runnable service to its actual
+Docker image ID before any smoke test.
 
 Production API request protection requires:
 

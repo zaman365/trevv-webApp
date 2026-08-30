@@ -7,6 +7,11 @@ const validEnvironment = {
   NODE_ENV: "test",
   WORKER_ID: "worker-alpha-1",
 };
+const releaseEnvironment = {
+  RELEASE_ID: "release-2026.08.30.1",
+  RELEASE_GIT_SHA: "a".repeat(40),
+  RELEASE_IMAGE_ID: `sha256:${"b".repeat(64)}`,
+};
 
 describe("worker runtime configuration", () => {
   it("uses bounded defaults and accepts explicit kill switches", () => {
@@ -106,8 +111,17 @@ describe("worker runtime configuration", () => {
         DEMO_MODE: "false",
         DATABASE_URL:
           "postgresql://trevv:test@db.trevv.test:5432/trevv?sslmode=verify-full",
+        ...releaseEnvironment,
       }),
     ).not.toThrow();
+    expect(() =>
+      readWorkerRuntimeConfiguration({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        DATABASE_URL:
+          "postgresql://trevv:test@db.trevv.test:5432/trevv?sslmode=verify-full",
+      }),
+    ).toThrow(/RELEASE_ID.*required for this runtime/);
     expect(() =>
       readWorkerRuntimeConfiguration({
         ...validEnvironment,

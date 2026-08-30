@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "ci",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "runUri": null,
+  "gitSha": null,
+  "checks": {
+    "format": false,
+    "lint": false,
+    "typecheck": false,
+    "unit": false,
+    "integration": false,
+    "contracts": false,
+    "migrations": false,
+    "build": false,
+    "performanceBudgets": false,
+    "e2eChromium": false,
+    "e2eWebKit": false,
+    "accessibility": false,
+    "dependencyAudit": false,
+    "security": false,
+    "productionMode": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

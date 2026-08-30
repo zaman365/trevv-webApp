@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "billing",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "approvedPricingReference": null,
+  "approvedPlanKeys": [],
+  "checks": {
+    "hostedCheckout": false,
+    "hostedPortal": false,
+    "trial": false,
+    "usage": false,
+    "invoice": false,
+    "renewal": false,
+    "duplicateWebhook": false,
+    "outOfOrderWebhook": false,
+    "dunning": false,
+    "cancel": false,
+    "downgrade": false,
+    "refund": false,
+    "planChange": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

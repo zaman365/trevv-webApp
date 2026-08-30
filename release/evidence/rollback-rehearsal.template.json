@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "rollback",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "environment": "remote-production-shaped-staging",
+  "scenario": null,
+  "startedAt": null,
+  "completedAt": null,
+  "operator": null,
+  "previousRelease": {
+    "releaseId": null,
+    "manifestDigest": null,
+    "webImageDigest": null,
+    "apiImageDigest": null,
+    "workerImageDigest": null,
+    "migrationHead": null
+  },
+  "candidateRelease": {
+    "releaseId": null,
+    "artifactIdentityDigest": null,
+    "migrationHead": null
+  },
+  "checks": {
+    "trafficProgressionStopped": false,
+    "affectedCapabilityDisabled": false,
+    "candidateProcessesDrained": false,
+    "previousImagesRetrievedByDigest": false,
+    "previousApplicationCompatibleWithCandidateSchema": false,
+    "previousImagesRestored": false,
+    "tenantReadWriteReconciled": false,
+    "auditOutboxIdempotencyReconciled": false,
+    "queueLeasesReconciled": false,
+    "postRollbackSmokePassed": false,
+    "noDownMigrationOrAdHocSqlUsed": false
+  },
+  "measured": {
+    "decisionToMitigationMinutes": null,
+    "decisionToHealthyMinutes": null
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

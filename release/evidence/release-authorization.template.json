@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "template": true,
+  "status": "not_authorized",
+  "environment": "production",
+  "releaseId": null,
+  "manifestDigest": null,
+  "scopeDigest": null,
+  "authorizedBy": null,
+  "authorizedAt": null,
+  "changeTicket": null,
+  "result": "UNVERIFIED",
+  "approverConfirmed": {
+    "sameArtifactsAsStaging": false,
+    "readinessRegisterGo": false,
+    "claimsRegisterGo": false,
+    "evidenceContentAndReleaseIdsVerified": false,
+    "backupAndRestoreEvidenceReviewed": false,
+    "migrationAndRollbackEvidenceReviewed": false,
+    "securityAndLegalEvidenceReviewed": false,
+    "supportAndIncidentEvidenceReviewed": false,
+    "commercialEvidenceReviewed": false,
+    "productMetricsGatePassed": false
+  },
+  "notes": "A repository template is not production authorization. In the completed immutable external record set template=false, status=authorized, result=PASS, replace every null and false value, and obtain explicit human approval. Production validation must retrieve and hash the record through its trusted authorization verifier; the repository CLI cannot authorize by itself."
+}

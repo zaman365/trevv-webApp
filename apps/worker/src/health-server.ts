@@ -1,11 +1,13 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { WorkerQueueTelemetry } from "@founderhq/db";
+import type { RuntimeReleaseMetadata } from "@founderhq/api-contract";
 
 export interface WorkerHealthStateOptions {
   enabled: boolean;
   activeHandlerNames: readonly string[];
   disabledHandlerNames: readonly string[];
+  releaseMetadata?: RuntimeReleaseMetadata | null;
   readinessMaxStalenessMs: number;
   readinessMaxReadyAgeMs?: number;
   readinessMaxUnsupportedAgeMs: number;
@@ -16,6 +18,7 @@ export interface WorkerHealthStateOptions {
 export interface WorkerHealthSnapshot {
   status: "ready" | "not_ready";
   service: "trevv-worker";
+  release: RuntimeReleaseMetadata | null;
   enabled: boolean;
   stopping: boolean;
   activeHandlers: readonly string[];
@@ -124,6 +127,7 @@ export function createWorkerHealthState(
       return {
         status: ready ? "ready" : "not_ready",
         service: "trevv-worker",
+        release: options.releaseMetadata ?? null,
         enabled: options.enabled,
         stopping,
         activeHandlers: [...options.activeHandlerNames],
@@ -169,6 +173,7 @@ export async function startWorkerHealthServer(input: {
         {
           status: snapshot.stopping ? "stopping" : "ok",
           service: snapshot.service,
+          release: snapshot.release,
         },
         request.method,
       );
@@ -201,6 +206,7 @@ export async function startWorkerHealthServer(input: {
         {
           status: snapshot.status,
           service: snapshot.service,
+          release: snapshot.release,
           enabled: snapshot.enabled,
           stopping: snapshot.stopping,
           activeHandlers: snapshot.activeHandlers,

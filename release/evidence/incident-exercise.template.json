@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "incident",
+  "template": true,
+  "status": "not_run",
+  "releaseId": null,
+  "scenario": null,
+  "severity": null,
+  "startedAt": null,
+  "detectedAt": null,
+  "acknowledgedAt": null,
+  "containedAt": null,
+  "recoveredAt": null,
+  "closedAt": null,
+  "roles": {
+    "incidentCommander": null,
+    "operationsLead": null,
+    "securityLead": null,
+    "customerCommunications": null,
+    "scribe": null
+  },
+  "checks": {
+    "pageDeliveredToStaffedResponder": false,
+    "customerImpactClassified": false,
+    "smallestKillSwitchUsed": false,
+    "evidencePreservedWithoutCustomerContent": false,
+    "statusCommunicationIssued": false,
+    "tenantIsolationRevalidated": false,
+    "authRevocationRevalidated": false,
+    "outboxAndWorkerRecoveryRevalidated": false,
+    "followUpOwnerAndDateAssigned": false
+  },
+  "forwardFix": {
+    "required": null,
+    "reasonRollbackWasUnsafe": null,
+    "newReleaseId": null,
+    "newManifestDigest": null,
+    "reviewedThroughCandidatePipeline": false,
+    "smallestAffectedWritesStayedDisabled": false,
+    "noDownMigrationOrAdHocSqlUsed": false,
+    "postFixReconciliationPassed": false
+  },
+  "timeline": [],
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

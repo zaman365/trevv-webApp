@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "security_review",
+  "template": true,
+  "status": "not_reviewed",
+  "releaseId": null,
+  "reviewerOrganization": null,
+  "reviewerIndependenceConfirmed": false,
+  "scope": [],
+  "testingStartedAt": null,
+  "reportIssuedAt": null,
+  "findings": {
+    "criticalOpen": null,
+    "highOpen": null,
+    "mediumOpen": null,
+    "lowOpen": null,
+    "acceptedRiskReferences": []
+  },
+  "retest": {
+    "completedAt": null,
+    "criticalClosed": false,
+    "highClosed": false
+  },
+  "reportReference": null,
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

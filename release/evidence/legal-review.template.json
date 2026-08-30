@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "legal",
+  "template": true,
+  "status": "not_reviewed",
+  "releaseId": null,
+  "reviewedAt": null,
+  "reviewers": {
+    "privacyCounsel": null,
+    "commercialCounsel": null,
+    "dataProtectionOwner": null
+  },
+  "scope": {
+    "privacyNotice": "UNVERIFIED",
+    "terms": "UNVERIFIED",
+    "dpa": "UNVERIFIED",
+    "subprocessors": "UNVERIFIED",
+    "retentionAndDeletion": "UNVERIFIED",
+    "billingAndTaxResponsibilities": "UNVERIFIED",
+    "marketingClaims": "UNVERIFIED"
+  },
+  "approvedJurisdictions": [],
+  "openFindings": [],
+  "signedOpinionReference": null,
+  "artifacts": [],
+  "result": "UNVERIFIED"
+}

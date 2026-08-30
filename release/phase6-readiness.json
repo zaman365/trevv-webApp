@@ -1,0 +1,656 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-08-30",
+  "releaseScope": {
+    "stage": "phase-6-preparation",
+    "decision": "NO_GO",
+    "supportedClients": ["web", "pwa"],
+    "supportedLocales": ["en"],
+    "excludedCapabilities": [
+      "public-registration",
+      "trials",
+      "billing",
+      "provider-integrations",
+      "private-files",
+      "automated-external-effects",
+      "native-mobile",
+      "native-desktop",
+      "german-localization"
+    ],
+    "reason": "Private-beta retention, commercial approval, remote reliability, legal, security-review, and recovery evidence do not exist."
+  },
+  "allowedStatuses": {
+    "P0": ["closed", "partial", "open", "out_of_scope"],
+    "P1": ["closed", "partial", "open", "out_of_scope"],
+    "P2": ["closed", "accepted", "deferred"],
+    "P3": ["closed", "accepted", "deferred"]
+  },
+  "findings": [
+    {
+      "id": "P0-01",
+      "title": "Real authentication and onboarding",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Identity and Security",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Live-mode authentication, verification, recovery, session revocation, and transactional onboarding are implemented and tested locally. Registration supports closed, invite_only, and public modes; invite_only is the current production-shaped default, while production startup and release authorization reject public admission until its separate gates pass.",
+      "evidence": [
+        {
+          "path": "docs/identity-tenant-boundary.md",
+          "detail": "Implemented identity and onboarding boundary."
+        },
+        {
+          "path": "tests/e2e/live-identity.spec.ts",
+          "detail": "Production-mode identity browser coverage."
+        },
+        {
+          "path": "apps/api/src/runtime-config.ts",
+          "detail": "Production permits closed or invite_only registration and rejects public admission."
+        }
+      ]
+    },
+    {
+      "id": "P0-02",
+      "title": "Server-derived tenant authorization",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Identity and Security",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Protected Web routes and live API requests derive access from durable membership and fail closed in tenant tests.",
+      "evidence": [
+        {
+          "path": "apps/web/lib/server-auth.ts",
+          "detail": "Server route/session enforcement."
+        },
+        {
+          "path": "apps/api/integration/postgres-api.test.ts",
+          "detail": "Tenant and collaboration authorization matrix."
+        }
+      ]
+    },
+    {
+      "id": "P0-03",
+      "title": "Canonical server state for release-scope workflows",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Web Product",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "The founder operating loop and collaboration live paths use typed server repositories; browser storage is limited to preferences and recoverable drafts.",
+      "evidence": [
+        {
+          "path": "docs/implementation-report.md",
+          "detail": "Implemented live workflow boundary and verification summary."
+        },
+        {
+          "path": "tests/e2e/live-founder-loop.spec.ts",
+          "detail": "Durability and recovery browser coverage."
+        }
+      ]
+    },
+    {
+      "id": "P0-04",
+      "title": "Durable PostgreSQL repositories",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Data and API",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Tenant-scoped repositories, concurrency, idempotency, transactions, audit, and outbox behavior are covered by PostgreSQL integration tests.",
+      "evidence": [
+        {
+          "path": "docs/persistent-data-plane.md",
+          "detail": "Repository and transaction boundary."
+        },
+        {
+          "path": "packages/db/integration/repositories.test.ts",
+          "detail": "PostgreSQL repository integration coverage."
+        }
+      ]
+    },
+    {
+      "id": "P0-05",
+      "title": "Complete production deployment topology",
+      "status": "open",
+      "releaseBlocker": true,
+      "ownerRole": "Platform Operations",
+      "targetDate": "2026-10-31",
+      "reviewDate": "2026-09-15",
+      "rationale": "Only a self-signed local/CI topology exists. No managed remote staging or production Web/API/worker/PostgreSQL runtime is provisioned.",
+      "evidence": [
+        {
+          "path": "docs/deployment.md",
+          "detail": "Current deployment truth and missing remote services."
+        },
+        {
+          "path": "compose.staging.yaml",
+          "detail": "Local production-shaped topology using test transport allowances."
+        }
+      ]
+    },
+    {
+      "id": "P0-06",
+      "title": "Persistent and authorized Teams and Messages",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Collaboration",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Teams, Team rooms, messages, participants, retention, and invalidation use durable authorization-aware live paths.",
+      "evidence": [
+        {
+          "path": "docs/phase-4-collaboration-runtime.md",
+          "detail": "Collaboration release boundary."
+        },
+        {
+          "path": "packages/db/integration/collaboration-repositories.test.ts",
+          "detail": "Durability and authorization coverage."
+        }
+      ]
+    },
+    {
+      "id": "P0-07",
+      "title": "Private service-worker cache safety",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Identity and Security",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Private app documents and API responses are excluded from shared service-worker caching.",
+      "evidence": [
+        {
+          "path": "apps/web/public/sw.js",
+          "detail": "Safe asset/offline policy."
+        },
+        {
+          "path": "apps/web/lib/service-worker.test.ts",
+          "detail": "Cache behavior regression coverage."
+        }
+      ]
+    },
+    {
+      "id": "P0-08",
+      "title": "Truthful capability and effect labeling",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Web Product",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Unsupported durable, provider, billing, import, file, and automation effects are disabled or explicitly labeled.",
+      "evidence": [
+        {
+          "path": "apps/web/lib/product-capabilities.ts",
+          "detail": "UI capability source of truth."
+        },
+        {
+          "path": "packages/core/src/release-safety.ts",
+          "detail": "Fail-closed external-effect policy."
+        }
+      ]
+    },
+    {
+      "id": "P0-09",
+      "title": "Production-like CI and deployed topology validation",
+      "status": "partial",
+      "releaseBlocker": true,
+      "ownerRole": "Platform Operations",
+      "targetDate": "2026-10-31",
+      "reviewDate": "2026-09-15",
+      "rationale": "CI is configured to enforce formatting, route/asset budgets, Chromium/WebKit browser gates, live identity, migrations, and a production-shaped topology whose Web, two APIs, and two Workers report one candidate release ID/full Git SHA and their actual Docker image IDs. Those new workflow changes have not run remotely, API/worker/migration still use NODE_ENV=test transport allowances in CI, and no operated remote environment is exercised. Production manifest authorization also requires external evidence-content and completed-authorization verifiers that the repository CLI deliberately does not provide. Verified records must match registered per-kind schemas, satisfy substantive thresholds/checks, reconcile derived metrics, and bind candidate artifact identity; no trusted release controller is deployed.",
+      "evidence": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "detail": "Configured format, performance, multi-browser, live-mode, and topology gates."
+        },
+        {
+          "path": "docs/deployment.md",
+          "detail": "Limitations of local CI evidence."
+        },
+        {
+          "path": "scripts/phase6-release-manifest.mjs",
+          "detail": "Fail-closed external evidence and authorization verification boundary."
+        },
+        {
+          "path": "scripts/staging-smoke.mjs",
+          "detail": "Configured per-instance release and image correlation smoke."
+        }
+      ]
+    },
+    {
+      "id": "P0-10",
+      "title": "Implementation-status documentation truth",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Product Scope",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Repository documentation consistently labels the hosted experience and undeployed live runtime limitations.",
+      "evidence": [
+        {
+          "path": "docs/known-limitations.md",
+          "detail": "Current limitation source of truth."
+        },
+        {
+          "path": "docs/implementation-report.md",
+          "detail": "Evidence-based implementation status."
+        }
+      ]
+    },
+    {
+      "id": "P0-11",
+      "title": "Safe public route and indexing behavior",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Web Product",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "The preview is noindexed, canonical URLs are validated, and sensitive routes use no-store/noindex headers. Public-beta indexing remains a separate launch decision.",
+      "evidence": [
+        {
+          "path": "apps/web/app/robots.ts",
+          "detail": "Preview-wide noindex policy."
+        },
+        {
+          "path": "apps/web/next.config.ts",
+          "detail": "Sensitive route cache and indexing headers."
+        }
+      ]
+    },
+    {
+      "id": "P1-01",
+      "title": "Operable worker and outbox lifecycle",
+      "status": "partial",
+      "releaseBlocker": true,
+      "ownerRole": "Platform Operations",
+      "targetDate": "2026-10-15",
+      "reviewDate": "2026-09-15",
+      "rationale": "Leasing, retry, dead-letter state, metrics, and shutdown are implemented, but no deployed supervision or reviewed dead-letter inspect/redrive procedure exists.",
+      "evidence": [
+        {
+          "path": "docs/operations.md",
+          "detail": "Implemented worker boundary and missing operator controls."
+        },
+        { "path": "apps/worker/src/index.ts", "detail": "Worker runtime." }
+      ]
+    },
+    {
+      "id": "P1-02",
+      "title": "Production integrations, files, imports, and scalable search",
+      "status": "partial",
+      "releaseBlocker": true,
+      "ownerRole": "Integrations and Data Portability",
+      "targetDate": "2026-11-30",
+      "reviewDate": "2026-09-30",
+      "rationale": "Providers, private files, and real import remain disabled without pilot evidence. PostgreSQL search applies tenant and accessible-Workspace predicates before LIMIT, and a local integration harness covers 100 Workspaces/10,000 items. Full-text/trigram indexing and deployed performance evidence remain absent.",
+      "evidence": [
+        {
+          "path": "docs/integrations.md",
+          "detail": "Disabled provider decision."
+        },
+        {
+          "path": "docs/phase-5-private-beta-foundations.md",
+          "detail": "Evidence decision and disabled runtime."
+        },
+        {
+          "path": "packages/db/src/repositories.ts",
+          "detail": "Permission predicates are applied before result limits."
+        },
+        {
+          "path": "packages/db/integration/repositories.test.ts",
+          "detail": "Local 100-Workspace/10,000-item bounded-search harness."
+        }
+      ]
+    },
+    {
+      "id": "P1-03",
+      "title": "Approved and exercised billing lifecycle",
+      "status": "open",
+      "releaseBlocker": true,
+      "ownerRole": "Commercial and Legal",
+      "targetDate": "2026-12-15",
+      "reviewDate": "2026-09-30",
+      "rationale": "There is no approved price, provider, checkout, portal, webhook processing, invoice, dunning, cancellation, downgrade, or refund implementation.",
+      "evidence": [
+        {
+          "path": "packages/core/src/commercial.ts",
+          "detail": "Billing-disabled private-beta entitlements."
+        },
+        {
+          "path": "docs/phase-5-private-beta-foundations.md",
+          "detail": "No pricing approval evidence."
+        }
+      ]
+    },
+    {
+      "id": "P1-04",
+      "title": "Reviewed legal package and executable privacy lifecycle",
+      "status": "open",
+      "releaseBlocker": true,
+      "ownerRole": "Commercial and Legal",
+      "targetDate": "2026-11-30",
+      "reviewDate": "2026-09-15",
+      "rationale": "Privacy and terms are previews; export, deletion, revocation, retention enforcement, deletion-safe evidence, and post-membership DSAR access are absent.",
+      "evidence": [
+        {
+          "path": "docs/data-inventory.md",
+          "detail": "Pending legal, DPA, region, and processor review."
+        },
+        {
+          "path": "apps/api/src/postgres-adapter.ts",
+          "detail": "Live organization exports remain unsupported."
+        }
+      ]
+    },
+    {
+      "id": "P1-05",
+      "title": "Active production telemetry, request protection, and browser policy",
+      "status": "partial",
+      "releaseBlocker": true,
+      "ownerRole": "Identity and Security",
+      "targetDate": "2026-10-31",
+      "reviewDate": "2026-09-15",
+      "rationale": "Bounded local RUM ingestion and normalized route reporting are configured, alongside runtime controls and vendor-neutral observability assets. No production collector, pager, error tracker, source maps, staffed ownership, measured RUM window, or nonce/hash enforcing CSP is active.",
+      "evidence": [
+        {
+          "path": "deploy/observability/README.md",
+          "detail": "Definitions-only observability boundary."
+        },
+        {
+          "path": "docs/security.md",
+          "detail": "Outstanding production hardening."
+        },
+        {
+          "path": "apps/web/app/api/web/vitals/route.ts",
+          "detail": "Bounded local Web Vitals ingestion into structured logs."
+        }
+      ]
+    },
+    {
+      "id": "P1-06",
+      "title": "Complete live-data and recovery state coverage",
+      "status": "partial",
+      "releaseBlocker": true,
+      "ownerRole": "Web Product",
+      "targetDate": "2026-10-31",
+      "reviewDate": "2026-09-30",
+      "rationale": "The golden loop and collaboration have strong state handling, but every release-scope route/state and cross-browser recovery matrix is not yet recorded.",
+      "evidence": [
+        {
+          "path": "apps/web/components/live-state.tsx",
+          "detail": "Shared live-state presentation."
+        },
+        {
+          "path": "tests/e2e/live-founder-loop.spec.ts",
+          "detail": "Golden-path fault and recovery coverage."
+        }
+      ]
+    },
+    {
+      "id": "P1-07",
+      "title": "Exercised release, restore, and incident controls",
+      "status": "open",
+      "releaseBlocker": true,
+      "ownerRole": "Platform Operations",
+      "targetDate": "2026-11-15",
+      "reviewDate": "2026-09-15",
+      "rationale": "No managed backup/PITR restore, migration rollback, remote incident, alert-routing, or provider failure exercise has produced evidence.",
+      "evidence": [
+        {
+          "path": "docs/operations.md",
+          "detail": "Restore policy and drill are explicitly unprovisioned."
+        },
+        {
+          "path": "docs/deployment.md",
+          "detail": "Release ordering exists without exercised remote promotion."
+        }
+      ]
+    },
+    {
+      "id": "P2-01",
+      "title": "Native mobile and desktop parity",
+      "status": "accepted",
+      "releaseBlocker": false,
+      "ownerRole": "Product Scope",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-11-30",
+      "rationale": "Web/PWA-only is the accepted GA scope. Mobile and desktop remain non-distributed companion foundations and must be labeled accordingly; any later native release requires a new reviewed gate.",
+      "evidence": [
+        {
+          "path": "apps/mobile/app/index.tsx",
+          "detail": "Mobile companion label."
+        },
+        {
+          "path": "docs/known-limitations.md",
+          "detail": "Native packaging and parity limitations."
+        }
+      ]
+    },
+    {
+      "id": "P2-02",
+      "title": "Complete German localization",
+      "status": "accepted",
+      "releaseBlocker": false,
+      "ownerRole": "Product Scope",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-11-30",
+      "rationale": "English-only is the accepted GA scope. German controls and claims must remain absent until complete extraction, persistence, translation, and responsive QA pass under a new reviewed gate.",
+      "evidence": [
+        {
+          "path": "apps/web/lib/product-copy.ts",
+          "detail": "Current release copy is English-only."
+        },
+        {
+          "path": "docs/phase-6-ga-readiness.md",
+          "detail": "Accepted English-only release scope."
+        }
+      ]
+    },
+    {
+      "id": "P2-03",
+      "title": "Founder-loop scope discipline",
+      "status": "accepted",
+      "releaseBlocker": false,
+      "ownerRole": "Product Scope",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-10-31",
+      "rationale": "Release scope is the founder operating loop plus contextual Teams/Messages. CRM, full chat/email, accounting, payroll, advanced Gantt, and native parity are excluded.",
+      "evidence": [
+        { "path": "docs/product-spec.md", "detail": "Product boundary." },
+        {
+          "path": "docs/phase-4-collaboration-runtime.md",
+          "detail": "Contextual collaboration boundary."
+        }
+      ]
+    },
+    {
+      "id": "P2-04",
+      "title": "Enforced performance and reference-volume budgets",
+      "status": "deferred",
+      "releaseBlocker": true,
+      "ownerRole": "Web Performance",
+      "targetDate": "2026-11-15",
+      "reviewDate": "2026-09-30",
+      "rationale": "Route/asset budgets and bounded RUM ingestion are configured, and a PostgreSQL search harness covers 100 Workspaces/10,000 items with permission filtering before LIMIT. The new CI budget gate has not run remotely; production RUM, representative mobile Core Web Vitals, Portfolio/browser reference-volume evidence, and measured query plans remain absent, so this deferral still blocks GA authorization.",
+      "evidence": [
+        {
+          "path": "docs/performance.md",
+          "detail": "Directional local evidence and missing production gate."
+        },
+        {
+          "path": "packages/db/integration/repositories.test.ts",
+          "detail": "Local database search reference-volume regression."
+        },
+        {
+          "path": "config/web-performance-budgets.json",
+          "detail": "Configured route and asset budgets."
+        },
+        {
+          "path": "apps/web/app/api/web/vitals/route.ts",
+          "detail": "Configured bounded RUM ingestion."
+        }
+      ]
+    },
+    {
+      "id": "P2-05",
+      "title": "Complete WCAG A/AA and assistive-technology evidence",
+      "status": "deferred",
+      "releaseBlocker": true,
+      "ownerRole": "Accessibility",
+      "targetDate": "2026-11-15",
+      "reviewDate": "2026-09-30",
+      "rationale": "Axe is configured to fail all reported in-scope WCAG A/AA findings across Chromium, WebKit, and mobile Chromium projects. Local Chromium and WebKit executions produced separate exact, owned, expiring demo/live incomplete-result inventories; no violation is accepted. The new CI workflow has not run remotely, and recorded keyboard/screen-reader/200%-zoom/reduced-motion/high-contrast/touch evidence remains incomplete.",
+      "evidence": [
+        {
+          "path": "tests/e2e/accessibility.spec.ts",
+          "detail": "Configured full in-scope WCAG A/AA assertions."
+        },
+        {
+          "path": "docs/accessibility.md",
+          "detail": "Manual checks without completed release record."
+        },
+        {
+          "path": "playwright.config.ts",
+          "detail": "Configured Chromium, WebKit, and mobile Chromium projects."
+        }
+      ]
+    },
+    {
+      "id": "P3-01",
+      "title": "Repository formatting gate",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Developer Experience",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-10-31",
+      "rationale": "The repository formatting baseline is normalized and format:check is configured as a required quality-job step. Remote workflow execution is still tracked by P0-09 rather than reopening this configuration finding.",
+      "evidence": [
+        {
+          "path": "package.json",
+          "detail": "Repository formatting command."
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "detail": "Formatting is configured before contracts and builds."
+        }
+      ]
+    },
+    {
+      "id": "P3-02",
+      "title": "Long-lived branch CI coverage",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Developer Experience",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-10-31",
+      "rationale": "CI now runs on every pushed branch and every pull request.",
+      "evidence": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "detail": "Push filter is branches: **."
+        }
+      ]
+    },
+    {
+      "id": "P3-03",
+      "title": "Pinned dependency support ranges",
+      "status": "deferred",
+      "releaseBlocker": false,
+      "ownerRole": "Developer Experience",
+      "targetDate": "2026-10-31",
+      "reviewDate": "2026-09-30",
+      "rationale": "Many package declarations still use latest and no controlled update automation is configured.",
+      "evidence": [
+        {
+          "path": "apps/web/package.json",
+          "detail": "Representative moving dependency declarations."
+        },
+        {
+          "path": "packages/db/package.json",
+          "detail": "Representative moving database dependency declarations."
+        }
+      ]
+    },
+    {
+      "id": "P3-04",
+      "title": "Immutable GitHub Action references",
+      "status": "deferred",
+      "releaseBlocker": false,
+      "ownerRole": "Developer Experience",
+      "targetDate": "2026-09-30",
+      "reviewDate": "2026-09-15",
+      "rationale": "Actions use moving major tags rather than reviewed commit SHAs.",
+      "evidence": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "detail": "Moving action references."
+        }
+      ]
+    },
+    {
+      "id": "P3-05",
+      "title": "Coverage and client release tests",
+      "status": "deferred",
+      "releaseBlocker": false,
+      "ownerRole": "Quality Engineering",
+      "targetDate": "2026-11-15",
+      "reviewDate": "2026-09-30",
+      "rationale": "Web browser suites are configured and have executed locally for Chromium, WebKit, and mobile Chromium, but the new remote run has not occurred, no risk-based coverage threshold is enforced, and excluded native clients have no distributable release smoke evidence.",
+      "evidence": [
+        {
+          "path": "package.json",
+          "detail": "Current test scripts have no coverage gate."
+        },
+        {
+          "path": "apps/mobile/package.json",
+          "detail": "Native companion foundation."
+        },
+        {
+          "path": "playwright.config.ts",
+          "detail": "Configured Web browser project matrix."
+        }
+      ]
+    },
+    {
+      "id": "P3-06",
+      "title": "API mutable test-state isolation",
+      "status": "closed",
+      "releaseBlocker": false,
+      "ownerRole": "Data and API",
+      "targetDate": "2026-08-30",
+      "reviewDate": "2026-10-31",
+      "rationale": "Live-mode tests use injected PostgreSQL repositories and isolated database fixtures rather than process-global product maps.",
+      "evidence": [
+        {
+          "path": "apps/api/integration/postgres-api.test.ts",
+          "detail": "Injected PostgreSQL live API tests."
+        },
+        {
+          "path": "packages/db/integration/database-test-helper.ts",
+          "detail": "Isolated database fixture support."
+        }
+      ]
+    },
+    {
+      "id": "P3-07",
+      "title": "Internal founderhq naming",
+      "status": "accepted",
+      "releaseBlocker": false,
+      "ownerRole": "Developer Experience",
+      "targetDate": "2027-03-31",
+      "reviewDate": "2026-12-15",
+      "rationale": "Internal package/database names remain non-public implementation details and must be migrated before any public SDK or developer platform.",
+      "evidence": [
+        {
+          "path": "package.json",
+          "detail": "Workspace retains internal package scope."
+        },
+        {
+          "path": "docs/known-limitations.md",
+          "detail": "Public release boundary remains Web/PWA product, not SDK."
+        }
+      ]
+    }
+  ]
+}

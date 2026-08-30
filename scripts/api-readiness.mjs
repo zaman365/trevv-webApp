@@ -11,6 +11,9 @@ const body = await response.json();
 if (
   body?.status !== "ready" ||
   body?.mode !== "live" ||
-  body?.database !== "ready"
+  body?.database !== "ready" ||
+  body?.release?.releaseId !== process.env.RELEASE_ID ||
+  body?.release?.gitSha !== process.env.RELEASE_GIT_SHA?.toLowerCase() ||
+  body?.release?.imageId !== process.env.RELEASE_IMAGE_ID?.toLowerCase()
 )
-  throw new Error("API data plane is not live and ready.");
+  throw new Error("API data plane or packaged release identity is not ready.");

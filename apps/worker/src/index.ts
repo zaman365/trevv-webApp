@@ -8,6 +8,7 @@ import {
   type WorkerQueueTelemetry,
   type WorkerRepositories,
 } from "@founderhq/db";
+import type { RuntimeReleaseMetadata } from "@founderhq/api-contract";
 import {
   createWorkerHandlerRegistry,
   defaultWorkerHandlers,
@@ -44,6 +45,7 @@ export interface WorkerDependencies {
   concurrency: number;
   leaseMs: number;
   maxAttempts: number;
+  releaseMetadata?: RuntimeReleaseMetadata | null;
   organizationSweepLimit?: number;
   clock?: () => Date;
   random?: () => number;
@@ -280,6 +282,7 @@ export async function runWorkerLoop(
             ({ name }) => name,
           ),
           disabledHandlers: dependencies.handlerRegistry.disabledHandlerNames,
+          release: dependencies.releaseMetadata ?? null,
           result,
           queue: lastQueue,
         });
@@ -293,6 +296,7 @@ export async function runWorkerLoop(
           service: "trevv-worker",
           event: "sweep_completed",
           workerId: dependencies.workerId,
+          release: dependencies.releaseMetadata ?? null,
           result,
         });
       }
@@ -302,6 +306,7 @@ export async function runWorkerLoop(
           service: "trevv-worker",
           event: "queue_snapshot",
           workerId: dependencies.workerId,
+          release: dependencies.releaseMetadata ?? null,
           queue: lastQueue,
         });
     } catch (error) {
@@ -312,6 +317,7 @@ export async function runWorkerLoop(
         service: "trevv-worker",
         event: "sweep_failed",
         workerId: dependencies.workerId,
+        release: dependencies.releaseMetadata ?? null,
         requestId: context.requestId,
         errorCode: workerErrorCode(error),
         retryInMs: pollIntervalMs,
@@ -339,6 +345,7 @@ async function main(): Promise<void> {
     readinessMaxReadyAgeMs: configuration.readinessMaxReadyAgeMs,
     readinessMaxUnsupportedAgeMs: configuration.readinessMaxUnsupportedAgeMs,
     readinessMaxDeadLetters: configuration.readinessMaxDeadLetters,
+    releaseMetadata: configuration.releaseMetadata,
   });
   const abortController = new AbortController();
   const stop = () => {
@@ -360,6 +367,8 @@ async function main(): Promise<void> {
       service: "trevv-worker",
       event: "health_listening",
       origin: healthServer.origin,
+      workerId: configuration.workerId,
+      release: configuration.releaseMetadata,
     });
     await runWorkerLoop(
       {
@@ -371,6 +380,7 @@ async function main(): Promise<void> {
         concurrency: configuration.concurrency,
         leaseMs: configuration.leaseMs,
         maxAttempts: configuration.maxAttempts,
+        releaseMetadata: configuration.releaseMetadata,
       },
       {
         pollIntervalMs: configuration.pollIntervalMs,
@@ -395,6 +405,7 @@ async function main(): Promise<void> {
       service: "trevv-worker",
       event: "stopped",
       workerId: configuration.workerId,
+      release: configuration.releaseMetadata,
     });
   }
 }

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "provider_scope",
+  "template": true,
+  "status": "not_reviewed",
+  "releaseId": null,
+  "scopeDecision": null,
+  "providers": [],
+  "checks": {
+    "credentialsEncrypted": false,
+    "leastScopes": false,
+    "replayProtection": false,
+    "tokenRefresh": false,
+    "reconciliation": false,
+    "disconnectAndRevocation": false,
+    "deletionBehavior": false,
+    "externalWritesRequireApproval": false
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "availability",
+  "template": true,
+  "status": "not_measured",
+  "releaseId": null,
+  "window": {
+    "startedAt": null,
+    "endedAt": null,
+    "minimumDays": 30,
+    "customerMinutes": null,
+    "unavailableMinutes": null,
+    "excludedMaintenanceMinutes": null,
+    "measuredAvailabilityPercent": null,
+    "targetAvailabilityPercent": 99.9
+  },
+  "measurement": {
+    "collector": null,
+    "query": null,
+    "syntheticChecks": [],
+    "statusIncidents": [],
+    "errorBudgetPolicy": null,
+    "staffedResponseSchedule": null
+  },
+  "artifacts": [],
+  "failures": [],
+  "result": "UNVERIFIED"
+}
