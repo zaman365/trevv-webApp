@@ -860,10 +860,22 @@ async function createDirectCapture(
   type: "decision" | "approval",
 ) {
   await page.goto(`/app/workspaces/${workspaceSlug}`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
   });
-  await page.getByRole("button", { name: "Create work", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/workspaces/${workspaceSlug}$`));
+  await expect(page.getByTestId("live-workspace-overview")).toBeVisible();
+  const createWork = page.getByRole("button", {
+    name: "Create work",
+    exact: true,
+  });
+  await expect(createWork).toBeVisible();
   const dialog = page.getByTestId("live-quick-capture");
+  await expect(async () => {
+    if (!(await dialog.isVisible())) {
+      await createWork.click();
+    }
+    await expect(dialog).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   await dialog.getByLabel("Direct to board").check();
   await dialog.getByTestId("live-capture-title").fill(title);
   await dialog.getByLabel("Work type").selectOption(type);
@@ -902,8 +914,12 @@ async function assertInjectedCaptureFailure(
       }),
     });
   });
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Create work", exact: true }).click();
+  const createWork = page.getByRole("button", {
+    name: "Create work",
+    exact: true,
+  });
+  await expect(createWork).toBeVisible();
+  await createWork.click();
   const dialog = page.getByTestId("live-quick-capture");
   await dialog.getByTestId("live-capture-title").fill(`${title} ${suffix}`);
   await dialog.getByTestId("live-capture-submit").click();
@@ -925,8 +941,12 @@ async function assertTimedOutCapture(page: Page, title: string) {
     }
     await route.continue();
   });
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Create work", exact: true }).click();
+  const createWork = page.getByRole("button", {
+    name: "Create work",
+    exact: true,
+  });
+  await expect(createWork).toBeVisible();
+  await createWork.click();
   const dialog = page.getByTestId("live-quick-capture");
   await dialog.getByTestId("live-capture-title").fill(title);
   await dialog.getByTestId("live-capture-submit").click();
