@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assertClientIpSpoofProbeResponse,
   assertHostOnlySessionCookie,
+  collaborationWorkerProgressMatches,
   inviteeEmailForRun,
   readRemoteStagingSmokeConfiguration,
   runRemoteStagingSmoke,
@@ -165,7 +166,46 @@ test("session-cookie verification rejects parent-domain and weak cookies", () =>
   );
 });
 
-test("client-IP spoof probe fails on unavailability, bypass, or cookies", async () => {
+test("client-IP spoof probe accepts only the API or exact Cloudflare fail-closed response", async () => {
+  await assert.doesNotReject(
+    assertClientIpSpoofProbeResponse(
+      json({ code: "REGISTRATION_INVITATION_REQUIRED" }, { status: 403 }),
+    ),
+  );
+  await assert.doesNotReject(
+    assertClientIpSpoofProbeResponse(
+      new Response("error code: 1000\n", {
+        status: 403,
+        headers: {
+          "cf-ray": "9e1234567890abcd-FRA",
+          "content-type": "text/plain; charset=UTF-8",
+          server: "cloudflare",
+        },
+      }),
+    ),
+  );
+  await assert.doesNotReject(
+    assertClientIpSpoofProbeResponse(
+      json(
+        {
+          status: 403,
+          error_code: 1000,
+          error_name: "dns_loop",
+          cloudflare_error: true,
+          retryable: false,
+          ray_id: "a336123456789abc",
+        },
+        {
+          status: 403,
+          headers: {
+            "cf-ray": "a336123456789abc-TXL",
+            server: "cloudflare",
+          },
+        },
+      ),
+    ),
+  );
+
   await assert.rejects(
     assertClientIpSpoofProbeResponse(
       json({ code: "operations_unavailable" }, { status: 503 }),
@@ -175,6 +215,74 @@ test("client-IP spoof probe fails on unavailability, bypass, or cookies", async 
   await assert.rejects(
     assertClientIpSpoofProbeResponse(
       json({ code: "registration_open" }, { status: 403 }),
+    ),
+    /safely handle/u,
+  );
+  await assert.rejects(
+    assertClientIpSpoofProbeResponse(
+      new Response("error code: 1000\n", {
+        status: 403,
+        headers: {
+          "content-type": "text/plain; charset=UTF-8",
+          server: "cloudflare",
+        },
+      }),
+    ),
+    /safely handle/u,
+  );
+  await assert.rejects(
+    assertClientIpSpoofProbeResponse(
+      new Response("error code: 1000 but accepted", {
+        status: 403,
+        headers: {
+          "cf-ray": "9e1234567890abcd-FRA",
+          "content-type": "text/plain; charset=UTF-8",
+          server: "cloudflare",
+        },
+      }),
+    ),
+    /safely handle/u,
+  );
+  await assert.rejects(
+    assertClientIpSpoofProbeResponse(
+      json(
+        {
+          status: 403,
+          error_code: 1000,
+          error_name: "dns_loop",
+          cloudflare_error: true,
+          retryable: false,
+          ray_id: "b336123456789abc",
+        },
+        {
+          status: 403,
+          headers: {
+            "cf-ray": "a336123456789abc-TXL",
+            server: "cloudflare",
+          },
+        },
+      ),
+    ),
+    /safely handle/u,
+  );
+  await assert.rejects(
+    assertClientIpSpoofProbeResponse(
+      json(
+        {
+          status: 403,
+          error_code: 1000,
+          cloudflare_error: true,
+          retryable: false,
+          ray_id: "a336123456789abc",
+        },
+        {
+          status: 403,
+          headers: {
+            "cf-ray": "a336123456789abc-TXL",
+            server: "cloudflare",
+          },
+        },
+      ),
     ),
     /safely handle/u,
   );
@@ -195,11 +303,104 @@ test("client-IP spoof probe fails on unavailability, bypass, or cookies", async 
   );
 });
 
-test("remote smoke proves public auth, collaboration, worker drain, and authenticated invitation submission", async (context) => {
+test("collaboration progress requires exact isolated API and Worker deltas", () => {
+  const before = operationFixture({
+    pendingOutbox: 4,
+    lastProcessedAtMs: Date.parse("2026-08-30T12:00:00.000Z"),
+  });
+  const workerBefore = workerFixture({
+    delayed: 4,
+    succeeded: 20,
+    failed: 2,
+    lastSuccessfulSweepAtMs: Date.parse("2026-08-30T12:00:00.000Z"),
+    observedAtMs: Date.parse("2026-08-30T12:00:00.000Z"),
+  });
+  const current = operationFixture({
+    pendingOutbox: 5,
+    lastProcessedAtMs: Date.parse("2026-08-30T12:00:01.000Z"),
+  });
+  const workerCurrent = workerFixture({
+    delayed: 5,
+    succeeded: 22,
+    failed: 2,
+    lastSuccessfulSweepAtMs: Date.parse("2026-08-30T12:00:01.000Z"),
+    observedAtMs: Date.parse("2026-08-30T12:00:01.000Z"),
+  });
+
+  assert.equal(
+    collaborationWorkerProgressMatches(
+      before,
+      workerBefore,
+      current,
+      workerCurrent,
+    ),
+    true,
+  );
+
+  const rejected = [
+    { current: { ...current, pendingOutbox: 6 } },
+    {
+      worker: {
+        ...workerCurrent,
+        queue: { ...workerCurrent.queue, delayed: 6 },
+      },
+    },
+    {
+      worker: {
+        ...workerCurrent,
+        queue: { ...workerCurrent.queue, ready: 1 },
+      },
+    },
+    {
+      worker: {
+        ...workerCurrent,
+        attempts: { ...workerCurrent.attempts, succeeded: 23 },
+      },
+    },
+    {
+      worker: {
+        ...workerCurrent,
+        attempts: { ...workerCurrent.attempts, failed: 3 },
+      },
+    },
+    {
+      worker: {
+        ...workerCurrent,
+        lastSuccessfulSweepAtMs: workerBefore.lastSuccessfulSweepAtMs,
+      },
+    },
+    {
+      worker: {
+        ...workerCurrent,
+        observedAtMs: workerBefore.observedAtMs,
+      },
+    },
+    {
+      worker: {
+        ...workerCurrent,
+        lastFailedSweepAtMs: Date.parse("2026-08-30T12:00:00.500Z"),
+      },
+    },
+    { worker: { ...workerCurrent, status: "not_ready" } },
+  ];
+  for (const candidate of rejected)
+    assert.equal(
+      collaborationWorkerProgressMatches(
+        before,
+        workerBefore,
+        candidate.current ?? current,
+        candidate.worker ?? workerCurrent,
+      ),
+      false,
+    );
+});
+
+test("remote smoke requires the scheduled-retention baseline after the immediate collaboration backlog drains", async (context) => {
   const requests = [];
   let operationReads = 0;
   let webReadinessReads = 0;
   let workerReadinessReads = 0;
+  let workerMetricReads = 0;
   let smokeRunId;
   const originalFetch = globalThis.fetch;
   context.after(() => {
@@ -253,6 +454,39 @@ test("remote smoke proves public auth, collaboration, worker drain, and authenti
         workerReadinessReads === 1 ? { status: 503 } : {},
       );
     }
+    if (
+      url.origin === environment.REMOTE_STAGING_WORKER_ORIGIN &&
+      url.pathname === "/metrics.json"
+    ) {
+      workerMetricReads += 1;
+      if (workerMetricReads === 1)
+        return json(
+          workerMetricsFixture({
+            delayed: 2,
+            succeeded: 10,
+            lastSuccessfulSweepAt: "2026-08-30T12:00:00.000Z",
+            observedAt: "2026-08-30T12:00:00.000Z",
+          }),
+        );
+      if (workerMetricReads === 2)
+        return json(
+          workerMetricsFixture({
+            ready: 1,
+            delayed: 3,
+            succeeded: 11,
+            lastSuccessfulSweepAt: "2026-08-30T12:00:01.000Z",
+            observedAt: "2026-08-30T12:00:01.000Z",
+          }),
+        );
+      return json(
+        workerMetricsFixture({
+          delayed: 3,
+          succeeded: 12,
+          lastSuccessfulSweepAt: "2026-08-30T12:00:02.000Z",
+          observedAt: "2026-08-30T12:00:02.000Z",
+        }),
+      );
+    }
     if (url.pathname === "/internal/metrics")
       return json({ error: { code: "not_found" } }, { status: 404 });
     if (url.pathname === "/internal/livez")
@@ -297,17 +531,23 @@ test("remote smoke proves public auth, collaboration, worker drain, and authenti
       return json([{ id: "workspace-staging" }]);
     if (url.pathname === "/api/v1/operations/status") {
       operationReads += 1;
-      return operationReads === 1
-        ? json({
-            pendingOutbox: 0,
-            failedCount: 0,
-            lastProcessedAt: "2026-08-30T12:00:00.000Z",
-          })
-        : json({
-            pendingOutbox: 0,
-            failedCount: 0,
-            lastProcessedAt: "2026-08-30T12:00:01.000Z",
-          });
+      if (operationReads === 1)
+        return json({
+          pendingOutbox: 2,
+          failedCount: 0,
+          lastProcessedAt: "2026-08-30T12:00:00.000Z",
+        });
+      if (operationReads === 2)
+        return json({
+          pendingOutbox: 4,
+          failedCount: 0,
+          lastProcessedAt: "2026-08-30T12:00:01.000Z",
+        });
+      return json({
+        pendingOutbox: 3,
+        failedCount: 0,
+        lastProcessedAt: "2026-08-30T12:00:02.000Z",
+      });
     }
     if (
       url.pathname === "/api/v1/workspaces/workspace-staging/teams" &&
@@ -375,7 +615,8 @@ test("remote smoke proves public auth, collaboration, worker drain, and authenti
   assert.ok(result.checks.includes("caller-client-ip-spoof-resistance"));
   assert.equal(webReadinessReads, 2);
   assert.equal(workerReadinessReads, 2);
-  assert.equal(operationReads, 2);
+  assert.equal(workerMetricReads, 3);
+  assert.equal(operationReads, 3);
   assert.ok(
     requests.every(
       ({ url, headers }) =>
@@ -407,9 +648,109 @@ test("remote smoke proves public auth, collaboration, worker drain, and authenti
   const teamWrite = requests.findIndex(
     ({ url, method }) => method === "POST" && url.pathname.endsWith("/teams"),
   );
+  const operationBaseline = requests.findIndex(
+    ({ url, method }) =>
+      method === "GET" && url.pathname === "/api/v1/operations/status",
+  );
+  const workerBaseline = requests.findIndex(
+    ({ url }) =>
+      url.origin === environment.REMOTE_STAGING_WORKER_ORIGIN &&
+      url.pathname === "/metrics.json",
+  );
   assert.ok(workerWake >= 0 && workerWake < teamWrite);
+  assert.ok(
+    operationBaseline >= 0 &&
+      operationBaseline < workerBaseline &&
+      workerBaseline < teamWrite,
+  );
   assert.equal(messageWrite.body.metadata.smokeRunId, result.runId);
 });
+
+function operationFixture({
+  pendingOutbox = 0,
+  failedCount = 0,
+  lastProcessedAtMs = null,
+} = {}) {
+  return { pendingOutbox, failedCount, lastProcessedAtMs };
+}
+
+function workerFixture({
+  status = "ready",
+  ready = 0,
+  delayed = 0,
+  leased = 0,
+  paused = 0,
+  unsupported = 0,
+  deadLettered = 0,
+  leasedAttempts = 0,
+  succeeded = 0,
+  failed = 0,
+  deadAttempts = 0,
+  lastSuccessfulSweepAtMs = 0,
+  lastFailedSweepAtMs = null,
+  observedAtMs = 0,
+} = {}) {
+  return {
+    status,
+    enabled: true,
+    stopping: false,
+    lastSuccessfulSweepAtMs,
+    lastFailedSweepAtMs,
+    observedAtMs,
+    queue: { ready, delayed, leased, paused, unsupported, deadLettered },
+    attempts: {
+      leased: leasedAttempts,
+      succeeded,
+      failed,
+      deadLettered: deadAttempts,
+    },
+  };
+}
+
+function workerMetricsFixture({
+  ready = 0,
+  delayed = 0,
+  leased = 0,
+  paused = 0,
+  unsupported = 0,
+  deadLettered = 0,
+  leasedAttempts = 0,
+  succeeded = 0,
+  failed = 0,
+  deadAttempts = 0,
+  lastSuccessfulSweepAt,
+  lastFailedSweepAt = null,
+  observedAt,
+}) {
+  return {
+    status: "ready",
+    service: "trevv-worker",
+    enabled: true,
+    stopping: false,
+    release: {
+      releaseId: environment.EXPECTED_RELEASE_ID,
+      gitSha: environment.EXPECTED_RELEASE_GIT_SHA,
+      imageId: environment.EXPECTED_WORKER_IMAGE_ID,
+    },
+    lastSuccessfulSweepAt,
+    lastFailedSweepAt,
+    queue: {
+      observedAt,
+      ready,
+      delayed,
+      leased,
+      paused,
+      unsupported,
+      deadLettered,
+      attempts: {
+        leased: leasedAttempts,
+        succeeded,
+        failed,
+        deadLettered: deadAttempts,
+      },
+    },
+  };
+}
 
 function json(body, { status = 200, headers = {} } = {}) {
   return new Response(JSON.stringify(body), {

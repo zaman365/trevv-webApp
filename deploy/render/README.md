@@ -79,11 +79,16 @@ independent outbound request. As a result, API calls through Web intentionally
 share the Web service's egress identity and rate-limit bucket in this preview.
 This is safe but not representative per-client rate-limit evidence. The
 bounded preview smoke sends invalid caller-supplied `CF-Connecting-IP` and
-`X-Forwarded-For` values directly to the API and requires the normal
-invite-only rejection. That proves the deployed edge/API combination neither
-became unavailable nor bypassed invite-only admission for that spoof attempt;
-it does not independently prove the configured header name, continuous edge
-enforcement, or representative per-client rate-limit behavior.
+`X-Forwarded-For` values directly to the API. It accepts only the normal JSON
+invite-only rejection or Cloudflare's exact fail-closed `403` signature with a
+valid `CF-Ray`, `Server: cloudflare`, and no auth cookie. Cloudflare currently
+returns either plain text `error code: 1000` or structured JSON that identifies
+error 1000 as `dns_loop`, marks it non-retryable and Cloudflare-originated, and
+binds its `ray_id` to the `CF-Ray` hex prefix. These Cloudflare responses prove
+the spoof was rejected before the API, not that the header was overwritten.
+Every accepted result proves the deployed edge/API combination did not bypass
+invite-only admission for that request; it does not independently prove
+continuous edge enforcement or representative per-client rate-limit behavior.
 
 `AUTH_COOKIE_DOMAIN` is deliberately absent. Authentication responses pass
 through the same-origin Web API boundary, so the browser stores a host-only
@@ -396,6 +401,11 @@ last guard against creating a different or billable topology.
    then Web from their exact approved digests on the checked-in Render origins.
 6. Wake the Worker's public `/readyz`, wait for its exact release identity and
    readiness, then run the bounded write/outbox checks before it can sleep.
+   Run no other writer concurrently: the smoke deliberately requires the exact
+   isolated API/Worker deltas documented in
+   `deploy/staging/remote-operations.md`. Observable extra activity fails the
+   gate; the aggregate metrics are not event-correlated proof under concurrent
+   writes.
 7. Probe cold start, database readiness, invite-only auth, authenticated SMTP
    submission recorded as sent plus revocation, host-only secure cookies, one
    authenticated tenant read, release metadata, Web-to-API correlation, and

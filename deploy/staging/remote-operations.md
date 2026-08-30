@@ -134,12 +134,17 @@ and message remain as clearly labeled fictional records containing the emitted
 `runId`; the invitation is revoked.
 
 The smoke also sends invalid caller-supplied `CF-Connecting-IP` and
-`X-Forwarded-For` values directly to the fixed API origin. It requires the
-normal invite-only `403 REGISTRATION_INVITATION_REQUIRED` response and no auth
-cookie. This proves that the deployed edge/API combination neither became
-unavailable nor bypassed invite-only admission for that spoof attempt. It does
-not independently prove the configured trusted-header name, continuous edge
-enforcement, or representative per-client rate limiting.
+`X-Forwarded-For` values directly to the fixed API origin. It accepts only the
+normal JSON `403 REGISTRATION_INVITATION_REQUIRED` response or Cloudflare's
+exact fail-closed `403` signature with a valid `CF-Ray`, `Server: cloudflare`,
+and no auth cookie. The Cloudflare body must be either plain text
+`error code: 1000` or structured JSON that identifies error 1000 as `dns_loop`,
+marks it non-retryable and Cloudflare-originated, and binds `ray_id` to the
+`CF-Ray` hex prefix. A Cloudflare response proves the spoof was rejected before
+the API, not that the edge overwrote it. Every accepted result proves the
+deployed edge/API combination did not bypass invite-only admission for that
+request. It does not establish continuous edge enforcement or representative
+per-client rate limiting.
 
 ```sh
 REMOTE_STAGING_ORIGIN=https://trevv-free-preview-web-zaman365.onrender.com \
@@ -161,9 +166,53 @@ pnpm smoke:remote-staging
 The command refuses loopback/non-HTTPS/credential-bearing origins, a Worker
 origin shared with Web, mutable image IDs, disabled TLS certificate verification,
 a non-invite-only runtime, an existing worker failure, a Worker that cannot be
-warmed, or an outbox that does not drain and advance within the bounded polling
+warmed, or immediate outbox events that do not drain to the expected
+scheduled-retention baseline and advance processing within the bounded polling
 window. A warmed Worker pass applies only to that run and does not establish
 durable Worker availability.
+
+The collaboration drain window is fixed at 90 seconds for the disposable
+Render Free preview. This accommodates several 15-second public-request bounds
+and the configured five-second processing and 30-second telemetry cycles
+without weakening the gate.
+`pendingOutbox` includes delayed work: sending the smoke's one message creates
+exactly one `message.retention_due` event whose `availableAt` is the message's
+future expiry, so that event must remain pending after the immediate Team and
+message events are processed.
+
+Immediately before the writes, the smoke captures both the authenticated
+organization operations status and the public Worker `/metrics.json` snapshot.
+It proceeds only when this disposable environment is isolated: the API pending
+count equals the Worker's global delayed count; ready, leased, paused,
+unsupported, dead-lettered, and currently leased-attempt counts are zero; and
+the Worker is ready, enabled, and not stopping. After the writes, one observation
+must satisfy all of these exact conditions at once:
+
+- API `pendingOutbox` is the baseline plus one, `failedCount` is zero, and
+  `lastProcessedAt` advanced;
+- successful Worker attempts are the baseline plus two, for the immediate Team
+  and message events;
+- delayed Worker events are the baseline plus one, for message retention;
+- ready, leased, paused, unsupported, dead-lettered, and currently leased
+  attempt counts are zero;
+- failed/dead-lettered attempt counts and `lastFailedSweepAt` did not change;
+  and
+- both `lastSuccessfulSweepAt` and the queue `observedAt` advanced.
+
+These global exact deltas are appropriate only for this fictional,
+single-operator, single-tenant disposable preview. Do not run another writer or
+smoke concurrently. Observable overshoot or drift fails the gate rather than
+being ignored or absorbed into a tolerance. Because the metrics are aggregate,
+precisely compensating concurrent changes could theoretically mask activity;
+the quiet single-writer window is therefore a required precondition. This is
+functional evidence for one isolated run, not event-correlation or production
+concurrency evidence.
+
+A timeout reports only poll counts, baseline/expected/observed queue counts,
+attempt-count deltas, and whether timestamps advanced; it does not print tenant
+IDs, record IDs, timestamp values, or content. Do not keep extending or blindly
+retrying a failure: stop other writers, then inspect the sanitized Worker
+sweep/queue logs and operations-status counts before one quiet rerun.
 
 ## Successor publication and release lineage
 

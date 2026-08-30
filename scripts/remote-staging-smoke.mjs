@@ -8,6 +8,7 @@ const requestTimeoutMs = 15_000;
 const publicWakeTimeoutMs = 180_000;
 const workerWakeTimeoutMs = 180_000;
 const workerWakePollMs = 1_000;
+const collaborationOutboxDrainTimeoutMs = 90_000;
 const approvedPreviewOrigin =
   "https://trevv-free-preview-web-zaman365.onrender.com";
 const approvedPreviewApiOrigin =
@@ -319,6 +320,12 @@ async function verifyCollaborationWorkerPath(
     throw new Error(
       "Remote staging already had failed background operations before the collaboration smoke write.",
     );
+  const workerBefore = await readWorkerQueueSnapshot(
+    configuration,
+    "pre-write",
+  );
+  assertIsolatedCollaborationBaseline(before, workerBefore);
+  const expectedPendingOutbox = before.pendingOutbox + 1;
 
   const createdTeam = await apiJson(
     configuration,
@@ -390,6 +397,10 @@ async function verifyCollaborationWorkerPath(
   )
     throw new Error("The durable Team-room message could not be read back.");
 
+  let statusPollCount = 0;
+  let lastObservedStatus = null;
+  let workerPollCount = 0;
+  let lastObservedWorker = null;
   const drained = await poll(async () => {
     const response = await apiJson(
       configuration,
@@ -398,22 +409,48 @@ async function verifyCollaborationWorkerPath(
     );
     assertStatus(response, 200, "poll background-operation status");
     const current = operationStatus(response.body, "post-write");
-    if (current.failedCount !== 0)
-      throw new Error(
-        "A collaboration smoke event entered failed background-operation state.",
-      );
-    const processedAdvanced =
-      current.lastProcessedAtMs !== null &&
-      (before.lastProcessedAtMs === null ||
-        current.lastProcessedAtMs > before.lastProcessedAtMs);
-    return current.pendingOutbox === 0 && processedAdvanced ? current : null;
-  }, 30_000);
+    statusPollCount += 1;
+    lastObservedStatus = current;
+    const workerCurrent = await readWorkerQueueSnapshot(
+      configuration,
+      "post-write",
+    );
+    workerPollCount += 1;
+    lastObservedWorker = workerCurrent;
+    assertNoTerminalCollaborationDrift(
+      before,
+      workerBefore,
+      current,
+      workerCurrent,
+    );
+    return collaborationWorkerProgressMatches(
+      before,
+      workerBefore,
+      current,
+      workerCurrent,
+    )
+      ? { current, workerCurrent }
+      : null;
+  }, collaborationOutboxDrainTimeoutMs);
   if (!drained)
     throw new Error(
-      "The collaboration outbox did not drain or advance lastProcessedAt within 30 seconds.",
+      `The collaboration immediate outbox events did not reach the exact isolated API and Worker deltas within ${collaborationOutboxDrainTimeoutMs / 1_000} seconds (${outboxDrainDiagnostic(before, workerBefore, expectedPendingOutbox, lastObservedStatus, lastObservedWorker, statusPollCount, workerPollCount)}).`,
     );
 
   return { teamId, messageId };
+}
+
+async function readWorkerQueueSnapshot(configuration, phase) {
+  const response = await remoteFetch(
+    new URL("/metrics.json", configuration.workerOrigin),
+    { cache: "no-store" },
+  );
+  if (response.status !== 200)
+    throw new Error(
+      `Could not capture ${phase} Worker queue status: HTTP ${response.status}.`,
+    );
+  const body = await response.json().catch(() => null);
+  return workerQueueStatus(body, configuration.expectedRelease, phase);
 }
 
 async function verifyPublicBoundary(configuration) {
@@ -543,11 +580,47 @@ async function verifyClientIpSpoofResistance(configuration, inviteeEmail) {
 }
 
 export async function assertClientIpSpoofProbeResponse(response) {
-  const body = await response.json().catch(() => null);
-  if (
-    response.status !== 403 ||
-    apiErrorCode(body) !== "REGISTRATION_INVITATION_REQUIRED"
-  )
+  const contentType = response.headers
+    .get("content-type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  const responseText = await response.text();
+  let body = null;
+  if (contentType === "application/json")
+    try {
+      body = JSON.parse(responseText);
+    } catch {
+      body = null;
+    }
+
+  const apiRejected =
+    response.status === 403 &&
+    contentType === "application/json" &&
+    apiErrorCode(body) === "REGISTRATION_INVITATION_REQUIRED";
+  const cloudflareRay = response.headers.get("cf-ray")?.trim() ?? "";
+  const cloudflareRayMatch = /^([0-9a-f]{16,32})(?:-[a-z0-9]{3,8})?$/iu.exec(
+    cloudflareRay,
+  );
+  const cloudflareResponse =
+    response.status === 403 &&
+    response.headers.get("server")?.trim().toLowerCase() === "cloudflare" &&
+    cloudflareRayMatch !== null;
+  const edgeTextRejected =
+    cloudflareResponse &&
+    contentType === "text/plain" &&
+    responseText.trim() === "error code: 1000";
+  const edgeJsonRejected =
+    cloudflareResponse &&
+    contentType === "application/json" &&
+    body?.status === 403 &&
+    body?.error_code === 1000 &&
+    body?.error_name === "dns_loop" &&
+    body?.cloudflare_error === true &&
+    body?.retryable === false &&
+    typeof body?.ray_id === "string" &&
+    body.ray_id.toLowerCase() === cloudflareRayMatch[1].toLowerCase();
+  if (!apiRejected && !edgeTextRejected && !edgeJsonRejected)
     throw new Error(
       "The preview edge and API did not safely handle caller-supplied client IP headers.",
     );
@@ -743,6 +816,241 @@ function operationStatus(value, phase) {
     failedCount: value.failedCount,
     lastProcessedAtMs,
   };
+}
+
+function workerQueueStatus(value, expectedRelease, phase) {
+  if (
+    !isRecord(value) ||
+    (value.status !== "ready" && value.status !== "not_ready") ||
+    value.service !== "trevv-worker" ||
+    typeof value.enabled !== "boolean" ||
+    typeof value.stopping !== "boolean" ||
+    !isRecord(value.release) ||
+    !isRecord(value.queue) ||
+    !isRecord(value.queue.attempts)
+  )
+    throw new Error(`Remote staging returned invalid ${phase} Worker status.`);
+  verifyReleaseMetadata(
+    value.release,
+    expectedRelease,
+    expectedRelease.workerImageId,
+    "Worker",
+  );
+  const queueFields = [
+    "ready",
+    "delayed",
+    "leased",
+    "deadLettered",
+    "paused",
+    "unsupported",
+  ];
+  const attemptFields = ["leased", "succeeded", "failed", "deadLettered"];
+  for (const field of queueFields)
+    assertNonNegativeInteger(value.queue[field], `${phase} Worker queue`);
+  for (const field of attemptFields)
+    assertNonNegativeInteger(
+      value.queue.attempts[field],
+      `${phase} Worker attempts`,
+    );
+  const lastSuccessfulSweepAtMs = requiredTimestamp(
+    value.lastSuccessfulSweepAt,
+    `${phase} Worker lastSuccessfulSweepAt`,
+  );
+  const observedAtMs = requiredTimestamp(
+    value.queue.observedAt,
+    `${phase} Worker queue observedAt`,
+  );
+  const lastFailedSweepAtMs = optionalTimestamp(
+    value.lastFailedSweepAt,
+    `${phase} Worker lastFailedSweepAt`,
+  );
+  return {
+    status: value.status,
+    enabled: value.enabled,
+    stopping: value.stopping,
+    lastSuccessfulSweepAtMs,
+    lastFailedSweepAtMs,
+    observedAtMs,
+    queue: {
+      ready: value.queue.ready,
+      delayed: value.queue.delayed,
+      leased: value.queue.leased,
+      deadLettered: value.queue.deadLettered,
+      paused: value.queue.paused,
+      unsupported: value.queue.unsupported,
+    },
+    attempts: {
+      leased: value.queue.attempts.leased,
+      succeeded: value.queue.attempts.succeeded,
+      failed: value.queue.attempts.failed,
+      deadLettered: value.queue.attempts.deadLettered,
+    },
+  };
+}
+
+function assertIsolatedCollaborationBaseline(operations, worker) {
+  const isolated =
+    operations.failedCount === 0 &&
+    operations.pendingOutbox === worker.queue.delayed &&
+    worker.status === "ready" &&
+    worker.enabled === true &&
+    worker.stopping === false &&
+    worker.queue.ready === 0 &&
+    worker.queue.leased === 0 &&
+    worker.queue.paused === 0 &&
+    worker.queue.unsupported === 0 &&
+    worker.queue.deadLettered === 0 &&
+    worker.attempts.leased === 0;
+  if (!isolated)
+    throw new Error(
+      `Remote staging did not have an isolated collaboration baseline (${workerBaselineDiagnostic(operations, worker)}).`,
+    );
+}
+
+export function collaborationWorkerProgressMatches(
+  before,
+  workerBefore,
+  current,
+  workerCurrent,
+) {
+  const processedAdvanced =
+    current.lastProcessedAtMs !== null &&
+    (before.lastProcessedAtMs === null ||
+      current.lastProcessedAtMs > before.lastProcessedAtMs);
+  return (
+    current.pendingOutbox === before.pendingOutbox + 1 &&
+    current.failedCount === 0 &&
+    processedAdvanced &&
+    workerCurrent.status === "ready" &&
+    workerCurrent.enabled === true &&
+    workerCurrent.stopping === false &&
+    workerCurrent.queue.delayed === workerBefore.queue.delayed + 1 &&
+    workerCurrent.queue.ready === 0 &&
+    workerCurrent.queue.leased === 0 &&
+    workerCurrent.queue.paused === 0 &&
+    workerCurrent.queue.unsupported === 0 &&
+    workerCurrent.queue.deadLettered === 0 &&
+    workerCurrent.attempts.leased === workerBefore.attempts.leased &&
+    workerCurrent.attempts.succeeded === workerBefore.attempts.succeeded + 2 &&
+    workerCurrent.attempts.failed === workerBefore.attempts.failed &&
+    workerCurrent.attempts.deadLettered ===
+      workerBefore.attempts.deadLettered &&
+    workerCurrent.lastFailedSweepAtMs === workerBefore.lastFailedSweepAtMs &&
+    workerCurrent.lastSuccessfulSweepAtMs >
+      workerBefore.lastSuccessfulSweepAtMs &&
+    workerCurrent.observedAtMs > workerBefore.observedAtMs
+  );
+}
+
+function assertNoTerminalCollaborationDrift(
+  before,
+  workerBefore,
+  current,
+  workerCurrent,
+) {
+  const failureDrift =
+    current.failedCount !== 0 ||
+    workerCurrent.queue.paused !== 0 ||
+    workerCurrent.queue.unsupported !== 0 ||
+    workerCurrent.queue.deadLettered !== 0 ||
+    workerCurrent.attempts.failed !== workerBefore.attempts.failed ||
+    workerCurrent.attempts.deadLettered !==
+      workerBefore.attempts.deadLettered ||
+    workerCurrent.lastFailedSweepAtMs !== workerBefore.lastFailedSweepAtMs;
+  const concurrencyOvershoot =
+    current.pendingOutbox > before.pendingOutbox + 3 ||
+    workerCurrent.queue.delayed > workerBefore.queue.delayed + 1 ||
+    workerCurrent.queue.ready + workerCurrent.queue.leased > 2 ||
+    workerCurrent.attempts.leased > workerBefore.attempts.leased + 2 ||
+    workerCurrent.attempts.succeeded > workerBefore.attempts.succeeded + 2;
+  if (failureDrift || concurrencyOvershoot)
+    throw new Error(
+      `The isolated collaboration smoke observed failure or concurrent queue drift (${outboxDrainDiagnostic(before, workerBefore, before.pendingOutbox + 1, current, workerCurrent, 1, 1)}).`,
+    );
+}
+
+function assertNonNegativeInteger(value, label) {
+  if (!Number.isInteger(value) || value < 0)
+    throw new Error(`Remote staging returned invalid ${label}.`);
+}
+
+function requiredTimestamp(value, label) {
+  if (typeof value !== "string")
+    throw new Error(`Remote staging returned invalid ${label}.`);
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed))
+    throw new Error(`Remote staging returned invalid ${label}.`);
+  return parsed;
+}
+
+function optionalTimestamp(value, label) {
+  if (value === null) return null;
+  return requiredTimestamp(value, label);
+}
+
+function workerBaselineDiagnostic(operations, worker) {
+  return [
+    `apiPending=${operations.pendingOutbox}`,
+    `workerDelayed=${worker.queue.delayed}`,
+    `ready=${worker.queue.ready}`,
+    `leased=${worker.queue.leased}`,
+    `paused=${worker.queue.paused}`,
+    `unsupported=${worker.queue.unsupported}`,
+    `deadLettered=${worker.queue.deadLettered}`,
+    `leasedAttempts=${worker.attempts.leased}`,
+    `workerStatus=${worker.status}`,
+  ].join(", ");
+}
+
+function outboxDrainDiagnostic(
+  before,
+  workerBefore,
+  expectedPendingOutbox,
+  current,
+  workerCurrent,
+  statusPollCount,
+  workerPollCount,
+) {
+  if (!current || !workerCurrent)
+    return [
+      `statusPolls=${statusPollCount}`,
+      `workerPolls=${workerPollCount}`,
+      `baselinePendingOutbox=${before.pendingOutbox}`,
+      `expectedPendingOutbox=${expectedPendingOutbox}`,
+      "status=unobserved",
+    ].join(", ");
+  const lastProcessedAt =
+    current.lastProcessedAtMs === null
+      ? "missing"
+      : before.lastProcessedAtMs !== null &&
+          current.lastProcessedAtMs <= before.lastProcessedAtMs
+        ? "not_advanced"
+        : "advanced";
+  return [
+    `statusPolls=${statusPollCount}`,
+    `workerPolls=${workerPollCount}`,
+    `baselinePendingOutbox=${before.pendingOutbox}`,
+    `expectedPendingOutbox=${expectedPendingOutbox}`,
+    `observedPendingOutbox=${current.pendingOutbox}`,
+    `failedCount=${current.failedCount}`,
+    `lastProcessedAt=${lastProcessedAt}`,
+    `baselineDelayed=${workerBefore.queue.delayed}`,
+    `observedDelayed=${workerCurrent.queue.delayed}`,
+    `ready=${workerCurrent.queue.ready}`,
+    `leased=${workerCurrent.queue.leased}`,
+    `paused=${workerCurrent.queue.paused}`,
+    `unsupported=${workerCurrent.queue.unsupported}`,
+    `deadLettered=${workerCurrent.queue.deadLettered}`,
+    `succeededDelta=${workerCurrent.attempts.succeeded - workerBefore.attempts.succeeded}`,
+    `failedAttemptDelta=${workerCurrent.attempts.failed - workerBefore.attempts.failed}`,
+    `deadAttemptDelta=${workerCurrent.attempts.deadLettered - workerBefore.attempts.deadLettered}`,
+    `lastSuccessfulSweep=${advancedLabel(workerBefore.lastSuccessfulSweepAtMs, workerCurrent.lastSuccessfulSweepAtMs)}`,
+    `observedAt=${advancedLabel(workerBefore.observedAtMs, workerCurrent.observedAtMs)}`,
+  ].join(", ");
+}
+
+function advancedLabel(before, current) {
+  return current > before ? "advanced" : "not_advanced";
 }
 
 async function poll(callback, timeoutMs) {
