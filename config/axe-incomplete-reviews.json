@@ -36,8 +36,8 @@
       "routes": ["/app/portfolio"],
       "themes": ["dark"],
       "ruleId": "color-contrast",
-      "nodeCount": 30,
-      "sha256": "58fcc1e8939f1a3365b26f8e1b630b95b834f8dc961c44c6a09130f823320dfb"
+      "nodeCount": 29,
+      "sha256": "399a154a361b231710deb62e03bd005dd8f82583b41ead5a547ea291f9f0ff29"
     },
     {
       "projects": ["chromium", "webkit"],
@@ -50,34 +50,18 @@
     {
       "projects": ["chromium", "webkit"],
       "routes": ["/app/workspaces/northstar-apparel"],
-      "themes": ["light"],
+      "themes": ["light", "dark"],
       "ruleId": "color-contrast",
       "nodeCount": 21,
       "sha256": "5e217f41ec8681c1f775067d53edd6aabddfd6b9fcb9831f5b7384c86c409f7a"
     },
     {
       "projects": ["chromium", "webkit"],
-      "routes": ["/app/workspaces/northstar-apparel"],
-      "themes": ["dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 26,
-      "sha256": "9f67ffbcf5afac9e7e8890c4a8f3badf0302fb16256c728de1e8ddd158ca477b"
-    },
-    {
-      "projects": ["chromium", "webkit"],
       "routes": ["/app/workspaces/northstar-apparel/dashboard"],
-      "themes": ["light"],
+      "themes": ["light", "dark"],
       "ruleId": "color-contrast",
       "nodeCount": 38,
       "sha256": "180352410e159a1eecbbc5b5bc17ed3e94036e745833356455ccc281919c13bb"
-    },
-    {
-      "projects": ["chromium", "webkit"],
-      "routes": ["/app/workspaces/northstar-apparel/dashboard"],
-      "themes": ["dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 43,
-      "sha256": "1cccae6631eec80c03bf26098a9d5ae9a1c2ed98fbcc6950429117b1239589c2"
     },
     {
       "projects": ["chromium", "webkit"],
@@ -86,22 +70,6 @@
       "ruleId": "color-contrast",
       "nodeCount": 15,
       "sha256": "dcaa9a9cc9ace4f555f8115ae230990ee7f01e3b80f1640cf59df410972d56bd"
-    },
-    {
-      "projects": ["chromium", "webkit"],
-      "routes": ["/app/workspaces/northstar-apparel/attention"],
-      "themes": ["dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 20,
-      "sha256": "9ab35ab1cd239fff4ad6c6f4dccb0c8bd2c7358ce12eae53bf5aab070eed9e00"
-    },
-    {
-      "projects": ["chromium", "webkit"],
-      "routes": ["/app/workspaces/northstar-apparel/waiting"],
-      "themes": ["dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 5,
-      "sha256": "b04ad5466b9cf5c3e9fc53b5325aa4e9cd8c98e062003591f1a2643d1a522254"
     },
     {
       "projects": ["chromium", "webkit"],
@@ -118,28 +86,16 @@
     },
     {
       "projects": ["chromium", "webkit"],
-      "routes": [
-        "/app/workspaces/northstar-apparel/decisions",
-        "/app/workspaces/northstar-apparel/teams",
-        "/app/workspaces/northstar-apparel/blueprints"
-      ],
-      "themes": ["dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 5,
-      "sha256": "b04ad5466b9cf5c3e9fc53b5325aa4e9cd8c98e062003591f1a2643d1a522254"
-    },
-    {
-      "projects": ["chromium", "webkit"],
       "routes": ["/app/workspaces/northstar-apparel/messages"],
       "themes": ["dark"],
       "ruleId": "color-contrast",
-      "nodeCount": 6,
-      "sha256": "6450f7327a98a8313a8ececa3320950ff54c6c9b1328b59d82018b8997ed0ddb"
+      "nodeCount": 1,
+      "sha256": "fb71b4b85503fa09d628bab6a267d725d671522f78fd39e1e8f1cb69e207ed3b"
     },
     {
       "projects": ["chromium", "webkit"],
       "routes": ["/app/workspaces/northstar-apparel/boards/b-northstar-launch"],
-      "themes": ["light"],
+      "themes": ["light", "dark"],
       "ruleId": "color-contrast",
       "nodeCount": 2,
       "sha256": "96581cceab00aad148038cd8af14a78a55cffd8045447cc4a6f6432051ce401f"
@@ -151,22 +107,6 @@
       "ruleId": "color-contrast",
       "nodeCount": 3,
       "sha256": "1eedb56b10d19818c7b1f013c62e18f3e96168582c3a706134e0b32c74df9d34"
-    },
-    {
-      "projects": ["chromium", "webkit"],
-      "routes": ["/app/workspaces/northstar-apparel/boards/b-northstar-launch"],
-      "themes": ["dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 7,
-      "sha256": "58cd463bc5cde33157e7f7ba0cc2788c8f6d243c7288c157b65d1134844678f0"
-    },
-    {
-      "projects": ["chromium", "webkit"],
-      "routes": ["/app/workspaces/northstar-apparel/boards/b-northstar-launch"],
-      "themes": ["dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 8,
-      "sha256": "0653a3332949d015f9ad13ceaaa175ef250e7e36f6a3b599d787da05dd76386e"
     },
     {
       "projects": ["webkit"],
@@ -244,6 +184,14 @@
     },
     {
       "projects": ["mobile-chromium"],
+      "routes": ["/app/workspaces/northstar-apparel/dashboard"],
+      "themes": ["light", "dark"],
+      "ruleId": "color-contrast",
+      "nodeCount": 39,
+      "sha256": "7364dbd7748766afcbc86e0334c0f67a7a873cad85b8b7cacface9ea67e1f812"
+    },
+    {
+      "projects": ["mobile-chromium"],
       "routes": ["/app/workspaces/northstar-apparel/attention"],
       "themes": ["light"],
       "ruleId": "color-contrast",
@@ -257,6 +205,14 @@
       "ruleId": "color-contrast",
       "nodeCount": 13,
       "sha256": "670b51673e85af6bf98523df8887eb5f56922e66cd08768e5f7eee322881f0b4"
+    },
+    {
+      "projects": ["mobile-chromium"],
+      "routes": ["/app/workspaces/northstar-apparel/attention"],
+      "themes": ["light", "dark"],
+      "ruleId": "color-contrast",
+      "nodeCount": 13,
+      "sha256": "0c20decfc1c2c0c2d448be5f1b1342f797655f4dd3636418e9d2943facf6bb5f"
     },
     {
       "projects": ["mobile-chromium"],
@@ -277,7 +233,7 @@
     {
       "projects": ["mobile-chromium"],
       "routes": ["/app/workspaces/northstar-apparel/decisions"],
-      "themes": ["light"],
+      "themes": ["light", "dark"],
       "ruleId": "color-contrast",
       "nodeCount": 1,
       "sha256": "748a08d6c6cda10de5114783d4950ad41f777f1f486bede89ea5cb0854722e45"
@@ -316,8 +272,16 @@
     },
     {
       "projects": ["mobile-chromium"],
+      "routes": ["/app/workspaces/northstar-apparel/teams"],
+      "themes": ["light", "dark"],
+      "ruleId": "color-contrast",
+      "nodeCount": 1,
+      "sha256": "748a08d6c6cda10de5114783d4950ad41f777f1f486bede89ea5cb0854722e45"
+    },
+    {
+      "projects": ["mobile-chromium"],
       "routes": ["/app/workspaces/northstar-apparel/blueprints"],
-      "themes": ["light"],
+      "themes": ["light", "dark"],
       "ruleId": "color-contrast",
       "nodeCount": 1,
       "sha256": "f5a5fdb6546223dc34386bd981f95097b27f9b398fceca2524e05ec6e553ade2"

@@ -4,6 +4,7 @@
   --fh-canvas-deep: #ebeef5;
   --fh-surface: #ffffff;
   --fh-surface-subtle: #fafbfc;
+  --fh-surface-muted: var(--fh-surface-subtle);
   --fh-ink: #172033;
   --fh-ink-soft: #3e465a;
   --fh-muted: #626b7e;

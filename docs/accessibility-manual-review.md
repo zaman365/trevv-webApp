@@ -71,6 +71,22 @@ hashes were refreshed. Those refreshed `incomplete` fingerprints remain a
 temporary diagnostic deferral under the same 15 September expiry; they are not
 GA contrast evidence.
 
+The Ubuntu runner and local macOS browser compositor do not always return the
+same `incomplete` selector set for layered mobile surfaces. Both measured sets
+are recorded as separate exact fingerprints for the affected route, theme, and
+browser project. The Ubuntu results were identical across the initial run and
+both retries, and the recurring Quick capture and Blueprint findings also match
+the preceding Ubuntu run. This is bounded cross-platform diagnostic evidence;
+it does not relax the zero-violation rule or replace the independent review
+required before GA.
+
+The shell follow-up replaced translucent Workspace and Portfolio marks with
+token-backed opaque surfaces, gave badges a theme-aware foreground, and removed
+the obsolete larger dark-theme fingerprints. Where Axe still returns
+`incomplete`, dark mode is accepted only under the new reduced exact fingerprint
+or the identical already-reviewed light fingerprint. Reintroducing the removed
+layered styles therefore fails rather than matching an old allowance.
+
 This register does not satisfy the required keyboard, VoiceOver/NVDA, 200%
 zoom, reduced-motion, high-contrast, or touch-target evidence. Those remain
 separate release gates.

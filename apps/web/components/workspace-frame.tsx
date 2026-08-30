@@ -460,17 +460,7 @@ function WorkspaceChrome({
                   setWorkspaceMenuOpen((currentOpen) => !currentOpen)
                 }
               >
-                <span
-                  className="workspace-context-icon project"
-                  style={
-                    contextProject
-                      ? {
-                          background: `${contextProject.accent}18`,
-                          color: contextProject.accent,
-                        }
-                      : undefined
-                  }
-                >
+                <span className="workspace-context-icon project">
                   {contextProject?.icon ?? <FolderKanban size={15} />}
                 </span>
                 <span className="workspace-context-copy">
@@ -834,13 +824,7 @@ function WorkspaceChrome({
                   setPortfolioMenuOpen((currentOpen) => !currentOpen)
                 }
               >
-                <span
-                  className="workspace-context-icon portfolio portfolio-logo"
-                  style={{
-                    background: `${contextPortfolioVisual?.accent ?? "#5b56db"}18`,
-                    color: contextPortfolioVisual?.accent ?? "#5b56db",
-                  }}
-                >
+                <span className="workspace-context-icon portfolio portfolio-logo">
                   {contextPortfolioVisual?.mark ?? "P"}
                 </span>
                 <span className="workspace-context-copy">

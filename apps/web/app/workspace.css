@@ -5265,7 +5265,7 @@
   display: grid;
   place-items: center;
   padding: 0 4px;
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   border: 2px solid var(--fh-surface);
   border-radius: 8px;
@@ -14237,17 +14237,7 @@
   gap: 10px;
   margin-bottom: 11px;
   padding: 12px 13px;
-  background:
-    radial-gradient(
-      circle at 12% 0%,
-      color-mix(in srgb, var(--fh-primary) 11%, transparent),
-      transparent 33%
-    ),
-    linear-gradient(
-      120deg,
-      var(--fh-surface),
-      color-mix(in srgb, var(--fh-primary-soft) 56%, var(--fh-surface))
-    );
+  background: var(--fh-surface-subtle);
   border: 1px solid color-mix(in srgb, var(--fh-primary) 20%, var(--fh-border));
   border-radius: 13px;
 }
@@ -14312,25 +14302,14 @@
   color: var(--fh-muted);
   background: transparent;
   border: 0;
+  border-bottom: 2px solid transparent;
   font-size: var(--fh-text-xs);
   font-weight: 750;
   white-space: nowrap;
 }
-.attention-tabs-complete button::after {
-  position: absolute;
-  height: 2px;
-  right: 7px;
-  bottom: -1px;
-  left: 7px;
-  content: "";
-  background: transparent;
-  border-radius: 2px 2px 0 0;
-}
 .attention-tabs-complete button.active {
   color: var(--fh-primary);
-}
-.attention-tabs-complete button.active::after {
-  background: var(--fh-primary);
+  border-bottom-color: var(--fh-primary);
 }
 .attention-tabs-complete b {
   min-width: 18px;
@@ -14420,6 +14399,8 @@
   gap: 9px;
 }
 .attention-action-card {
+  --attention-severity-color: var(--fh-warning);
+
   position: relative;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 208px;
@@ -14428,24 +14409,16 @@
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
   border-radius: 14px;
-  box-shadow: 0 2px 6px rgb(23 32 51 / 4%);
+  box-shadow:
+    inset 3px 0 0 var(--attention-severity-color),
+    0 2px 6px rgb(23 32 51 / 4%);
   scroll-margin-top: 84px;
 }
-.attention-action-card::before {
-  position: absolute;
-  width: 3px;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  content: "";
-  background: var(--fh-warning);
-  border-radius: 0 3px 3px 0;
+.attention-action-card.severity-critical {
+  --attention-severity-color: var(--fh-danger);
 }
-.attention-action-card.severity-critical::before {
-  background: var(--fh-danger);
-}
-.attention-action-card.severity-high::before {
-  background: #e36b40;
+.attention-action-card.severity-high {
+  --attention-severity-color: #e36b40;
 }
 .attention-rank-column {
   display: flex;
@@ -14469,7 +14442,7 @@
   border-radius: 10px;
 }
 .attention-severity-icon.high {
-  color: #c6532d;
+  color: #a13e21;
   background: #fff0eb;
 }
 .attention-severity-icon.critical {
@@ -14513,6 +14486,8 @@
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  color: var(--fh-primary-strong);
+  background: var(--fh-primary-soft);
   border-radius: 6px;
   font-size: 9px;
   font-weight: 800;
@@ -14527,7 +14502,7 @@
   text-transform: uppercase;
 }
 .signal-severity.high {
-  color: #c6532d;
+  color: #a13e21;
   background: #fff0eb;
 }
 .signal-severity.critical {
@@ -15381,6 +15356,14 @@
   }
   .attention-operating-note {
     align-items: flex-start;
+  }
+  .attention-tabs-complete {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+  .attention-tabs-complete button {
+    min-width: 0;
   }
   .attention-note-legend {
     display: none;

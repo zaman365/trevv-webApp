@@ -574,14 +574,7 @@ function AttentionCard({
           {workspace ? (
             <>
               <Link href={workspaceHref(workspace.slug)}>
-                <span
-                  style={{
-                    background: `${workspace.accent}18`,
-                    color: workspace.accent,
-                  }}
-                >
-                  {workspace.icon}
-                </span>
+                <span>{workspace.icon}</span>
                 {workspace.name}
               </Link>
               {board && (
