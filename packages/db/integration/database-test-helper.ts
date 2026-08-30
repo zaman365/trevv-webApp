@@ -21,8 +21,12 @@ export function requireIntegrationDatabaseUrl(): string {
 
 export async function createTemporaryDatabase(
   sourceUrl = requireIntegrationDatabaseUrl(),
+  options: { namePrefix?: string } = {},
 ): Promise<TemporaryDatabase> {
-  const databaseName = `trevv_it_${process.pid}_${randomBytes(6).toString("hex")}`;
+  const namePrefix = options.namePrefix ?? "trevv_it";
+  if (!/^[a-z][a-z0-9_]{2,31}$/u.test(namePrefix))
+    throw new Error("Temporary database namePrefix is invalid.");
+  const databaseName = `${namePrefix}_${process.pid}_${randomBytes(6).toString("hex")}`;
   const adminUrl = new URL(sourceUrl);
   adminUrl.pathname = "/postgres";
   const targetUrl = new URL(sourceUrl);

@@ -25,6 +25,7 @@
     "test:integration": "vitest run integration",
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
+    "migrate:staging": "tsx src/staging-migrate.ts",
     "seed": "tsx src/seed.ts"
   },
   "dependencies": {
