@@ -21,6 +21,10 @@ const sensitiveAuthHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // The development badge is a fixed overlay. In browser CI it can cover the
+  // sidebar or mobile navigation and make Axe report nondeterministic
+  // `color-contrast` incomplete results for otherwise unchanged app content.
+  devIndicators: false,
   outputFileTracingRoot: workspaceRoot,
   transpilePackages: [
     "@founderhq/api-client",
