@@ -49,6 +49,7 @@ describe("live runtime configuration", () => {
       },
       rateLimitBackend: "memory",
       errorReportingMode: "disabled",
+      internalMetricsEnabled: true,
       registrationMode: "invite_only",
     });
   });
@@ -198,36 +199,34 @@ describe("live runtime configuration", () => {
     ).toThrow(/must require TLS/);
   });
 
-  it("requires a valid shared cookie domain for split production hosts", () => {
-    expect(() =>
+  it("requires host-only cookies for split production hosts", () => {
+    expect(
       readRuntimeConfiguration({
         ...productionEnvironment(),
         AUTH_COOKIE_DOMAIN: undefined,
       }),
-    ).toThrow(/AUTH_COOKIE_DOMAIN is required/);
-
-    expect(() =>
-      readRuntimeConfiguration({
-        ...productionEnvironment(),
-        AUTH_COOKIE_DOMAIN: "example.com",
-      }),
-    ).toThrow(/contain both/);
-
-    expect(() =>
-      readRuntimeConfiguration({
-        ...productionEnvironment(),
-        AUTH_COOKIE_DOMAIN: "de",
-      }),
-    ).toThrow(/registrable DNS domain/);
-
-    expect(readRuntimeConfiguration(productionEnvironment())).toMatchObject({
+    ).toMatchObject({
       mode: "live",
-      cookieDomain: "trevv.de",
       rateLimitBackend: "postgres",
       rateLimitHashSecret: "private-rate-limit-hmac-material-2026",
       trustedClientIpHeader: "x-trevv-client-ip",
       registrationMode: "invite_only",
+      internalMetricsEnabled: false,
     });
+
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        AUTH_COOKIE_DOMAIN: "trevv.de",
+      }),
+    ).toThrow(/must be unset in production/);
+
+    expect(() =>
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        AUTH_COOKIE_DOMAIN: "de",
+      }),
+    ).toThrow(/registrable DNS domain/);
   });
 
   it("requires honest, complete SMTP configuration", () => {
@@ -255,6 +254,19 @@ describe("live runtime configuration", () => {
         MAIL_FROM: "not-an-email-address",
       }),
     ).toThrow(/plain email address/);
+  });
+
+  it("keeps the public metrics endpoint disabled in production", () => {
+    expect(readRuntimeConfiguration(productionEnvironment())).toMatchObject({
+      mode: "live",
+      internalMetricsEnabled: false,
+    });
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        INTERNAL_METRICS_ENABLED: "true",
+      }),
+    ).toThrow(/private telemetry boundary/u);
   });
 
   it("requires shared request protection in production", () => {
@@ -337,7 +349,6 @@ function productionEnvironment() {
       "postgresql://trevv:test@db.trevv.de:5432/trevv?sslmode=verify-full",
     BETTER_AUTH_URL: "https://api.trevv.de",
     WEB_ORIGIN: "https://trevv.de",
-    AUTH_COOKIE_DOMAIN: "trevv.de",
     SMTP_HOST: "smtp.trevv.de",
     SMTP_PORT: "587",
     SMTP_REQUIRE_TLS: "true",

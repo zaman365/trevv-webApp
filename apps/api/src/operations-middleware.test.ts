@@ -113,6 +113,18 @@ describe("API operations middleware", () => {
     expect(text).not.toContain("Fictional");
   });
 
+  it("can remove public metrics while retaining liveness", async () => {
+    const app = createApiApp({
+      mode: "demo",
+      ...createDemoAdapter(),
+      exposeInternalMetrics: false,
+    });
+    expect((await app.request("/internal/livez")).status).toBe(200);
+    const metrics = await app.request("/internal/metrics");
+    expect(metrics.status).toBe(404);
+    expect(await metrics.text()).not.toContain("trevv_api_");
+  });
+
   it("bounds authentication bodies before invoking the auth provider", async () => {
     let invoked = false;
     const app = createApiApp({

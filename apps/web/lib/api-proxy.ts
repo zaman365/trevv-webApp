@@ -11,10 +11,15 @@ const browserAuthOperations = new Set([
   "POST sign-up/email",
 ]);
 const strippedRequestHeaders = new Set([
+  "cf-connecting-ip",
   "connection",
   "content-length",
+  "forwarded",
   "host",
   "transfer-encoding",
+  "true-client-ip",
+  "x-forwarded-for",
+  "x-real-ip",
 ]);
 const strippedResponseHeaders = new Set([
   "connection",

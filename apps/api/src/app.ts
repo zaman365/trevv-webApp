@@ -133,6 +133,7 @@ export interface ApiAppDependencies {
   invitationTtlMs?: number;
   corsOrigin?: string;
   operations?: ApiOperations;
+  exposeInternalMetrics?: boolean;
 }
 
 export function createApiApp(dependencies: ApiAppDependencies) {
@@ -322,12 +323,13 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     context.json({ status: "ok", service: "trevv-api" }),
   );
 
-  api.get("/internal/metrics", (context) =>
-    context.text(operations.metrics?.render() ?? "", 200, {
-      "cache-control": "no-store",
-      "content-type": "text/plain; version=0.0.4; charset=utf-8",
-    }),
-  );
+  if (dependencies.exposeInternalMetrics !== false)
+    api.get("/internal/metrics", (context) =>
+      context.text(operations.metrics?.render() ?? "", 200, {
+        "cache-control": "no-store",
+        "content-type": "text/plain; version=0.0.4; charset=utf-8",
+      }),
+    );
 
   api.use("/api/v1/*", async (context, next) => {
     if (
@@ -2617,6 +2619,7 @@ export function createRuntimeApi(
       mailFrom: configuration.mailFrom,
       webOrigin: configuration.webOrigin,
       corsOrigin: configuration.webOrigin,
+      exposeInternalMetrics: configuration.internalMetricsEnabled,
       operations: {
         ...(rateLimitStore ? { rateLimitStore } : {}),
         ...(configuration.trustedClientIpHeader

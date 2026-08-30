@@ -30,6 +30,7 @@ export type RuntimeConfiguration =
       rateLimitHashSecret?: string;
       trustedClientIpHeader?: string;
       errorReportingMode: "disabled" | "external";
+      internalMetricsEnabled: boolean;
       testRegistrationBootstrapSecret?: string;
     };
 
@@ -174,6 +175,17 @@ export function readRuntimeConfiguration(
     ["disabled", "external"] as const,
     "disabled",
   );
+  const internalMetricsEnabled =
+    enumValue(
+      environment,
+      "INTERNAL_METRICS_ENABLED",
+      ["true", "false"] as const,
+      production ? "false" : "true",
+    ) === "true";
+  if (production && internalMetricsEnabled)
+    throw new Error(
+      "Production INTERNAL_METRICS_ENABLED must remain false until the metrics endpoint is isolated on a private telemetry boundary.",
+    );
 
   return {
     mode: "live",
@@ -206,6 +218,7 @@ export function readRuntimeConfiguration(
     ...(rateLimitHashSecret ? { rateLimitHashSecret } : {}),
     ...(trustedClientIpHeader ? { trustedClientIpHeader } : {}),
     errorReportingMode,
+    internalMetricsEnabled,
   };
 }
 
@@ -302,13 +315,11 @@ function validateCookieTopology(
 ): void {
   const authHost = new URL(authBaseUrl).hostname;
   const webHost = new URL(webOrigin).hostname;
-  if (!cookieDomain) {
-    if (production && authHost !== webHost)
-      throw new Error(
-        "AUTH_COOKIE_DOMAIN is required when production Web and auth use different hosts.",
-      );
-    return;
-  }
+  if (!cookieDomain) return;
+  if (production)
+    throw new Error(
+      "AUTH_COOKIE_DOMAIN must be unset in production; browser authentication uses host-only cookies through the same-origin Web API boundary.",
+    );
   if (
     cookieDomain.includes("://") ||
     cookieDomain.includes("/") ||

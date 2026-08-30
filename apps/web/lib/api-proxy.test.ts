@@ -141,6 +141,41 @@ describe("browser API proxy boundary", () => {
     );
   });
 
+  it("strips caller-supplied network identity before crossing the proxy boundary", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi.fn().mockResolvedValue(Response.json([]));
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/v1/workspaces", {
+        headers: {
+          "cf-connecting-ip": "192.0.2.10",
+          forwarded: "for=192.0.2.11",
+          "true-client-ip": "192.0.2.12",
+          "x-forwarded-for": "192.0.2.13, 198.51.100.9",
+          "x-real-ip": "192.0.2.14",
+        },
+      }),
+      ["v1", "workspaces"],
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
+    const upstreamHeaders = new Headers(
+      (upstream.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+    );
+    for (const header of [
+      "cf-connecting-ip",
+      "forwarded",
+      "true-client-ip",
+      "x-forwarded-for",
+      "x-real-ip",
+    ])
+      expect(upstreamHeaders.has(header)).toBe(false);
+    expect(upstreamHeaders.get("x-forwarded-host")).toBe("trevv.test");
+    expect(upstreamHeaders.get("x-forwarded-proto")).toBe("https");
+  });
+
   it("forwards sign-up when a non-production suite explicitly enables it", async () => {
     vi.stubEnv("REGISTRATION_MODE", "public");
     vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
