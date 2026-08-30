@@ -198,7 +198,7 @@
       "ownerRole": "Platform Operations",
       "targetDate": "2026-10-31",
       "reviewDate": "2026-09-15",
-      "rationale": "CI is configured to enforce formatting, route/asset budgets, Chromium/WebKit browser gates, live identity, migrations, and a production-shaped topology whose Web, two APIs, and two Workers report one candidate release ID/full Git SHA and their actual Docker image IDs. Those new workflow changes have not run remotely, API/worker/migration still use NODE_ENV=test transport allowances in CI, and no operated remote environment is exercised. Production manifest authorization also requires external evidence-content and completed-authorization verifiers that the repository CLI deliberately does not provide. Verified records must match registered per-kind schemas, satisfy substantive thresholds/checks, reconcile derived metrics, and bind candidate artifact identity; no trusted release controller is deployed.",
+      "rationale": "CI enforces formatting, route/asset budgets, Chromium/WebKit browser gates, live identity, migrations, and a production-shaped topology whose Web, two APIs, and two Workers report one candidate release ID/full Git SHA and their actual Docker image IDs. The candidate branch has exercised those gates in GitHub Actions, but a branch run is not immutable release evidence. API/worker/migration still use NODE_ENV=test transport allowances in CI, and no operated remote environment is exercised. Production manifest authorization also requires external evidence-content and completed-authorization verifiers that the repository CLI deliberately does not provide. Verified records must match registered per-kind schemas, satisfy substantive thresholds/checks, reconcile derived metrics, and bind candidate artifact identity; no trusted release controller is deployed.",
       "evidence": [
         {
           "path": ".github/workflows/ci.yml",
@@ -472,7 +472,7 @@
       "ownerRole": "Web Performance",
       "targetDate": "2026-11-15",
       "reviewDate": "2026-09-30",
-      "rationale": "Route/asset budgets and bounded RUM ingestion are configured, and a PostgreSQL search harness covers 100 Workspaces/10,000 items with permission filtering before LIMIT. The new CI budget gate has not run remotely; production RUM, representative mobile Core Web Vitals, Portfolio/browser reference-volume evidence, and measured query plans remain absent, so this deferral still blocks GA authorization.",
+      "rationale": "Route/asset budgets and bounded RUM ingestion are configured, and a PostgreSQL search harness covers 100 Workspaces/10,000 items with permission filtering before LIMIT. The budget gate has executed in GitHub Actions, but production RUM, representative mobile Core Web Vitals, Portfolio/browser reference-volume evidence, and measured query plans remain absent, so this deferral still blocks GA authorization.",
       "evidence": [
         {
           "path": "docs/performance.md",
@@ -500,7 +500,7 @@
       "ownerRole": "Accessibility",
       "targetDate": "2026-11-15",
       "reviewDate": "2026-09-30",
-      "rationale": "Axe is configured to fail all reported in-scope WCAG A/AA findings across Chromium, WebKit, and mobile Chromium projects. Local Chromium and WebKit executions produced separate exact, owned, expiring demo/live incomplete-result inventories; no violation is accepted. The new CI workflow has not run remotely, and recorded keyboard/screen-reader/200%-zoom/reduced-motion/high-contrast/touch evidence remains incomplete.",
+      "rationale": "Axe is configured to fail all reported in-scope WCAG A/AA findings across Chromium, WebKit, and mobile Chromium projects. Local and GitHub Actions executions produce separate exact, owned, expiring demo/live incomplete-result inventories; no violation is accepted. Recorded keyboard/screen-reader/200%-zoom/reduced-motion/high-contrast/touch evidence remains incomplete.",
       "evidence": [
         {
           "path": "tests/e2e/accessibility.spec.ts",
@@ -596,7 +596,7 @@
       "ownerRole": "Quality Engineering",
       "targetDate": "2026-11-15",
       "reviewDate": "2026-09-30",
-      "rationale": "Web browser suites are configured and have executed locally for Chromium, WebKit, and mobile Chromium, but the new remote run has not occurred, no risk-based coverage threshold is enforced, and excluded native clients have no distributable release smoke evidence.",
+      "rationale": "Web browser suites have executed locally and in GitHub Actions for Chromium, WebKit, and mobile Chromium. No risk-based coverage threshold is enforced, and excluded native clients have no distributable release smoke evidence.",
       "evidence": [
         {
           "path": "package.json",

@@ -469,7 +469,7 @@
       "publicUse": false,
       "releaseBlocker": true,
       "scope": "Performance, sales, support, status, procurement, and marketing surfaces.",
-      "limitations": "Route/asset budgets, local RUM ingestion, and a PostgreSQL 100-Workspace/10,000-item search harness are configured, but the new CI gate has not run remotely and no representative mobile, Portfolio/browser reference-volume, or production result exists.",
+      "limitations": "Route/asset budgets, local RUM ingestion, and a PostgreSQL 100-Workspace/10,000-item search harness are configured and the budget gate has executed in GitHub Actions, but no representative mobile, Portfolio/browser reference-volume, or production result exists.",
       "ownerRole": "Web Performance",
       "reviewDate": "2026-11-15",
       "sourceLocations": [],
