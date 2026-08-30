@@ -320,7 +320,7 @@ test("digest publication rejects an unexpected metadata target file", async (t) 
   await assert.rejects(runAssembly(assemble.run, context));
 });
 
-test("image attestation uses and promptly scrubs an isolated GHCR credential", () => {
+test("image attestation uses and promptly scrubs a job-scoped GHCR credential", () => {
   const attestJob = job("attest-images");
   const steps = attestJob.steps;
   const loginIndex = steps.findIndex(
@@ -347,12 +347,11 @@ test("image attestation uses and promptly scrubs an isolated GHCR credential", (
   assert.equal(cleanupIndex, attestIndex + 1);
   assert.equal(recordIndex, cleanupIndex + 1);
 
-  const prepare = stepNamed(steps, "Prepare isolated registry credentials");
-  assert.match(
-    prepare.run,
-    /attestation_docker_config="\$\{RUNNER_TEMP\}\/trevv-attestation-docker-config"/u,
+  assert.equal(
+    stepNamed(steps, "Prepare isolated registry credentials"),
+    undefined,
   );
-  assert.match(prepare.run, /DOCKER_CONFIG=.*>> "\$GITHUB_ENV"/u);
+  assert.doesNotMatch(JSON.stringify(steps), /DOCKER_CONFIG/u);
 
   const login = steps[loginIndex];
   assert.match(login.uses, /^docker\/login-action@[0-9a-f]{40}$/u);
@@ -369,7 +368,8 @@ test("image attestation uses and promptly scrubs an isolated GHCR credential", (
   const cleanup = steps[cleanupIndex];
   assert.equal(cleanup.if, "${{ always() }}");
   assert.match(cleanup.run, /docker logout ghcr\.io/u);
-  assert.match(cleanup.run, /> "\$DOCKER_CONFIG\/config\.json"/u);
+  assert.match(cleanup.run, /> "\$\{HOME\}\/\.docker\/config\.json"/u);
+  assert.match(cleanup.run, /chmod 0600/u);
   assert.match(cleanup.run, /\.auths \| length/u);
 });
 
