@@ -31,8 +31,10 @@ if (!/\supstream=127\.0\.0\.1:1(?:\s|$)/u.test(failedUpstreamLine))
 
 const apiUpstreams = new Set();
 for (const line of source.split("\n")) {
-  if (!/"(?:GET|POST|PUT|PATCH|DELETE|HEAD) \/api\/(?:auth|v1)\//u.test(line))
-    continue;
+  // `/api/auth/**` legitimately spans the Web auth boundary and the API.
+  // Count only the application API family when proving both API instances
+  // received public traffic.
+  if (!/"(?:GET|POST|PUT|PATCH|DELETE|HEAD) \/api\/v1\//u.test(line)) continue;
   const value = line.match(/\supstream=([^\s]+)/u)?.[1];
   for (const upstream of value?.split(",").map((entry) => entry.trim()) ?? [])
     if (upstream && upstream !== "-") apiUpstreams.add(upstream);
