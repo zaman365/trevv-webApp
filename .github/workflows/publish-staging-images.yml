@@ -1,0 +1,618 @@
+name: Publish staging images
+
+run-name: Publish staging images for ${{ inputs.source_sha || github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Optional full SHA; it must equal this workflow's branch commit
+        required: false
+        default: ""
+        type: string
+      public_origin:
+        description: Public HTTPS origin compiled into the Web image
+        required: true
+        default: https://trevv-free-preview-web-zaman365.onrender.com
+        type: string
+      csp_mode:
+        description: Fixed report-only CSP for this disposable free preview
+        required: true
+        default: report-only
+        type: choice
+        options:
+          - report-only
+      hsts_enabled:
+        description: Fixed HSTS-off policy for this disposable free preview
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+      genesis_confirmation:
+        description: Type create-first-disposable-preview-genesis; this workflow is not valid for later cohorts
+        required: true
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-image-publication-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-source:
+    name: Verify remote source and CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+    steps:
+      - name: Require the publication workflow from trevv-foundation
+        run: test "$GITHUB_REF" = "refs/heads/trevv-foundation"
+      - name: Check out remote history only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve and verify the source commit
+        id: source
+        env:
+          CSP_MODE: ${{ inputs.csp_mode }}
+          GENESIS_CONFIRMATION: ${{ inputs.genesis_confirmation }}
+          HSTS_ENABLED: ${{ inputs.hsts_enabled }}
+          PUBLIC_ORIGIN: ${{ inputs.public_origin }}
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          source_sha="${REQUESTED_SOURCE_SHA:-$GITHUB_SHA}"
+          if ! printf '%s' "$source_sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::source_sha must be a full lowercase 40-character Git commit SHA."
+            exit 1
+          fi
+          node -e '
+            const origin = new URL(process.env.PUBLIC_ORIGIN);
+            if (origin.protocol !== "https:" || origin.username || origin.password ||
+                origin.pathname !== "/" || origin.search || origin.hash) {
+              throw new Error("public_origin must be a credential-free HTTPS origin without a path, query, or fragment");
+            }
+            if (origin.origin !== "https://trevv-free-preview-web-zaman365.onrender.com") {
+              throw new Error("public_origin must equal the checked-in Render Free Web origin");
+            }
+          '
+          if [ "$CSP_MODE" != "report-only" ] || [ "$HSTS_ENABLED" != "false" ]; then
+            echo "::error::The disposable free preview requires csp_mode=report-only and hsts_enabled=false."
+            exit 1
+          fi
+          if [ "$GENESIS_CONFIRMATION" != "create-first-disposable-preview-genesis" ]; then
+            echo "::error::This publisher is restricted to the first disposable-preview genesis cohort."
+            exit 1
+          fi
+          test "$(git rev-parse origin/trevv-foundation)" = "$GITHUB_SHA"
+          git cat-file -e "${source_sha}^{commit}"
+          if [ "$source_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::source_sha must exactly equal the trevv-foundation workflow commit."
+            exit 1
+          fi
+          test -z "$(git status --porcelain)"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - name: Require a successful complete CI run for the exact source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          successful_runs=$(gh api --method GET \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f "head_sha=${SOURCE_SHA}" \
+            -f status=completed \
+            -f per_page=20 \
+            --jq '[.workflow_runs[] | select(
+              .event == "push" and
+              .head_branch == "trevv-foundation" and
+              .conclusion == "success"
+            )] | length')
+          if [ "$successful_runs" -lt 1 ]; then
+            echo "::error::No successful TREVV CI run exists for ${SOURCE_SHA}."
+            exit 1
+          fi
+
+  build-images:
+    name: Build and push ${{ matrix.target }}
+    needs: verify-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: web
+            docker_target: web
+          - target: api
+            docker_target: api
+          - target: worker
+            docker_target: worker
+          - target: migrate
+            docker_target: remote-migrate
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+    steps:
+      - name: Check out the verified source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ needs.verify-source.outputs.source_sha }}
+          persist-credentials: false
+      - name: Verify the checkout is exact and clean
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain)"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Log in to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Define a unique candidate image reference
+        id: image
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          name="ghcr.io/${owner}/trevv-${TARGET}"
+          tag="unverified-candidate-${SOURCE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "reference=${name}:${tag}" >> "$GITHUB_OUTPUT"
+      - name: Build and push the uniquely tagged unverified candidate
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: Dockerfile.staging
+          target: ${{ matrix.docker_target }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.reference }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.verify-source.outputs.source_sha }}
+            org.opencontainers.image.title=trevv-${{ matrix.target }}
+          build-args: |
+            STAGING_PUBLIC_ORIGIN=${{ inputs.public_origin }}
+            STAGING_CSP_MODE=${{ inputs.csp_mode }}
+            STAGING_HSTS_ENABLED=${{ inputs.hsts_enabled }}
+          cache-from: type=gha,scope=staging-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=staging-${{ matrix.target }}
+          provenance: mode=max
+          sbom: true
+      - name: Verify the exact pushed registry digest
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+        run: |
+          test -n "$IMAGE_DIGEST"
+          mkdir -p artifacts
+          docker buildx imagetools inspect --raw "${IMAGE_NAME}@${IMAGE_DIGEST}" \
+            > "artifacts/${{ matrix.target }}.oci-manifest.json"
+      - name: Record unverified candidate metadata
+        env:
+          CSP_MODE: ${{ inputs.csp_mode }}
+          HSTS_ENABLED: ${{ inputs.hsts_enabled }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          PUBLIC_ORIGIN: ${{ inputs.public_origin }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          jq -n \
+            --arg target "$TARGET" \
+            --arg image "$IMAGE_NAME" \
+            --arg tag "$IMAGE_TAG" \
+            --arg digest "$IMAGE_DIGEST" \
+            --arg sourceSha "$SOURCE_SHA" \
+            --arg publicOrigin "$PUBLIC_ORIGIN" \
+            --arg cspMode "$CSP_MODE" \
+            --arg hstsEnabled "$HSTS_ENABLED" \
+            '{
+              target: $target,
+              image: $image,
+              tag: $tag,
+              digest: $digest,
+              reference: ($image + "@" + $digest),
+              sourceSha: $sourceSha,
+              platform: "linux/amd64",
+              build: {
+                publicOrigin: $publicOrigin,
+                cspMode: $cspMode,
+                hstsEnabled: ($hstsEnabled == "true")
+              },
+              verification: {
+                status: "unverified",
+                requiredGates: ["syft-spdx", "grype-high-critical"],
+                githubProvenanceIssued: false
+              }
+            }' > "artifacts/${TARGET}.manifest.json"
+      - name: Remove the package-write registry credential
+        run: docker logout ghcr.io
+      - name: Upload unverified build evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: staging-image-build-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 30
+
+  scan-images:
+    name: Scan ${{ matrix.target }}
+    needs: [verify-source, build-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [web, api, worker, migrate]
+    permissions:
+      contents: read
+      packages: read
+    env:
+      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+    steps:
+      - name: Download unverified build evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: staging-image-build-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts
+      - name: Validate candidate metadata and prepare isolated Docker credentials
+        id: image
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          manifest="artifacts/${TARGET}.manifest.json"
+          test "$(jq -r '.target' "$manifest")" = "$TARGET"
+          test "$(jq -r '.sourceSha' "$manifest")" = "$SOURCE_SHA"
+          test "$(jq -r '.verification.status' "$manifest")" = "unverified"
+          image_name=$(jq -r '.image' "$manifest")
+          image_digest=$(jq -r '.digest' "$manifest")
+          printf '%s' "$image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          test "$(jq -r '.reference' "$manifest")" = "${image_name}@${image_digest}"
+          scan_docker_config="${RUNNER_TEMP}/trevv-scan-docker-config"
+          mkdir -p "$scan_docker_config"
+          echo "DOCKER_CONFIG=$scan_docker_config" >> "$GITHUB_ENV"
+          echo "name=$image_name" >> "$GITHUB_OUTPUT"
+          echo "digest=$image_digest" >> "$GITHUB_OUTPUT"
+          echo "local_reference=trevv-local-${TARGET}:${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR with package-read access
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Load the exact pushed image locally
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          LOCAL_IMAGE: ${{ steps.image.outputs.local_reference }}
+        run: |
+          docker pull --platform linux/amd64 "${IMAGE_NAME}@${IMAGE_DIGEST}"
+          docker tag "${IMAGE_NAME}@${IMAGE_DIGEST}" "$LOCAL_IMAGE"
+          docker image inspect "$LOCAL_IMAGE" >/dev/null
+      - name: Remove usable registry credentials before security tools run
+        run: |
+          docker logout ghcr.io
+          printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
+          test "$(jq '.auths | length' "$DOCKER_CONFIG/config.json")" -eq 0
+      - name: Generate an explicit SPDX JSON SBOM from the local image
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.image.outputs.local_reference }}
+          format: spdx-json
+          output-file: artifacts/${{ matrix.target }}.sbom.spdx.json
+          upload-artifact: false
+      - name: Scan the local image for high and critical vulnerabilities
+        uses: anchore/scan-action@0d444ed77d83ee2ba7f5ced0d90d640a1281d762 # v7.3.0
+        with:
+          image: ${{ steps.image.outputs.local_reference }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+          output-file: artifacts/${{ matrix.target }}.vulnerabilities.sarif
+      - name: Mark the candidate security gates as passed
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          jq \
+            '.verification.status = "security-gates-passed" |
+             .verification.githubProvenanceIssued = false' \
+            "artifacts/${TARGET}.manifest.json" > "artifacts/${TARGET}.manifest.tmp.json"
+          mv "artifacts/${TARGET}.manifest.tmp.json" "artifacts/${TARGET}.manifest.json"
+      - name: Upload security evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: staging-image-scan-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30
+
+  attest-images:
+    name: Attest verified ${{ matrix.target }} image
+    needs: [verify-source, scan-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [web, api, worker, migrate]
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+    steps:
+      - name: Download passed security evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: staging-image-scan-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence
+      - name: Validate the exact attestation subject
+        id: subject
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          manifest="evidence/${TARGET}.manifest.json"
+          test "$(jq -r '.target' "$manifest")" = "$TARGET"
+          test "$(jq -r '.sourceSha' "$manifest")" = "$SOURCE_SHA"
+          test "$(jq -r '.verification.status' "$manifest")" = "security-gates-passed"
+          image_name=$(jq -r '.image' "$manifest")
+          image_digest=$(jq -r '.digest' "$manifest")
+          printf '%s' "$image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          test "$(jq -r '.reference' "$manifest")" = "${image_name}@${image_digest}"
+          echo "name=$image_name" >> "$GITHUB_OUTPUT"
+          echo "digest=$image_digest" >> "$GITHUB_OUTPUT"
+      - name: Prepare isolated registry credentials
+        run: |
+          attestation_docker_config="${RUNNER_TEMP}/trevv-attestation-docker-config"
+          mkdir -p "$attestation_docker_config"
+          echo "DOCKER_CONFIG=$attestation_docker_config" >> "$GITHUB_ENV"
+      - name: Log in to GHCR for registry attestation
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Create GitHub provenance for the exact verified image
+        id: attest
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        with:
+          subject-name: ${{ steps.subject.outputs.name }}
+          subject-digest: ${{ steps.subject.outputs.digest }}
+          push-to-registry: true
+      - name: Remove the registry attestation credential
+        if: ${{ always() }}
+        run: |
+          docker logout ghcr.io || true
+          printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
+          test "$(jq '.auths | length' "$DOCKER_CONFIG/config.json")" -eq 0
+      - name: Record provenance in the verified image metadata
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          test -f "$ATTESTATION_BUNDLE"
+          cp "$ATTESTATION_BUNDLE" "evidence/${TARGET}.provenance.bundle.json"
+          jq \
+            --arg attestationUrl "$ATTESTATION_URL" \
+            '.verification.status = "attested-security-gates-passed" |
+             .verification.githubProvenanceIssued = true |
+             .provenance = {url: $attestationUrl}' \
+            "evidence/${TARGET}.manifest.json" > "evidence/${TARGET}.manifest.tmp.json"
+          mv "evidence/${TARGET}.manifest.tmp.json" "evidence/${TARGET}.manifest.json"
+      - name: Upload attested image evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: staging-image-attested-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  digest-bundle:
+    name: Publish digest bundle and genesis manifest
+    needs: [verify-source, attest-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    env:
+      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+    steps:
+      - name: Check out the exact verified source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ needs.verify-source.outputs.source_sha }}
+          persist-credentials: false
+      - name: Use the manifest-declared Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+      - name: Verify the manifest source worktree is exact and clean
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain)"
+          mkdir -p "$RUNNER_TEMP/staging-evidence" "$RUNNER_TEMP/staging-publication"
+      - name: Download service evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: staging-image-attested-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/staging-evidence
+          merge-multiple: true
+      - name: Assemble the machine-readable digest bundle
+        env:
+          CSP_MODE: ${{ inputs.csp_mode }}
+          EVIDENCE_DIR: ${{ runner.temp }}/staging-evidence
+          HSTS_ENABLED: ${{ inputs.hsts_enabled }}
+          OUTPUT_DIR: ${{ runner.temp }}/staging-publication
+          PUBLIC_ORIGIN: ${{ inputs.public_origin }}
+        run: |
+          created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          metadata_files=(
+            "${EVIDENCE_DIR}/web.manifest.json"
+            "${EVIDENCE_DIR}/api.manifest.json"
+            "${EVIDENCE_DIR}/worker.manifest.json"
+            "${EVIDENCE_DIR}/migrate.manifest.json"
+          )
+          expected_metadata=$(printf '%s\n' \
+            api.manifest.json \
+            migrate.manifest.json \
+            web.manifest.json \
+            worker.manifest.json)
+          actual_metadata=$(find "$EVIDENCE_DIR" -maxdepth 1 -type f \
+            -name '*.manifest.json' ! -name '*.oci-manifest.json' \
+            -exec basename {} \; | sort)
+          test "$actual_metadata" = "$expected_metadata"
+          for target in web api worker migrate; do
+            metadata="${EVIDENCE_DIR}/${target}.manifest.json"
+            test -f "$metadata"
+            test "$(jq -r '.target' "$metadata")" = "$target"
+            test "$(jq -r '.image' "$metadata")" = "ghcr.io/zaman365/trevv-${target}"
+          done
+          jq -s \
+            --arg sourceSha "$SOURCE_SHA" \
+            --arg workflowSha "$GITHUB_SHA" \
+            --arg workflowRun "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg createdAt "$created_at" \
+            --arg publicOrigin "$PUBLIC_ORIGIN" \
+            --arg cspMode "$CSP_MODE" \
+            --arg hstsEnabled "$HSTS_ENABLED" \
+            '{
+              schemaVersion: 1,
+              candidateId: ("staging-" + $sourceSha + "-" + env.GITHUB_RUN_ID + "-" + env.GITHUB_RUN_ATTEMPT),
+              sourceSha: $sourceSha,
+              publicationWorkflowSha: $workflowSha,
+              workflowRun: $workflowRun,
+              createdAt: $createdAt,
+              platform: "linux/amd64",
+              evidenceClass: "artifact-publication-only",
+              deploymentPerformed: false,
+              publicationProfile: {
+                classification: "disposable-free-preview",
+                intendedFreeWebServices: ["web", "api", "worker"],
+                operatorRunOnly: ["migrate"],
+                auxiliaryImages: [],
+                excludedEvidence: [
+                  "always-on-worker",
+                  "high-availability",
+                  "managed-backup-pitr",
+                  "private-service-networking",
+                  "production-readiness"
+                ]
+              },
+              build: {
+                publicOrigin: $publicOrigin,
+                cspMode: $cspMode,
+                hstsEnabled: ($hstsEnabled == "true")
+              },
+              images: (map({
+                key: .target,
+                value: {
+                  image: .image,
+                  tag: .tag,
+                  digest: .digest,
+                  reference: .reference,
+                  provenance: .provenance,
+                  verification: .verification
+                }
+              }) | from_entries)
+            }' "${metadata_files[@]}" > "${OUTPUT_DIR}/staging-image-digests.json"
+          jq -e '
+            (.sourceSha | test("^[0-9a-f]{40}$")) and
+            (.images | keys == ["api", "migrate", "web", "worker"]) and
+            (.images | to_entries | all(
+              .value.image == ("ghcr.io/zaman365/trevv-" + .key)
+            )) and
+            ([.images[].digest | test("^sha256:[0-9a-f]{64}$")] | all) and
+            ([.images[].reference | contains("@sha256:")] | all) and
+            ([.images[].provenance.url | type == "string" and length > 0] | all) and
+            ([.images[].verification.status == "attested-security-gates-passed"] | all) and
+            ([.images[].verification.githubProvenanceIssued == true] | all)
+          ' "${OUTPUT_DIR}/staging-image-digests.json"
+      - name: Generate the one-time first non-production genesis release manifest
+        env:
+          DIGEST_BUNDLE: ${{ runner.temp }}/staging-publication/staging-image-digests.json
+          OUTPUT_DIR: ${{ runner.temp }}/staging-publication
+          REHEARSAL_GENESIS: "true"
+          REHEARSAL_GIT_SHA: ${{ needs.verify-source.outputs.source_sha }}
+          REHEARSAL_RELEASE_ID: rehearsal-baseline-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          test -z "$(git status --porcelain)"
+          export TREV_API_IMAGE_ID
+          export TREV_MIGRATE_IMAGE_ID
+          export TREV_WEB_IMAGE_ID
+          export TREV_WORKER_IMAGE_ID
+          export REHEARSAL_CREATED_AT
+          REHEARSAL_CREATED_AT=$(jq -r '.createdAt' "$DIGEST_BUNDLE")
+          TREV_API_IMAGE_ID=$(jq -r '.images.api.digest' "$DIGEST_BUNDLE")
+          TREV_MIGRATE_IMAGE_ID=$(jq -r '.images.migrate.digest' "$DIGEST_BUNDLE")
+          TREV_WEB_IMAGE_ID=$(jq -r '.images.web.digest' "$DIGEST_BUNDLE")
+          TREV_WORKER_IMAGE_ID=$(jq -r '.images.worker.digest' "$DIGEST_BUNDLE")
+          node scripts/nonproduction-release-input.mjs \
+            > "$RUNNER_TEMP/staging-genesis-input.json"
+          node scripts/phase6-release-manifest.mjs generate \
+            --input "$RUNNER_TEMP/staging-genesis-input.json" \
+            --output "${OUTPUT_DIR}/staging-release-manifest.json"
+          node scripts/phase6-release-manifest.mjs validate \
+            --manifest "${OUTPUT_DIR}/staging-release-manifest.json"
+          test -z "$(git status --porcelain)"
+      - name: Attest the digest bundle
+        id: attest-bundle
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        with:
+          subject-path: ${{ runner.temp }}/staging-publication/staging-image-digests.json
+      - name: Attest the one-time non-production genesis release manifest
+        id: attest-release
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        with:
+          subject-path: ${{ runner.temp }}/staging-publication/staging-release-manifest.json
+      - name: Add publication provenance to the evidence set
+        env:
+          DIGEST_ATTESTATION_BUNDLE: ${{ steps.attest-bundle.outputs.bundle-path }}
+          DIGEST_ATTESTATION_URL: ${{ steps.attest-bundle.outputs.attestation-url }}
+          OUTPUT_DIR: ${{ runner.temp }}/staging-publication
+          RELEASE_ATTESTATION_BUNDLE: ${{ steps.attest-release.outputs.bundle-path }}
+          RELEASE_ATTESTATION_URL: ${{ steps.attest-release.outputs.attestation-url }}
+        run: |
+          test -f "$DIGEST_ATTESTATION_BUNDLE"
+          test -f "$RELEASE_ATTESTATION_BUNDLE"
+          cp "$DIGEST_ATTESTATION_BUNDLE" \
+            "${OUTPUT_DIR}/staging-image-digests.provenance.bundle.json"
+          cp "$RELEASE_ATTESTATION_BUNDLE" \
+            "${OUTPUT_DIR}/staging-release-manifest.provenance.bundle.json"
+          jq -n \
+            --arg digestBundle "$DIGEST_ATTESTATION_URL" \
+            --arg releaseManifest "$RELEASE_ATTESTATION_URL" \
+            '{digestBundle: $digestBundle, releaseManifest: $releaseManifest}' \
+            > "${OUTPUT_DIR}/staging-publication-attestations.json"
+      - name: Upload the immutable candidate publication
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: staging-image-digests-${{ needs.verify-source.outputs.source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/staging-publication/staging-image-digests.json
+            ${{ runner.temp }}/staging-publication/staging-image-digests.provenance.bundle.json
+            ${{ runner.temp }}/staging-publication/staging-publication-attestations.json
+            ${{ runner.temp }}/staging-publication/staging-release-manifest.json
+            ${{ runner.temp }}/staging-publication/staging-release-manifest.provenance.bundle.json
+          if-no-files-found: error
+          retention-days: 90

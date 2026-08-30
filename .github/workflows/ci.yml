@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
         env:
           POSTGRES_USER: founderhq
           POSTGRES_PASSWORD: founderhq
@@ -32,13 +32,13 @@ jobs:
       WEB_ORIGIN: http://127.0.0.1:3100
       DEMO_MODE: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 11.22.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verify formatting baseline
@@ -92,18 +92,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: quality
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 11.22.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
           name: playwright-report-e2e
@@ -113,18 +113,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: quality
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 11.22.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm test:a11y
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
           name: playwright-report-a11y
@@ -136,7 +136,7 @@ jobs:
     needs: quality
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
         env:
           POSTGRES_USER: founderhq
           POSTGRES_PASSWORD: founderhq
@@ -152,20 +152,20 @@ jobs:
       DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
       LIVE_E2E_DATABASE_URL: postgresql://founderhq:founderhq@127.0.0.1:5432/founderhq_live_e2e
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 11.22.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:migrate
       - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Verify live identity and tenant boundaries
         run: pnpm test:e2e:live
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
           name: playwright-report-live-identity
@@ -177,7 +177,7 @@ jobs:
     needs: quality
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Define the immutable candidate identity
         run: |
           echo "TREV_CANDIDATE_RELEASE_ID=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
@@ -252,6 +252,33 @@ jobs:
         run: >-
           docker compose -f compose.staging.yaml --profile smoke
           down --volumes --remove-orphans
+
+  release-gate:
+    name: Release gate
+    if: ${{ always() }}
+    needs: [quality, e2e, accessibility, live-identity, staging-topology]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify every required CI gate passed
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          ACCESSIBILITY_RESULT: ${{ needs.accessibility.result }}
+          LIVE_IDENTITY_RESULT: ${{ needs.live-identity.result }}
+          STAGING_TOPOLOGY_RESULT: ${{ needs.staging-topology.result }}
+        run: |
+          printf '%s\n' \
+            "quality=${QUALITY_RESULT}" \
+            "e2e=${E2E_RESULT}" \
+            "accessibility=${ACCESSIBILITY_RESULT}" \
+            "live-identity=${LIVE_IDENTITY_RESULT}" \
+            "staging-topology=${STAGING_TOPOLOGY_RESULT}"
+          test "$QUALITY_RESULT" = "success"
+          test "$E2E_RESULT" = "success"
+          test "$ACCESSIBILITY_RESULT" = "success"
+          test "$LIVE_IDENTITY_RESULT" = "success"
+          test "$STAGING_TOPOLOGY_RESULT" = "success"
 
   # Production promotion is intentionally absent. The previous Web-only
   # Cloudflare deploy could publish a client without its API, worker, database,

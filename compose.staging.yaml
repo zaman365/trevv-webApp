@@ -102,7 +102,7 @@ services:
       - staging-tls:/tls
 
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
     restart: unless-stopped
     environment:
       POSTGRES_USER: founderhq
@@ -117,7 +117,7 @@ services:
       retries: 20
 
   mail-init:
-    image: alpine:3.22
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
     restart: "no"
     command:
       - sh

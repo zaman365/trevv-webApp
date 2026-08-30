@@ -1,0 +1,210 @@
+# Materialization template for a disposable $0 Render preview. The Worker runs
+# as a sleeping public web service because Render has no free Worker/private-
+# service plan. This is not durable-worker or private-network evidence.
+# The approved Migrate artifact runs from an operator-controlled local Docker
+# host because free web services cannot run Render one-off jobs:
+# migrate-image: ghcr.io/__TREV_REGISTRY_OWNER__/trevv-migrate@sha256:__TREV_MIGRATE_IMAGE_SHA256__
+previews:
+  generation: off
+
+envVarGroups:
+  - name: trevv-free-preview-runtime
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DEMO_MODE
+        value: "false"
+      - key: RELEASE_METADATA_REQUIRED
+        value: "true"
+      - key: RELEASE_ID
+        value: "__TREV_RELEASE_ID__"
+      - key: RELEASE_GIT_SHA
+        value: "__TREV_RELEASE_GIT_SHA__"
+
+databases:
+  - name: trevv-free-preview-postgres-zaman365
+    region: frankfurt
+    plan: free
+    postgresMajorVersion: "17"
+    databaseName: trevv_staging
+    user: trevv_staging
+    # Fail closed. After creation, add only the current Frankfurt service
+    # egress CIDRs plus a temporary operator /32 for migration/pg_dump.
+    ipAllowList: []
+
+services:
+  - type: web
+    name: trevv-free-preview-api-zaman365
+    runtime: image
+    region: frankfurt
+    plan: free
+    numInstances: 1
+    autoDeployTrigger: off
+    maxShutdownDelaySeconds: 60
+    renderSubdomainPolicy: enabled
+    healthCheckPath: /api/v1/readyz
+    image:
+      url: ghcr.io/__TREV_REGISTRY_OWNER__/trevv-api@sha256:__TREV_API_IMAGE_SHA256__
+    dockerCommand: >-
+      /bin/sh -ceu 'case "$DATABASE_URL" in
+      *"sslmode=verify-full"*) ;;
+      *) echo "DATABASE_URL must use sslmode=verify-full." >&2; exit 64;;
+      esac;
+      umask 077;
+      printf "%s" "$DATABASE_CA_CERT_B64" |
+      base64 -d > /tmp/trevv-render-postgres-ca.pem;
+      test -s /tmp/trevv-render-postgres-ca.pem;
+      export NODE_EXTRA_CA_CERTS=/tmp/trevv-render-postgres-ca.pem;
+      exec node apps/api/dist/index.js'
+    envVars:
+      - fromGroup: trevv-free-preview-runtime
+      - key: RELEASE_IMAGE_ID
+        value: "sha256:__TREV_API_IMAGE_SHA256__"
+      - key: PORT
+        value: "8787"
+      - key: REGISTRATION_MODE
+        value: invite_only
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_CA_CERT_B64
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        value: https://trevv-free-preview-api-zaman365.onrender.com
+      - key: WEB_ORIGIN
+        value: https://trevv-free-preview-web-zaman365.onrender.com
+      - key: MAIL_FROM
+        value: preview@mail.trevv.de
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      # Resend's authenticated STARTTLS port 2587 avoids Render Free's blocked
+      # outbound SMTP ports 25, 465, and 587.
+      - key: SMTP_PORT
+        value: "2587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_REQUIRE_TLS
+        value: "true"
+      - key: SMTP_USERNAME
+        value: resend
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: RATE_LIMIT_BACKEND
+        value: postgres
+      - key: RATE_LIMIT_HASH_SECRET
+        generateValue: true
+      # Render's edge sets the real address first. TREVV accepts only a single
+      # IP, so a caller-supplied comma-separated chain fails closed.
+      - key: TRUSTED_CLIENT_IP_HEADER
+        value: x-forwarded-for
+      - key: ERROR_REPORTING_MODE
+        value: disabled
+      - key: INTERNAL_METRICS_ENABLED
+        value: "false"
+
+  # This is deliberately a Free public web service, not a Render background
+  # worker. It sleeps after idle and exposes only the Worker's health/metrics
+  # server. Preview smoke must wake it before creating asynchronous work.
+  - type: web
+    name: trevv-free-preview-worker-zaman365
+    runtime: image
+    region: frankfurt
+    plan: free
+    numInstances: 1
+    autoDeployTrigger: off
+    maxShutdownDelaySeconds: 120
+    renderSubdomainPolicy: enabled
+    healthCheckPath: /readyz
+    image:
+      url: ghcr.io/__TREV_REGISTRY_OWNER__/trevv-worker@sha256:__TREV_WORKER_IMAGE_SHA256__
+    dockerCommand: >-
+      /bin/sh -ceu 'case "$DATABASE_URL" in
+      *"sslmode=verify-full"*) ;;
+      *) echo "DATABASE_URL must use sslmode=verify-full." >&2; exit 64;;
+      esac;
+      umask 077;
+      printf "%s" "$DATABASE_CA_CERT_B64" |
+      base64 -d > /tmp/trevv-render-postgres-ca.pem;
+      test -s /tmp/trevv-render-postgres-ca.pem;
+      export NODE_EXTRA_CA_CERTS=/tmp/trevv-render-postgres-ca.pem;
+      exec node apps/worker/dist/index.js'
+    envVars:
+      - fromGroup: trevv-free-preview-runtime
+      - key: RELEASE_IMAGE_ID
+        value: "sha256:__TREV_WORKER_IMAGE_SHA256__"
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: trevv-free-preview-api-zaman365
+          envVarKey: DATABASE_URL
+      - key: DATABASE_CA_CERT_B64
+        fromService:
+          type: web
+          name: trevv-free-preview-api-zaman365
+          envVarKey: DATABASE_CA_CERT_B64
+      - key: WORKER_ID
+        value: trevv-free-preview-worker
+      - key: WORKER_ENABLED
+        value: "true"
+      - key: WORKER_DISABLED_HANDLERS
+        value: ""
+      - key: WORKER_POLL_INTERVAL_MS
+        value: "5000"
+      - key: WORKER_ATTENTION_SWEEP_INTERVAL_MS
+        value: "60000"
+      - key: WORKER_TELEMETRY_INTERVAL_MS
+        value: "30000"
+      - key: WORKER_READINESS_MAX_STALENESS_MS
+        value: "60000"
+      - key: WORKER_READINESS_MAX_READY_AGE_MS
+        value: "300000"
+      - key: WORKER_READINESS_MAX_UNSUPPORTED_AGE_MS
+        value: "300000"
+      - key: WORKER_READINESS_MAX_DEAD_LETTERS
+        value: "0"
+      - key: WORKER_BATCH_SIZE
+        value: "2"
+      - key: WORKER_CONCURRENCY
+        value: "2"
+      - key: WORKER_LEASE_MS
+        value: "30000"
+      - key: WORKER_MAX_ATTEMPTS
+        value: "8"
+      - key: WORKER_HEALTH_HOST
+        value: 0.0.0.0
+      - key: WORKER_HEALTH_PORT
+        value: "10000"
+      - key: PORT
+        value: "10000"
+
+  - type: web
+    name: trevv-free-preview-web-zaman365
+    runtime: image
+    region: frankfurt
+    plan: free
+    numInstances: 1
+    autoDeployTrigger: off
+    maxShutdownDelaySeconds: 60
+    renderSubdomainPolicy: enabled
+    healthCheckPath: /api/web/readyz
+    image:
+      url: ghcr.io/__TREV_REGISTRY_OWNER__/trevv-web@sha256:__TREV_WEB_IMAGE_SHA256__
+    envVars:
+      - fromGroup: trevv-free-preview-runtime
+      - key: RELEASE_IMAGE_ID
+        value: "sha256:__TREV_WEB_IMAGE_SHA256__"
+      - key: REGISTRATION_MODE
+        value: invite_only
+      - key: PORT
+        value: "3000"
+      - key: HOSTNAME
+        value: 0.0.0.0
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://trevv-free-preview-web-zaman365.onrender.com
+      - key: API_ORIGIN
+        value: https://trevv-free-preview-api-zaman365.onrender.com
+      - key: CSP_MODE
+        value: "__TREV_CSP_MODE__"
+      - key: HSTS_ENABLED
+        value: "__TREV_HSTS_ENABLED__"

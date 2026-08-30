@@ -146,7 +146,13 @@ export function validateReleaseManifest(
     !/^\d{4}_[a-z0-9_]+$/u.test(String(manifest.database?.migrationHead ?? ""))
   )
     errors.push("database.migrationHead is invalid.");
-  if (
+  const stagingGenesis = isStagingGenesis(manifest.previousRelease);
+  if (stagingGenesis) {
+    if (manifest.database?.previousReleaseMigrationHead !== null)
+      errors.push(
+        "A staging genesis must have no previous release migration head.",
+      );
+  } else if (
     !/^\d{4}_[a-z0-9_]+$/u.test(
       String(manifest.database?.previousReleaseMigrationHead ?? ""),
     )
@@ -192,14 +198,40 @@ export function validateReleaseManifest(
     )
   )
     errors.push("securityModes.errorReportingMode is invalid.");
-  if (!releaseIdPattern.test(String(manifest.previousRelease?.releaseId ?? "")))
-    errors.push("previousRelease.releaseId is invalid.");
-  if (
-    !digestPattern.test(String(manifest.previousRelease?.manifestDigest ?? ""))
-  )
-    errors.push(
-      "previousRelease.manifestDigest must be an immutable sha256 digest.",
-    );
+  if (stagingGenesis) {
+    if (
+      !/^rehearsal-baseline-[a-z0-9][a-z0-9._+-]{0,101}$/u.test(
+        manifest.releaseId,
+      )
+    )
+      errors.push(
+        "A staging genesis is allowed only for rehearsal-baseline-* releases.",
+      );
+    const expectedGenesis = {
+      environment: "staging",
+      kind: "staging_genesis",
+      previousCohort: null,
+      reason: "no-prior-full-topology-cohort",
+    };
+    if (
+      stableStringify(manifest.previousRelease) !==
+      stableStringify(expectedGenesis)
+    )
+      errors.push("The staging genesis declaration is invalid.");
+  } else {
+    if (
+      !releaseIdPattern.test(String(manifest.previousRelease?.releaseId ?? ""))
+    )
+      errors.push("previousRelease.releaseId is invalid.");
+    if (
+      !digestPattern.test(
+        String(manifest.previousRelease?.manifestDigest ?? ""),
+      )
+    )
+      errors.push(
+        "previousRelease.manifestDigest must be an immutable sha256 digest.",
+      );
+  }
 
   const evidenceKinds = new Set();
   for (const [index, link] of (manifest.evidenceLinks ?? []).entries()) {
@@ -287,6 +319,10 @@ export function validateReleaseManifest(
   }
 
   if (forProduction) {
+    if (stagingGenesis)
+      errors.push(
+        "Production authorization cannot use a staging genesis manifest.",
+      );
     const worktreeChanges = repositoryWorktreeChanges(repositoryRoot, {
       statusOutput: worktreeStatus,
     });
@@ -349,6 +385,12 @@ export function validateReleaseManifest(
   }
 
   return errors;
+}
+
+function isStagingGenesis(value) {
+  return Boolean(
+    value && typeof value === "object" && value.kind === "staging_genesis",
+  );
 }
 
 export function writeImmutableManifest(path, manifest) {

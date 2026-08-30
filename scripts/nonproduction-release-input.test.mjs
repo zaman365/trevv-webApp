@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createNonProductionReleaseInput } from "./nonproduction-release-input.mjs";
@@ -10,10 +11,10 @@ import {
 
 const digest = (character) => `sha256:${character.repeat(64)}`;
 
-function previousManifest() {
+function previousManifest(releaseId = "rehearsal-previous") {
   return createReleaseManifest(
     {
-      releaseId: "rehearsal-previous",
+      releaseId,
       createdAt: "2026-08-29T12:00:00.000Z",
       gitSha: "a".repeat(40),
       imageDigests: {
@@ -58,7 +59,7 @@ function candidateConfiguration() {
     releaseId: "rehearsal-candidate",
     createdAt: "2026-08-30T12:00:00.000Z",
     gitSha: "b".repeat(40),
-    previousMigrationHead: "0016_shared_api_rate_limits",
+    previousMigrationHead: previousManifest().database.migrationHead,
     previousReleaseId: "rehearsal-previous",
     imageDigests: {
       api: digest("6"),
@@ -121,6 +122,125 @@ test("non-production input requires an immutable previous manifest", () => {
         { previousManifestText: `${stableStringify(previousManifest())}\n` },
       ),
     /worker image ID must be an immutable sha256 digest/u,
+  );
+});
+
+test("a normal candidate cannot reference a valid manifest with its own release ID", () => {
+  const configuration = {
+    ...candidateConfiguration(),
+    previousReleaseId: "rehearsal-candidate",
+  };
+  const selfManifest = previousManifest(configuration.releaseId);
+  assert.deepEqual(
+    validateReleaseManifest(selfManifest, { repositoryRoot: null }),
+    [],
+  );
+  assert.throws(
+    () =>
+      createNonProductionReleaseInput(configuration, {
+        previousManifestText: `${stableStringify(selfManifest)}\n`,
+      }),
+    /cannot self-reference/u,
+  );
+});
+
+test("a normal candidate must bind the previous manifest migration head", () => {
+  assert.throws(
+    () =>
+      createNonProductionReleaseInput(
+        {
+          ...candidateConfiguration(),
+          previousMigrationHead: "0004_initial_foundation",
+        },
+        {
+          previousManifestText: `${stableStringify(previousManifest())}\n`,
+        },
+      ),
+    /previousMigrationHead does not match/u,
+  );
+});
+
+test("the first complete staging cohort uses an explicit genesis and is never production-valid", () => {
+  const configuration = {
+    ...candidateConfiguration(),
+    releaseId: "rehearsal-baseline-remote-staging-a",
+  };
+  delete configuration.previousMigrationHead;
+  delete configuration.previousReleaseId;
+  const input = createNonProductionReleaseInput(configuration, {
+    genesis: true,
+  });
+  assert.deepEqual(input.previousRelease, {
+    kind: "staging_genesis",
+    environment: "staging",
+    previousCohort: null,
+    reason: "no-prior-full-topology-cohort",
+  });
+  assert.equal(input.database.previousReleaseMigrationHead, null);
+
+  const baseline = createReleaseManifest(input, { worktreeStatus: "" });
+  assert.deepEqual(
+    validateReleaseManifest(baseline, { repositoryRoot: null }),
+    [],
+  );
+  assert.ok(
+    validateReleaseManifest(baseline, {
+      forProduction: true,
+      repositoryRoot: null,
+      worktreeStatus: "",
+    }).includes(
+      "Production authorization cannot use a staging genesis manifest.",
+    ),
+  );
+
+  const baselineText = `${stableStringify(baseline)}\n`;
+  const candidate = createNonProductionReleaseInput(
+    {
+      ...candidateConfiguration(),
+      previousReleaseId: baseline.releaseId,
+      previousMigrationHead: baseline.database.migrationHead,
+    },
+    { previousManifestText: baselineText },
+  );
+  assert.deepEqual(candidate.previousRelease, {
+    releaseId: baseline.releaseId,
+    manifestDigest: `sha256:${createHash("sha256")
+      .update(baselineText)
+      .digest("hex")}`,
+  });
+});
+
+test("staging genesis rejects prior-cohort fields, self-reference, and ordinary release IDs", () => {
+  assert.throws(
+    () =>
+      createNonProductionReleaseInput(candidateConfiguration(), {
+        genesis: true,
+      }),
+    /must start with rehearsal-baseline-/u,
+  );
+  assert.throws(
+    () =>
+      createNonProductionReleaseInput(
+        {
+          ...candidateConfiguration(),
+          releaseId: "rehearsal-baseline-remote-staging-a",
+        },
+        { genesis: true },
+      ),
+    /must state that no previous release or migration head exists/u,
+  );
+  assert.throws(
+    () =>
+      createNonProductionReleaseInput(
+        {
+          ...candidateConfiguration(),
+          releaseId: "rehearsal-baseline-remote-staging-a",
+          previousReleaseId: undefined,
+          previousMigrationHead: undefined,
+        },
+        { genesis: true, previousManifestText: "{}" },
+      ),
+    /cannot supply a previous manifest/u,
   );
 });
 

@@ -12,10 +12,12 @@ const digestPattern = /^sha256:[a-f0-9]{64}$/u;
 const gitShaPattern = /^[a-f0-9]{40}$/u;
 const migrationPattern = /^\d{4}_[a-z0-9_]+$/u;
 const releaseIdPattern = /^rehearsal-[a-z0-9][a-z0-9._+-]{0,110}$/u;
+const baselineReleaseIdPattern =
+  /^rehearsal-baseline-[a-z0-9][a-z0-9._+-]{0,101}$/u;
 
 export function createNonProductionReleaseInput(
   configuration,
-  { previousManifestText } = {},
+  { previousManifestText, genesis = false } = {},
 ) {
   const releaseId = String(configuration.releaseId ?? "");
   if (!releaseIdPattern.test(releaseId))
@@ -24,7 +26,10 @@ export function createNonProductionReleaseInput(
     throw new Error("createdAt must be an ISO timestamp.");
   if (!gitShaPattern.test(String(configuration.gitSha ?? "")))
     throw new Error("gitSha must be a full lowercase Git SHA.");
-  if (!migrationPattern.test(String(configuration.previousMigrationHead ?? "")))
+  if (
+    !genesis &&
+    !migrationPattern.test(String(configuration.previousMigrationHead ?? ""))
+  )
     throw new Error("previousMigrationHead is invalid.");
 
   for (const service of ["api", "migrate", "web", "worker"])
@@ -35,21 +40,61 @@ export function createNonProductionReleaseInput(
         `${service} image ID must be an immutable sha256 digest.`,
       );
 
-  if (
-    typeof previousManifestText !== "string" ||
-    previousManifestText.length === 0
-  )
-    throw new Error("A previous non-production manifest is required.");
-  const previousManifest = JSON.parse(previousManifestText);
-  const previousErrors = validateReleaseManifest(previousManifest, {
-    repositoryRoot: null,
-  });
-  if (previousErrors.length > 0)
-    throw new Error(
-      `Previous non-production manifest is invalid: ${previousErrors.join(" ")}`,
-    );
-  if (previousManifest.releaseId !== configuration.previousReleaseId)
-    throw new Error("previousReleaseId does not match the supplied manifest.");
+  let previousRelease;
+  if (genesis) {
+    if (!baselineReleaseIdPattern.test(releaseId))
+      throw new Error(
+        "A staging genesis releaseId must start with rehearsal-baseline-.",
+      );
+    if (previousManifestText !== undefined)
+      throw new Error("A staging genesis cannot supply a previous manifest.");
+    if (
+      configuration.previousReleaseId !== undefined ||
+      configuration.previousMigrationHead !== undefined
+    )
+      throw new Error(
+        "A staging genesis must state that no previous release or migration head exists.",
+      );
+    previousRelease = {
+      kind: "staging_genesis",
+      environment: "staging",
+      previousCohort: null,
+      reason: "no-prior-full-topology-cohort",
+    };
+  } else {
+    if (
+      typeof previousManifestText !== "string" ||
+      previousManifestText.length === 0
+    )
+      throw new Error("A previous non-production manifest is required.");
+    const previousManifest = JSON.parse(previousManifestText);
+    const previousErrors = validateReleaseManifest(previousManifest, {
+      repositoryRoot: null,
+    });
+    if (previousErrors.length > 0)
+      throw new Error(
+        `Previous non-production manifest is invalid: ${previousErrors.join(" ")}`,
+      );
+    if (previousManifest.releaseId === releaseId)
+      throw new Error(
+        "The current non-production releaseId cannot self-reference as its previous release.",
+      );
+    if (previousManifest.releaseId !== configuration.previousReleaseId)
+      throw new Error(
+        "previousReleaseId does not match the supplied manifest.",
+      );
+    if (
+      previousManifest.database?.migrationHead !==
+      configuration.previousMigrationHead
+    )
+      throw new Error(
+        "previousMigrationHead does not match the supplied manifest.",
+      );
+    previousRelease = {
+      releaseId: previousManifest.releaseId,
+      manifestDigest: rawDigest(previousManifestText),
+    };
+  }
 
   return {
     schemaVersion: 1,
@@ -64,7 +109,9 @@ export function createNonProductionReleaseInput(
       worker: configuration.imageDigests.worker,
     },
     database: {
-      previousReleaseMigrationHead: configuration.previousMigrationHead,
+      previousReleaseMigrationHead: genesis
+        ? null
+        : configuration.previousMigrationHead,
       strategy: "additive-forward-only",
     },
     runtimes: {
@@ -79,10 +126,7 @@ export function createNonProductionReleaseInput(
       rateLimitBackend: "postgres",
       errorReportingMode: "disabled",
     },
-    previousRelease: {
-      releaseId: previousManifest.releaseId,
-      manifestDigest: rawDigest(previousManifestText),
-    },
+    previousRelease,
     evidenceLinks: [],
     authorization: {
       status: "not_authorized",
@@ -106,14 +150,23 @@ function required(name) {
 }
 
 function cliConfiguration() {
-  const previousManifestPath = required("REHEARSAL_PREVIOUS_MANIFEST_PATH");
+  const genesis = optionalBoolean("REHEARSAL_GENESIS", false);
+  const previousManifestPath = genesis
+    ? undefined
+    : required("REHEARSAL_PREVIOUS_MANIFEST_PATH");
   return {
     configuration: {
       releaseId: required("REHEARSAL_RELEASE_ID"),
       createdAt: required("REHEARSAL_CREATED_AT"),
       gitSha: required("REHEARSAL_GIT_SHA"),
-      previousMigrationHead: required("REHEARSAL_PREVIOUS_MIGRATION_HEAD"),
-      previousReleaseId: required("REHEARSAL_PREVIOUS_RELEASE_ID"),
+      ...(genesis
+        ? {}
+        : {
+            previousMigrationHead: required(
+              "REHEARSAL_PREVIOUS_MIGRATION_HEAD",
+            ),
+            previousReleaseId: required("REHEARSAL_PREVIOUS_RELEASE_ID"),
+          }),
       imageDigests: {
         api: required("TREV_API_IMAGE_ID"),
         migrate: required("TREV_MIGRATE_IMAGE_ID"),
@@ -121,17 +174,29 @@ function cliConfiguration() {
         worker: required("TREV_WORKER_IMAGE_ID"),
       },
     },
-    previousManifestText: readFileSync(previousManifestPath, "utf8"),
+    ...(previousManifestPath
+      ? { previousManifestText: readFileSync(previousManifestPath, "utf8") }
+      : {}),
+    genesis,
   };
+}
+
+function optionalBoolean(name, fallback) {
+  const value = process.env[name]?.trim();
+  if (!value) return fallback;
+  if (value !== "true" && value !== "false")
+    throw new Error(`${name} must be true or false.`);
+  return value === "true";
 }
 
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  const { configuration, previousManifestText } = cliConfiguration();
+  const { configuration, previousManifestText, genesis } = cliConfiguration();
   const input = createNonProductionReleaseInput(configuration, {
     previousManifestText,
+    genesis,
   });
   process.stdout.write(`${stableStringify(input)}\n`);
 }
