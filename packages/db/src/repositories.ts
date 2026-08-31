@@ -84,6 +84,7 @@ export type RepositoryErrorCode =
   | "constraint_conflict"
   | "identity_not_verified"
   | "identity_access_unavailable"
+  | "invitation_acceptance_required"
   | "organization_selection_required"
   | "onboarding_conflict"
   | "invitation_invalid"

@@ -8,14 +8,6 @@
   "evidence": "docs/accessibility-manual-review.md",
   "fingerprints": [
     {
-      "projects": ["chromium", "webkit"],
-      "routes": ["/sign-in"],
-      "themes": ["light", "dark"],
-      "ruleId": "color-contrast",
-      "nodeCount": 20,
-      "sha256": "61bcac7db813dbf8ec806a0c39bc29bd090db31c854e4728555436775d26e080"
-    },
-    {
       "projects": ["chromium", "webkit", "mobile-chromium"],
       "routes": ["/onboarding"],
       "themes": ["light", "dark"],
@@ -127,7 +119,7 @@
       "sha256": "7b71a80eddf6d017a24f5b488e1569d4354c558090adbf04f90b043a8353dd14"
     },
     {
-      "projects": ["mobile-chromium"],
+      "projects": ["chromium", "webkit", "mobile-chromium"],
       "routes": ["/sign-in"],
       "themes": ["light", "dark"],
       "ruleId": "color-contrast",

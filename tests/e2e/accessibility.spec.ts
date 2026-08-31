@@ -157,6 +157,21 @@ test("item detail panel has no automated WCAG A/AA violations", async ({
       })
       .click();
   }
+  await expect(panel).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await panel.evaluate(async (element) => {
+    await Promise.all(
+      element
+        .getAnimations()
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
   const results = await new AxeBuilder({ page })
     .include(".item-panel")
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])

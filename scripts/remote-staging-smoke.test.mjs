@@ -596,6 +596,11 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
         { code: "REGISTRATION_INVITATION_REQUIRED" },
         { status: 403 },
       );
+    if (
+      url.pathname === "/api/v1/invitations/accept-claim" &&
+      method === "POST"
+    )
+      return json({ error: { code: "unauthenticated" } }, { status: 401 });
     if (url.pathname === "/api/auth/sign-in/email")
       return json(
         { ok: true },
@@ -712,6 +717,7 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
   assert.ok(result.checks.includes("public-worker-wake-readiness"));
   assert.ok(result.checks.includes("api-public-metrics-disabled"));
   assert.ok(result.checks.includes("caller-client-ip-spoof-resistance"));
+  assert.ok(result.checks.includes("invitation-claim-auth-boundary"));
   assert.ok(result.checks.includes("alpha-canonical-noindex"));
   assert.ok(result.checks.includes("retired-web-origin-disabled"));
   assert.ok(result.checks.includes("retired-web-origin-mutation-rejected"));
@@ -738,6 +744,22 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
   assert.equal(
     trustedEdgeProbe.headers.get("x-forwarded-for"),
     "also-not-a-valid-ip",
+  );
+  const anonymousInvitationClaimIndex = requests.findIndex(
+    ({ url, method }) =>
+      url.pathname === "/api/v1/invitations/accept-claim" && method === "POST",
+  );
+  const anonymousInvitationClaim = requests[anonymousInvitationClaimIndex];
+  assert.ok(anonymousInvitationClaim);
+  assert.equal(anonymousInvitationClaim.headers.get("cookie"), null);
+  assert.deepEqual(anonymousInvitationClaim.body, {});
+  const ownerSignInIndex = requests.findIndex(
+    ({ url, method }) =>
+      url.pathname === "/api/auth/sign-in/email" && method === "POST",
+  );
+  assert.ok(
+    anonymousInvitationClaimIndex >= 0 &&
+      anonymousInvitationClaimIndex < ownerSignInIndex,
   );
   assert.deepEqual(
     requests

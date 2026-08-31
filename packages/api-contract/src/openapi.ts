@@ -421,6 +421,29 @@ export const openApiDocument = {
           "403": { $ref: "#/components/responses/Forbidden" },
           "404": { $ref: "#/components/responses/NotFound" },
           "422": { $ref: "#/components/responses/Validation" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/invitations/accept-claim": {
+      post: {
+        tags: ["Identity"],
+        operationId: "acceptClaimedInvitation",
+        responses: {
+          "200": {
+            description:
+              "Accept the invitation durably claimed during account registration",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/InvitationAcceptance" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "429": { $ref: "#/components/responses/RateLimited" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },

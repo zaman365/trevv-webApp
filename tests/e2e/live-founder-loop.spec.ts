@@ -1017,8 +1017,8 @@ async function signUpAndVerify(
     );
   }
   await page.getByRole("button", { name: "Create account" }).click();
-  if (bootstrapRegistration) await page.unroute("**/api/auth/sign-up/email");
   await page.waitForURL("**/verify-email?**");
+  if (bootstrapRegistration) await page.unroute("**/api/auth/sign-up/email");
   const verificationUrl = await waitForMailAction(
     email,
     "Verify your TREVV email",

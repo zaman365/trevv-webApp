@@ -1531,6 +1531,7 @@ function toRetentionPolicyDto(policy: RetentionPolicyProjection) {
 function identityResolutionError(
   status:
     | "verification_required"
+    | "invitation_acceptance_required"
     | "onboarding_required"
     | "organization_selection_required"
     | "access_unavailable",
@@ -1540,6 +1541,11 @@ function identityResolutionError(
       return new DataPlaneError(
         "identity_verification_required",
         "Verify your email before accessing TREVV.",
+      );
+    case "invitation_acceptance_required":
+      return new DataPlaneError(
+        "invitation_acceptance_required",
+        "Accept your pending invitation before continuing.",
       );
     case "onboarding_required":
       return new DataPlaneError(

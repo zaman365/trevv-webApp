@@ -13,13 +13,17 @@ import {
 } from "@founderhq/auth-server";
 import {
   appUserOrganizationSelections,
+  auditLogs,
   authUserMappings,
   authUsers,
   boards,
   createDatabase,
   createPostgresRepositories,
+  hashInvitationToken,
+  invitations,
   memberships,
   organizations,
+  outboxEvents,
   portfolioMembers,
   portfolios,
   users,
@@ -1538,15 +1542,35 @@ describe("PostgreSQL-backed API", () => {
         inviteeAuthId,
         fixture.first.organizationId,
       );
-      await expect(
-        inviteeClient.acceptInvitation(rawToken),
-      ).resolves.toMatchObject({
+      const firstAcceptance = await inviteeClient.acceptInvitation(rawToken);
+      expect(firstAcceptance).toMatchObject({
         invitationId: created.id,
         organizationId: fixture.first.organizationId,
         role: "member",
       });
+      const effectsBeforeReplay = await apiInvitationReplaySnapshot({
+        organizationId: fixture.first.organizationId,
+        invitationId: created.id,
+        authUserId: inviteeAuthId,
+      });
+      expect(effectsBeforeReplay).toMatchObject({
+        acceptanceAuditCount: 1,
+        acceptanceOutboxCount: 1,
+        membershipCount: 1,
+        mappingCount: 1,
+      });
+      await expect(inviteeClient.acceptInvitation(rawToken)).resolves.toEqual(
+        firstAcceptance,
+      );
+      expect(
+        await apiInvitationReplaySnapshot({
+          organizationId: fixture.first.organizationId,
+          invitationId: created.id,
+          authUserId: inviteeAuthId,
+        }),
+      ).toEqual(effectsBeforeReplay);
       await expect(
-        inviteeClient.acceptInvitation(rawToken),
+        wrongIdentityClient.acceptInvitation(rawToken),
       ).rejects.toMatchObject({
         code: "resource_not_found",
         status: 404,
@@ -1593,6 +1617,12 @@ describe("PostgreSQL-backed API", () => {
         code: "identity_access_unavailable",
         status: 403,
       } satisfies Partial<TrevvApiError>);
+      await expect(
+        inviteeClient.acceptInvitation(rawToken),
+      ).rejects.toMatchObject({
+        code: "resource_not_found",
+        status: 404,
+      } satisfies Partial<TrevvApiError>);
       const removedMemberEvents = await live.app.request("/api/v1/events", {
         headers: authorization(inviteeAuthId),
       });
@@ -1615,9 +1645,167 @@ describe("PostgreSQL-backed API", () => {
       await live.close();
     }
   });
+
+  it("keeps expired and revoked invitation tokens non-leaking through live HTTP", async () => {
+    let currentTime = now;
+    const live = createLiveHarness(() => currentTime);
+    try {
+      const ownerClient = clientFor(
+        live.app,
+        fixture.first.ownerId,
+        fixture.first.organizationId,
+      );
+
+      const revokedAuthId = `auth-api-revoked-${crypto.randomUUID()}`;
+      const revokedEmail = `${revokedAuthId}@example.test`;
+      await seedAuthIdentity(revokedAuthId, revokedEmail, "Revoked invitee");
+      const revoked = await ownerClient.createInvitation(
+        { email: revokedEmail, role: "member" },
+        crypto.randomUUID(),
+      );
+      const revokedToken = invitationTokenFromMail(live.mail);
+      await ownerClient.revokeInvitation(
+        revoked.data.id,
+        revoked.data.version,
+        crypto.randomUUID(),
+      );
+      await expect(
+        clientFor(
+          live.app,
+          revokedAuthId,
+          fixture.first.organizationId,
+        ).acceptInvitation(revokedToken),
+      ).rejects.toMatchObject({
+        code: "resource_not_found",
+        status: 404,
+      } satisfies Partial<TrevvApiError>);
+
+      const expiredAuthId = `auth-api-expired-${crypto.randomUUID()}`;
+      const expiredEmail = `${expiredAuthId}@example.test`;
+      await seedAuthIdentity(expiredAuthId, expiredEmail, "Expired invitee");
+      await ownerClient.createInvitation(
+        { email: expiredEmail, role: "member" },
+        crypto.randomUUID(),
+      );
+      const expiredToken = invitationTokenFromMail(live.mail);
+      const expiredClient = clientFor(
+        live.app,
+        expiredAuthId,
+        fixture.first.organizationId,
+      );
+      await expect(
+        expiredClient.acceptInvitation(expiredToken),
+      ).resolves.toMatchObject({
+        organizationId: fixture.first.organizationId,
+        role: "member",
+      });
+      currentTime = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1_000);
+      await expect(
+        expiredClient.acceptInvitation(expiredToken),
+      ).rejects.toMatchObject({
+        code: "resource_not_found",
+        status: 404,
+      } satisfies Partial<TrevvApiError>);
+    } finally {
+      await live.close();
+    }
+  });
+
+  it("accepts a registration invitation from its durable authenticated claim and blocks onboarding", async () => {
+    const suffix = crypto.randomUUID();
+    const inviteeAuthId = `auth-api-claimed-invite-${suffix}`;
+    const inviteeEmail = `${inviteeAuthId}@example.test`;
+    const unclaimedAuthId = `auth-api-unclaimed-${suffix}`;
+    const live = createLiveHarness();
+    try {
+      const ownerClient = clientFor(
+        live.app,
+        fixture.first.ownerId,
+        fixture.first.organizationId,
+      );
+      const created = await ownerClient.createInvitation(
+        { email: inviteeEmail, role: "member" },
+        crypto.randomUUID(),
+      );
+      const rawToken = invitationTokenFromMail(live.mail);
+      await seedConnection.db.insert(authUsers).values([
+        {
+          id: inviteeAuthId,
+          name: "Durably claimed invitee",
+          email: inviteeEmail,
+          emailVerified: true,
+          registrationInvitationTokenHash: hashInvitationToken(rawToken),
+        },
+        {
+          id: unclaimedAuthId,
+          name: "Unclaimed identity",
+          email: `${unclaimedAuthId}@example.test`,
+          emailVerified: true,
+        },
+      ]);
+
+      const pending = await live.app.request("/api/v1/session/organizations", {
+        headers: authorization(inviteeAuthId),
+      });
+      expect(pending.status).toBe(409);
+      await expect(errorCode(pending)).resolves.toBe(
+        "invitation_acceptance_required",
+      );
+
+      const onboarding = await live.app.request("/api/v1/onboarding", {
+        headers: authorization(inviteeAuthId),
+      });
+      expect(onboarding.status).toBe(409);
+      await expect(errorCode(onboarding)).resolves.toBe(
+        "invitation_acceptance_required",
+      );
+
+      const anonymous = await live.app.request(
+        "/api/v1/invitations/accept-claim",
+        { method: "POST" },
+      );
+      expect(anonymous.status).toBe(401);
+      await expect(errorCode(anonymous)).resolves.toBe("unauthenticated");
+
+      const missing = await live.app.request(
+        "/api/v1/invitations/accept-claim",
+        {
+          method: "POST",
+          headers: authorization(unclaimedAuthId),
+        },
+      );
+      expect(missing.status).toBe(404);
+      await expect(errorCode(missing)).resolves.toBe("resource_not_found");
+
+      const accepted = await live.app.request(
+        "/api/v1/invitations/accept-claim",
+        {
+          method: "POST",
+          headers: authorization(inviteeAuthId),
+        },
+      );
+      expect(accepted.status).toBe(200);
+      await expect(accepted.json()).resolves.toMatchObject({
+        invitationId: created.data.id,
+        organizationId: fixture.first.organizationId,
+        role: "member",
+      });
+
+      const session = await live.app.request("/api/v1/session", {
+        headers: authorization(inviteeAuthId),
+      });
+      expect(session.status).toBe(200);
+      await expect(session.json()).resolves.toMatchObject({
+        organizationId: fixture.first.organizationId,
+        user: { email: inviteeEmail, role: "member" },
+      });
+    } finally {
+      await live.close();
+    }
+  });
 });
 
-function createLiveHarness() {
+function createLiveHarness(clock: () => Date = () => now) {
   const connection = createDatabase(temporary.url);
   const repositories = createPostgresRepositories(connection.db);
   const mail = createMemoryMailSink();
@@ -1630,7 +1818,7 @@ function createLiveHarness() {
           name: authUserId,
           emailVerified: true,
           sessionId: `session-${authUserId}`,
-          expiresAt: new Date(now.getTime() + 3_600_000),
+          expiresAt: new Date(clock().getTime() + 3_600_000),
         }
       : null;
   };
@@ -1641,7 +1829,7 @@ function createLiveHarness() {
       return authUserId
         ? {
             authUserId,
-            expiresAt: new Date(now.getTime() + 3_600_000),
+            expiresAt: new Date(clock().getTime() + 3_600_000),
           }
         : null;
     },
@@ -1650,7 +1838,7 @@ function createLiveHarness() {
     app: createApiApp({
       mode: "live",
       ...adapter,
-      clock: () => now,
+      clock,
       authIdentityResolver: { resolve: resolveAuthIdentity },
       preMembershipPaths: [
         "/api/v1/session/organizations",
@@ -1658,6 +1846,7 @@ function createLiveHarness() {
         "/api/v1/onboarding",
         "/api/v1/onboarding/complete",
         "/api/v1/invitations/accept",
+        "/api/v1/invitations/accept-claim",
       ],
       repositories,
       mailDelivery: mail,
@@ -1798,6 +1987,58 @@ function invitationTokenFromMail(mail: MemoryMailSink): string {
 async function errorCode(response: Response): Promise<string | undefined> {
   const body = (await response.json()) as { error?: { code?: string } };
   return body.error?.code;
+}
+
+async function apiInvitationReplaySnapshot(input: {
+  organizationId: string;
+  invitationId: string;
+  authUserId: string;
+}) {
+  const [audits, outbox, membershipRows, mappings, invitationRows, selections] =
+    await Promise.all([
+      seedConnection.db.select().from(auditLogs),
+      seedConnection.db.select().from(outboxEvents),
+      seedConnection.db.select().from(memberships),
+      seedConnection.db.select().from(authUserMappings),
+      seedConnection.db.select().from(invitations),
+      seedConnection.db.select().from(appUserOrganizationSelections),
+    ]);
+  const mapping = mappings.find(
+    (candidate) => candidate.authUserId === input.authUserId,
+  );
+  const invitation = invitationRows.find(
+    (candidate) => candidate.id === input.invitationId,
+  );
+  const selection = selections.find(
+    (candidate) => candidate.appUserId === mapping?.appUserId,
+  );
+  return {
+    acceptanceAuditCount: audits.filter(
+      (audit) =>
+        audit.organizationId === input.organizationId &&
+        audit.action === "invitation.accepted" &&
+        audit.targetId === input.invitationId,
+    ).length,
+    acceptanceOutboxCount: outbox.filter(
+      (event) =>
+        event.organizationId === input.organizationId &&
+        event.eventType === "invitation.accepted" &&
+        event.aggregateId === input.invitationId,
+    ).length,
+    membershipCount: membershipRows.filter(
+      (membership) =>
+        membership.organizationId === input.organizationId &&
+        membership.userId === mapping?.appUserId,
+    ).length,
+    mappingCount: mappings.filter(
+      (candidate) => candidate.authUserId === input.authUserId,
+    ).length,
+    invitationVersion: invitation?.version,
+    invitationAcceptedAt: invitation?.acceptedAt,
+    invitationUpdatedAt: invitation?.updatedAt,
+    selectedOrganizationId: selection?.organizationId,
+    selectionUpdatedAt: selection?.updatedAt,
+  };
 }
 
 async function seedAuthIdentity(id: string, email: string, name: string) {

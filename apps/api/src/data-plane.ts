@@ -383,6 +383,7 @@ export type DataPlaneErrorCode =
   | "idempotency_key_reused"
   | "invitation_delivery_incomplete"
   | "identity_verification_required"
+  | "invitation_acceptance_required"
   | "onboarding_required"
   | "organization_selection_required"
   | "identity_access_unavailable"

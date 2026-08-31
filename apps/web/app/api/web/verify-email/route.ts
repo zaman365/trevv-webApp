@@ -46,14 +46,17 @@ export async function POST(request: Request) {
   const successful =
     !redirectedWithError &&
     (upstream.ok || (upstream.status >= 300 && upstream.status < 400));
+  const retryable = upstream.status === 429 || upstream.status >= 500;
   const response = successful
     ? NextResponse.json({ success: true })
-    : verificationError(upstream.status >= 500 ? 502 : 400);
+    : verificationError(
+        upstream.status === 429 ? 429 : upstream.status >= 500 ? 502 : 400,
+      );
   response.headers.set("cache-control", "private, no-store, max-age=0");
   response.headers.set("referrer-policy", "no-referrer");
   appendSetCookieHeaders(upstream.headers, response.headers);
-  if (successful || upstream.status < 500)
-    clearVerificationCookie(response, request);
+  if (retryable) forwardRetryHeaders(upstream.headers, response.headers);
+  if (successful || !retryable) clearVerificationCookie(response, request);
   return response;
 }
 
@@ -63,13 +66,22 @@ function verificationError(status: number) {
       error:
         status === 400
           ? "This verification link is invalid, expired, or already used."
-          : "Your email could not be verified. Try again.",
+          : status === 429
+            ? "Too many verification attempts. Wait a moment, then try verification again."
+            : "Your email could not be verified, and no verification was confirmed. Try verification again.",
     },
     { status },
   );
   response.headers.set("cache-control", "private, no-store, max-age=0");
   response.headers.set("referrer-policy", "no-referrer");
   return response;
+}
+
+function forwardRetryHeaders(source: Headers, destination: Headers) {
+  for (const name of ["retry-after", "x-request-id"] as const) {
+    const value = source.get(name);
+    if (value) destination.set(name, value);
+  }
 }
 
 function clearVerificationCookie(response: NextResponse, request: Request) {

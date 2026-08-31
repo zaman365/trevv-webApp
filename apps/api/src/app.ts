@@ -744,6 +744,21 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     });
   });
 
+  api.post("/api/v1/invitations/accept-claim", async (context) => {
+    const accepted = await identityRepositories(
+      dependencies,
+      context,
+    ).invitations.acceptClaim(clock());
+    return context.json({
+      invitationId: accepted.invitationId,
+      organizationId: accepted.organizationId,
+      role: accepted.membership.role,
+      ...(accepted.workspaceId ? { workspaceId: accepted.workspaceId } : {}),
+      ...(accepted.teamId ? { teamId: accepted.teamId } : {}),
+      acceptedAt: accepted.acceptedAt.toISOString(),
+    });
+  });
+
   api.get("/api/v1/memberships", async (context) => {
     requireOrganizationManagement(context.get("access"));
     const repositories = organizationRepositories(dependencies, context);
@@ -2614,6 +2629,7 @@ export function createRuntimeApi(
         "/api/v1/onboarding",
         "/api/v1/onboarding/complete",
         "/api/v1/invitations/accept",
+        "/api/v1/invitations/accept-claim",
       ],
       repositories,
       mailDelivery,
@@ -2783,6 +2799,11 @@ function identityResolutionFailure(
     return new DataPlaneError(
       "identity_verification_required",
       "Verify your email before accessing TREVV.",
+    );
+  if (status === "invitation_acceptance_required")
+    return new DataPlaneError(
+      "invitation_acceptance_required",
+      "Accept your pending invitation before continuing.",
     );
   if (status === "onboarding_required")
     return new DataPlaneError(
@@ -3235,6 +3256,7 @@ function mapError(
       "Verify your email before accessing TREVV.",
     );
   if (
+    code === "invitation_acceptance_required" ||
     code === "onboarding_required" ||
     code === "organization_selection_required"
   )

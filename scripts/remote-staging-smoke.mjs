@@ -135,6 +135,7 @@ export async function runRemoteStagingSmoke(configuration) {
   await verifyStalePredecessorCookiesRejected(configuration.origin);
   await verifyClientIpSpoofResistance(configuration, inviteeEmail);
   await verifyInviteOnlyAdmission(configuration, inviteeEmail, cookieJar);
+  await verifyAnonymousInvitationClaimBoundary(configuration);
   await signIn(configuration, cookieJar);
   await verifyRetiredOriginMutationRejection(cookieJar);
 
@@ -261,6 +262,7 @@ export async function runRemoteStagingSmoke(configuration) {
       "anonymous-private-route-guard",
       "caller-client-ip-spoof-resistance",
       "invite-only-headerless-rejection",
+      "invitation-claim-auth-boundary",
       "real-owner-sign-in",
       "retired-web-origin-mutation-rejected",
       "stale-predecessor-cookies-rejected",
@@ -763,6 +765,28 @@ async function verifyInviteOnlyAdmission(
     throw new Error("Headerless remote staging registration was not rejected.");
   if (cookieJar.size > 0)
     throw new Error("Rejected remote registration created auth cookies.");
+}
+
+async function verifyAnonymousInvitationClaimBoundary(configuration) {
+  const cookieJar = new Map();
+  const response = await apiJson(
+    configuration,
+    cookieJar,
+    "/api/v1/invitations/accept-claim",
+    {
+      method: "POST",
+      body: {},
+      authenticated: false,
+    },
+  );
+  if (response.status !== 401)
+    throw new Error(
+      "Anonymous invitation-claim recovery did not fail at the authentication boundary.",
+    );
+  if (cookieJar.size > 0 || setCookieValues(response.headers).length > 0)
+    throw new Error(
+      "Rejected anonymous invitation-claim recovery emitted an authentication cookie.",
+    );
 }
 
 async function signIn(configuration, cookieJar) {

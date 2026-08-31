@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createApiClient, TrevvApiError } from "@founderhq/api-client";
+import { apiErrorSchema, sessionSchema } from "@founderhq/api-contract";
 import { demoWorkspaces } from "@founderhq/core";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
@@ -19,17 +20,16 @@ import { webRequestId } from "./security-headers";
 type ApiClient = ReturnType<typeof createApiClient>;
 export type WebAppSession = Awaited<ReturnType<ApiClient["session"]>>;
 
-class SessionFlowRequired extends Error {
-  constructor(
-    readonly flow:
-      | "onboarding_required"
-      | "organization_selection_required"
-      | "verification_required"
-      | "access_unavailable",
-  ) {
-    super(flow);
-  }
-}
+type SessionFlow =
+  | "onboarding_required"
+  | "invitation_acceptance_required"
+  | "organization_selection_required"
+  | "verification_required"
+  | "access_unavailable";
+
+type SessionResolution =
+  | { flow: "active"; session: WebAppSession }
+  | { flow: "anonymous" | SessionFlow };
 
 const fictionalDemoSession = {
   user: {
@@ -59,51 +59,69 @@ const fictionalDemoSession = {
   expiresAt: "2099-01-01T00:00:00.000Z",
 } satisfies WebAppSession;
 
-export const resolveAppSession = cache(
-  async (): Promise<WebAppSession | null> => {
-    if (webRuntimeMode() === "demo") return fictionalDemoSession;
-    try {
-      return (await serverApiClient()).session();
-    } catch (error) {
-      if (error instanceof TrevvApiError) {
-        if (error.status === 401) return null;
-        if (error.code === "onboarding_required" || error.status === 404)
-          throw new SessionFlowRequired("onboarding_required");
-        if (error.code === "organization_selection_required")
-          throw new SessionFlowRequired("organization_selection_required");
-        if (error.code === "identity_verification_required")
-          throw new SessionFlowRequired("verification_required");
-        if (error.code === "identity_access_unavailable")
-          throw new SessionFlowRequired("access_unavailable");
-      }
-      throw error;
-    }
-  },
-);
+const resolveAppSession = cache(async (): Promise<SessionResolution> => {
+  if (webRuntimeMode() === "demo")
+    return { flow: "active", session: fictionalDemoSession };
+  const response = await serverApiFetch("/session");
+  const body: unknown = await response.json().catch(() => null);
+  if (response.ok)
+    return { flow: "active", session: sessionSchema.parse(body) };
+
+  const parsed = apiErrorSchema.safeParse(body);
+  const code = parsed.success ? parsed.data.error.code : undefined;
+  if (response.status === 401) return { flow: "anonymous" };
+  if (code === "onboarding_required" || response.status === 404)
+    return { flow: "onboarding_required" };
+  if (code === "invitation_acceptance_required")
+    return { flow: "invitation_acceptance_required" };
+  if (code === "organization_selection_required")
+    return { flow: "organization_selection_required" };
+  if (code === "identity_verification_required")
+    return { flow: "verification_required" };
+  if (code === "identity_access_unavailable")
+    return { flow: "access_unavailable" };
+  throw new Error(
+    `Application session resolution failed (${response.status}).`,
+  );
+});
 
 export async function requireAppSession(
   returnTo = "/app/portfolio",
 ): Promise<WebAppSession> {
-  let session: WebAppSession | null;
-  try {
-    session = await resolveAppSession();
-  } catch (error) {
-    if (error instanceof SessionFlowRequired) {
-      if (error.flow === "onboarding_required") redirect("/onboarding");
-      if (error.flow === "organization_selection_required") {
-        const target = new URLSearchParams({ next: returnTo });
-        redirect(`/select-organization?${target}`);
-      }
-      if (error.flow === "verification_required") redirect("/verify-email");
-      if (error.flow === "access_unavailable") notFound();
-    }
-    throw error;
+  const resolution = await resolveAppSession();
+  if (resolution.flow === "active") return resolution.session;
+  if (resolution.flow === "onboarding_required") redirect("/onboarding");
+  if (resolution.flow === "invitation_acceptance_required")
+    redirect("/invite/accept?resume=1");
+  if (resolution.flow === "organization_selection_required") {
+    const target = new URLSearchParams({ next: returnTo });
+    redirect(`/select-organization?${target}`);
   }
-  if (!session) {
+  if (resolution.flow === "verification_required") redirect("/verify-email");
+  if (resolution.flow === "access_unavailable") notFound();
+  if (resolution.flow === "anonymous") {
     const target = new URLSearchParams({ next: returnTo });
     redirect(`/sign-in?${target}`);
   }
-  return session;
+  throw new Error("Application session flow was not handled.");
+}
+
+/**
+ * Allow only a verified identity whose authoritative application flow is
+ * onboarding. Pending invitation claims must recover through acceptance first.
+ */
+export async function requireOnboardingAccess(): Promise<void> {
+  const resolution = await resolveAppSession();
+  if (resolution.flow === "onboarding_required") return;
+  if (resolution.flow === "invitation_acceptance_required")
+    redirect("/invite/accept?resume=1");
+  if (resolution.flow === "organization_selection_required")
+    redirect("/select-organization?next=%2Fapp%2Fportfolio");
+  if (resolution.flow === "verification_required") redirect("/verify-email");
+  if (resolution.flow === "access_unavailable") notFound();
+  if (resolution.flow === "anonymous") redirect("/sign-in?next=%2Fonboarding");
+  if (resolution.flow === "active") redirect("/app/portfolio");
+  throw new Error("Onboarding session flow was not handled.");
 }
 
 export async function requireWorkspaceAccess(
@@ -126,13 +144,32 @@ export async function requireWorkspaceAccess(
   try {
     return await (await serverApiClient()).workspace(workspaceSlug);
   } catch (error) {
-    if (error instanceof TrevvApiError) {
-      if (error.status === 401)
+    const apiError = apiErrorDetails(error);
+    if (apiError) {
+      if (apiError.status === 401)
         redirect(`/sign-in?next=${encodeURIComponent(returnTo)}`);
-      if (error.status === 403 || error.status === 404) notFound();
+      if (apiError.status === 403 || apiError.status === 404) notFound();
     }
     throw error;
   }
+}
+
+function apiErrorDetails(
+  error: unknown,
+): { code: string; status: number } | null {
+  if (error instanceof TrevvApiError)
+    return { code: error.code, status: error.status };
+  if (!error || typeof error !== "object") return null;
+  const candidate = error as {
+    name?: unknown;
+    code?: unknown;
+    status?: unknown;
+  };
+  return candidate.name === "TrevvApiError" &&
+    typeof candidate.code === "string" &&
+    typeof candidate.status === "number"
+    ? { code: candidate.code, status: candidate.status }
+    : null;
 }
 
 export async function hasAuthenticationIdentity(): Promise<boolean> {

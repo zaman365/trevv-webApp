@@ -1472,12 +1472,10 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 36px 7vw 42px;
   color: white;
-  background:
-    radial-gradient(circle at 80% 20%, rgb(124 108 244 / 55%), transparent 32%),
-    linear-gradient(145deg, #171d35, #323069 70%, #4e49a4);
+  background: #31305f;
 }
 .auth-brand-panel::after {
   position: absolute;
@@ -1503,13 +1501,16 @@
   width: 32px;
   height: 32px;
 }
+.auth-brand-panel .brand-mark {
+  background: #5148b8;
+}
 .auth-brand strong {
   font-size: var(--fh-text-base);
 }
 .auth-promise {
   position: relative;
   z-index: 1;
-  margin: 8vh 0;
+  margin: auto 0;
 }
 .auth-promise > span {
   width: 35px;
@@ -1552,55 +1553,6 @@
   color: #272453;
   background: #aee5cf;
   border-radius: 50%;
-}
-.auth-mini-portfolio {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 7px;
-}
-.auth-mini-portfolio article {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px;
-  background: rgb(255 255 255 / 9%);
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 10px;
-  backdrop-filter: blur(8px);
-}
-.auth-mini-portfolio article > span {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  background: rgb(255 255 255 / 12%);
-  border-radius: 7px;
-  font-size: var(--fh-text-sm);
-  font-weight: 700;
-}
-.auth-mini-portfolio article > div {
-  min-width: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-.auth-mini-portfolio strong {
-  font-size: var(--fh-text-xs);
-}
-.auth-mini-portfolio small {
-  overflow: hidden;
-  margin-top: 2px;
-  color: rgb(255 255 255 / 55%);
-  font-size: var(--fh-text-2xs);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.auth-mini-portfolio b {
-  color: #b8f0d9;
-  font-size: var(--fh-text-2xs);
 }
 .auth-form-panel {
   display: grid;
@@ -11209,6 +11161,21 @@
 }
 .auth-confirmation h2 {
   margin: 0;
+}
+.verification-resend-form {
+  display: grid;
+  gap: 10px;
+}
+.invitation-recovery-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.invitation-recovery-actions > p {
+  margin: 0;
+  color: var(--fh-muted);
+  font-size: var(--fh-text-sm);
+  line-height: 1.55;
 }
 .onboarding-exit {
   display: inline-flex;

@@ -32,13 +32,17 @@ export async function POST(request: Request) {
     method: "POST",
     body: JSON.stringify({ newPassword, token }),
   });
+  const retryable = upstream.status === 429 || upstream.status >= 500;
   const response = upstream.ok
     ? NextResponse.json({ success: true })
-    : resetError(upstream.status >= 500 ? 502 : 400);
+    : resetError(
+        upstream.status === 429 ? 429 : upstream.status >= 500 ? 502 : 400,
+      );
   response.headers.set("cache-control", "private, no-store, max-age=0");
   response.headers.set("referrer-policy", "no-referrer");
   appendSetCookieHeaders(upstream.headers, response.headers);
-  if (upstream.ok || upstream.status < 500) clearResetCookie(response, request);
+  if (retryable) forwardRetryHeaders(upstream.headers, response.headers);
+  if (upstream.ok || !retryable) clearResetCookie(response, request);
   return response;
 }
 
@@ -48,13 +52,22 @@ function resetError(status: number) {
       error:
         status === 400
           ? "This reset link is invalid, expired, or has already been used."
-          : "The password could not be reset. Try again.",
+          : status === 429
+            ? "Too many reset attempts. Wait a moment, then try again."
+            : "The password could not be reset, and no password change was confirmed. Try again.",
     },
     { status },
   );
   response.headers.set("cache-control", "private, no-store, max-age=0");
   response.headers.set("referrer-policy", "no-referrer");
   return response;
+}
+
+function forwardRetryHeaders(source: Headers, destination: Headers) {
+  for (const name of ["retry-after", "x-request-id"] as const) {
+    const value = source.get(name);
+    if (value) destination.set(name, value);
+  }
 }
 
 function clearResetCookie(response: NextResponse, request: Request) {

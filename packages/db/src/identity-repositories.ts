@@ -133,6 +133,7 @@ type ResolvedAuthUser = Omit<
 
 export type IdentityResolution =
   | (IdentityBase & { status: "verification_required" })
+  | (IdentityBase & { status: "invitation_acceptance_required" })
   | (IdentityBase & { status: "onboarding_required" })
   | (IdentityBase & {
       status: "organization_selection_required";
@@ -185,6 +186,7 @@ export interface IdentityRepositories {
       tokenHash: InvitationTokenHash,
       now?: Date,
     ) => Promise<AcceptedInvitationResult>;
+    acceptClaim: (now?: Date) => Promise<AcceptedInvitationResult>;
   };
 }
 
@@ -237,6 +239,7 @@ export function createIdentityRepositories(
     invitations: {
       accept: (tokenHash, now) =>
         acceptInvitation(database, scope, tokenHash, now),
+      acceptClaim: (now) => acceptClaimedInvitation(database, scope, now),
     },
   };
 }
@@ -249,6 +252,12 @@ async function resolveIdentity(
   const authUserProjection = projectAuthUser(authUser);
   if (!authUser.emailVerified)
     return { status: "verification_required", authUser: authUserProjection };
+
+  if (await hasPendingRegistrationInvitationClaim(database, scope.authUserId))
+    return {
+      status: "invitation_acceptance_required",
+      authUser: authUserProjection,
+    };
 
   const mappedUser = await getMappedAppUser(database, scope.authUserId);
   if (!mappedUser)
@@ -380,6 +389,7 @@ async function getOnboardingProgress(
   scope: IdentityScope,
 ) {
   await getVerifiedAuthUser(database, scope.authUserId);
+  await requireNoPendingRegistrationInvitationClaim(database, scope.authUserId);
   const [progress] = await database
     .select()
     .from(onboardingProgress)
@@ -397,6 +407,10 @@ async function saveOnboardingProgress(
   return database.transaction(async (rawTransaction) => {
     const transaction = rawTransaction as unknown as TrevvDatabase;
     await getVerifiedAuthUser(transaction, scope.authUserId, true);
+    await requireNoPendingRegistrationInvitationClaim(
+      transaction,
+      scope.authUserId,
+    );
     const now = new Date();
     const sanitizedDraft = sanitizeOnboardingDraft(input);
     const [inserted] = await transaction
@@ -507,6 +521,10 @@ async function completeOnboarding(
           "This identity is already mapped to an application user.",
         );
       const appUser = await ensureApplicationUser(transaction, authUser, now);
+      await requireNoPendingRegistrationInvitationClaim(
+        transaction,
+        scope.authUserId,
+      );
       const [existingMembership] = await transaction
         .select({ organizationId: memberships.organizationId })
         .from(memberships)
@@ -724,6 +742,35 @@ async function acceptInvitation(
   requestedNow?: Date,
 ): Promise<AcceptedInvitationResult> {
   asInvitationTokenHash(tokenHash);
+  return acceptInvitationSelection(
+    database,
+    scope,
+    { kind: "token", tokenHash },
+    requestedNow,
+  );
+}
+
+async function acceptClaimedInvitation(
+  database: TrevvDatabase,
+  scope: IdentityScope,
+  requestedNow?: Date,
+): Promise<AcceptedInvitationResult> {
+  return acceptInvitationSelection(
+    database,
+    scope,
+    { kind: "registration_claim" },
+    requestedNow,
+  );
+}
+
+async function acceptInvitationSelection(
+  database: TrevvDatabase,
+  scope: IdentityScope,
+  selector:
+    | { kind: "token"; tokenHash: InvitationTokenHash }
+    | { kind: "registration_claim" },
+  requestedNow?: Date,
+): Promise<AcceptedInvitationResult> {
   const now = requestedNow ?? new Date();
   return database.transaction(async (rawTransaction) => {
     const transaction = rawTransaction as unknown as TrevvDatabase;
@@ -732,25 +779,40 @@ async function acceptInvitation(
       scope.authUserId,
       true,
     );
-    const [invitation] = await transaction
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          eq(invitations.tokenHash, tokenHash),
-          isNull(invitations.deletedAt),
-        ),
-      )
-      .limit(1)
-      .for("update");
+    const invitationId =
+      selector.kind === "registration_claim"
+        ? await claimedInvitationId(transaction, scope.authUserId)
+        : undefined;
+    const invitationWhere =
+      selector.kind === "token"
+        ? and(
+            eq(invitations.tokenHash, selector.tokenHash),
+            isNull(invitations.deletedAt),
+          )
+        : invitationId
+          ? and(eq(invitations.id, invitationId), isNull(invitations.deletedAt))
+          : undefined;
+    const [invitation] = invitationWhere
+      ? await transaction
+          .select()
+          .from(invitations)
+          .where(invitationWhere)
+          .limit(1)
+          .for("update")
+      : [];
     if (
       !invitation ||
-      invitation.acceptedAt !== null ||
       invitation.revokedAt !== null ||
+      invitation.deletedAt !== null ||
       invitation.expiresAt.getTime() <= now.getTime() ||
       normalizeEmail(invitation.email) !== normalizeEmail(authUser.email)
     )
       throw invalidInvitation();
+
+    if (invitation.acceptedAt !== null) {
+      if (selector.kind !== "token") throw invalidInvitation();
+      return replayAcceptedInvitation(transaction, authUser, invitation);
+    }
 
     const [registrationClaim] = await transaction
       .select({ authUserId: registrationInvitationClaims.authUserId })
@@ -808,32 +870,10 @@ async function acceptInvitation(
     }
     if (!membership) throw invalidInvitation();
 
-    const [workspaceAssignment] = await transaction
-      .select()
-      .from(invitationWorkspaceAssignments)
-      .where(
-        and(
-          eq(
-            invitationWorkspaceAssignments.organizationId,
-            invitation.organizationId,
-          ),
-          eq(invitationWorkspaceAssignments.invitationId, invitation.id),
-        ),
-      )
-      .limit(1);
-    const [teamAssignment] = await transaction
-      .select()
-      .from(invitationTeamAssignments)
-      .where(
-        and(
-          eq(
-            invitationTeamAssignments.organizationId,
-            invitation.organizationId,
-          ),
-          eq(invitationTeamAssignments.invitationId, invitation.id),
-        ),
-      )
-      .limit(1);
+    const { workspaceAssignment, teamAssignment } = await invitationAssignments(
+      transaction,
+      invitation,
+    );
     if (workspaceAssignment)
       await transaction
         .insert(workspaceMembers)
@@ -1115,6 +1155,10 @@ async function acceptInvitation(
       )
       .returning({ id: invitations.id });
     if (!accepted) throw invalidInvitation();
+    await transaction
+      .update(registrationInvitationClaims)
+      .set({ authUserId: null })
+      .where(eq(registrationInvitationClaims.authUserId, scope.authUserId));
     await persistOrganizationSelection(
       transaction,
       appUser.id,
@@ -1149,6 +1193,126 @@ async function acceptInvitation(
       acceptedAt: now,
     };
   });
+}
+
+async function replayAcceptedInvitation(
+  database: TrevvDatabase,
+  authUser: ResolvedAuthUser,
+  invitation: typeof invitations.$inferSelect,
+): Promise<AcceptedInvitationResult> {
+  if (!invitation.acceptedAt || !invitation.acceptedByUserId)
+    throw invalidInvitation();
+  const appUser = await getMappedAppUser(database, authUser.id, true);
+  if (!appUser || appUser.id !== invitation.acceptedByUserId)
+    throw invalidInvitation();
+  const [membership] = await database
+    .select()
+    .from(memberships)
+    .where(
+      and(
+        eq(memberships.organizationId, invitation.organizationId),
+        eq(memberships.userId, appUser.id),
+        isNull(memberships.archivedAt),
+        isNull(memberships.deletedAt),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!membership) throw invalidInvitation();
+  const { workspaceAssignment, teamAssignment } = await invitationAssignments(
+    database,
+    invitation,
+  );
+  return {
+    invitationId: invitation.id,
+    organizationId: invitation.organizationId,
+    appUserId: appUser.id,
+    membership,
+    ...(workspaceAssignment
+      ? { workspaceId: workspaceAssignment.workspaceId }
+      : {}),
+    ...(teamAssignment ? { teamId: teamAssignment.teamId } : {}),
+    acceptedAt: invitation.acceptedAt,
+  };
+}
+
+async function invitationAssignments(
+  database: TrevvDatabase,
+  invitation: Pick<typeof invitations.$inferSelect, "id" | "organizationId">,
+) {
+  const [workspaceAssignments, teamAssignments] = await Promise.all([
+    database
+      .select()
+      .from(invitationWorkspaceAssignments)
+      .where(
+        and(
+          eq(
+            invitationWorkspaceAssignments.organizationId,
+            invitation.organizationId,
+          ),
+          eq(invitationWorkspaceAssignments.invitationId, invitation.id),
+        ),
+      )
+      .limit(1),
+    database
+      .select()
+      .from(invitationTeamAssignments)
+      .where(
+        and(
+          eq(
+            invitationTeamAssignments.organizationId,
+            invitation.organizationId,
+          ),
+          eq(invitationTeamAssignments.invitationId, invitation.id),
+        ),
+      )
+      .limit(1),
+  ]);
+  return {
+    workspaceAssignment: workspaceAssignments[0],
+    teamAssignment: teamAssignments[0],
+  };
+}
+
+async function claimedInvitationId(
+  database: TrevvDatabase,
+  authUserId: string,
+): Promise<string | undefined> {
+  const [claim] = await database
+    .select({ invitationId: registrationInvitationClaims.invitationId })
+    .from(registrationInvitationClaims)
+    .where(eq(registrationInvitationClaims.authUserId, authUserId))
+    .limit(1);
+  return claim?.invitationId;
+}
+
+async function hasPendingRegistrationInvitationClaim(
+  database: TrevvDatabase,
+  authUserId: string,
+): Promise<boolean> {
+  const [claim] = await database
+    .select({ invitationId: registrationInvitationClaims.invitationId })
+    .from(registrationInvitationClaims)
+    .innerJoin(
+      invitations,
+      eq(invitations.id, registrationInvitationClaims.invitationId),
+    )
+    .where(
+      and(
+        eq(registrationInvitationClaims.authUserId, authUserId),
+        isNull(invitations.acceptedAt),
+      ),
+    )
+    .limit(1);
+  return Boolean(claim);
+}
+
+async function requireNoPendingRegistrationInvitationClaim(
+  database: TrevvDatabase,
+  authUserId: string,
+): Promise<void> {
+  if (await hasPendingRegistrationInvitationClaim(database, authUserId))
+    throw invitationAcceptanceRequired();
 }
 
 async function getAuthUser(
@@ -1188,8 +1352,12 @@ async function getVerifiedAuthUser(
   return authUser;
 }
 
-async function getMappedAppUser(database: TrevvDatabase, authUserId: string) {
-  const [row] = await database
+async function getMappedAppUser(
+  database: TrevvDatabase,
+  authUserId: string,
+  lock = false,
+) {
+  const query = database
     .select({ user: users })
     .from(authUserMappings)
     .innerJoin(users, eq(users.id, authUserMappings.appUserId))
@@ -1201,6 +1369,7 @@ async function getMappedAppUser(database: TrevvDatabase, authUserId: string) {
       ),
     )
     .limit(1);
+  const [row] = lock ? await query.for("update") : await query;
   return row?.user;
 }
 
@@ -1621,6 +1790,13 @@ function invalidInvitation() {
   return new RepositoryError(
     "invitation_invalid",
     "This invitation is invalid, expired, revoked, already used, or belongs to another verified email address.",
+  );
+}
+
+function invitationAcceptanceRequired() {
+  return new RepositoryError(
+    "invitation_acceptance_required",
+    "Accept your pending invitation before continuing.",
   );
 }
 

@@ -33,6 +33,13 @@ export function OrganizationSelection({ returnTo }: { returnTo: string }) {
           return;
         }
         const code = apiErrorCode(body);
+        if (
+          response.status === 409 &&
+          code === "invitation_acceptance_required"
+        ) {
+          window.location.replace("/invite/accept?resume=1");
+          return;
+        }
         if (response.status === 409 && code === "onboarding_required") {
           window.location.replace("/onboarding");
           return;

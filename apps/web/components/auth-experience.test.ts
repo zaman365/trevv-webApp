@@ -9,6 +9,39 @@ import {
 import { AuthExperience } from "./auth-experience";
 
 describe("registration admission experience", () => {
+  it.each([
+    ["sign-in", "closed", false],
+    ["sign-up", "invite_only", false],
+    ["sign-in", "public", true],
+  ] as const)(
+    "keeps fictional portfolio cards off the %s screen",
+    (mode, registrationMode, demoEnabled) => {
+      const html = renderToStaticMarkup(
+        createElement(AuthExperience, {
+          demoEnabled,
+          mode,
+          registrationMode,
+          returnTo: mode === "sign-in" ? "/app/portfolio" : "/onboarding",
+        }),
+      );
+
+      expect(html).not.toContain("auth-mini-portfolio");
+      expect(html).toContain(
+        demoEnabled
+          ? "Explainable signals from fictional operational work"
+          : "Explainable signals from your operational work",
+      );
+      expect(html).not.toContain(
+        demoEnabled
+          ? "Explainable signals from your operational work"
+          : "Explainable signals from fictional operational work",
+      );
+      expect(html).not.toContain("Northstar Apparel");
+      expect(html).not.toContain("MealFlow");
+      expect(html).not.toContain("LocalReach");
+    },
+  );
+
   it("explains closed private-beta access without rendering a sign-up form", () => {
     const html = renderToStaticMarkup(
       createElement(AuthExperience, {
@@ -75,6 +108,22 @@ describe("registration admission experience", () => {
     );
     expect(html).toContain("Resend verification email");
     expect(html).not.toContain("Open the time-limited verification link sent");
+  });
+
+  it("lets a user request a fresh verification link when no email is known", () => {
+    const html = renderToStaticMarkup(
+      createElement(VerifyEmailExperience, {
+        resume: false,
+        returnTo: "/invite/accept?resume=1",
+      }),
+    );
+
+    expect(html).toContain('type="email"');
+    expect(html).toContain('autoComplete="email"');
+    expect(html).toContain('value=""');
+    expect(html).toContain("Resend verification email");
+    expect(html).toContain("Return to sign in");
+    expect(html).not.toContain("A verification email was sent");
   });
 
   it("does not claim a rate-limited verification resend was accepted", () => {

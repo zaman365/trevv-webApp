@@ -3,16 +3,18 @@
 import { MailCheck, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { trevvBrand } from "@/lib/branding";
+import { waitForLiveApiReadiness } from "@/lib/live-api-readiness";
 
 export function InvitationAcceptance({ resume }: { resume: boolean }) {
   const attempted = useRef(false);
   const [message, setMessage] = useState(
     resume
-      ? "Validating your invitation…"
+      ? "Preparing secure invitation acceptance…"
       : "This invitation link is missing or no longer available.",
   );
   const [failed, setFailed] = useState(!resume);
   const [retryable, setRetryable] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     if (attempted.current) return;
@@ -22,6 +24,19 @@ export function InvitationAcceptance({ resume }: { resume: boolean }) {
 
     async function accept() {
       try {
+        setMessage(
+          "Waking the secure preview services. Free-preview startup can take up to two minutes. No invitation change has happened yet.",
+        );
+        const ready = await waitForLiveApiReadiness();
+        if (!ready) {
+          setMessage(
+            "The secure services did not become ready in time. Your invitation was not accepted. Try again.",
+          );
+          setRetryable(true);
+          setFailed(true);
+          return;
+        }
+        setMessage("Secure services are ready. Validating your invitation…");
         const response = await fetch("/api/web/invitations/accept", {
           method: "POST",
           credentials: "same-origin",
@@ -42,12 +57,34 @@ export function InvitationAcceptance({ resume }: { resume: boolean }) {
         setMessage("Invitation accepted. Opening your organization…");
         window.location.replace("/app/portfolio");
       } catch {
-        setMessage("The invitation could not be checked. Try the link again.");
+        setMessage(
+          "The invitation could not be checked, and no membership change was confirmed. Try again.",
+        );
         setRetryable(true);
         setFailed(true);
       }
     }
   }, [resume]);
+
+  async function signOutForRecovery() {
+    setSigningOut(true);
+    try {
+      const response = await fetch("/api/web/sign-out", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: "{}",
+      });
+      if (!response.ok)
+        throw new Error("The current account could not be signed out.");
+      window.location.replace("/sign-in");
+    } catch {
+      setMessage(
+        "This invitation needs a replacement from the Workspace owner. TREVV could not sign out the current account; try again before using another invited address.",
+      );
+      setSigningOut(false);
+    }
+  }
 
   return (
     <main className="public-auth-page">
@@ -61,14 +98,39 @@ export function InvitationAcceptance({ resume }: { resume: boolean }) {
         <span className="onboarding-icon">
           {failed ? <ShieldCheck size={18} /> : <MailCheck size={18} />}
         </span>
-        <h1>{failed ? "Invitation unavailable" : "Accept invitation"}</h1>
+        <h1>
+          {failed
+            ? retryable
+              ? "Invitation not confirmed"
+              : "Invitation unavailable"
+            : "Accept invitation"}
+        </h1>
         <p role="status">{message}</p>
-        {failed ? (
-          <a
-            className="auth-card-link"
-            href={retryable ? "/invite/accept?resume=1" : "/sign-in"}
-          >
-            {retryable ? "Try invitation again" : "Sign in to TREVV"}
+        {failed && retryable ? (
+          <a className="auth-card-link" href="/invite/accept?resume=1">
+            Try invitation again
+          </a>
+        ) : null}
+        {failed && !retryable && resume ? (
+          <div className="invitation-recovery-actions">
+            <p>
+              Ask the Workspace owner to send a replacement invitation. If this
+              invitation belongs to another email address, sign out before
+              opening the replacement link.
+            </p>
+            <button
+              className="primary-button"
+              disabled={signingOut}
+              onClick={() => void signOutForRecovery()}
+              type="button"
+            >
+              {signingOut ? "Signing out…" : "Sign out and switch account"}
+            </button>
+          </div>
+        ) : null}
+        {failed && !retryable && !resume ? (
+          <a className="auth-card-link" href="/sign-in">
+            Sign in to TREVV
           </a>
         ) : null}
       </section>

@@ -53,6 +53,29 @@ const item = {
 } as const;
 
 describe("Phase 3 API client", () => {
+  it("accepts a durable registration claim without resending the raw token", async () => {
+    const acceptance = {
+      invitationId: "invitation-claimed-1",
+      organizationId: "organization-claimed-1",
+      role: "member" as const,
+      acceptedAt: timestamp,
+    };
+    const fetchMock = vi.fn(async () => Response.json(acceptance));
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(client.acceptClaimedInvitation()).resolves.toEqual(acceptance);
+    const [requested, init] =
+      (fetchMock.mock.calls as unknown as Parameters<typeof fetch>[])[0] ?? [];
+    expect(new URL(String(requested)).pathname).toBe(
+      "/api/v1/invitations/accept-claim",
+    );
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBeUndefined();
+  });
+
   it("parses immutable runtime identity from readiness", async () => {
     const release = {
       releaseId: "release-2026.08.30.1",

@@ -95,6 +95,34 @@ describe("runtime release metadata", () => {
   });
 });
 
+describe("Phase 2 identity contract", () => {
+  it("publishes authenticated durable invitation-claim acceptance", () => {
+    const operation =
+      openApiDocument.paths["/api/v1/invitations/accept-claim"].post;
+    expect(operation.operationId).toBe("acceptClaimedInvitation");
+    expect(operation).not.toHaveProperty("requestBody");
+    expect(operation.responses["200"]).toMatchObject({
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/InvitationAcceptance" },
+        },
+      },
+    });
+  });
+
+  it.each([
+    ["raw token", openApiDocument.paths["/api/v1/invitations/accept"].post],
+    [
+      "durable claim",
+      openApiDocument.paths["/api/v1/invitations/accept-claim"].post,
+    ],
+  ])("documents rate limiting for %s acceptance", (_kind, operation) => {
+    expect(operation.responses["429"]).toEqual({
+      $ref: "#/components/responses/RateLimited",
+    });
+  });
+});
+
 describe("Phase 3 API contract", () => {
   it("requires organization timezone and durable Workspace versions", () => {
     expect(() =>

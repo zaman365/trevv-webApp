@@ -1,0 +1,82 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  cookies: vi.fn(),
+  serverAuthFetch: vi.fn(),
+}));
+
+vi.mock("next/headers", () => ({ cookies: mocks.cookies }));
+vi.mock("@/lib/server-auth", () => ({
+  serverAuthFetch: mocks.serverAuthFetch,
+}));
+
+import { POST } from "./route";
+
+beforeEach(() => {
+  vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://trevv.test");
+  mocks.cookies.mockReset();
+  mocks.serverAuthFetch.mockReset();
+  mocks.cookies.mockResolvedValue({
+    get: vi.fn().mockReturnValue({ value: "one-time-reset-token" }),
+  });
+});
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe("Web password reset", () => {
+  it.each([429, 503])(
+    "preserves the one-time token for retryable upstream HTTP %s",
+    async (status) => {
+      mocks.serverAuthFetch.mockResolvedValue(
+        Response.json(
+          { code: "temporarily_unavailable" },
+          {
+            status,
+            headers: {
+              "retry-after": "17",
+              "x-request-id": "reset-request-1",
+            },
+          },
+        ),
+      );
+
+      const response = await POST(sameOriginRequest());
+
+      expect(response.status).toBe(status === 429 ? 429 : 502);
+      expect(response.headers.get("set-cookie")).toBeNull();
+      expect(response.headers.get("retry-after")).toBe("17");
+      expect(response.headers.get("x-request-id")).toBe("reset-request-1");
+      await expect(response.json()).resolves.toMatchObject({
+        error: expect.stringMatching(/try again/iu),
+      });
+    },
+  );
+
+  it("clears a definitively invalid one-time token", async () => {
+    mocks.serverAuthFetch.mockResolvedValue(
+      Response.json({ code: "INVALID_TOKEN" }, { status: 400 }),
+    );
+
+    const response = await POST(sameOriginRequest());
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("set-cookie")).toContain(
+      "trevv.pending_password_reset=",
+    );
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+});
+
+function sameOriginRequest() {
+  return new Request("https://trevv.test/api/web/reset-password", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: "https://trevv.test",
+    },
+    body: JSON.stringify({
+      newPassword: "test-only-replacement-password",
+    }),
+  });
+}

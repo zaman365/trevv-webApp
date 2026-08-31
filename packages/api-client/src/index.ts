@@ -328,6 +328,15 @@ export function createApiClient({
         ).body,
       ),
 
+    acceptClaimedInvitation: async (): Promise<InvitationAcceptance> =>
+      invitationAcceptanceSchema.parse(
+        (
+          await request("/invitations/accept-claim", {
+            method: "POST",
+          })
+        ).body,
+      ),
+
     memberships: async (): Promise<Membership[]> =>
       membershipSchema.array().parse((await request("/memberships")).body),
 

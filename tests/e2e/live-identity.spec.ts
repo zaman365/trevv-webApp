@@ -22,6 +22,60 @@ test.afterAll(async () => {
   await rm(requiredMailSink(), { force: true });
 });
 
+test("a terminal invitation failure offers a safe account-recovery path", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    extraHTTPHeaders: clientHeaders(99),
+  });
+  const page = await context.newPage();
+  let signOutRequests = 0;
+
+  await page.route("**/api/web/readyz", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      status: 200,
+      body: JSON.stringify({ status: "ready", mode: "live", api: "ready" }),
+    }),
+  );
+  await page.route("**/api/web/invitations/accept", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      status: 404,
+      body: JSON.stringify({
+        error: "This invitation is invalid, expired, revoked, or already used.",
+      }),
+    }),
+  );
+  await page.route("**/api/web/sign-out", (route) => {
+    signOutRequests += 1;
+    return route.fulfill({
+      contentType: "application/json",
+      status: 200,
+      body: JSON.stringify({ success: true }),
+    });
+  });
+
+  await page.goto("/invite/accept?resume=1");
+  await expect(
+    page.getByRole("heading", { name: "Invitation unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(
+    "invalid, expired, revoked, or already used",
+  );
+  await expect(
+    page.getByText("Ask the Workspace owner to send a replacement invitation"),
+  ).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Sign out and switch account" })
+    .click();
+  await page.waitForURL("**/sign-in");
+  expect(new URL(page.url()).search).toBe("");
+  expect(signOutRequests).toBe(1);
+  await context.close();
+});
+
 test("live identity, onboarding, invitation, revocation, and recovery fail closed", async ({
   browser,
 }) => {
@@ -56,6 +110,10 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   );
 
   await ownerPage.goto("/sign-in?next=%2Fonboarding");
+  await expect(ownerPage.locator(".auth-mini-portfolio")).toHaveCount(0);
+  await expect(ownerPage.getByText("Northstar Apparel")).toHaveCount(0);
+  await expect(ownerPage.getByText("MealFlow")).toHaveCount(0);
+  await expect(ownerPage.getByText("LocalReach")).toHaveCount(0);
   await expectNoLiveWcagFindings(ownerPage, "sign-in");
   await submitSignIn(ownerPage, ownerEmail, "incorrect-test-password");
   await expect(ownerPage.getByRole("status")).toContainText(
@@ -167,30 +225,60 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     "You are invited to TREVV",
   );
 
-  const inviteeContext = await browser.newContext({
+  const invitationRegistrationContext = await browser.newContext({
     extraHTTPHeaders: clientHeaders(103),
   });
-  const inviteePage = await inviteeContext.newPage();
+  const invitationRegistrationPage =
+    await invitationRegistrationContext.newPage();
   const invitationLanding = await normalizeMailAction(
-    inviteeContext,
+    invitationRegistrationContext,
     invitationUrl,
   );
-  await inviteePage.goto(invitationLanding);
-  await inviteePage.waitForURL("**/sign-in?next=**");
-  await inviteePage
+  await invitationRegistrationPage.goto(invitationLanding);
+  await invitationRegistrationPage.waitForURL("**/sign-in?next=**");
+  await invitationRegistrationPage
     .getByRole("link", { name: "Create invited account" })
     .click();
-  await signUpAndVerify(
-    inviteePage,
-    inviteeContext,
+  const inviteeVerificationUrl = await submitSignUp(
+    invitationRegistrationPage,
     "Live Invitee",
     inviteeEmail,
     inviteePassword,
     "/invite/accept?resume=1",
     false,
   );
+
+  // Registration durably binds the invitation to the new identity. Email
+  // verification and acceptance must therefore survive a different browser
+  // with none of the scoped raw-token cookies from the invitation link.
+  await invitationRegistrationContext.clearCookies();
+  expect(await invitationCookies(invitationRegistrationContext)).toEqual([]);
+  await invitationRegistrationContext.close();
+
+  const inviteeContext = await browser.newContext({
+    extraHTTPHeaders: clientHeaders(104),
+  });
+  const inviteePage = await inviteeContext.newPage();
+  expect(await invitationCookies(inviteeContext)).toEqual([]);
+  const anonymousClaimRecovery = inviteePage.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/web/invitations/accept" &&
+      response.request().method() === "POST",
+    { timeout: 20_000 },
+  );
+  await verifyEmailAction(inviteePage, inviteeContext, inviteeVerificationUrl);
+  expect((await anonymousClaimRecovery).status()).toBe(401);
   await inviteePage.waitForURL("**/sign-in?next=**");
+  expect(await invitationCookies(inviteeContext)).toEqual([]);
+  const authenticatedClaimRecovery = inviteePage.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/web/invitations/accept" &&
+      response.request().method() === "POST" &&
+      response.status() === 200,
+    { timeout: 20_000 },
+  );
   await submitSignIn(inviteePage, inviteeEmail, inviteePassword);
+  expect((await authenticatedClaimRecovery).status()).toBe(200);
   await inviteePage.waitForURL("**/app/portfolio");
   const inviteeSession = await browserJson(inviteePage, "/api/v1/session");
   expect(inviteeSession.status).toBe(200);
@@ -258,7 +346,7 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   });
 
   const replayContext = await browser.newContext({
-    extraHTTPHeaders: clientHeaders(104),
+    extraHTTPHeaders: clientHeaders(105),
   });
   const replayPage = await replayContext.newPage();
   const replayLanding = await normalizeMailAction(replayContext, resetUrl);
@@ -309,6 +397,27 @@ async function signUpAndVerify(
   navigate = true,
   bootstrapRegistration = false,
 ) {
+  const verificationUrl = await submitSignUp(
+    page,
+    name,
+    email,
+    password,
+    returnTo,
+    navigate,
+    bootstrapRegistration,
+  );
+  await verifyEmailAction(page, context, verificationUrl);
+}
+
+async function submitSignUp(
+  page: Page,
+  name: string,
+  email: string,
+  password: string,
+  returnTo: string,
+  navigate = true,
+  bootstrapRegistration = false,
+): Promise<string> {
   if (navigate) {
     await page.goto(`/sign-up?next=${encodeURIComponent(returnTo)}`);
     await expectNoLiveWcagFindings(page, "sign-up");
@@ -328,12 +437,20 @@ async function signUpAndVerify(
     );
   }
   await page.getByRole("button", { name: "Create account" }).click();
-  if (bootstrapRegistration) await page.unroute("**/api/auth/sign-up/email");
   await page.waitForURL("**/verify-email?**");
+  if (bootstrapRegistration) await page.unroute("**/api/auth/sign-up/email");
   const verificationUrl = await waitForMailAction(
     email,
     "Verify your TREVV email",
   );
+  return verificationUrl;
+}
+
+async function verifyEmailAction(
+  page: Page,
+  context: BrowserContext,
+  verificationUrl: string,
+) {
   const callback = await normalizeMailAction(context, verificationUrl);
   const verificationResponse = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/web/verify-email",
@@ -354,6 +471,14 @@ async function signUpAndVerify(
     );
   }
   await page.waitForURL((url) => url.pathname !== "/verify-email");
+}
+
+async function invitationCookies(context: BrowserContext) {
+  const names = new Set([
+    "trevv.pending_invitation",
+    "trevv.registration_invitation",
+  ]);
+  return (await context.cookies()).filter((cookie) => names.has(cookie.name));
 }
 
 async function submitSignIn(page: Page, email: string, password: string) {

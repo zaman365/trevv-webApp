@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
 import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";
+import { warmLiveApiReadiness } from "@/lib/live-api-readiness";
 import type { WebRegistrationMode } from "@/lib/web-runtime-config";
 import { CapabilityNotice, TechnicalPreviewBadge } from "./capability-status";
 
@@ -53,8 +54,9 @@ export function AuthExperience({
 
   useEffect(() => {
     const timer = window.setTimeout(() => setHydrated(true), 0);
+    if (!demoEnabled) void warmLiveApiReadiness();
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [demoEnabled]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,6 +97,16 @@ export function AuthExperience({
     setPending(true);
     setMessage("");
     try {
+      if (!demoEnabled) {
+        setMessage(
+          "Preparing secure services. Free-preview startup can take up to two minutes; no authentication request has been sent yet.",
+        );
+        if (!(await warmLiveApiReadiness()))
+          throw new Error(
+            "The secure services did not become ready in time. No sign-in or account request was sent. Try again.",
+          );
+        setMessage("");
+      }
       const response = await fetch(
         mode === "sign-in"
           ? "/api/auth/sign-in/email"
@@ -123,6 +135,16 @@ export function AuthExperience({
         },
       );
       const body: unknown = await response.json().catch(() => null);
+      if (
+        mode === "sign-in" &&
+        !response.ok &&
+        /EMAIL_NOT_VERIFIED/iu.test(authResponseCode(body))
+      ) {
+        window.location.replace(
+          `/verify-email?email=${encodeURIComponent(email)}&next=${encodeURIComponent(returnTo)}`,
+        );
+        return;
+      }
       if (
         mode === "sign-up" &&
         !response.ok &&
@@ -166,6 +188,13 @@ export function AuthExperience({
           sessionCode === "onboarding_required")
       ) {
         window.location.replace("/onboarding");
+        return;
+      }
+      if (
+        sessionResponse.status === 409 &&
+        sessionCode === "invitation_acceptance_required"
+      ) {
+        window.location.replace("/invite/accept?resume=1");
         return;
       }
       if (
@@ -228,7 +257,9 @@ export function AuthExperience({
           <ul>
             <li>
               <Check size={13} />
-              Explainable signals from fictional operational work
+              {demoEnabled
+                ? "Explainable signals from fictional operational work"
+                : "Explainable signals from your operational work"}
             </li>
             <li>
               <Check size={13} />
@@ -239,32 +270,6 @@ export function AuthExperience({
               One calm hierarchy for every Workspace
             </li>
           </ul>
-        </div>
-        <div className="auth-mini-portfolio">
-          <article>
-            <span>N</span>
-            <div>
-              <strong>Northstar Apparel</strong>
-              <small>Launch readiness</small>
-            </div>
-            <b>68%</b>
-          </article>
-          <article>
-            <span>M</span>
-            <div>
-              <strong>MealFlow</strong>
-              <small>Pilot onboarding</small>
-            </div>
-            <b>Watch</b>
-          </article>
-          <article>
-            <span>L</span>
-            <div>
-              <strong>LocalReach</strong>
-              <small>Service delivery</small>
-            </div>
-            <b>On track</b>
-          </article>
         </div>
       </section>
       <section className="auth-form-panel">

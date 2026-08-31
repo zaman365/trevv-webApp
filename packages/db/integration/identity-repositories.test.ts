@@ -90,6 +90,165 @@ function mutation(route: string, now = new Date("2026-08-29T12:00:00.000Z")) {
   };
 }
 
+async function teamInvitationReplaySnapshot(input: {
+  organizationId: string;
+  invitationId: string;
+  workspaceId: string;
+  teamId: string;
+  conversationId: string;
+  userId: string;
+}) {
+  const [
+    invitationAuditCount,
+    invitationOutboxCount,
+    teamAuditCount,
+    teamOutboxCount,
+    collaborationEventCount,
+    membershipCount,
+    workspaceMemberCount,
+    teamMemberCount,
+    roomParticipantCount,
+    membership,
+    workspaceMember,
+    teamMember,
+    roomParticipant,
+    team,
+    room,
+  ] = await Promise.all([
+    connection.db.$count(
+      auditLogs,
+      and(
+        eq(auditLogs.organizationId, input.organizationId),
+        eq(auditLogs.action, "invitation.accepted"),
+        eq(auditLogs.targetId, input.invitationId),
+      ),
+    ),
+    connection.db.$count(
+      outboxEvents,
+      and(
+        eq(outboxEvents.organizationId, input.organizationId),
+        eq(outboxEvents.eventType, "invitation.accepted"),
+        eq(outboxEvents.aggregateId, input.invitationId),
+      ),
+    ),
+    connection.db.$count(
+      auditLogs,
+      and(
+        eq(auditLogs.organizationId, input.organizationId),
+        eq(auditLogs.action, "team.membership_changed"),
+        eq(auditLogs.targetId, input.teamId),
+      ),
+    ),
+    connection.db.$count(
+      outboxEvents,
+      and(
+        eq(outboxEvents.organizationId, input.organizationId),
+        eq(outboxEvents.eventType, "team.membership_changed"),
+        eq(outboxEvents.aggregateId, input.teamId),
+      ),
+    ),
+    connection.db.$count(
+      collaborationEvents,
+      and(
+        eq(collaborationEvents.organizationId, input.organizationId),
+        eq(collaborationEvents.eventType, "team.membership_changed"),
+        eq(collaborationEvents.aggregateId, input.teamId),
+      ),
+    ),
+    connection.db.$count(
+      memberships,
+      and(
+        eq(memberships.organizationId, input.organizationId),
+        eq(memberships.userId, input.userId),
+      ),
+    ),
+    connection.db.$count(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.organizationId, input.organizationId),
+        eq(workspaceMembers.workspaceId, input.workspaceId),
+        eq(workspaceMembers.userId, input.userId),
+      ),
+    ),
+    connection.db.$count(
+      teamMembers,
+      and(
+        eq(teamMembers.organizationId, input.organizationId),
+        eq(teamMembers.teamId, input.teamId),
+        eq(teamMembers.userId, input.userId),
+      ),
+    ),
+    connection.db.$count(
+      conversationParticipants,
+      and(
+        eq(conversationParticipants.organizationId, input.organizationId),
+        eq(conversationParticipants.conversationId, input.conversationId),
+        eq(conversationParticipants.userId, input.userId),
+      ),
+    ),
+    connection.db.query.memberships.findFirst({
+      where: and(
+        eq(memberships.organizationId, input.organizationId),
+        eq(memberships.userId, input.userId),
+      ),
+    }),
+    connection.db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.organizationId, input.organizationId),
+        eq(workspaceMembers.workspaceId, input.workspaceId),
+        eq(workspaceMembers.userId, input.userId),
+      ),
+    }),
+    connection.db.query.teamMembers.findFirst({
+      where: and(
+        eq(teamMembers.organizationId, input.organizationId),
+        eq(teamMembers.teamId, input.teamId),
+        eq(teamMembers.userId, input.userId),
+      ),
+    }),
+    connection.db.query.conversationParticipants.findFirst({
+      where: and(
+        eq(conversationParticipants.organizationId, input.organizationId),
+        eq(conversationParticipants.conversationId, input.conversationId),
+        eq(conversationParticipants.userId, input.userId),
+      ),
+    }),
+    connection.db.query.teams.findFirst({
+      where: and(
+        eq(teams.organizationId, input.organizationId),
+        eq(teams.id, input.teamId),
+      ),
+    }),
+    connection.db.query.conversations.findFirst({
+      where: and(
+        eq(conversations.organizationId, input.organizationId),
+        eq(conversations.id, input.conversationId),
+      ),
+    }),
+  ]);
+  return {
+    invitationAuditCount,
+    invitationOutboxCount,
+    teamAuditCount,
+    teamOutboxCount,
+    collaborationEventCount,
+    membershipCount,
+    workspaceMemberCount,
+    teamMemberCount,
+    roomParticipantCount,
+    membershipUpdatedAt: membership?.updatedAt,
+    workspaceMemberUpdatedAt: workspaceMember?.updatedAt,
+    teamMemberVersion: teamMember?.version,
+    teamMemberUpdatedAt: teamMember?.updatedAt,
+    roomParticipantVersion: roomParticipant?.version,
+    roomParticipantUpdatedAt: roomParticipant?.updatedAt,
+    teamVersion: team?.version,
+    teamUpdatedAt: team?.updatedAt,
+    roomVersion: room?.version,
+    roomUpdatedAt: room?.updatedAt,
+  };
+}
+
 async function seedAuthUser(input: {
   id: string;
   email: string;
@@ -630,6 +789,31 @@ describe("Phase 2 identity repositories", () => {
         where: eq(registrationInvitationClaims.invitationId, invitationId),
       });
     expect(claim).toMatchObject({ authUserId: claimedAuthUserId });
+    const claimedIdentity = createPostgresRepositories(
+      connection.db,
+    ).forIdentity(identityScope(claimedAuthUserId, "claim-owner"));
+    await expect(claimedIdentity.resolve()).resolves.toMatchObject({
+      status: "invitation_acceptance_required",
+    });
+    await expect(
+      claimedIdentity.onboarding.getProgress(),
+    ).rejects.toMatchObject({ code: "invitation_acceptance_required" });
+    await expect(
+      claimedIdentity.onboarding.saveProgress({
+        step: 2,
+        organizationName: "Must not be provisioned",
+      }),
+    ).rejects.toMatchObject({ code: "invitation_acceptance_required" });
+    await expect(
+      claimedIdentity.onboarding.complete(onboardingInput("claimed-invite"), {
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: "invitation_acceptance_required" });
+    await expect(
+      connection.db.query.onboardingProgress.findFirst({
+        where: eq(onboardingProgress.authUserId, claimedAuthUserId),
+      }),
+    ).resolves.toBeUndefined();
     await expect(
       createPostgresRepositories(connection.db)
         .forIdentity(identityScope(otherAuthUserId, "wrong-claim-owner"))
@@ -637,11 +821,86 @@ describe("Phase 2 identity repositories", () => {
     ).rejects.toMatchObject({ code: "invitation_invalid" });
     await expect(
       createPostgresRepositories(connection.db)
-        .forIdentity(identityScope(claimedAuthUserId, "claim-owner"))
-        .invitations.accept(tokenHash),
+        .forIdentity(identityScope(otherAuthUserId, "missing-claim"))
+        .invitations.acceptClaim(),
+    ).rejects.toMatchObject({ code: "invitation_invalid" });
+    await expect(
+      claimedIdentity.invitations.acceptClaim(),
     ).resolves.toMatchObject({
       invitationId,
       organizationId,
+    });
+    await expect(
+      connection.db.query.registrationInvitationClaims.findFirst({
+        where: eq(registrationInvitationClaims.invitationId, invitationId),
+      }),
+    ).resolves.toMatchObject({ authUserId: null });
+    await expect(claimedIdentity.resolve()).resolves.toMatchObject({
+      status: "active",
+      organization: { id: organizationId },
+    });
+  });
+
+  it("consumes a stale registration claim when a valid replacement invitation is accepted", async () => {
+    const suffix = randomUUID();
+    const organizationId = `org-replacement-claim-${suffix}`;
+    const staleInvitationId = `invitation-stale-claim-${suffix}`;
+    const replacementInvitationId = `invitation-replacement-${suffix}`;
+    const authUserId = `auth-replacement-claim-${suffix}`;
+    const email = `${authUserId}@example.test`;
+    const staleTokenHash = hashInvitationToken(opaqueToken());
+    const replacementTokenHash = hashInvitationToken(opaqueToken());
+    const now = new Date();
+    await connection.db.insert(organizations).values({
+      id: organizationId,
+      name: "Replacement claim test",
+      slug: `replacement-claim-${suffix}`,
+    });
+    await connection.db.insert(invitations).values({
+      id: staleInvitationId,
+      organizationId,
+      email,
+      role: "member",
+      tokenHash: staleTokenHash,
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1_000),
+    });
+    await connection.db.insert(authUsers).values({
+      id: authUserId,
+      name: "Replacement invitation identity",
+      email,
+      emailVerified: true,
+      registrationInvitationTokenHash: staleTokenHash,
+    });
+    await connection.db
+      .update(invitations)
+      .set({ revokedAt: now })
+      .where(eq(invitations.id, staleInvitationId));
+    await connection.db.insert(invitations).values({
+      id: replacementInvitationId,
+      organizationId,
+      email,
+      role: "member",
+      tokenHash: replacementTokenHash,
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1_000),
+    });
+
+    const identity = createPostgresRepositories(connection.db).forIdentity(
+      identityScope(authUserId, "replacement-claim"),
+    );
+    await expect(identity.resolve()).resolves.toMatchObject({
+      status: "invitation_acceptance_required",
+    });
+    await expect(
+      identity.invitations.accept(replacementTokenHash, now),
+    ).resolves.toMatchObject({ invitationId: replacementInvitationId });
+    await expect(
+      connection.db.query.registrationInvitationClaims.findFirst({
+        where: eq(registrationInvitationClaims.invitationId, staleInvitationId),
+      }),
+    ).resolves.toMatchObject({ authUserId: null });
+    await expect(identity.resolve()).resolves.toMatchObject({
+      status: "active",
+      organization: { id: organizationId },
     });
   });
 
@@ -914,9 +1173,17 @@ describe("Phase 2 identity repositories", () => {
       organizationId: owner.result.organizationId,
       membership: { role: "member" },
     });
-    await expect(
-      inviteeIdentity.invitations.accept(secondTokenHash, now),
-    ).rejects.toMatchObject({ code: "invitation_invalid" });
+    const replayedAcceptance = await inviteeIdentity.invitations.accept(
+      secondTokenHash,
+      now,
+    );
+    expect(replayedAcceptance).toMatchObject({
+      invitationId: created.value.id,
+      organizationId: owner.result.organizationId,
+      appUserId: accepted.appUserId,
+      membership: { role: "member" },
+    });
+    expect(replayedAcceptance.acceptedAt).toEqual(accepted.acceptedAt);
     await expect(inviteeIdentity.resolve()).resolves.toMatchObject({
       status: "active",
       organization: { id: owner.result.organizationId },
@@ -1068,10 +1335,74 @@ describe("Phase 2 identity repositories", () => {
         ),
       ),
     ).toBe(1);
+    const replayInput = {
+      organizationId: owner.result.organizationId,
+      invitationId: invitation.value.id,
+      workspaceId: owner.result.workspaceId,
+      teamId: team.value.team.id,
+      conversationId: room!.conversationId,
+      userId: accepted.appUserId,
+    };
+    const beforeReplay = await teamInvitationReplaySnapshot(replayInput);
+    expect(beforeReplay).toMatchObject({
+      invitationAuditCount: 1,
+      invitationOutboxCount: 1,
+      teamAuditCount: 1,
+      teamOutboxCount: 1,
+      collaborationEventCount: 1,
+      membershipCount: 1,
+      workspaceMemberCount: 1,
+      teamMemberCount: 1,
+      roomParticipantCount: 1,
+    });
+    const replayed = await inviteeIdentity.invitations.accept(
+      tokenHash,
+      new Date("2026-08-29T12:30:00.000Z"),
+    );
+    expect(replayed).toMatchObject({
+      invitationId: invitation.value.id,
+      organizationId: owner.result.organizationId,
+      appUserId: accepted.appUserId,
+      workspaceId: owner.result.workspaceId,
+      teamId: team.value.team.id,
+      membership: { role: "member" },
+    });
+    expect(replayed.acceptedAt).toEqual(accepted.acceptedAt);
+    expect(await teamInvitationReplaySnapshot(replayInput)).toEqual(
+      beforeReplay,
+    );
+
+    const wrongAuthUserId = `auth-team-replay-wrong-${randomUUID()}`;
+    const wrongAppUserId = `user-team-replay-wrong-${randomUUID()}`;
+    await connection.db.transaction(async (transaction) => {
+      await transaction.insert(users).values({
+        id: wrongAppUserId,
+        email: `${wrongAppUserId}@example.test`,
+        name: "Wrong mapped invitation user",
+      });
+      await transaction.insert(authUsers).values({
+        id: wrongAuthUserId,
+        email: inviteeEmail.toLocaleUpperCase("en-US"),
+        name: "Wrong invitation identity",
+        emailVerified: true,
+      });
+      await transaction.insert(authUserMappings).values({
+        authUserId: wrongAuthUserId,
+        appUserId: wrongAppUserId,
+      });
+    });
+    await expect(
+      createPostgresRepositories(connection.db)
+        .forIdentity(identityScope(wrongAuthUserId, "wrong-replay-user"))
+        .invitations.accept(tokenHash, new Date("2026-08-29T12:30:00.000Z")),
+    ).rejects.toMatchObject({ code: "invitation_invalid" });
+    expect(await teamInvitationReplaySnapshot(replayInput)).toEqual(
+      beforeReplay,
+    );
     await expect(
       inviteeIdentity.invitations.accept(
         tokenHash,
-        new Date("2026-08-29T12:00:00.000Z"),
+        new Date("2026-09-01T12:00:00.000Z"),
       ),
     ).rejects.toMatchObject({ code: "invitation_invalid" });
 
@@ -1492,6 +1823,12 @@ describe("Phase 2 identity repositories", () => {
     expect(workspaceGrant?.archivedAt).toBeInstanceOf(Date);
     expect(selection).toBeUndefined();
     expect(storedInvitation?.acceptedByUserId).toBe(accepted.appUserId);
+    await expect(
+      inviteeIdentity.invitations.accept(
+        tokenHash,
+        new Date("2026-08-29T12:30:00.000Z"),
+      ),
+    ).rejects.toMatchObject({ code: "invitation_invalid" });
     const [oldTeamGrant, oldTeamRoomGrant, privateGrant, directGrant] =
       await Promise.all([
         connection.db.query.teamMembers.findFirst({

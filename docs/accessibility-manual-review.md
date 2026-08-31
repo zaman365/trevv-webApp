@@ -87,6 +87,12 @@ the obsolete larger dark-theme fingerprints. Where Axe still returns
 or the identical already-reviewed light fingerprint. Reintroducing the removed
 layered styles therefore fails rather than matching an old allowance.
 
+The sign-in follow-up also replaced the decorative authentication-panel
+gradient with an opaque, contrast-safe surface after removing its fictional
+portfolio cards. Desktop and mobile now produce the same single reviewed
+separator fingerprint; the obsolete larger desktop fingerprint is no longer
+accepted.
+
 The first Linux run after that follow-up reduced mobile Attention from its
 obsolete 13-node compositor sets to the same single Quick Capture label already
 observed on other mobile routes. It also returned the Board's reviewed
