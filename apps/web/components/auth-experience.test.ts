@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -9,6 +10,17 @@ import {
 import { AuthExperience } from "./auth-experience";
 
 describe("registration admission experience", () => {
+  it("keeps readiness warming advisory so auth requests are never preflight-blocked", () => {
+    const source = readFileSync(
+      new URL("./auth-experience.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("void warmLiveApiReadiness()");
+    expect(source).not.toContain("await warmLiveApiReadiness()");
+    expect(source).not.toContain("No sign-in or account request was sent");
+  });
+
   it.each([
     ["sign-in", "closed", false],
     ["sign-up", "invite_only", false],

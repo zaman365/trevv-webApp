@@ -54,6 +54,9 @@ export function AuthExperience({
 
   useEffect(() => {
     const timer = window.setTimeout(() => setHydrated(true), 0);
+    // Warm a sleeping preview API opportunistically. Authentication requests
+    // must still reach the API when this readiness probe times out: the auth
+    // request itself is the authoritative operation and can wake the service.
     if (!demoEnabled) void warmLiveApiReadiness();
     return () => window.clearTimeout(timer);
   }, [demoEnabled]);
@@ -97,16 +100,6 @@ export function AuthExperience({
     setPending(true);
     setMessage("");
     try {
-      if (!demoEnabled) {
-        setMessage(
-          "Preparing secure services. Free-preview startup can take up to two minutes; no authentication request has been sent yet.",
-        );
-        if (!(await warmLiveApiReadiness()))
-          throw new Error(
-            "The secure services did not become ready in time. No sign-in or account request was sent. Try again.",
-          );
-        setMessage("");
-      }
       const response = await fetch(
         mode === "sign-in"
           ? "/api/auth/sign-in/email"
