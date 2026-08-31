@@ -253,9 +253,13 @@ The environment file contains `TREV_RUNTIME_ENVIRONMENT=staging`,
 `NODE_ENV=production`, the verified `DATABASE_URL`, `RELEASE_ID`, and
 `TREV_STAGING_MIGRATION_CONFIRM`. The entrypoint reads the actual database name
 and persistent comment before Drizzle can create its journal or execute DDL,
-and serializes guarded runs with a PostgreSQL advisory lock. Require a
-`"status":"migrated"` first run and a `"status":"no_op"` second run, capture
-the image digest and migration head, then configure/redeploy the API. Any
+and serializes guarded runs with a PostgreSQL advisory lock. On an empty
+genesis database, require a `"status":"migrated"` first run followed by
+`"status":"no_op"`. On a successor whose deployed predecessor already has the
+same authenticated migration head and tree, require `"status":"no_op"` on both
+runs with zero applied migrations and a stable migration count; a reported
+`"status":"migrated"` is then a stop condition. Capture the image digest and
+migration head before configuring/redeploying the API. Any
 identity, marker, cohort, TLS, or confirmation failure is a stop condition; do
 not fall back to the generic `packages/db/dist/migrate.js` entrypoint. For an
 existing disposable preview, take a local `pg_dump` and prove a local restore

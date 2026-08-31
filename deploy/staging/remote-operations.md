@@ -53,9 +53,12 @@ migration journal or application schema can be created. Never bypass this by
 running `packages/db/dist/migrate.js` directly.
 
 Run the immutable `trevv-migrate@sha256:...` image exactly as documented in
-`deploy/render/README.md`. Record a successful `"status":"migrated"` run and a
-second `"status":"no_op"` run for the same database and release cohort before
-starting the API.
+`deploy/render/README.md`. For an empty genesis database, record a successful
+`"status":"migrated"` run and then `"status":"no_op"`. For a successor whose
+authenticated predecessor has the same migration head and tree, require two
+`"status":"no_op"` runs, zero applied migrations, and a stable migration count;
+stop if that successor run reports a migration. Complete the applicable two-run
+check for the same database and release cohort before starting the API.
 
 The CA is public certificate material, but both published images run as an
 unprivileged user. Keep its parent directory private and set only the reviewed
