@@ -12,6 +12,12 @@ type Environment = Record<string, string | undefined>;
 
 const localCanonicalUrl = "http://127.0.0.1:3100";
 const localApiOrigin = "http://127.0.0.1:8787";
+const alphaCanonicalOrigin = "https://alpha.trevv.de";
+const defaultAuthCookiePrefix = "trevv";
+const alphaAuthCookiePrefix = "trevv_alpha";
+
+export type WebAuthCookiePrefix =
+  typeof defaultAuthCookiePrefix | typeof alphaAuthCookiePrefix;
 
 export function webRuntimeMode(
   environment: Environment = process.env,
@@ -76,6 +82,35 @@ export function webApiOrigin(environment: Environment = process.env): URL {
   return url;
 }
 
+export function webAuthCookiePrefix(
+  environment: Environment = process.env,
+): WebAuthCookiePrefix {
+  const prefix =
+    environment.AUTH_COOKIE_PREFIX?.trim() || defaultAuthCookiePrefix;
+  if (prefix !== defaultAuthCookiePrefix && prefix !== alphaAuthCookiePrefix)
+    throw new Error(
+      `AUTH_COOKIE_PREFIX must be ${defaultAuthCookiePrefix} or ${alphaAuthCookiePrefix}.`,
+    );
+  const alphaOrigin =
+    webCanonicalUrl(environment).origin === alphaCanonicalOrigin;
+  if (alphaOrigin && prefix !== alphaAuthCookiePrefix)
+    throw new Error(
+      `AUTH_COOKIE_PREFIX must explicitly equal ${alphaAuthCookiePrefix} for ${alphaCanonicalOrigin}.`,
+    );
+  if (!alphaOrigin && prefix === alphaAuthCookiePrefix)
+    throw new Error(
+      `AUTH_COOKIE_PREFIX=${alphaAuthCookiePrefix} is reserved for ${alphaCanonicalOrigin}.`,
+    );
+  return prefix;
+}
+
+export function webSessionCookieNames(
+  environment: Environment = process.env,
+): readonly [string, string] {
+  const prefix = webAuthCookiePrefix(environment);
+  return [`${prefix}.session_token`, `__Secure-${prefix}.session_token`];
+}
+
 export function validateProductionWebConfiguration(
   environment: Environment = process.env,
 ): void {
@@ -91,6 +126,7 @@ export function validateProductionWebConfiguration(
 
   const canonical = webCanonicalUrl(environment);
   webApiOrigin(environment);
+  webAuthCookiePrefix(environment);
 
   if (canonical.pathname !== "/") {
     throw new Error(

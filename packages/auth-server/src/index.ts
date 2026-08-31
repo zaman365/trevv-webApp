@@ -18,6 +18,12 @@ const AUTH_BASE_PATH = "/api/auth";
 const EMAIL_VERIFICATION_PREFIX = "trevv-email-verification:";
 const DEFAULT_EMAIL_VERIFICATION_TTL_SECONDS = 60 * 60;
 const DEFAULT_PASSWORD_RESET_TTL_SECONDS = 60 * 60;
+const ALPHA_WEB_ORIGIN = "https://alpha.trevv.de";
+
+export const defaultAuthCookiePrefix = "trevv";
+export const alphaAuthCookiePrefix = "trevv_alpha";
+export type AuthCookiePrefix =
+  typeof defaultAuthCookiePrefix | typeof alphaAuthCookiePrefix;
 
 export type RegistrationMode = "closed" | "invite_only" | "public";
 
@@ -31,6 +37,7 @@ export interface AuthEnvironment {
   registrationMode: RegistrationMode;
   mailDelivery: MailDelivery;
   mailFrom: string;
+  cookiePrefix?: AuthCookiePrefix;
   cookieDomain?: string;
   appName?: string;
   emailVerificationTtlSeconds?: number;
@@ -60,6 +67,33 @@ export interface AuthIdentityResolver {
 
 interface VerificationDeliveryOutcome {
   failed: boolean;
+}
+
+export function resolveAuthCookiePrefix(
+  value: string | undefined,
+  trustedOrigins: readonly string[],
+): AuthCookiePrefix {
+  const prefix = value?.trim() || defaultAuthCookiePrefix;
+  if (prefix !== defaultAuthCookiePrefix && prefix !== alphaAuthCookiePrefix)
+    throw new Error(
+      `AUTH_COOKIE_PREFIX must be ${defaultAuthCookiePrefix} or ${alphaAuthCookiePrefix}.`,
+    );
+  const alphaOriginTrusted = trustedOrigins.some((origin) => {
+    try {
+      return new URL(origin).origin === ALPHA_WEB_ORIGIN;
+    } catch {
+      return false;
+    }
+  });
+  if (alphaOriginTrusted && prefix !== alphaAuthCookiePrefix)
+    throw new Error(
+      `AUTH_COOKIE_PREFIX must explicitly equal ${alphaAuthCookiePrefix} for ${ALPHA_WEB_ORIGIN}.`,
+    );
+  if (!alphaOriginTrusted && prefix === alphaAuthCookiePrefix)
+    throw new Error(
+      `AUTH_COOKIE_PREFIX=${alphaAuthCookiePrefix} is reserved for ${ALPHA_WEB_ORIGIN}.`,
+    );
+  return prefix;
 }
 
 export function createTrevvAuth(environment: AuthEnvironment) {
@@ -111,6 +145,10 @@ function createTrevvAuthWithPool(
   verificationDelivery: AsyncLocalStorage<VerificationDeliveryOutcome>,
   faultInjection: AuthRuntimeFaultInjection = {},
 ) {
+  const cookiePrefix = resolveAuthCookiePrefix(
+    environment.cookiePrefix,
+    environment.trustedOrigins,
+  );
   const verificationTtl =
     environment.emailVerificationTtlSeconds ??
     DEFAULT_EMAIL_VERIFICATION_TTL_SECONDS;
@@ -231,7 +269,7 @@ function createTrevvAuthWithPool(
     advanced: {
       database: { joins: true },
       useSecureCookies: environment.baseUrl.startsWith("https://"),
-      cookiePrefix: "trevv",
+      cookiePrefix,
       ...(environment.cookieDomain
         ? {
             crossSubDomainCookies: {

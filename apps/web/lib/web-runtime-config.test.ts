@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   safeReturnPath,
   validateProductionWebConfiguration,
+  webAuthCookiePrefix,
   webReleaseMetadata,
   webRegistrationMode,
   webRuntimeMode,
+  webSessionCookieNames,
 } from "./web-runtime-config";
 
 const secureProduction = {
@@ -150,6 +152,49 @@ describe("Web runtime configuration", () => {
         BETTER_AUTH_URL: "https://unrelated.example.test/api/auth",
       }),
     ).not.toThrow();
+  });
+
+  it("uses an isolated, explicit session-cookie namespace only on alpha", () => {
+    expect(webAuthCookiePrefix(secureProduction)).toBe("trevv");
+    expect(webSessionCookieNames(secureProduction)).toEqual([
+      "trevv.session_token",
+      "__Secure-trevv.session_token",
+    ]);
+
+    const alphaProduction = {
+      ...secureProduction,
+      NEXT_PUBLIC_APP_URL: "https://alpha.trevv.de",
+      AUTH_COOKIE_PREFIX: "trevv_alpha",
+    };
+    expect(webAuthCookiePrefix(alphaProduction)).toBe("trevv_alpha");
+    expect(webSessionCookieNames(alphaProduction)).toEqual([
+      "trevv_alpha.session_token",
+      "__Secure-trevv_alpha.session_token",
+    ]);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...alphaProduction,
+        AUTH_COOKIE_PREFIX: undefined,
+      }),
+    ).toThrow(/must explicitly equal trevv_alpha/u);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...alphaProduction,
+        AUTH_COOKIE_PREFIX: "trevv",
+      }),
+    ).toThrow(/must explicitly equal trevv_alpha/u);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        AUTH_COOKIE_PREFIX: "trevv_alpha",
+      }),
+    ).toThrow(/reserved for https:\/\/alpha\.trevv\.de/u);
+    expect(() =>
+      validateProductionWebConfiguration({
+        ...secureProduction,
+        AUTH_COOKIE_PREFIX: "trevv-alpha",
+      }),
+    ).toThrow(/must be trevv or trevv_alpha/u);
   });
 
   it("accepts only internal auth return destinations", () => {

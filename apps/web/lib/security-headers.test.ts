@@ -98,6 +98,7 @@ describe("Web security headers", () => {
       "/app/workspaces/:workspace/:view",
     );
     expect(webTelemetryPath("/api/web/csp-report")).toBe("/api/web/csp-report");
+    expect(webTelemetryPath("/api/web/livez")).toBe("/api/web/livez");
     expect(webTelemetryPath("/api/web/vitals")).toBe("/api/web/vitals");
     expect(webTelemetryPath("/private-token/path")).toBe("/:unmatched");
     expect(webTelemetryPath("/api/web/private-token")).toBe(

@@ -51,6 +51,7 @@ describe("live runtime configuration", () => {
       errorReportingMode: "disabled",
       internalMetricsEnabled: true,
       registrationMode: "invite_only",
+      cookiePrefix: "trevv",
     });
   });
 
@@ -227,6 +228,47 @@ describe("live runtime configuration", () => {
         AUTH_COOKIE_DOMAIN: "de",
       }),
     ).toThrow(/registrable DNS domain/);
+  });
+
+  it("isolates the alpha cookie namespace from every other Web origin", () => {
+    expect(
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        WEB_ORIGIN: "https://alpha.trevv.de",
+        AUTH_COOKIE_PREFIX: "trevv_alpha",
+      }),
+    ).toMatchObject({
+      mode: "live",
+      webOrigin: "https://alpha.trevv.de",
+      cookiePrefix: "trevv_alpha",
+    });
+
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        WEB_ORIGIN: "https://alpha.trevv.de",
+        AUTH_COOKIE_PREFIX: undefined,
+      }),
+    ).toThrow(/must explicitly equal trevv_alpha/u);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        WEB_ORIGIN: "https://alpha.trevv.de",
+        AUTH_COOKIE_PREFIX: "trevv",
+      }),
+    ).toThrow(/must explicitly equal trevv_alpha/u);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...productionEnvironment(),
+        AUTH_COOKIE_PREFIX: "trevv_alpha",
+      }),
+    ).toThrow(/reserved for https:\/\/alpha\.trevv\.de/u);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        AUTH_COOKIE_PREFIX: "trevv-alpha",
+      }),
+    ).toThrow(/must be trevv or trevv_alpha/u);
   });
 
   it("requires honest, complete SMTP configuration", () => {

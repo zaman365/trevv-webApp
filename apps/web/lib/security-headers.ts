@@ -24,6 +24,7 @@ const appTelemetryPaths = new Set(["account", "portfolio"]);
 const webApiTelemetryPaths = new Set([
   "client-error",
   "csp-report",
+  "livez",
   "readyz",
   "vitals",
 ]);

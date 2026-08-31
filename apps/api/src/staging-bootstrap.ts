@@ -2,6 +2,7 @@ import { completeOnboardingSchema } from "@founderhq/api-contract";
 import {
   createMemoryMailSink,
   createTrevvAuthRuntime,
+  type AuthCookiePrefix,
 } from "@founderhq/auth-server";
 import {
   createDatabase,
@@ -19,6 +20,7 @@ export interface StagingBootstrapConfiguration {
   authBaseUrl: string;
   authSecret: string;
   webOrigin: string;
+  cookiePrefix: AuthCookiePrefix;
   mailFrom: string;
   releaseId: string;
   owner: { name: string; email: string; password: string };
@@ -64,6 +66,7 @@ export function readStagingBootstrapConfiguration(
     authBaseUrl: runtime.authBaseUrl,
     authSecret: runtime.authSecret,
     webOrigin: runtime.webOrigin,
+    cookiePrefix: runtime.cookiePrefix,
     mailFrom: runtime.mailFrom,
     releaseId: runtime.releaseMetadata.releaseId,
     owner,
@@ -105,6 +108,7 @@ export async function bootstrapRemoteStagingOwner(
         baseUrl: configuration.authBaseUrl,
         secret: configuration.authSecret,
         trustedOrigins: [configuration.webOrigin],
+        cookiePrefix: configuration.cookiePrefix,
         // This handler is process-local and has no listening socket. Public
         // registration remains invite-only in the deployed API.
         registrationMode: "public",

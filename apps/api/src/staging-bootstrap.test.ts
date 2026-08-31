@@ -42,6 +42,7 @@ describe("remote staging owner bootstrap configuration", () => {
       readStagingBootstrapConfiguration(productionEnvironment),
     ).toMatchObject({
       releaseId: "rehearsal-baseline-2026.08.30.1",
+      cookiePrefix: "trevv",
       owner: {
         name: "Staging Owner",
         email: "owner@staging.trevv.test",

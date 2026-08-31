@@ -5,17 +5,16 @@ import {
   authActionCookiePaths,
   authActionCookies,
 } from "./lib/auth-action-cookies";
-import { safeReturnPath, webRuntimeMode } from "./lib/web-runtime-config";
+import {
+  safeReturnPath,
+  webRuntimeMode,
+  webSessionCookieNames,
+} from "./lib/web-runtime-config";
 import {
   webRequestId,
   webTelemetryPath,
   writeStructuredWebLog,
 } from "./lib/security-headers";
-
-const sessionCookieNames = [
-  "trevv.session_token",
-  "__Secure-trevv.session_token",
-] as const;
 
 export function proxy(request: NextRequest) {
   const requestId = webRequestId(request.headers.get("x-request-id"));
@@ -36,6 +35,8 @@ export function proxy(request: NextRequest) {
       method: request.method,
       path: webTelemetryPath(request.nextUrl.pathname),
     });
+  if (request.nextUrl.pathname === "/api/web/livez")
+    return finish(nextResponse());
   if (webRuntimeMode() === "demo") return finish(nextResponse());
   const tokenAction = tokenActionFor(request.nextUrl.pathname);
   const token = request.nextUrl.searchParams.get("token");
@@ -77,7 +78,7 @@ export function proxy(request: NextRequest) {
   }
   if (!request.nextUrl.pathname.startsWith("/app"))
     return finish(nextResponse());
-  const hasSessionMarker = sessionCookieNames.some((name) =>
+  const hasSessionMarker = webSessionCookieNames().some((name) =>
     request.cookies.has(name),
   );
   if (hasSessionMarker) return finish(nextResponse());

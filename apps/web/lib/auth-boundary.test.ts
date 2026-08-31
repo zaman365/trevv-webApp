@@ -2,12 +2,25 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { proxy } from "../proxy";
+
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://trevv.test");
+  vi.stubEnv("AUTH_COOKIE_PREFIX", "trevv");
+});
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe("optimistic private-route boundary", () => {
+  it("keeps process liveness independent of application runtime admission", () => {
+    vi.stubEnv("DEMO_MODE", "invalid");
+
+    const response = proxy(new NextRequest("https://trevv.test/api/web/livez"));
+
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("redirects anonymous app requests and preserves only an internal return path", () => {
     vi.stubEnv("DEMO_MODE", "false");
     const response = proxy(
@@ -34,6 +47,47 @@ describe("optimistic private-route boundary", () => {
     );
     expect(allowed.headers.get("x-middleware-next")).toBe("1");
     expect(legacy.headers.get("location")).toContain("/sign-in?");
+  });
+
+  it("ignores the predecessor parent-domain session on alpha without disrupting an alpha session", () => {
+    vi.stubEnv("DEMO_MODE", "false");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://alpha.trevv.de");
+    vi.stubEnv("AUTH_COOKIE_PREFIX", "trevv_alpha");
+    // A browser strips cookie attributes before sending the Cookie header. This
+    // fixture models a stale cookie originally issued with Domain=.trevv.de.
+    const staleParentDomainSetCookie =
+      "trevv.session_token=stale-predecessor; Domain=.trevv.de; Path=/; Secure; HttpOnly";
+    const staleParentDomainCookie = staleParentDomainSetCookie.split(
+      ";",
+      1,
+    )[0]!;
+
+    const staleOnly = proxy(
+      new NextRequest("https://alpha.trevv.de/app/portfolio", {
+        headers: { cookie: staleParentDomainCookie },
+      }),
+    );
+    expect(staleOnly.headers.get("location")).toBe(
+      "https://alpha.trevv.de/sign-in?next=%2Fapp%2Fportfolio",
+    );
+
+    const alphaOnly = proxy(
+      new NextRequest("https://alpha.trevv.de/app/portfolio", {
+        headers: {
+          cookie: "__Secure-trevv_alpha.session_token=active-alpha-session",
+        },
+      }),
+    );
+    expect(alphaOnly.headers.get("x-middleware-next")).toBe("1");
+
+    const both = proxy(
+      new NextRequest("https://alpha.trevv.de/app/portfolio", {
+        headers: {
+          cookie: `${staleParentDomainCookie}; __Secure-trevv_alpha.session_token=active-alpha-session`,
+        },
+      }),
+    );
+    expect(both.headers.get("x-middleware-next")).toBe("1");
   });
 
   it.each([

@@ -1,7 +1,9 @@
 import type {
+  AuthCookiePrefix,
   RegistrationMode,
   SmtpMailConfiguration,
 } from "@founderhq/auth-server";
+import { resolveAuthCookiePrefix } from "@founderhq/auth-server";
 import {
   readRuntimeReleaseMetadata,
   runtimeReleaseMetadataRequired,
@@ -19,6 +21,7 @@ export type RuntimeConfiguration =
       authBaseUrl: string;
       authSecret: string;
       webOrigin: string;
+      cookiePrefix: AuthCookiePrefix;
       registrationMode: RegistrationMode;
       releaseMetadata: RuntimeReleaseMetadata | null;
       mailFrom: string;
@@ -72,6 +75,10 @@ export function readRuntimeConfiguration(
     production,
   );
   const authSecret = required(environment, "BETTER_AUTH_SECRET");
+  const cookiePrefix = resolveAuthCookiePrefix(
+    optional(environment, "AUTH_COOKIE_PREFIX"),
+    [webOrigin],
+  );
   validateAuthSecret(authSecret);
   validatePostgresDatabaseUrl(databaseUrl, { production });
   const registrationMode = enumValue(
@@ -195,6 +202,7 @@ export function readRuntimeConfiguration(
     authBaseUrl,
     authSecret,
     webOrigin,
+    cookiePrefix,
     registrationMode,
     releaseMetadata,
     ...(testRegistrationBootstrapSecret

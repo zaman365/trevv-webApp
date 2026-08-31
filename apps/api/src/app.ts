@@ -2575,6 +2575,7 @@ export function createRuntimeApi(
     baseUrl: configuration.authBaseUrl,
     secret: configuration.authSecret,
     trustedOrigins: [configuration.webOrigin],
+    cookiePrefix: configuration.cookiePrefix,
     registrationMode: configuration.registrationMode,
     ...(configuration.testRegistrationBootstrapSecret
       ? {

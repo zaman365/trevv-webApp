@@ -47,6 +47,106 @@ afterAll(async () => {
 }, 120_000);
 
 describe("Better Auth live runtime", () => {
+  it("issues a host-only alpha session that is isolated from the predecessor namespace", async () => {
+    const alphaWebOrigin = "https://alpha.trevv.de";
+    const alphaAuthOrigin = "https://api.alpha.trevv.test";
+    const email = `alpha-cookie-${crypto.randomUUID()}@example.test`;
+    const mail = createMemoryMailSink();
+    const runtime = createTrevvAuthRuntime({
+      databaseUrl: temporary.url,
+      baseUrl: alphaAuthOrigin,
+      secret: "test-only-alpha-auth-secret-with-at-least-32-characters",
+      trustedOrigins: [alphaWebOrigin],
+      cookiePrefix: "trevv_alpha",
+      registrationMode: "public",
+      mailDelivery: mail,
+      mailFrom: "no-reply@trevv.test",
+    });
+    const alphaRequest = (
+      path: string,
+      options: {
+        method?: "GET" | "POST";
+        body?: unknown;
+        cookie?: string;
+      } = {},
+    ) => {
+      const headers = new Headers({ origin: alphaWebOrigin });
+      if (options.body !== undefined)
+        headers.set("content-type", "application/json");
+      if (options.cookie) headers.set("cookie", options.cookie);
+      return runtime.handler(
+        new Request(`${alphaAuthOrigin}/api/auth${path}`, {
+          method: options.method ?? "GET",
+          headers,
+          ...(options.body === undefined
+            ? {}
+            : { body: JSON.stringify(options.body) }),
+        }),
+      );
+    };
+    try {
+      const signUp = await alphaRequest("/sign-up/email", {
+        method: "POST",
+        body: {
+          name: "Alpha Cookie Test User",
+          email,
+          password: originalPassword,
+          callbackURL: `${alphaWebOrigin}/onboarding`,
+        },
+      });
+      expect(signUp.status).toBe(200);
+
+      const delivery = new URL(actionUrl(mail, "Verify your TREVV email"));
+      const token = delivery.searchParams.get("token");
+      expect(token).toBeTruthy();
+      const verification = new URL("/api/auth/verify-email", alphaAuthOrigin);
+      verification.searchParams.set("token", token!);
+      verification.searchParams.set(
+        "callbackURL",
+        `${alphaWebOrigin}/onboarding`,
+      );
+      const verified = await runtime.handler(
+        new Request(verification, {
+          headers: { origin: alphaWebOrigin },
+        }),
+      );
+      expect(verified.status).toBe(302);
+
+      const signedIn = await alphaRequest("/sign-in/email", {
+        method: "POST",
+        body: { email, password: originalPassword },
+      });
+      expect(signedIn.status).toBe(200);
+      const setCookie = signedIn.headers.get("set-cookie") ?? "";
+      const cookieMatch = setCookie.match(
+        /(?:^|,\s*)(__Secure-trevv_alpha\.session_token=[^;]+)/u,
+      );
+      expect(cookieMatch?.[1]).toBeTruthy();
+      expect(setCookie).toMatch(/(?:^|;)\s*Path=\//iu);
+      expect(setCookie).toMatch(/(?:^|;)\s*HttpOnly(?:;|,|$)/iu);
+      expect(setCookie).toMatch(/(?:^|;)\s*Secure(?:;|,|$)/iu);
+      expect(setCookie).toMatch(/(?:^|;)\s*SameSite=Lax(?:;|,|$)/iu);
+      expect(setCookie).not.toMatch(/(?:^|[;,])\s*Domain=/iu);
+
+      const staleCookie = "trevv.session_token=stale-parent-domain-session";
+      const staleSession = await alphaRequest("/get-session", {
+        cookie: staleCookie,
+      });
+      expect(staleSession.status).toBe(200);
+      await expect(staleSession.json()).resolves.toBeNull();
+
+      const activeSession = await alphaRequest("/get-session", {
+        cookie: `${staleCookie}; ${cookieMatch![1]}`,
+      });
+      expect(activeSession.status).toBe(200);
+      await expect(activeSession.json()).resolves.toMatchObject({
+        user: { email },
+      });
+    } finally {
+      await runtime.close();
+    }
+  }, 120_000);
+
   it("verifies accounts once, rejects wrong credentials, recovers passwords, and revokes sessions", async () => {
     const mail = createMemoryMailSink();
     const runtime = createAuthHarness(mail);
