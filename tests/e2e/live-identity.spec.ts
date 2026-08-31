@@ -216,6 +216,9 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     .getByRole("textbox", { name: "Email", exact: true })
     .fill(inviteeEmail);
   await ownerPage.getByLabel("Organization role").selectOption("member");
+  await ownerPage
+    .getByLabel("Workspace access")
+    .selectOption({ label: workspaceName });
   await ownerPage.getByRole("button", { name: "Send invitation" }).click();
   await expect(ownerPage.getByRole("status")).toContainText(
     `Invitation sent to ${inviteeEmail}`,
@@ -286,6 +289,9 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     organizationId,
     user: { email: inviteeEmail, role: "member" },
   });
+  await expect(
+    inviteePage.getByRole("link", { name: new RegExp(workspaceName) }),
+  ).toBeVisible();
 
   const memberships = await browserJson(ownerPage, "/api/v1/memberships");
   const inviteeMembership = (

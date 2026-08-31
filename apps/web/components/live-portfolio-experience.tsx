@@ -237,10 +237,14 @@ export function LivePortfolioExperience() {
               description={
                 canCreateWorkspace
                   ? "Create a workspace to start the founder operating loop."
-                  : "An organization owner or admin must create the first workspace."
+                  : "You do not have access to a Workspace yet. Ask an organization owner or admin to assign one."
               }
               kind="empty"
-              title="No workspaces yet"
+              title={
+                canCreateWorkspace
+                  ? "No workspaces yet"
+                  : "No Workspace access yet"
+              }
             />
           ) : (
             <div className={styles.cardGrid}>

@@ -11289,9 +11289,12 @@
 }
 .invitation-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(210px, 1fr) 170px auto;
+  grid-template-columns: minmax(220px, 1fr) 170px minmax(220px, 1fr) auto;
   align-items: end;
   gap: 14px;
+}
+.invitation-form > div:first-child {
+  grid-column: 1 / -1;
 }
 .invitation-form label {
   display: grid;

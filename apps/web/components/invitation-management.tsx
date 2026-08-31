@@ -10,6 +10,7 @@ import {
   type FormEvent,
 } from "react";
 import { useAppSession } from "@/lib/app-session-context";
+import { useOptionalLiveAppData } from "@/lib/live-app-data";
 
 interface InvitationView {
   id: string;
@@ -25,10 +26,13 @@ interface InvitationView {
   acceptedAt?: string;
   revokedAt?: string;
   lastSentAt?: string;
+  workspaceId?: string;
+  teamId?: string;
 }
 
 export function InvitationManagement() {
   const session = useAppSession();
+  const liveData = useOptionalLiveAppData();
   const [invitations, setInvitations] = useState<InvitationView[]>([]);
   const [loading, setLoading] = useState(!session.demo);
   const [working, setWorking] = useState<string | null>(null);
@@ -74,13 +78,14 @@ export function InvitationManagement() {
       .trim()
       .toLowerCase();
     const role = String(data.get("role") ?? "member");
+    const workspaceId = String(data.get("workspaceId") ?? "").trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setMessage("Enter a valid email address.");
       return;
     }
     setWorking("create");
     setMessage("");
-    const fingerprint = `create:${email}:${role}`;
+    const fingerprint = `create:${email}:${role}:${workspaceId}`;
     const idempotencyKey = mutationKey(mutationKeys.current, fingerprint);
     try {
       const response = await fetch("/api/v1/invitations", {
@@ -90,7 +95,11 @@ export function InvitationManagement() {
           "idempotency-key": idempotencyKey,
         },
         credentials: "same-origin",
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({
+          email,
+          role,
+          ...(workspaceId ? { workspaceId } : {}),
+        }),
       });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok || !isInvitation(body))
@@ -203,7 +212,8 @@ export function InvitationManagement() {
               <h2>Invite a person</h2>
               <p>
                 The database stores only a hash of the expiring, one-time token
-                sent by email.
+                sent by email. Assign Workspace access now so the person can
+                start collaborating immediately after acceptance.
               </p>
             </div>
             <label>
@@ -228,6 +238,21 @@ export function InvitationManagement() {
                 <option value="member">Member</option>
                 <option value="guest">Guest</option>
                 <option value="viewer">Viewer</option>
+              </select>
+            </label>
+            <label>
+              <span>Workspace access</span>
+              <select
+                defaultValue={liveData?.workspaces[0]?.id ?? ""}
+                disabled={working !== null}
+                name="workspaceId"
+              >
+                <option value="">Organization only</option>
+                {(liveData?.workspaces ?? []).map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                  </option>
+                ))}
               </select>
             </label>
             <button
@@ -281,6 +306,14 @@ export function InvitationManagement() {
                         Last sent {formatInvitationDate(invitation.lastSentAt)}
                       </small>
                     ) : null}
+                    <small>
+                      {invitation.workspaceId
+                        ? `Workspace · ${workspaceName(
+                            liveData?.workspaces ?? [],
+                            invitation.workspaceId,
+                          )}`
+                        : "Organization only"}
+                    </small>
                   </div>
                   {invitation.status === "pending" ? (
                     <div className="invitation-actions">
@@ -312,6 +345,16 @@ export function InvitationManagement() {
         </>
       )}
     </main>
+  );
+}
+
+function workspaceName(
+  workspaces: Array<{ id: string; name: string }>,
+  workspaceId: string,
+) {
+  return (
+    workspaces.find((workspace) => workspace.id === workspaceId)?.name ??
+    "Assigned Workspace"
   );
 }
 
