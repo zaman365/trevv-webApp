@@ -22,6 +22,16 @@ const artifactId = 9_736_170_511;
 const runId = 33_325_402_267;
 const runAttempt = 1;
 const repositoryId = 1_345_176_940;
+const alphaPublicOrigin = "https://alpha.trevv.de";
+const legacyPublicOrigin =
+  "https://trevv-free-preview-web-zaman365.onrender.com";
+const legacyOriginTransition = Object.freeze({
+  artifactId: 9_739_632_252,
+  gitSha: "a77a78b83d765a70c12f6cfb35017485c175e32c",
+  releaseId: "rehearsal-candidate-33337660293-1",
+  runAttempt: 1,
+  runId: 33_337_660_293,
+});
 const digests = Object.freeze({
   api: `sha256:${"a".repeat(64)}`,
   migrate: `sha256:${"b".repeat(64)}`,
@@ -38,7 +48,7 @@ const migrationHead = journal.entries.at(-1).tag;
 
 test("pins the exact public readiness endpoints for the deployed preview", () => {
   assert.deepEqual(deployedReadinessUrls, {
-    web: "https://trevv-free-preview-web-zaman365.onrender.com/api/web/readyz",
+    web: "https://alpha.trevv.de/api/web/readyz",
     api: "https://trevv-free-preview-api-zaman365.onrender.com/api/v1/readyz",
     worker: "https://trevv-free-preview-worker-zaman365.onrender.com/readyz",
   });
@@ -166,6 +176,89 @@ test("rejects incomplete predecessor security-gate evidence", () => {
   );
 });
 
+test("accepts the one exact deployed predecessor with the legacy Web origin", () => {
+  const fixture = predecessorFixture({
+    fixtureArtifactId: legacyOriginTransition.artifactId,
+    fixturePreviousSha: legacyOriginTransition.gitSha,
+    fixturePublicOrigin: legacyPublicOrigin,
+    fixtureReleaseId: legacyOriginTransition.releaseId,
+    fixtureRunAttempt: legacyOriginTransition.runAttempt,
+    fixtureRunId: legacyOriginTransition.runId,
+  });
+  const publication = validateArtifactAndRun(fixture);
+
+  assert.doesNotThrow(() =>
+    validatePublishedManifest({ ...fixture, publication }),
+  );
+});
+
+test("rejects an unrecognized predecessor Web origin", () => {
+  const fixture = predecessorFixture({
+    fixturePublicOrigin: "https://preview.example.com",
+  });
+  const publication = validateArtifactAndRun(fixture);
+
+  assert.throws(
+    () => validatePublishedManifest({ ...fixture, publication }),
+    /predecessor publication profile is invalid/u,
+  );
+});
+
+for (const { name, overrides } of [
+  {
+    name: "an unrelated publication",
+    overrides: {
+      fixtureArtifactId: artifactId,
+      fixturePreviousSha: previousSha,
+      fixtureReleaseId: "rehearsal-baseline-fixture",
+      fixtureRunAttempt: runAttempt,
+      fixtureRunId: runId,
+    },
+  },
+  {
+    name: "a different artifact ID",
+    overrides: {
+      fixtureArtifactId: legacyOriginTransition.artifactId + 1,
+    },
+  },
+  {
+    name: "a different workflow run",
+    overrides: { fixtureRunId: legacyOriginTransition.runId + 1 },
+  },
+  {
+    name: "a different workflow attempt",
+    overrides: { fixtureRunAttempt: legacyOriginTransition.runAttempt + 1 },
+  },
+  {
+    name: "a different source SHA",
+    overrides: { fixturePreviousSha: "9".repeat(40) },
+  },
+  {
+    name: "a different release ID",
+    overrides: {
+      fixtureReleaseId: "rehearsal-candidate-33337660293-2",
+    },
+  },
+]) {
+  test(`rejects the legacy Web origin for ${name}`, () => {
+    const fixture = predecessorFixture({
+      fixtureArtifactId: legacyOriginTransition.artifactId,
+      fixturePreviousSha: legacyOriginTransition.gitSha,
+      fixturePublicOrigin: legacyPublicOrigin,
+      fixtureReleaseId: legacyOriginTransition.releaseId,
+      fixtureRunAttempt: legacyOriginTransition.runAttempt,
+      fixtureRunId: legacyOriginTransition.runId,
+      ...overrides,
+    });
+    const publication = validateArtifactAndRun(fixture);
+
+    assert.throws(
+      () => validatePublishedManifest({ ...fixture, publication }),
+      /predecessor publication profile is invalid/u,
+    );
+  });
+}
+
 for (const { name, mutate, message } of [
   {
     name: "release ID mismatch",
@@ -267,17 +360,25 @@ test("pins readiness fetches to the exact origins without redirects", async () =
   );
 });
 
-function predecessorFixture() {
+function predecessorFixture({
+  fixtureArtifactId = artifactId,
+  fixturePreviousSha = previousSha,
+  fixturePublicOrigin = alphaPublicOrigin,
+  fixtureReleaseId = "rehearsal-baseline-fixture",
+  fixtureRunAttempt = runAttempt,
+  fixtureRunId = runId,
+} = {}) {
+  const stagingGenesis = fixtureReleaseId.startsWith("rehearsal-baseline-");
   const manifest = createReleaseManifest(
     {
       schemaVersion: 1,
       template: false,
-      releaseId: "rehearsal-baseline-fixture",
+      releaseId: fixtureReleaseId,
       createdAt: "2026-08-30T17:37:10.534Z",
-      gitSha: previousSha,
+      gitSha: fixturePreviousSha,
       imageDigests: digests,
       database: {
-        previousReleaseMigrationHead: null,
+        previousReleaseMigrationHead: stagingGenesis ? null : migrationHead,
         strategy: "additive-forward-only",
       },
       runtimes: { node: "22.23.2", pnpm: "11.22.0" },
@@ -289,12 +390,17 @@ function predecessorFixture() {
         rateLimitBackend: "postgres",
         registrationMode: "invite_only",
       },
-      previousRelease: {
-        environment: "staging",
-        kind: "staging_genesis",
-        previousCohort: null,
-        reason: "no-prior-full-topology-cohort",
-      },
+      previousRelease: stagingGenesis
+        ? {
+            environment: "staging",
+            kind: "staging_genesis",
+            previousCohort: null,
+            reason: "no-prior-full-topology-cohort",
+          }
+        : {
+            releaseId: "rehearsal-baseline-fixture",
+            manifestDigest: `sha256:${"e".repeat(64)}`,
+          },
       evidenceLinks: [],
       authorization: {
         status: "not_authorized",
@@ -313,32 +419,32 @@ function predecessorFixture() {
   const expectedManifestSha256 = sha256(manifestText);
   const release = (service) => ({
     releaseId: manifest.releaseId,
-    gitSha: previousSha,
+    gitSha: fixturePreviousSha,
     imageId: digests[service],
   });
   return {
     artifact: {
-      id: artifactId,
-      name: `staging-image-digests-${previousSha}-${runId}-${runAttempt}`,
+      id: fixtureArtifactId,
+      name: `staging-image-digests-${fixturePreviousSha}-${fixtureRunId}-${fixtureRunAttempt}`,
       expired: false,
       digest: expectedArtifactSha256,
       size_in_bytes: artifactBytes.length,
       workflow_run: {
-        id: runId,
+        id: fixtureRunId,
         head_branch: "trevv-foundation",
-        head_sha: previousSha,
+        head_sha: fixturePreviousSha,
         repository_id: repositoryId,
         head_repository_id: repositoryId,
       },
     },
     run: {
-      id: runId,
-      run_attempt: runAttempt,
+      id: fixtureRunId,
+      run_attempt: fixtureRunAttempt,
       event: "workflow_dispatch",
       status: "completed",
       conclusion: "success",
       head_branch: "trevv-foundation",
-      head_sha: previousSha,
+      head_sha: fixturePreviousSha,
       path: ".github/workflows/publish-staging-images.yml",
       repository: {
         id: repositoryId,
@@ -352,7 +458,12 @@ function predecessorFixture() {
     artifactBytes,
     manifest,
     manifestText,
-    digestBundle: digestBundle(manifest),
+    digestBundle: digestBundle(manifest, {
+      fixturePreviousSha,
+      fixturePublicOrigin,
+      fixtureRunAttempt,
+      fixtureRunId,
+    }),
     journal: structuredClone(journal),
     predecessorMigrationTreeId: "3".repeat(40),
     candidateMigrationTreeId: "3".repeat(40),
@@ -392,7 +503,7 @@ function predecessorFixture() {
         },
       },
     },
-    expectedArtifactId: artifactId,
+    expectedArtifactId: fixtureArtifactId,
     expectedArtifactSha256,
     expectedManifestSha256,
     candidateSha,
@@ -400,7 +511,10 @@ function predecessorFixture() {
   };
 }
 
-function digestBundle(manifest) {
+function digestBundle(
+  manifest,
+  { fixturePreviousSha, fixturePublicOrigin, fixtureRunAttempt, fixtureRunId },
+) {
   const images = Object.fromEntries(
     Object.entries(digests).map(([service, digest]) => {
       const image = `ghcr.io/zaman365/trevv-${service}`;
@@ -408,11 +522,11 @@ function digestBundle(manifest) {
         service,
         {
           image,
-          tag: `unverified-candidate-${previousSha}-${runId}-${runAttempt}`,
+          tag: `unverified-candidate-${fixturePreviousSha}-${fixtureRunId}-${fixtureRunAttempt}`,
           digest,
           reference: `${image}@${digest}`,
           provenance: {
-            url: `https://github.com/zaman365/trevv-webApp/attestations/${runId}`,
+            url: `https://github.com/zaman365/trevv-webApp/attestations/${fixtureRunId}`,
           },
           verification: {
             status: "attested-security-gates-passed",
@@ -425,10 +539,10 @@ function digestBundle(manifest) {
   );
   return {
     schemaVersion: 1,
-    candidateId: `staging-${previousSha}-${runId}-${runAttempt}`,
-    sourceSha: previousSha,
-    publicationWorkflowSha: previousSha,
-    workflowRun: `https://github.com/zaman365/trevv-webApp/actions/runs/${runId}`,
+    candidateId: `staging-${fixturePreviousSha}-${fixtureRunId}-${fixtureRunAttempt}`,
+    sourceSha: fixturePreviousSha,
+    publicationWorkflowSha: fixturePreviousSha,
+    workflowRun: `https://github.com/zaman365/trevv-webApp/actions/runs/${fixtureRunId}`,
     createdAt: manifest.createdAt,
     platform: "linux/amd64",
     evidenceClass: "artifact-publication-only",
@@ -447,7 +561,7 @@ function digestBundle(manifest) {
       operatorRunOnly: ["migrate"],
     },
     build: {
-      publicOrigin: "https://trevv-free-preview-web-zaman365.onrender.com",
+      publicOrigin: fixturePublicOrigin,
       cspMode: "report-only",
       hstsEnabled: false,
     },

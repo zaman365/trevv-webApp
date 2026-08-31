@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assertClientIpSpoofProbeResponse,
   assertHostOnlySessionCookie,
+  assertRetiredWebOriginResponse,
   collaborationWorkerProgressMatches,
   inviteeEmailForRun,
   readRemoteStagingSmokeConfiguration,
@@ -10,7 +11,7 @@ import {
 } from "./remote-staging-smoke.mjs";
 
 const environment = {
-  REMOTE_STAGING_ORIGIN: "https://trevv-free-preview-web-zaman365.onrender.com",
+  REMOTE_STAGING_ORIGIN: "https://alpha.trevv.de",
   REMOTE_STAGING_WORKER_ORIGIN:
     "https://trevv-free-preview-worker-zaman365.onrender.com",
   REMOTE_STAGING_OWNER_EMAIL: "Owner@Staging.Trevv.Test",
@@ -18,21 +19,21 @@ const environment = {
   REMOTE_STAGING_INVITEE_EMAIL_TEMPLATE: "trevv-smoke+{run}@staging.trevv.test",
   REMOTE_STAGING_EXPECT_CSP: "report-only",
   REMOTE_STAGING_EXPECT_HSTS: "false",
+  REMOTE_STAGING_RETIREMENT_MODE: "enforced",
   EXPECTED_RELEASE_ID: "rehearsal-baseline-2026.08.30.1",
   EXPECTED_RELEASE_GIT_SHA: "a".repeat(40),
   EXPECTED_WEB_IMAGE_ID: `sha256:${"b".repeat(64)}`,
   EXPECTED_API_IMAGE_ID: `sha256:${"c".repeat(64)}`,
   EXPECTED_WORKER_IMAGE_ID: `sha256:${"d".repeat(64)}`,
   REMOTE_STAGING_CONFIRM:
-    "smoke:trevv-free-preview-web-zaman365.onrender.com:rehearsal-baseline-2026.08.30.1",
+    "smoke:alpha.trevv.de:rehearsal-baseline-2026.08.30.1",
 };
+const retiredWebOrigin = "https://trevv-free-preview-web-zaman365.onrender.com";
+const apiOrigin = "https://trevv-free-preview-api-zaman365.onrender.com";
 
 test("remote smoke configuration requires public TLS and immutable artifacts", () => {
   const parsed = readRemoteStagingSmokeConfiguration(environment);
-  assert.equal(
-    parsed.origin.origin,
-    "https://trevv-free-preview-web-zaman365.onrender.com",
-  );
+  assert.equal(parsed.origin.origin, "https://alpha.trevv.de");
   assert.equal(
     parsed.workerOrigin.origin,
     "https://trevv-free-preview-worker-zaman365.onrender.com",
@@ -40,14 +41,82 @@ test("remote smoke configuration requires public TLS and immutable artifacts", (
   assert.equal(parsed.ownerEmail, "owner@staging.trevv.test");
   assert.equal(parsed.ownerPassword, environment.REMOTE_STAGING_OWNER_PASSWORD);
   assert.equal(parsed.expectedHsts, false);
+  assert.equal(parsed.retirementMode, "enforced");
   assert.equal(parsed.expectedRelease.gitSha, "a".repeat(40));
+});
+
+test("remote smoke requires an explicit alpha retirement phase", () => {
+  assert.equal(
+    readRemoteStagingSmokeConfiguration({
+      ...environment,
+      REMOTE_STAGING_RETIREMENT_MODE: "transition",
+    }).retirementMode,
+    "transition",
+  );
+  for (const retirementMode of [undefined, "", "disabled", "true"])
+    assert.throws(
+      () =>
+        readRemoteStagingSmokeConfiguration({
+          ...environment,
+          REMOTE_STAGING_RETIREMENT_MODE: retirementMode,
+        }),
+      /REMOTE_STAGING_RETIREMENT_MODE/u,
+    );
+});
+
+test("retired Web origin validation separates transition and enforced states", () => {
+  assert.doesNotThrow(() =>
+    assertRetiredWebOriginResponse(
+      "/sign-in",
+      new Response("TREVV"),
+      "transition",
+    ),
+  );
+  assert.doesNotThrow(() =>
+    assertRetiredWebOriginResponse(
+      "/app/portfolio",
+      new Response(null, {
+        status: 307,
+        headers: { location: "/sign-in" },
+      }),
+      "transition",
+    ),
+  );
+  assert.doesNotThrow(() =>
+    assertRetiredWebOriginResponse(
+      "/sign-in",
+      new Response("Not Found", { status: 404 }),
+      "enforced",
+    ),
+  );
+  assert.throws(
+    () =>
+      assertRetiredWebOriginResponse(
+        "/sign-in",
+        new Response("TREVV"),
+        "enforced",
+      ),
+    /can still serve/u,
+  );
+  assert.throws(
+    () =>
+      assertRetiredWebOriginResponse(
+        "/sign-in",
+        new Response("TREVV", {
+          headers: { "set-cookie": "unexpected=value" },
+        }),
+        "transition",
+      ),
+    /emitted a cookie/u,
+  );
 });
 
 test("remote smoke rejects loopback, non-TLS, mutable images, and ambiguous headers", () => {
   for (const origin of [
-    "http://trevv-free-preview-web-zaman365.onrender.com",
+    "http://alpha.trevv.de",
     "https://127.0.0.1",
-    "https://trevv-free-preview-web-zaman365.onrender.com/path",
+    "https://alpha.trevv.de/path",
+    "https://trevv-free-preview-web-zaman365.onrender.com",
   ])
     assert.throws(
       () =>
@@ -107,8 +176,7 @@ test("remote smoke rejects loopback, non-TLS, mutable images, and ambiguous head
       readRemoteStagingSmokeConfiguration({
         ...environment,
         EXPECTED_RELEASE_ID: "release-2026.08.30.1",
-        REMOTE_STAGING_CONFIRM:
-          "smoke:trevv-free-preview-web-zaman365.onrender.com:release-2026.08.30.1",
+        REMOTE_STAGING_CONFIRM: "smoke:alpha.trevv.de:release-2026.08.30.1",
       }),
     /rehearsal-only/u,
   );
@@ -147,20 +215,27 @@ test("invitee template produces a unique valid address and requires one placehol
 test("session-cookie verification rejects parent-domain and weak cookies", () => {
   assert.doesNotThrow(() =>
     assertHostOnlySessionCookie(
-      "__Secure-trevv.session_token=fixture; Path=/; HttpOnly; Secure; SameSite=Lax",
+      "__Secure-trevv_alpha.session_token=fixture; Path=/; HttpOnly; Secure; SameSite=Lax",
     ),
   );
   assert.throws(
     () =>
       assertHostOnlySessionCookie(
-        "__Secure-trevv.session_token=fixture; Domain=trevv.de; Path=/; HttpOnly; Secure; SameSite=Lax",
+        "__Secure-trevv_alpha.session_token=fixture; Domain=trevv.de; Path=/; HttpOnly; Secure; SameSite=Lax",
       ),
     /parent-domain/u,
   );
   assert.throws(
     () =>
       assertHostOnlySessionCookie(
-        "__Secure-trevv.session_token=fixture; Path=/; HttpOnly; SameSite=Lax",
+        "__Secure-trevv.session_token=stale; Domain=trevv.de; Path=/; HttpOnly; Secure; SameSite=Lax",
+      ),
+    /isolated alpha/u,
+  );
+  assert.throws(
+    () =>
+      assertHostOnlySessionCookie(
+        "__Secure-trevv_alpha.session_token=fixture; Path=/; HttpOnly; SameSite=Lax",
       ),
     /host-only Path/u,
   );
@@ -413,6 +488,8 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
     const body = options.body ? JSON.parse(options.body) : undefined;
     requests.push({ url, method, headers, body });
 
+    if (url.origin === retiredWebOrigin)
+      return new Response("Not Found", { status: 404 });
     if (url.pathname === "/api/web/readyz") {
       webReadinessReads += 1;
       if (webReadinessReads === 1)
@@ -492,15 +569,27 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
     if (url.pathname === "/internal/livez")
       return json({ status: "ok", service: "trevv-api" });
     if (url.pathname === "/sign-in")
-      return new Response("<html>TREVV</html>", {
-        headers: {
-          "content-security-policy-report-only": "default-src 'self'",
+      return new Response(
+        '<html><head><link rel="canonical" href="https://alpha.trevv.de/" /></head><body>TREVV</body></html>',
+        {
+          headers: {
+            "content-security-policy-report-only": "default-src 'self'",
+            "x-robots-tag": "noindex, nofollow, noarchive",
+          },
         },
-      });
+      );
+    if (url.pathname === "/robots.txt")
+      return new Response(
+        "User-Agent: *\nDisallow: /\nHost: https://alpha.trevv.de\n",
+        { headers: { "content-type": "text/plain" } },
+      );
     if (url.pathname === "/app/portfolio")
       return new Response("", {
         status: 307,
-        headers: { location: "/sign-in" },
+        headers: {
+          location: "/sign-in",
+          "x-robots-tag": "noindex, nofollow, noarchive",
+        },
       });
     if (url.pathname === "/api/auth/sign-up/email")
       return json(
@@ -513,9 +602,19 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
         {
           headers: {
             "set-cookie":
-              "__Secure-trevv.session_token=fixture; Path=/; HttpOnly; Secure; SameSite=Lax",
+              "__Secure-trevv_alpha.session_token=fixture; Path=/; HttpOnly; Secure; SameSite=Lax",
           },
         },
+      );
+    if (
+      url.origin === apiOrigin &&
+      url.pathname === "/api/v1/invitations" &&
+      method === "POST" &&
+      headers.get("origin") === retiredWebOrigin
+    )
+      return json(
+        { error: { code: "invalid_request_origin" } },
+        { status: 403 },
       );
     if (url.pathname === "/api/v1/session" && method === "GET") {
       if (
@@ -613,6 +712,10 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
   assert.ok(result.checks.includes("public-worker-wake-readiness"));
   assert.ok(result.checks.includes("api-public-metrics-disabled"));
   assert.ok(result.checks.includes("caller-client-ip-spoof-resistance"));
+  assert.ok(result.checks.includes("alpha-canonical-noindex"));
+  assert.ok(result.checks.includes("retired-web-origin-disabled"));
+  assert.ok(result.checks.includes("retired-web-origin-mutation-rejected"));
+  assert.ok(result.checks.includes("stale-predecessor-cookies-rejected"));
   assert.equal(webReadinessReads, 2);
   assert.equal(workerReadinessReads, 2);
   assert.equal(workerMetricReads, 3);
@@ -635,6 +738,43 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
   assert.equal(
     trustedEdgeProbe.headers.get("x-forwarded-for"),
     "also-not-a-valid-ip",
+  );
+  assert.deepEqual(
+    requests
+      .filter(({ url }) => url.origin === retiredWebOrigin)
+      .map(({ url, method }) => `${method} ${url.pathname}`),
+    ["GET /sign-in", "GET /app/portfolio"],
+  );
+  const retiredOriginMutation = requests.find(
+    ({ url, method, headers }) =>
+      url.origin === apiOrigin &&
+      url.pathname === "/api/v1/invitations" &&
+      method === "POST" &&
+      headers.get("origin") === retiredWebOrigin,
+  );
+  assert.ok(retiredOriginMutation);
+  assert.equal(
+    retiredOriginMutation.headers.get("sec-fetch-site"),
+    "cross-site",
+  );
+  assert.ok(retiredOriginMutation.headers.has("cookie"));
+  assert.deepEqual(retiredOriginMutation.body, {});
+  const staleCookieProbes = requests.filter(
+    ({ url, method, headers }) =>
+      url.origin === environment.REMOTE_STAGING_ORIGIN &&
+      url.pathname === "/app/portfolio" &&
+      method === "GET" &&
+      headers.get("cookie")?.includes("stale-parent-domain-session"),
+  );
+  assert.deepEqual(
+    staleCookieProbes.map(({ headers }) => headers.get("cookie")),
+    [
+      "trevv.session_token=stale-parent-domain-session",
+      "__Secure-trevv.session_token=stale-parent-domain-session",
+    ],
+  );
+  assert.ok(
+    staleCookieProbes.every(({ headers }) => !headers.has("set-cookie")),
   );
   const messageWrite = requests.find(
     ({ url, method }) =>

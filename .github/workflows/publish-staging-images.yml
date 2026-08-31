@@ -13,7 +13,7 @@ on:
       public_origin:
         description: Public HTTPS origin compiled into the Web image
         required: true
-        default: https://trevv-free-preview-web-zaman365.onrender.com
+        default: https://alpha.trevv.de
         type: string
       csp_mode:
         description: Fixed report-only CSP for this disposable free preview
@@ -98,8 +98,8 @@ jobs:
                 origin.pathname !== "/" || origin.search || origin.hash) {
               throw new Error("public_origin must be a credential-free HTTPS origin without a path, query, or fragment");
             }
-            if (origin.origin !== "https://trevv-free-preview-web-zaman365.onrender.com") {
-              throw new Error("public_origin must equal the checked-in Render Free Web origin");
+            if (origin.origin !== "https://alpha.trevv.de") {
+              throw new Error("public_origin must equal the checked-in alpha Web origin");
             }
           '
           if [ "$CSP_MODE" != "report-only" ] || [ "$HSTS_ENABLED" != "false" ]; then

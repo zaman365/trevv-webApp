@@ -8,8 +8,17 @@ import { validateReleaseManifest } from "./phase6-release-manifest.mjs";
 const expectedRepository = "zaman365/trevv-webApp";
 const expectedBranch = "trevv-foundation";
 const expectedWorkflowPath = ".github/workflows/publish-staging-images.yml";
-const expectedPublicOrigin =
+const expectedPublicOrigin = "https://alpha.trevv.de";
+// Remove this fixed exception after the first alpha-origin cohort is published.
+const legacyPublicOrigin =
   "https://trevv-free-preview-web-zaman365.onrender.com";
+const legacyOriginTransition = Object.freeze({
+  artifactId: 9_739_632_252,
+  gitSha: "a77a78b83d765a70c12f6cfb35017485c175e32c",
+  releaseId: "rehearsal-candidate-33337660293-1",
+  runAttempt: 1,
+  runId: 33_337_660_293,
+});
 const services = Object.freeze(["api", "migrate", "web", "worker"]);
 const digestPattern = /^sha256:[0-9a-f]{64}$/u;
 const gitShaPattern = /^[0-9a-f]{40}$/u;
@@ -248,7 +257,7 @@ export function validateImageEvidence(digestBundle, manifest, publication) {
     "predecessor image evidence build",
   );
   if (
-    digestBundle.build.publicOrigin !== expectedPublicOrigin ||
+    !validPredecessorPublicOrigin(digestBundle, manifest, publication) ||
     digestBundle.build.cspMode !== manifest.securityModes.cspMode ||
     digestBundle.build.hstsEnabled !== manifest.securityModes.hstsEnabled
   )
@@ -327,6 +336,19 @@ export function validateImageEvidence(digestBundle, manifest, publication) {
       JSON.stringify(expected)
     )
       throw new Error(`The predecessor publicationProfile.${key} is invalid.`);
+}
+
+function validPredecessorPublicOrigin(digestBundle, manifest, publication) {
+  if (digestBundle.build.publicOrigin === expectedPublicOrigin) return true;
+  return (
+    digestBundle.build.publicOrigin === legacyPublicOrigin &&
+    publication.artifactId === legacyOriginTransition.artifactId &&
+    publication.runId === legacyOriginTransition.runId &&
+    publication.runAttempt === legacyOriginTransition.runAttempt &&
+    publication.sourceSha === legacyOriginTransition.gitSha &&
+    manifest.gitSha === legacyOriginTransition.gitSha &&
+    manifest.releaseId === legacyOriginTransition.releaseId
+  );
 }
 
 export function validateSameMigrationHead(manifest, journal) {

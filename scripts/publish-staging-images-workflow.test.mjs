@@ -200,6 +200,12 @@ test("security scans remain fail-closed for every published image", () => {
 
 test("dispatch binds the candidate to the selected deployed publication", () => {
   const inputs = workflow.on.workflow_dispatch.inputs;
+  assert.deepEqual(inputs.public_origin, {
+    description: "Public HTTPS origin compiled into the Web image",
+    required: true,
+    default: "https://alpha.trevv.de",
+    type: "string",
+  });
   assert.deepEqual(inputs.csp_mode, {
     description: "Fixed report-only CSP for this disposable free preview",
     required: true,
@@ -247,6 +253,7 @@ test("dispatch binds the candidate to the selected deployed publication", () => 
     "Resolve and verify the source commit",
   );
   assert.equal(verify.env.CSP_MODE, "${{ inputs.csp_mode }}");
+  assert.equal(verify.env.PUBLIC_ORIGIN, "${{ inputs.public_origin }}");
   assert.equal(
     verify.env.PREVIOUS_ARTIFACT_ID,
     "${{ inputs.previous_artifact_id }}",
@@ -266,6 +273,11 @@ test("dispatch binds the candidate to the selected deployed publication", () => 
   assert.equal(verify.env.HSTS_ENABLED, "${{ inputs.hsts_enabled }}");
   assert.match(verify.run, /"\$CSP_MODE" != "report-only"/u);
   assert.match(verify.run, /"\$HSTS_ENABLED" != "false"/u);
+  assert.match(verify.run, /origin\.origin !== "https:\/\/alpha\.trevv\.de"/u);
+  assert.doesNotMatch(
+    verify.run,
+    /origin\.origin !== "https:\/\/trevv-free-preview-web-zaman365\.onrender\.com"/u,
+  );
   assert.match(verify.run, /\^\[1-9\]\[0-9\]\*\$/u);
   assert.match(verify.run, /\^sha256:\[0-9a-f\]\{64\}\$/u);
   assert.match(
@@ -627,7 +639,7 @@ async function runAssembly(script, context) {
       GITHUB_SHA: "f".repeat(40),
       HSTS_ENABLED: "false",
       OUTPUT_DIR: context.outputDirectory,
-      PUBLIC_ORIGIN: "https://trevv-free-preview-web-zaman365.onrender.com",
+      PUBLIC_ORIGIN: "https://alpha.trevv.de",
       SOURCE_SHA: "f".repeat(40),
     },
   });

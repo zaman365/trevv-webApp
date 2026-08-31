@@ -12,8 +12,8 @@ const trustedRegistryOwner = "zaman365";
 const trustedSignerWorkflow =
   "zaman365/trevv-webApp/.github/workflows/publish-staging-images.yml";
 const trustedSourceRef = "refs/heads/trevv-foundation";
-const previewPublicOrigin =
-  "https://trevv-free-preview-web-zaman365.onrender.com";
+const previewPublicOrigin = "https://alpha.trevv.de";
+const previewPublicDomain = new URL(previewPublicOrigin).hostname;
 const imageKeys = Object.freeze(["api", "migrate", "web", "worker"]);
 const deployedServices = Object.freeze({
   "trevv-free-preview-api-zaman365": "api",
@@ -447,11 +447,13 @@ export function validateBlueprint(blueprint, releaseManifest, owner) {
       );
     const imageKey = deployedServices[service.name];
     const includesCommand = imageKey === "api" || imageKey === "worker";
+    const includesDomain = imageKey === "web";
     exactKeys(
       service,
       [
         "autoDeployTrigger",
         ...(includesCommand ? ["dockerCommand"] : []),
+        ...(includesDomain ? ["domains"] : []),
         "envVars",
         "healthCheckPath",
         "image",
@@ -474,19 +476,27 @@ export function validateBlueprint(blueprint, releaseManifest, owner) {
       },
       worker: { healthCheckPath: "/readyz", maxShutdownDelaySeconds: 120 },
       web: {
-        healthCheckPath: "/api/web/readyz",
+        healthCheckPath: "/api/web/livez",
         maxShutdownDelaySeconds: 60,
       },
     }[imageKey];
+    const expectedSubdomainPolicy = imageKey === "web" ? "disabled" : "enabled";
     if (
       service.region !== "frankfurt" ||
-      service.renderSubdomainPolicy !== "enabled" ||
+      service.renderSubdomainPolicy !== expectedSubdomainPolicy ||
       service.healthCheckPath !== expectedServicePolicy.healthCheckPath ||
       service.maxShutdownDelaySeconds !==
         expectedServicePolicy.maxShutdownDelaySeconds
     )
       throw new Error(
         `Render service ${service.name} routing and lifecycle policy is outside the strict allowlist.`,
+      );
+    if (
+      imageKey === "web" &&
+      JSON.stringify(service.domains) !== JSON.stringify([previewPublicDomain])
+    )
+      throw new Error(
+        `Render service ${service.name} must expose only ${previewPublicDomain}.`,
       );
     const expectedImage = `ghcr.io/${owner}/trevv-${imageKey}@${releaseManifest.imageDigests[imageKey]}`;
     if (service.image?.url !== expectedImage)
@@ -569,6 +579,7 @@ function validateRuntimeContract(blueprint, releaseManifest, services) {
     { key: "DATABASE_URL", sync: false },
     { key: "DATABASE_CA_CERT_B64", sync: false },
     { key: "BETTER_AUTH_SECRET", generateValue: true },
+    { key: "AUTH_COOKIE_PREFIX", value: "trevv_alpha" },
     { key: "BETTER_AUTH_URL", value: apiOrigin },
     { key: "WEB_ORIGIN", value: webOrigin },
     { key: "MAIL_FROM", value: "preview@mail.trevv.de" },
@@ -629,6 +640,7 @@ function validateRuntimeContract(blueprint, releaseManifest, services) {
     { fromGroup: "trevv-free-preview-runtime" },
     { key: "RELEASE_IMAGE_ID", value: releaseManifest.imageDigests.web },
     { key: "REGISTRATION_MODE", value: "invite_only" },
+    { key: "AUTH_COOKIE_PREFIX", value: "trevv_alpha" },
     { key: "PORT", value: "3000" },
     { key: "HOSTNAME", value: "0.0.0.0" },
     { key: "NEXT_PUBLIC_APP_URL", value: webOrigin },

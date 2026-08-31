@@ -70,10 +70,12 @@ services:
         sync: false
       - key: BETTER_AUTH_SECRET
         generateValue: true
+      - key: AUTH_COOKIE_PREFIX
+        value: trevv_alpha
       - key: BETTER_AUTH_URL
         value: https://trevv-free-preview-api-zaman365.onrender.com
       - key: WEB_ORIGIN
-        value: https://trevv-free-preview-web-zaman365.onrender.com
+        value: https://alpha.trevv.de
       - key: MAIL_FROM
         value: preview@mail.trevv.de
       - key: SMTP_HOST
@@ -187,8 +189,10 @@ services:
     numInstances: 1
     autoDeployTrigger: off
     maxShutdownDelaySeconds: 60
-    renderSubdomainPolicy: enabled
-    healthCheckPath: /api/web/readyz
+    renderSubdomainPolicy: disabled
+    domains:
+      - alpha.trevv.de
+    healthCheckPath: /api/web/livez
     image:
       url: ghcr.io/__TREV_REGISTRY_OWNER__/trevv-web@sha256:__TREV_WEB_IMAGE_SHA256__
     envVars:
@@ -197,12 +201,14 @@ services:
         value: "sha256:__TREV_WEB_IMAGE_SHA256__"
       - key: REGISTRATION_MODE
         value: invite_only
+      - key: AUTH_COOKIE_PREFIX
+        value: trevv_alpha
       - key: PORT
         value: "3000"
       - key: HOSTNAME
         value: 0.0.0.0
       - key: NEXT_PUBLIC_APP_URL
-        value: https://trevv-free-preview-web-zaman365.onrender.com
+        value: https://alpha.trevv.de
       - key: API_ORIGIN
         value: https://trevv-free-preview-api-zaman365.onrender.com
       - key: CSP_MODE

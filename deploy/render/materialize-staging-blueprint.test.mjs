@@ -23,7 +23,7 @@ const defaultTemplate = resolve(
   repositoryRoot,
   "deploy/render/render.staging.template.yaml",
 );
-const publicOrigin = "https://trevv-free-preview-web-zaman365.onrender.com";
+const publicOrigin = "https://alpha.trevv.de";
 
 test("verifies provenance and materializes the exact free topology", async () => {
   const context = await fixture();
@@ -42,6 +42,7 @@ test("verifies provenance and materializes the exact free topology", async () =>
   assert.equal(output.match(/^  - type: web$/gmu)?.length, 3);
   assert.match(output, /migrate-image: ghcr\.io\/zaman365\/trevv-migrate/u);
   assert.match(output, /ghcr\.io\/zaman365\/trevv-worker@sha256:d{64}/u);
+  assert.match(output, /domains:\n\s+- alpha\.trevv\.de/u);
   assert.doesNotMatch(output, /-----BEGIN [A-Z ]*PRIVATE KEY-----/u);
   assert.doesNotMatch(output, /(?:ghp|github_pat)_[A-Za-z0-9_]+/u);
 
@@ -213,6 +214,23 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
     ),
     false,
   );
+  assert.deepEqual(renderService(blueprint, "web").domains, ["alpha.trevv.de"]);
+  assert.equal(
+    renderService(blueprint, "web").renderSubdomainPolicy,
+    "disabled",
+  );
+  assert.equal(
+    Object.hasOwn(renderService(blueprint, "api"), "domains"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(renderService(blueprint, "worker"), "domains"),
+    false,
+  );
+  assert.equal(
+    renderService(blueprint, "web").healthCheckPath,
+    "/api/web/livez",
+  );
 
   const cases = [
     [
@@ -229,6 +247,16 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
           key: "AUTH_COOKIE_DOMAIN",
           value: "trevv.de",
         });
+      },
+      /API environment is outside/u,
+    ],
+    [
+      "predecessor API cookie namespace",
+      (copy) => {
+        findEnv(
+          renderService(copy, "api").envVars,
+          "AUTH_COOKIE_PREFIX",
+        ).value = "trevv";
       },
       /API environment is outside/u,
     ],
@@ -284,6 +312,16 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
       /Web environment is outside/u,
     ],
     [
+      "predecessor Web cookie namespace",
+      (copy) => {
+        findEnv(
+          renderService(copy, "web").envVars,
+          "AUTH_COOKIE_PREFIX",
+        ).value = "trevv";
+      },
+      /Web environment is outside/u,
+    ],
+    [
       "unreviewed CSP",
       (copy) => {
         findEnv(renderService(copy, "web").envVars, "CSP_MODE").value =
@@ -331,11 +369,25 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
       /preview policy is outside/u,
     ],
     [
-      "custom production-parent domain",
+      "wrong Web custom domain",
       (copy) => {
         renderService(copy, "web").domains = ["preview.trevv.de"];
       },
-      /Render service .* must contain exactly/u,
+      /must expose only alpha\.trevv\.de/u,
+    ],
+    [
+      "extra Web custom domain",
+      (copy) => {
+        renderService(copy, "web").domains.push("preview.trevv.de");
+      },
+      /must expose only alpha\.trevv\.de/u,
+    ],
+    [
+      "API custom domain",
+      (copy) => {
+        renderService(copy, "api").domains = ["api.alpha.trevv.de"];
+      },
+      /must contain exactly/u,
     ],
     [
       "wrong service region",
@@ -352,9 +404,9 @@ test("the parsed default Blueprint pins topology, runtime security, and commands
       /routing and lifecycle policy is outside/u,
     ],
     [
-      "disabled Render subdomain",
+      "enabled retired Web subdomain",
       (copy) => {
-        renderService(copy, "web").renderSubdomainPolicy = "disabled";
+        renderService(copy, "web").renderSubdomainPolicy = "enabled";
       },
       /routing and lifecycle policy is outside/u,
     ],
@@ -558,7 +610,7 @@ test("the publication workflow requires source SHA to equal the branch workflow 
   );
   assert.match(
     sourceStep.run,
-    /origin\.origin !== "https:\/\/trevv-free-preview-web-zaman365\.onrender\.com"/u,
+    /origin\.origin !== "https:\/\/alpha\.trevv\.de"/u,
   );
   assert.doesNotMatch(sourceStep.run, /merge-base --is-ancestor/u);
   assert.match(workflowSource, /image: \.image,/u);

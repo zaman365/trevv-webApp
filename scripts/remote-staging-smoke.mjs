@@ -9,12 +9,15 @@ const publicWakeTimeoutMs = 180_000;
 const workerWakeTimeoutMs = 180_000;
 const workerWakePollMs = 1_000;
 const collaborationOutboxDrainTimeoutMs = 90_000;
-const approvedPreviewOrigin =
+const approvedPreviewOrigin = "https://alpha.trevv.de";
+const retiredPreviewWebOrigin =
   "https://trevv-free-preview-web-zaman365.onrender.com";
 const approvedPreviewApiOrigin =
   "https://trevv-free-preview-api-zaman365.onrender.com";
 const approvedPreviewWorkerOrigin =
   "https://trevv-free-preview-worker-zaman365.onrender.com";
+const alphaSessionCookieName = "__Secure-trevv_alpha.session_token";
+const retirementModes = new Set(["transition", "enforced"]);
 
 export function readRemoteStagingSmokeConfiguration(environment = process.env) {
   if (environment.NODE_TLS_REJECT_UNAUTHORIZED?.trim() === "0")
@@ -59,6 +62,14 @@ export function readRemoteStagingSmokeConfiguration(environment = process.env) {
       "REMOTE_STAGING_EXPECT_CSP must be report-only or enforce.",
     );
   const expectedHsts = strictBoolean(environment, "REMOTE_STAGING_EXPECT_HSTS");
+  const retirementMode = required(
+    environment,
+    "REMOTE_STAGING_RETIREMENT_MODE",
+  );
+  if (!retirementModes.has(retirementMode))
+    throw new Error(
+      "REMOTE_STAGING_RETIREMENT_MODE must be transition or enforced.",
+    );
   const expectedRelease = {
     releaseId: required(environment, "EXPECTED_RELEASE_ID"),
     gitSha: required(environment, "EXPECTED_RELEASE_GIT_SHA").toLowerCase(),
@@ -95,6 +106,7 @@ export function readRemoteStagingSmokeConfiguration(environment = process.env) {
     invitationTemplate,
     expectedCsp,
     expectedHsts,
+    retirementMode,
     expectedRelease,
   };
 }
@@ -117,11 +129,14 @@ export async function runRemoteStagingSmoke(configuration) {
   const cookieJar = new Map();
 
   await verifyPublicBoundary(configuration);
+  await verifyRetiredWebOriginState(configuration.retirementMode);
   await wakeAndVerifyPublicWorker(configuration);
   await verifyAnonymousBoundary(configuration.origin);
+  await verifyStalePredecessorCookiesRejected(configuration.origin);
   await verifyClientIpSpoofResistance(configuration, inviteeEmail);
   await verifyInviteOnlyAdmission(configuration, inviteeEmail, cookieJar);
   await signIn(configuration, cookieJar);
+  await verifyRetiredOriginMutationRejection(cookieJar);
 
   const session = await apiJson(configuration, cookieJar, "/api/v1/session");
   assertStatus(session, 200, "resolve the staging owner session");
@@ -239,10 +254,16 @@ export async function runRemoteStagingSmoke(configuration) {
       "api-public-metrics-disabled",
       "public-worker-wake-readiness",
       "security-headers",
+      "alpha-canonical-noindex",
+      configuration.retirementMode === "enforced"
+        ? "retired-web-origin-disabled"
+        : "retired-web-origin-transition-ready",
       "anonymous-private-route-guard",
       "caller-client-ip-spoof-resistance",
       "invite-only-headerless-rejection",
       "real-owner-sign-in",
+      "retired-web-origin-mutation-rejected",
+      "stale-predecessor-cookies-rejected",
       "tenant-read",
       "team-room-atomic-create",
       "durable-message-write-read",
@@ -522,8 +543,11 @@ async function verifyPublicBoundary(configuration) {
   const page = await remoteFetch(new URL("/sign-in", configuration.origin), {
     cache: "no-store",
   });
-  if (!page.ok || !(await page.text()).includes("TREVV"))
+  const pageHtml = await page.text();
+  if (!page.ok || !pageHtml.includes("TREVV"))
     throw new Error("The public trusted-TLS sign-in surface did not render.");
+  assertCanonicalLink(pageHtml, configuration.origin);
+  assertNoIndexHeader(page.headers, "The alpha sign-in surface");
   const enforcing = page.headers.get("content-security-policy");
   const reportOnly = page.headers.get("content-security-policy-report-only");
   if (
@@ -537,6 +561,28 @@ async function verifyPublicBoundary(configuration) {
   const hsts = page.headers.get("strict-transport-security");
   if (configuration.expectedHsts ? !hsts : hsts)
     throw new Error("The public Web HSTS mode does not match the smoke input.");
+
+  const robots = await remoteFetch(
+    new URL("/robots.txt", configuration.origin),
+    {
+      cache: "no-store",
+    },
+  );
+  const robotsText = await robots.text();
+  if (
+    !robots.ok ||
+    !/^User-Agent:\s*\*\s*$/imu.test(robotsText) ||
+    !/^Disallow:\s*\/\s*$/imu.test(robotsText) ||
+    new RegExp(
+      `^Host:\\s*${escapeRegExp(configuration.origin.origin)}\\s*$`,
+      "imu",
+    ).test(robotsText) === false ||
+    /^Allow:\s*\/\s*$/imu.test(robotsText) ||
+    robotsText.includes(retiredPreviewWebOrigin)
+  )
+    throw new Error(
+      "The alpha robots policy is not a complete no-index policy for the canonical host.",
+    );
 }
 
 async function verifyAnonymousBoundary(origin) {
@@ -550,8 +596,68 @@ async function verifyAnonymousBoundary(origin) {
     !response.headers.get("location")?.includes("/sign-in")
   )
     throw new Error("Anonymous remote app access did not redirect to sign-in.");
+  assertNoIndexHeader(response.headers, "The anonymous alpha app boundary");
   if ((await response.text()).includes("Northstar Apparel"))
     throw new Error("Anonymous remote app access leaked demo data.");
+}
+
+async function verifyStalePredecessorCookiesRejected(origin) {
+  for (const cookieName of [
+    "trevv.session_token",
+    "__Secure-trevv.session_token",
+  ]) {
+    const response = await remoteFetch(new URL("/app/portfolio", origin), {
+      headers: { cookie: `${cookieName}=stale-parent-domain-session` },
+      cache: "no-store",
+      redirect: "manual",
+    });
+    if (
+      (response.status !== 307 && response.status !== 308) ||
+      !response.headers.get("location")?.includes("/sign-in")
+    )
+      throw new Error(
+        "A stale predecessor session cookie satisfied the alpha route boundary.",
+      );
+    assertNoIndexHeader(response.headers, "The stale-cookie alpha boundary");
+    if ((await response.text()).includes("Northstar Apparel"))
+      throw new Error(
+        "A stale predecessor session cookie exposed fictional tenant content.",
+      );
+    if (setCookieValues(response.headers).length > 0)
+      throw new Error(
+        "The stale predecessor cookie probe emitted an authentication cookie.",
+      );
+  }
+}
+
+async function verifyRetiredWebOriginState(retirementMode) {
+  for (const path of ["/sign-in", "/app/portfolio"]) {
+    const response = await remoteFetch(new URL(path, retiredPreviewWebOrigin), {
+      cache: "no-store",
+      redirect: "manual",
+    });
+    assertRetiredWebOriginResponse(path, response, retirementMode);
+  }
+}
+
+export function assertRetiredWebOriginResponse(path, response, retirementMode) {
+  if (retirementMode === "enforced") {
+    if (response.status !== 404)
+      throw new Error(
+        "The retired Render Web origin can still serve an app or authentication surface.",
+      );
+  } else if (
+    (path === "/sign-in" && response.status !== 200) ||
+    (path === "/app/portfolio" &&
+      (response.status < 300 ||
+        response.status >= 400 ||
+        !response.headers.get("location")?.includes("/sign-in")))
+  )
+    throw new Error(
+      "The transitional Render Web fallback is not ready for fail-closed rollback.",
+    );
+  if (setCookieValues(response.headers).length > 0)
+    throw new Error("The retired Render Web origin emitted a cookie.");
 }
 
 async function verifyClientIpSpoofResistance(configuration, inviteeEmail) {
@@ -676,14 +782,55 @@ async function signIn(configuration, cookieJar) {
   );
   assertStatus(response, 200, "sign in the bootstrapped staging owner");
   const sessionCookie = setCookieValues(response.headers).find((value) =>
-    /(?:^|-)trevv\.session_token=/u.test(value),
+    value.startsWith(`${alphaSessionCookieName}=`),
   );
   assertHostOnlySessionCookie(sessionCookie);
 }
 
+async function verifyRetiredOriginMutationRejection(cookieJar) {
+  if (cookieJar.size === 0)
+    throw new Error(
+      "The retired-origin mutation probe requires an authenticated session.",
+    );
+  const response = await remoteFetch(
+    new URL("/api/v1/invitations", approvedPreviewApiOrigin),
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        cookie: cookieHeader(cookieJar),
+        origin: retiredPreviewWebOrigin,
+        "sec-fetch-site": "cross-site",
+      },
+      redirect: "manual",
+      cache: "no-store",
+      // Invalid even if the origin guard regresses, so this safety probe can
+      // never create an invitation or trigger mail delivery.
+      body: "{}",
+    },
+  );
+  const body = await response.json().catch(() => null);
+  if (
+    response.status !== 403 ||
+    apiErrorCode(body) !== "invalid_request_origin" ||
+    response.headers.get("access-control-allow-origin") ===
+      retiredPreviewWebOrigin
+  )
+    throw new Error(
+      "The API did not reject the retired Web origin before a state-changing boundary.",
+    );
+  if (setCookieValues(response.headers).length > 0)
+    throw new Error(
+      "The retired-origin mutation probe emitted an auth cookie.",
+    );
+}
+
 export function assertHostOnlySessionCookie(sessionCookie) {
-  if (!sessionCookie || !/(?:^|-)trevv\.session_token=/u.test(sessionCookie))
-    throw new Error("Remote sign-in did not set the TREVV session cookie.");
+  if (!sessionCookie?.startsWith(`${alphaSessionCookieName}=`))
+    throw new Error(
+      "Remote sign-in did not set the isolated alpha session cookie.",
+    );
   if (/;\s*Domain=/iu.test(sessionCookie))
     throw new Error(
       "Remote sign-in set a parent-domain session cookie instead of a host-only cookie.",
@@ -750,6 +897,43 @@ function cookieHeader(cookieJar) {
   return [...cookieJar.entries()]
     .map(([name, value]) => `${name}=${value}`)
     .join("; ");
+}
+
+function assertCanonicalLink(html, origin) {
+  const canonicalTags = [...html.matchAll(/<link\b[^>]*>/giu)].filter(([tag]) =>
+    /\brel=(?:"canonical"|'canonical')/iu.test(tag),
+  );
+  const hrefMatch =
+    canonicalTags.length === 1
+      ? /\bhref=(?:"([^"]+)"|'([^']+)')/iu.exec(canonicalTags[0][0])
+      : null;
+  const href = hrefMatch?.[1] ?? hrefMatch?.[2];
+  if (
+    href !== new URL("/", origin).toString() ||
+    html.includes(retiredPreviewWebOrigin)
+  )
+    throw new Error(
+      "The alpha sign-in surface does not publish exactly one canonical alpha URL.",
+    );
+}
+
+function assertNoIndexHeader(headers, label) {
+  const directives = new Set(
+    (headers.get("x-robots-tag") ?? "")
+      .toLowerCase()
+      .split(/[\s,]+/u)
+      .filter(Boolean),
+  );
+  if (
+    !directives.has("noindex") ||
+    !directives.has("nofollow") ||
+    !directives.has("noarchive")
+  )
+    throw new Error(`${label} is missing its complete no-index header.`);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function validateExpectedRelease(value) {
