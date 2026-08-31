@@ -6,8 +6,8 @@ creates resources, changes DNS, stores credentials, or authorizes spending.
 
 The preview contains exactly:
 
-- one Free public Web service at
-  `trevv-free-preview-web-zaman365.onrender.com`;
+- one Free public Web service at `alpha.trevv.de` (with its Render subdomain
+  retained only during the bounded first-cutover transition);
 - one Free public API web service at
   `trevv-free-preview-api-zaman365.onrender.com`;
 - one Free public web service running the Worker health process at
@@ -66,9 +66,19 @@ Its `/internal/metrics` endpoint is disabled in production and the remote smoke
 requires a 404. `/internal/livez` remains public with only the exact service and
 status fields; a probe can still wake the API and consume Free hours. This is
 liveness-only preview behavior, not private-metrics or availability evidence.
-The preview deliberately stays on separate `onrender.com` origins instead of a
-`trevv.de` subdomain. That prevents a production `trevv.de` parent-domain
-cookie left in a browser from reaching this lower-assurance preview.
+Render supervises the Web process through the content-free, process-local
+`/api/web/livez` endpoint so a sleeping API or database cannot keep the Web on
+Render's wake-up interstitial. Dependency-aware admission remains separate at
+`/api/web/readyz`; release smoke and routing decisions must continue to require
+that endpoint. The public liveness endpoint can wake the Free Web service and
+therefore consumes shared Free hours, but exposes only fixed service/status
+fields and never tenant, release, configuration, API, or database state.
+The Web is exposed only at the single reviewed custom domain
+`https://alpha.trevv.de`; its retired Render subdomain is disabled. A stale
+parent-domain `trevv.session_token` can therefore reach the alpha host, which
+is why the isolated `trevv_alpha` namespace below is a hard runtime and smoke
+gate rather than an optional convention. API and Worker remain on their exact
+Render origins.
 [Render documents](https://render.com/articles/host-pocketbase-on-render) that
 its Cloudflare edge overwrites `CF-Connecting-IP` with one validated client
 address, so the preview configures that header as its trusted limiter identity.
@@ -92,8 +102,12 @@ continuous edge enforcement or representative per-client rate-limit behavior.
 
 `AUTH_COOKIE_DOMAIN` is deliberately absent. Authentication responses pass
 through the same-origin Web API boundary, so the browser stores a host-only
-cookie for the Web origin and the Web forwards it server-side to API. The
-smoke rejects any session cookie carrying a `Domain` attribute.
+cookie for the Web origin and the Web forwards it server-side to API. The API
+and Web both require `AUTH_COOKIE_PREFIX=trevv_alpha` for
+`https://alpha.trevv.de`; this isolates alpha from stale `trevv.session_token`
+cookies that may have been issued by an earlier parent-domain deployment. The
+smoke rejects any session cookie carrying a `Domain` attribute and verifies the
+isolated `__Secure-trevv_alpha.session_token` namespace.
 
 ## $0 is an account-level gate too
 
@@ -103,10 +117,16 @@ human owner must verify in Render that:
 
 1. no paid resource, add-on, protected-environment feature, or extra domain is
    selected;
-2. all three services use only their included Render subdomains;
+2. API and Worker use only their included Render subdomains, while Web uses
+   only the reviewed `alpha.trevv.de` custom domain;
 3. the workspace has no payment method that can incur overage, or has an
    effective $0 spend limit; and
 4. current Free hours, bandwidth, and build/pipeline allowances are available.
+
+Render currently includes two custom domains with a Hobby workspace, and this
+topology consumes exactly one at $0. That is an account-state fact, not a
+guarantee made by this repository: abort if the Dashboard presents an upgrade,
+paid certificate, billable add-on, or any charge for `alpha.trevv.de`.
 
 If Render cannot guarantee suspension instead of billing for the selected
 account configuration, do not provision. Usage exhaustion, suspension, cold
@@ -253,12 +273,13 @@ recipient-inbox delivery. If the verified domain, Free allowance, or alternate
 port becomes unavailable, the preview is blocked; do not weaken runtime
 validation or use the test file sink.
 
-Keep all three services on their exact checked-in `onrender.com` origins and
-leave `renderSubdomainPolicy: enabled`. No preview CNAME is needed. The Web
-artifact must already be built for
-`https://trevv-free-preview-web-zaman365.onrender.com`, its exact public API
-origin, and the manifest's CSP/HSTS modes because those Next.js values are
-compiled into the artifact.
+Keep API and Worker on their exact checked-in `onrender.com` origins. Web is
+built for `https://alpha.trevv.de`, its exact public API origin, and the
+manifest's CSP/HSTS modes because those Next.js values are compiled into the
+artifact. `AUTH_COOKIE_PREFIX` is intentionally runtime-only rather than a
+Docker build input; API and Web must both resolve it to `trevv_alpha` before
+either service is admitted. The Web Render subdomain is enabled only during
+the bounded first-cutover transition and disabled after the transition smoke.
 
 The Web image does not set `NODE_EXTRA_CA_CERTS`. Local Compose injects
 `/etc/trevv-local-tls/ca.crt` only into the Web container that mounts the
@@ -355,7 +376,10 @@ preview manually in the Render Dashboard from the validated file:
    `trevv-free-preview-api-zaman365`,
    `trevv-free-preview-worker-zaman365`, and
    `trevv-free-preview-web-zaman365`: Frankfurt, Free, one instance, automatic
-   deploys off, Render subdomain enabled, and no custom domain.
+   deploys off. API and Worker retain their Render subdomains. Web may retain
+   its Render subdomain only during the bounded custom-domain transition below;
+   its final state has exactly `alpha.trevv.de` and the Render subdomain
+   disabled.
 3. Copy each exact `ghcr.io/zaman365/trevv-<service>@sha256:<digest>` image,
    health path, API/Worker command, and environment entry from the materialized
    file. Secret values remain in Render only. Do not add registry credentials;
@@ -375,8 +399,9 @@ preview manually in the Render Dashboard from the validated file:
      Worker or Web. `SMTP_PASSWORD` is the domain-scoped, sending-only Resend
      key and remains API-only.
 4. Reject the review if the Dashboard proposes any paid plan, trial, private or
-   background service, cron/job, persistent disk, scaling, custom domain,
-   deploy hook, additional resource, or mutable image tag.
+   background service, cron/job, persistent disk, scaling, custom domain other
+   than the one included `alpha.trevv.de`, deploy hook, additional resource, or
+   mutable image tag.
 5. Before clicking the final Create/Deploy control, compare the Dashboard
    summary field-by-field with the materialized file and capture the resource
    IDs, exact image digests, and Free plan labels in the rehearsal evidence.
@@ -384,6 +409,54 @@ preview manually in the Render Dashboard from the validated file:
 Manual provisioning is intentionally operator-controlled. The release manifest
 and attested digest bundle authenticate the values; the Dashboard review is the
 last guard against creating a different or billable topology.
+
+The materialized Blueprint describes the final post-cutover state and therefore
+requires the Web Render subdomain to be disabled. During the first cutover,
+use it as the reviewed source for image and environment values but record the
+single temporary deviation: keep the existing Web Render subdomain enabled
+until the `transition` smoke passes. Do not apply or declare the materialized
+final state until the subsequent `enforced` smoke proves retirement.
+
+## Alpha custom-domain cutover and rollback
+
+Render custom-domain verification and Cloudflare DNS cannot be made atomic.
+Keep the existing Web Render subdomain enabled until all of these steps finish:
+
+1. preserve the authenticated predecessor manifest and all four predecessor
+   image digests; confirm they remain anonymously retrievable;
+2. attach only `alpha.trevv.de` to the Render Web service and confirm the
+   Dashboard still reports $0 before accepting it;
+3. create only a DNS-only (gray-cloud) Cloudflare CNAME named `alpha` targeting
+   the exact Render Web hostname; remove any conflicting `alpha` AAAA record
+   and do not change the apex or `www` records. Keep it DNS-only through
+   verification and this preview unless a separately reviewed proxy cutover
+   updates the edge assumptions and smoke;
+4. wait for Render to report the domain verified and its managed certificate
+   active, then verify authoritative DNS and HTTPS at `alpha.trevv.de`;
+5. deploy the candidate API and Web as one compatibility cohort, with API
+   `WEB_ORIGIN=https://alpha.trevv.de`, both services
+   `AUTH_COOKIE_PREFIX=trevv_alpha`, and no `AUTH_COOKIE_DOMAIN` anywhere;
+6. run the complete remote smoke with
+   `REMOTE_STAGING_RETIREMENT_MODE=transition`; require `/api/web/livez`,
+   dependency-aware `/api/web/readyz`, invite-only sign-in, host-only
+   `__Secure-trevv_alpha.session_token`, rejection of a stale
+   `trevv.session_token`, authenticated tenant read, and a ready rollback
+   fallback through the still-enabled Render Web subdomain;
+7. disable the Web Render subdomain; and
+8. run the complete remote smoke again with
+   `REMOTE_STAGING_RETIREMENT_MODE=enforced`, which must prove the retired
+   origin returns exact 404s and the candidate remains healthy through
+   `alpha.trevv.de`.
+
+Any failed gate stops the cutover. For rollback, first re-enable and verify the
+Web Render subdomain. Then withdraw the `alpha.trevv.de` Cloudflare record and
+detach the Render custom domain so cached or stale alpha traffic fails closed.
+Restore the authenticated predecessor Web/API/Worker image cohort together,
+restore the predecessor Web/API origins and `AUTH_COOKIE_PREFIX=trevv`, keep
+`AUTH_COOKIE_DOMAIN` unset, and run the predecessor smoke on the Render origin.
+Never roll back database state; this path is allowed only while the
+same-migration-head predecessor rule holds. Record each Dashboard and DNS
+change so the forward and rollback cohorts remain attributable.
 
 ## Safe bootstrap and smoke
 
@@ -398,7 +471,9 @@ last guard against creating a different or billable topology.
    `deploy/staging/remote-operations.md`. Require its success before deploying
    any service; never expose the owner password or verification token.
 5. Configure the same approved runtime values in Render. Deploy API, Worker,
-   then Web from their exact approved digests on the checked-in Render origins.
+   then Web from their exact approved digests: API and Worker remain on their
+   checked-in Render origins, while Web completes the bounded
+   `alpha.trevv.de` cutover above.
 6. Wake the Worker's public `/readyz`, wait for its exact release identity and
    readiness, then run the bounded write/outbox checks before it can sleep.
    Run no other writer concurrently: the smoke deliberately requires the exact
@@ -432,6 +507,8 @@ Official Render references:
 - <https://render.com/docs/free>
 - <https://render.com/docs/compute-plans>
 - <https://render.com/docs/blueprint-spec>
+- <https://render.com/docs/custom-domains>
+- <https://render.com/docs/configure-cloudflare-dns>
 - <https://render.com/docs/postgresql-creating-connecting>
 - <https://render.com/docs/postgresql-backups>
 - <https://render.com/docs/outbound-ip-addresses>

@@ -57,6 +57,18 @@ the successful predecessor run, both provenance bundles, exact artifact
 inventory, image/manifest binding, anonymous availability of every predecessor
 image digest, and Git ancestry before it creates a successor manifest.
 
+For the invite-only `$0` alpha, the fixed Web readiness origin is
+`https://alpha.trevv.de`; API and Worker readiness remain on their existing
+`trevv-free-preview-api-zaman365.onrender.com` and
+`trevv-free-preview-worker-zaman365.onrender.com` origins. The first transition
+accepts the old Web build origin only for release
+`rehearsal-candidate-33337660293-1`, Git SHA
+`a77a78b83d765a70c12f6cfb35017485c175e32c`, workflow run `33337660293`
+attempt `1`, and artifact `9739632252`. Every other predecessor must bind its
+Web build to `https://alpha.trevv.de`. This exception authenticates lineage; it
+does not promote the disposable fictional-data preview to production, public
+beta, or GA evidence.
+
 The publisher separately reports that it has not verified PostgreSQL state. For
 this iteration it rejects every migration change: the current checked-in journal
 head and recursive `packages/db/migrations` Git tree must equal the deployed
@@ -88,5 +100,15 @@ For every cohort rollback:
 5. Smoke authentication, tenant isolation, the founder loop, Team room/message delivery, outbox processing, privacy lifecycle, and service-worker logout safety.
 6. Reconcile queue age, dead letters, duplicate effects, and writes accepted during the transition.
 7. Prefer a reviewed additive forward fix when compatibility is unproven. Never improvise a down migration.
+
+The first alpha-origin rollback has an additional exact boundary: stop writes,
+re-enable the Render Web subdomain, withdraw the alpha DNS/custom-domain route
+so incompatible traffic fails closed, then restore the predecessor images and
+complete release environment. Restore API `WEB_ORIGIN` and Web
+`NEXT_PUBLIC_APP_URL` to
+`https://trevv-free-preview-web-zaman365.onrender.com`, restore
+`AUTH_COOKIE_PREFIX=trevv` on API and Web with no `AUTH_COOKIE_DOMAIN`, and
+verify the predecessor there. The full ordered procedure is in
+`deploy/staging/remote-operations.md`.
 
 The authoritative production procedure and evidence requirements remain in `docs/ga-release-runbook.md`; this document only makes the non-production execution path concrete.

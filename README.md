@@ -4,6 +4,13 @@ TREVV is an experimental, fictional-data technical preview of a portfolio-orient
 
 > **Current release status: experimental fictional-data technical preview—not public beta or GA.** The hosted Web experience uses fictional sample data, and its changes stay in the current browser. In undeployed `DEMO_MODE=false`, identity, the persistent work-management loop, Teams, Team rooms, and Messages use tenant-scoped PostgreSQL with a durable outbox worker and permission-scoped Web invalidation. The repository also contains private-beta safety foundations for request protection, redacted telemetry, security headers, and reviewed data-lifecycle requests. A production-shaped topology is defined only for local/CI validation; it has not been deployed as a customer service, and no external collector, provider, storage, billing, or AI capability is enabled. The intended GA client and locale scope, if every release gate is eventually met, is English-only Web/PWA; German localization and native mobile/desktop releases are out of current GA scope. Do not enter real credentials, confidential information, or customer data in the hosted preview. See [known limitations](docs/known-limitations.md).
 
+The current remote rollout target is a disposable, invite-only `$0` alpha at
+`https://alpha.trevv.de`, using only explicitly fictional evaluation data.
+Its API and sleeping Worker remain on their existing Render `onrender.com`
+origins. This rollout does not change `trevv.de`, enable public registration,
+or provide production, public-beta, or GA evidence. The alpha is considered
+live only when the cutover smoke evidence for the deployed commit passes.
+
 ## What can be explored
 
 - Organization → Portfolio → Workspace tenancy with automatic default-Portfolio migration

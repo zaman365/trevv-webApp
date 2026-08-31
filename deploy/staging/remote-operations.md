@@ -14,6 +14,16 @@ multi-instance leasing, durable worker uptime, managed backup/PITR, provider
 retention, rollback, incident recovery, or any production-shaped gate. Record
 all of those as `not_run`, never `PASS`, until tested on qualifying topology.
 
+The intended invite-only alpha Web origin is exactly
+`https://alpha.trevv.de`. The API and Worker remain at
+`https://trevv-free-preview-api-zaman365.onrender.com` and
+`https://trevv-free-preview-worker-zaman365.onrender.com`; this rollout does not
+move or expose them under `trevv.de`. It uses one custom domain included with
+the current Render Hobby workspace, introduces no paid resource, and keeps the
+current cost at `$0`. All records must remain explicitly fictional, public
+registration stays closed, and neither the alpha hostname nor a passing smoke
+is production, public-beta, or GA evidence.
+
 ## Guarded migration
 
 Before migrations, inspect the actual database identity and set the marker
@@ -147,14 +157,15 @@ request. It does not establish continuous edge enforcement or representative
 per-client rate limiting.
 
 ```sh
-REMOTE_STAGING_ORIGIN=https://trevv-free-preview-web-zaman365.onrender.com \
+REMOTE_STAGING_ORIGIN=https://alpha.trevv.de \
 REMOTE_STAGING_WORKER_ORIGIN=https://trevv-free-preview-worker-zaman365.onrender.com \
-REMOTE_STAGING_CONFIRM='smoke:trevv-free-preview-web-zaman365.onrender.com:<release-id>' \
+REMOTE_STAGING_CONFIRM='smoke:alpha.trevv.de:<release-id>' \
 REMOTE_STAGING_OWNER_EMAIL=<controlled-staging-mailbox> \
 REMOTE_STAGING_OWNER_PASSWORD=<secret-from-approved-store> \
 REMOTE_STAGING_INVITEE_EMAIL_TEMPLATE='trevv-smoke+{run}@<controlled-test-domain>' \
 REMOTE_STAGING_EXPECT_CSP=report-only \
 REMOTE_STAGING_EXPECT_HSTS=false \
+REMOTE_STAGING_RETIREMENT_MODE=<transition-or-enforced> \
 EXPECTED_RELEASE_ID=<release-id> \
 EXPECTED_RELEASE_GIT_SHA=<full-40-character-sha> \
 EXPECTED_WEB_IMAGE_ID=sha256:<64-hex> \
@@ -243,6 +254,17 @@ runtime configuration, not independent proof of Render's active OCI digest.
 Before dispatch, compare the current image reference for each service with the
 manifest through authenticated Render state and stop on any mismatch.
 
+For the first origin transition only, attach `alpha.trevv.de` to the Render Web
+service and make its DNS resolve to the currently deployed predecessor before
+dispatch. Keep the Render Web `onrender.com` subdomain enabled. The publisher
+fetches Web readiness from `https://alpha.trevv.de/api/web/readyz` without
+following redirects, while API and Worker readiness stay on their existing
+`onrender.com` origins. It accepts the legacy Web build origin only for the one
+exact deployed predecessor—release `rehearsal-candidate-33337660293-1`, Git SHA
+`a77a78b83d765a70c12f6cfb35017485c175e32c`, workflow run `33337660293`
+attempt `1`, artifact `9739632252`. Every other predecessor must have been
+built for `https://alpha.trevv.de`.
+
 This publisher accepts only a candidate with the same checked-in migration
 journal head and the same recursive `packages/db/migrations` Git tree as the
 deployed publication. It emits no claim about the live database journal; the
@@ -262,7 +284,7 @@ previous_manifest_sha256=sha256:<manifest-file-64-hex>
 gh workflow run publish-staging-images.yml \
   --ref trevv-foundation \
   -f source_sha="$candidate_sha" \
-  -f public_origin=https://trevv-free-preview-web-zaman365.onrender.com \
+  -f public_origin=https://alpha.trevv.de \
   -f csp_mode=report-only \
   -f hsts_enabled=false \
   -f previous_artifact_id="$previous_artifact_id" \
@@ -277,3 +299,43 @@ The resulting release ID begins with `rehearsal-candidate-`. Its
 predecessor instead of dispatch text. Never self-reference, synthesize a
 predecessor, select a publication whose readiness identity is not currently
 deployed, or regenerate a release ID.
+
+## First alpha cutover and exact rollback
+
+Build the candidate with `NEXT_PUBLIC_APP_URL=https://alpha.trevv.de`.
+`AUTH_COOKIE_PREFIX` is a runtime-only setting, not image provenance: configure
+both Web and API with `AUTH_COOKIE_PREFIX=trevv_alpha`, and configure the API
+with `WEB_ORIGIN=https://alpha.trevv.de`; keep
+`AUTH_COOKIE_DOMAIN` absent on both services. `BETTER_AUTH_URL`, `API_ORIGIN`,
+and the API and Worker public origins remain unchanged. Keep
+`trevv-free-preview-web-zaman365.onrender.com` enabled until the alpha smoke has
+passed against the exact candidate cohort with
+`REMOTE_STAGING_RETIREMENT_MODE=transition`. Then disable that Render Web
+subdomain and run the complete smoke again with
+`REMOTE_STAGING_RETIREMENT_MODE=enforced`; only the second pass establishes the
+final retired-origin state.
+
+If the first alpha cutover must be rolled back, treat Web, API, and Worker as
+one cohort and perform all of these steps:
+
+1. Stop candidate writes if integrity is uncertain and drain or safely expire
+   candidate Worker leases.
+2. Re-enable the Render Web `onrender.com` subdomain and confirm that its TLS
+   route reaches the service. Do not run state-changing smoke against the
+   candidate through this rollback origin.
+3. Withdraw the `alpha.trevv.de` DNS/custom-domain route so incompatible alpha
+   traffic fails closed during the cohort restore.
+4. Restore the exact predecessor Web, API, and Worker images together with its
+   complete release environment (`RELEASE_ID`, `RELEASE_GIT_SHA`, and each
+   service's matching immutable `RELEASE_IMAGE_ID`). Restore API `WEB_ORIGIN`
+   and Web `NEXT_PUBLIC_APP_URL` to
+   `https://trevv-free-preview-web-zaman365.onrender.com`; restore
+   `AUTH_COOKIE_PREFIX=trevv` on both services and keep `AUTH_COOKIE_DOMAIN`
+   absent. Do not run a down migration.
+5. Verify the predecessor readiness identity and authenticated smoke on the
+   Render origin, then reconcile accepted writes and outbox state.
+
+Host-only cookies and the distinct alpha cookie prefix deliberately do not
+carry sessions across this boundary; evaluators must sign in again after either
+cutover or rollback. This procedure is for the disposable fictional-data alpha
+only and does not satisfy the production rollback gate.
