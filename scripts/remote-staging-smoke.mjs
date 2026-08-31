@@ -908,8 +908,14 @@ function assertCanonicalLink(html, origin) {
       ? /\bhref=(?:"([^"]+)"|'([^']+)')/iu.exec(canonicalTags[0][0])
       : null;
   const href = hrefMatch?.[1] ?? hrefMatch?.[2];
+  let canonicalUrl = null;
+  try {
+    canonicalUrl = href ? new URL(href) : null;
+  } catch {
+    canonicalUrl = null;
+  }
   if (
-    href !== new URL("/", origin).toString() ||
+    canonicalUrl?.toString() !== new URL("/", origin).toString() ||
     html.includes(retiredPreviewWebOrigin)
   )
     throw new Error(

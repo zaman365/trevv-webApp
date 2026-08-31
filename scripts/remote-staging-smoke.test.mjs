@@ -570,7 +570,7 @@ test("remote smoke requires the scheduled-retention baseline after the immediate
       return json({ status: "ok", service: "trevv-api" });
     if (url.pathname === "/sign-in")
       return new Response(
-        '<html><head><link rel="canonical" href="https://alpha.trevv.de/" /></head><body>TREVV</body></html>',
+        '<html><head><link rel="canonical" href="https://alpha.trevv.de" /></head><body>TREVV</body></html>',
         {
           headers: {
             "content-security-policy-report-only": "default-src 'self'",
