@@ -260,6 +260,11 @@ export function VerifyEmailExperience({
       setMessage("Verifying your email…");
       try {
         void warmLiveApiReadiness();
+        // Let the token-bearing navigation finish attaching its scoped
+        // HttpOnly cookie before the verification POST. Readiness remains
+        // advisory and never gates the request.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+        if (!active) return;
         const response = await fetch("/api/web/verify-email", {
           method: "POST",
           headers: { "content-type": "application/json" },
