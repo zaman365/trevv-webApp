@@ -55,6 +55,7 @@ import {
   createDatabase,
   createIdentityScope,
   createOrganizationScope,
+  createPlatformScope,
   createPostgresRepositories,
   createRateLimitRepository,
   hashInvitationToken,
@@ -63,6 +64,7 @@ import {
   type OnboardingDraft as RepositoryOnboardingDraft,
   type OnboardingProgressProjection,
   type OrganizationScopedRepositories,
+  PlatformAccessError,
   type PostgresRepositories,
 } from "@founderhq/db";
 import {
@@ -454,6 +456,37 @@ export function createApiApp(dependencies: ApiAppDependencies) {
   });
 
   api.get("/api/v1/session", (context) => context.json(context.get("session")));
+
+  api.get("/api/v1/platform", async (context) => {
+    requirePlatformOwner(context);
+    const dashboard = await platformRepositories(
+      dependencies,
+      context,
+    ).dashboard(clock());
+    return context.json({
+      role: "owner" as const,
+      ...dashboard,
+      release: dependencies.releaseMetadata ?? null,
+      registrationMode: dependencies.registrationMode ?? "closed",
+      generatedAt: clock().toISOString(),
+    });
+  });
+
+  api.post(
+    "/api/v1/platform/users/:authUserId/revoke-sessions",
+    async (context) => {
+      requirePlatformOwner(context);
+      const result = await platformRepositories(
+        dependencies,
+        context,
+      ).revokeUserSessions(
+        context.req.param("authUserId"),
+        context.get("authIdentity").sessionId,
+        clock(),
+      );
+      return context.json(result);
+    },
+  );
 
   api.get("/api/v1/session/organizations", async (context) => {
     const resolved = await identityRepositories(
@@ -2786,6 +2819,24 @@ function organizationRepositories(
   );
 }
 
+function platformRepositories(
+  dependencies: ApiAppDependencies,
+  context: ApiContext,
+) {
+  if (!dependencies.repositories) throw new PlatformAccessError();
+  return dependencies.repositories.forPlatform(
+    createPlatformScope({
+      actorUserId: context.get("access").userId,
+      requestId: context.get("requestId"),
+    }),
+  );
+}
+
+function requirePlatformOwner(context: ApiContext): void {
+  if (context.get("session").platformRole !== "owner")
+    throw new PlatformAccessError();
+}
+
 function requireOrganizationManagement(access: AccessContext): void {
   requireAccess(access, "manage_members", "settings", {
     organizationId: access.organizationId,
@@ -2844,6 +2895,7 @@ function sessionFromIdentity(
     availableOrganizations: resolved.availableOrganizations,
     managedWorkspaceIds: resolved.managedWorkspaceIds,
     expiresAt: identity.expiresAt.toISOString(),
+    ...(resolved.platformRole ? { platformRole: resolved.platformRole } : {}),
   };
 }
 
@@ -3213,6 +3265,13 @@ function mapError(
 ): Response {
   const code = dataPlaneErrorCode(error);
   if (error instanceof PermissionError || code === "resource_not_found")
+    return failure(
+      context,
+      404,
+      "resource_not_found",
+      "The requested resource is unavailable.",
+    );
+  if (error instanceof PlatformAccessError)
     return failure(
       context,
       404,

@@ -129,6 +129,48 @@ record, after which the empty-database guard deliberately blocks retry. For the
 first staging baseline, discard and recreate that empty staging database; do
 not delete selected rows to bypass the guard.
 
+## Single platform-owner assignment
+
+Platform control is separate from tenant ownership and has exactly one durable
+assignee. Assign it only after the guarded migration and after the controlled
+account is verified, mapped to an application user, and remains an active
+organization owner. The one-off command refuses demo mode, public registration,
+a mutable artifact, an unmarked database, a non-staging database name, or an
+attempt to replace a different existing platform owner. Repeating the same
+assignment is a safe no-op; transferring ownership requires a separately
+reviewed recovery procedure and is intentionally not automated.
+
+Add these values to a mode-0600 one-off environment file containing the same
+runtime configuration and immutable release identity as the deployed API:
+
+```text
+TREV_RUNTIME_ENVIRONMENT=staging
+TREV_PLATFORM_OWNER_EMAIL=<controlled-verified-owner-mailbox>
+TREV_STAGING_PLATFORM_OWNER_CONFIRM=platform-owner:<actual-database-name>:<normalized-owner-email>
+```
+
+Run the command from the exact digest-pinned API image. Keep the database CA
+read-only and never put the database URL, confirmation, or email on the command
+line or in logs:
+
+```sh
+docker run --rm \
+  --platform linux/amd64 \
+  --env-file /secure/trevv-render-platform-owner.env \
+  -e NODE_EXTRA_CA_CERTS=/run/trevv/db-ca.pem \
+  --mount type=bind,src=/secure/render-db-ca.pem,dst=/run/trevv/db-ca.pem,readonly \
+  --entrypoint node \
+  ghcr.io/<owner>/trevv-api@sha256:<approved-api-digest> \
+  apps/api/dist/platform-owner.js
+```
+
+Success prints only the normalized email, application-user ID, database name,
+and `assigned` or `no_op`. It never prints authentication credentials or
+sessions. Verify that the assigned account's next `/api/v1/session` response
+contains `platformRole: "owner"`, that ordinary organization owners receive a
+404 from `/api/v1/platform`, and that only the assignee sees **Platform
+control** under System and in the avatar menu.
+
 ## Public trusted-TLS smoke
 
 Run the smoke from an approved runner using the public staging origin. It does
@@ -268,12 +310,14 @@ exact deployed predecessor—release `rehearsal-candidate-33337660293-1`, Git SH
 attempt `1`, artifact `9739632252`. Every other predecessor must have been
 built for `https://alpha.trevv.de`.
 
-This publisher accepts only a candidate with the same checked-in migration
-journal head and the same recursive `packages/db/migrations` Git tree as the
-deployed publication. It emits no claim about the live database journal; the
-guarded migration rehearsal is separate evidence. Stop and design a reviewed
-deployed-database evidence path before publishing a candidate that changes any
-migration file or metadata.
+The publisher defaults to the same checked-in migration head and recursive
+`packages/db/migrations` Git tree as the deployed publication. For an additive
+migration successor only, provide the separate exact confirmation documented
+in `deploy/render/README.md`; the workflow then proves the prior journal is an
+unchanged prefix and permits only the new SQL/snapshot files plus the journal
+append. Publication still emits no claim about the live database. A verified
+pre-migration dump and local restore, the guarded digest-pinned migration, and
+post-migration journal inspection remain mandatory before service cutover.
 
 After the candidate is the exact successful `trevv-foundation` CI head,
 dispatch with:
@@ -283,6 +327,7 @@ candidate_sha=<full-40-character-candidate-sha>
 previous_artifact_id=<deployed-predecessor-artifact-id>
 previous_artifact_sha256=sha256:<artifact-zip-64-hex>
 previous_manifest_sha256=sha256:<manifest-file-64-hex>
+migration_change_confirmation=<empty-for-same-head-or-exact-additive-confirmation>
 
 gh workflow run publish-staging-images.yml \
   --ref trevv-foundation \
@@ -293,6 +338,7 @@ gh workflow run publish-staging-images.yml \
   -f previous_artifact_id="$previous_artifact_id" \
   -f previous_artifact_sha256="$previous_artifact_sha256" \
   -f previous_manifest_sha256="$previous_manifest_sha256" \
+  -f migration_change_confirmation="$migration_change_confirmation" \
   -f successor_confirmation="publish-successor-from-deployed:${candidate_sha}:${previous_manifest_sha256}"
 ```
 

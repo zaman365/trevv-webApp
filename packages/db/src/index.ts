@@ -12,6 +12,7 @@ export * from "./repositories.js";
 export * from "./identity-repositories.js";
 export * from "./collaboration-repositories.js";
 export * from "./privacy-repositories.js";
+export * from "./platform-repositories.js";
 export * from "./worker-repositories.js";
 export * from "./database-runtime.js";
 export * from "./rate-limit-repository.js";

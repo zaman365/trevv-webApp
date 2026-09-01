@@ -3131,6 +3131,58 @@ export const authUserMappings = pgTable(
   ],
 );
 
+// Platform authority is intentionally separate from organization membership.
+// The checked singleton key makes it impossible to provision more than one
+// platform owner while keeping the assignment durable and server-derived.
+export const platformOwnerAssignments = pgTable(
+  "platform_owner_assignments",
+  {
+    singletonKey: text("singleton_key").primaryKey().default("primary"),
+    appUserId: text("app_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("platform_owner_assignments_user_unique").on(table.appUserId),
+    check(
+      "platform_owner_assignments_singleton_check",
+      sql`${table.singletonKey} = 'primary'`,
+    ),
+  ],
+);
+
+// Platform operations cannot use the organization-scoped audit table because
+// a platform owner may inspect multiple organizations without becoming a
+// member of each one. Payloads are redacted operational metadata only.
+export const platformAuditEvents = pgTable(
+  "platform_audit_events",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    requestId: text("request_id").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("platform_audit_events_request_unique").on(table.requestId),
+    index("platform_audit_events_created_idx").on(table.createdAt),
+    index("platform_audit_events_actor_idx").on(table.actorUserId),
+  ],
+);
+
 // The active organization is server-owned state. A client can request a switch,
 // but this composite FK and repository checks require a real membership.
 export const appUserOrganizationSelections = pgTable(

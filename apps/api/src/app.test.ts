@@ -5,6 +5,7 @@ import type {
   CreateItemInput,
   TeamDto,
 } from "@founderhq/api-contract";
+import type { PostgresRepositories } from "@founderhq/db";
 import {
   createApiApp,
   createDemoApiApp,
@@ -303,6 +304,79 @@ describe("TREVV API v1 dependency boundaries", () => {
     expect(
       ((await unavailable.json()) as { error: { code: string } }).error.code,
     ).toBe("repository_unavailable");
+  });
+
+  it("does not disclose the platform surface to ordinary organization owners", async () => {
+    const live = createUnavailableLiveDependencies();
+    const app = createApiApp({
+      mode: "live",
+      accessResolver: liveAccessResolver,
+      dataPlane: live.dataPlane,
+    });
+    const response = await app.request("/api/v1/platform");
+    expect(response.status).toBe(404);
+    await expect(errorCode(response)).resolves.toBe("resource_not_found");
+  });
+
+  it("returns the redacted dashboard only for the server-derived platform owner", async () => {
+    const live = createUnavailableLiveDependencies();
+    const dashboard = {
+      owner: {
+        id: "user-live",
+        name: "Live User",
+        email: "live@example.test",
+      },
+      summary: {
+        organizations: 1,
+        users: 1,
+        verifiedUsers: 1,
+        activeSessions: 1,
+        pendingInvitations: 0,
+        failedInvitationDeliveries: 0,
+      },
+      organizations: [],
+      users: [],
+      invitations: [],
+      audit: [],
+    };
+    const repositories = {
+      forPlatform: () => ({
+        dashboard: async () => dashboard,
+        revokeUserSessions: async () => ({
+          revokedSessions: 0,
+          preservedCurrentSession: true,
+        }),
+      }),
+    } as unknown as PostgresRepositories;
+    const platformAccessResolver: AccessResolver = {
+      mode: "live",
+      async resolve(request, requestId) {
+        const resolved = await liveAccessResolver.resolve(request, requestId);
+        if (!resolved) return null;
+        return {
+          ...resolved,
+          session: { ...resolved.session, platformRole: "owner" as const },
+        };
+      },
+    };
+    const app = createApiApp({
+      mode: "live",
+      accessResolver: platformAccessResolver,
+      dataPlane: live.dataPlane,
+      repositories,
+      registrationMode: "invite_only",
+      releaseMetadata: runtimeRelease,
+      clock: () => new Date(fixedNow),
+    });
+    const response = await app.request("/api/v1/platform");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      role: "owner",
+      ...dashboard,
+      release: runtimeRelease,
+      registrationMode: "invite_only",
+      generatedAt: fixedNow.toISOString(),
+    });
   });
 
   it("maps live transport failures to stable 401, 429, and 500 envelopes", async () => {

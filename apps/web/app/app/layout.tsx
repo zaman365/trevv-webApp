@@ -37,6 +37,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <AppShellProviders
       session={{
         demo: mode === "demo",
+        ...(session.platformRole ? { platformRole: session.platformRole } : {}),
         organization: {
           id: session.organization.id,
           name: session.organization.name,

@@ -4,6 +4,7 @@ import { createContext, useContext, type ReactNode } from "react";
 
 export interface AppSessionView {
   demo: boolean;
+  platformRole?: "owner";
   organization: {
     id: string;
     name: string;

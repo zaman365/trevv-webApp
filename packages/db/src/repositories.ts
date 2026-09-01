@@ -12,6 +12,11 @@ import {
   createPrivacyRepositories,
   type PrivacyRepositories,
 } from "./privacy-repositories.js";
+import {
+  createPlatformRepositories,
+  type PlatformRepositories,
+  type TrustedPlatformScope,
+} from "./platform-repositories.js";
 import type {
   DecisionOutcome,
   MeaningfulChange,
@@ -896,6 +901,7 @@ export interface PostgresRepositories {
   readiness(): Promise<void>;
   forOrganization(scope: TenantScope): OrganizationScopedRepositories;
   forIdentity(scope: IdentityScope): IdentityRepositories;
+  forPlatform(scope: TrustedPlatformScope): PlatformRepositories;
 }
 
 export function fingerprintRequest(value: unknown): string {
@@ -915,6 +921,9 @@ export function createPostgresRepositories(
     },
     forIdentity(scope) {
       return createIdentityRepositories(database, scope);
+    },
+    forPlatform(scope) {
+      return createPlatformRepositories(database, scope);
     },
   };
 }

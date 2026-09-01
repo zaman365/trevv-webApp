@@ -7,6 +7,7 @@ import {
   fingerprintRequest,
   RepositoryError,
 } from "./repositories.js";
+import { resolvePlatformOwnerRole } from "./platform-repositories.js";
 import {
   appUserOrganizationSelections,
   auditLogs,
@@ -155,6 +156,7 @@ export type IdentityResolution =
       managedWorkspaceIds: string[];
       availableOrganizations: OrganizationChoice[];
       organizations: OrganizationChoice[];
+      platformRole?: "owner";
     });
 
 export interface AcceptedInvitationResult {
@@ -328,6 +330,7 @@ async function resolveIdentity(
       }),
     )
     .session.resolve();
+  const platformRole = await resolvePlatformOwnerRole(database, mappedUser.id);
   return {
     status: "active",
     authUser: authUserProjection,
@@ -340,6 +343,7 @@ async function resolveIdentity(
     managedWorkspaceIds: session.managedWorkspaceIds,
     availableOrganizations: choices,
     organizations: choices,
+    ...(platformRole ? { platformRole } : {}),
   };
 }
 

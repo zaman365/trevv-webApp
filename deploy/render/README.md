@@ -172,14 +172,24 @@ proof of Render's active OCI digest. Before dispatch, an operator must also use
 authenticated Render state to compare each service's current image reference
 with the selected manifest. Stop on any mismatch.
 
-This successor publisher is intentionally same-migration-head-and-tree-only.
-The candidate migration journal head and the recursive Git tree for
-`packages/db/migrations` must both equal the selected deployed publication.
-Those comparisons authenticate publication compatibility only; they do not
-inspect or attest the live PostgreSQL migration journal. The guarded migration
-rehearsal remains separate and must prove the database state before cutover. Any
-future migration change requires a new reviewed path with explicit
-deployed-database evidence.
+By default, the successor publisher is same-migration-head-and-tree-only. A
+migration-bearing publication is allowed only when the candidate journal is an
+exact prefix-preserving append, every prior migration byte is unchanged, the
+Git diff consists exactly of the journal update plus the newly added SQL and
+snapshot, and `migration_change_confirmation` binds the candidate SHA,
+predecessor head, candidate head, and predecessor manifest digest:
+
+```text
+publish-additive-migration-successor:<candidate-sha>:<predecessor-head>:<candidate-head>:<previous-manifest-sha256>
+```
+
+This authorizes artifact publication only. It does not inspect or attest the
+live PostgreSQL journal and does not authorize service cutover. Before any
+service uses that candidate, take a new dump, prove a local restore, run the
+digest-pinned guarded migration, verify the live journal head and table shape,
+and preserve the complete predecessor image cohort. A missing or non-additive
+diff, rewritten prior migration, unbound confirmation, failed restore, or
+unexpected migration result is a stop condition.
 
 ## Database transport and migration
 

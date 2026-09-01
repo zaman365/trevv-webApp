@@ -11,6 +11,7 @@ export const openApiDocument = {
   tags: [
     { name: "System" },
     { name: "Identity" },
+    { name: "Platform" },
     { name: "Organization" },
     { name: "Portfolio" },
     { name: "Attention" },
@@ -110,6 +111,58 @@ export const openApiDocument = {
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "403": { $ref: "#/components/responses/Forbidden" },
           "409": { $ref: "#/components/responses/Conflict" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/platform": {
+      get: {
+        tags: ["Platform"],
+        operationId: "getPlatformDashboard",
+        description:
+          "Return the redacted, cross-tenant operational dashboard only when the authenticated application user is the database-assigned single platform owner. Other users receive no platform resource.",
+        responses: {
+          "200": {
+            description: "Platform-owner operational dashboard",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PlatformDashboard" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/platform/users/{authUserId}/revoke-sessions": {
+      post: {
+        tags: ["Platform"],
+        operationId: "revokePlatformUserSessions",
+        description:
+          "Revoke active sessions for one authentication account. When the target is the platform owner, the current owner session is always preserved.",
+        parameters: [
+          {
+            name: "authUserId",
+            in: "path",
+            required: true,
+            schema: { type: "string", minLength: 3, maxLength: 128 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Session revocation result",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PlatformSessionRevocation",
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -2844,6 +2897,229 @@ export const openApiDocument = {
             items: { type: "string", minLength: 3, maxLength: 128 },
           },
           expiresAt: { type: "string", format: "date-time" },
+          platformRole: { type: "string", enum: ["owner"] },
+        },
+      },
+      PlatformDashboard: {
+        type: "object",
+        required: [
+          "role",
+          "owner",
+          "summary",
+          "organizations",
+          "users",
+          "invitations",
+          "audit",
+          "release",
+          "registrationMode",
+          "generatedAt",
+        ],
+        properties: {
+          role: { type: "string", enum: ["owner"] },
+          owner: {
+            type: "object",
+            required: ["id", "name", "email"],
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              email: { type: "string", format: "email" },
+            },
+          },
+          summary: {
+            type: "object",
+            required: [
+              "organizations",
+              "users",
+              "verifiedUsers",
+              "activeSessions",
+              "pendingInvitations",
+              "failedInvitationDeliveries",
+            ],
+            properties: {
+              organizations: { type: "integer", minimum: 0 },
+              users: { type: "integer", minimum: 0 },
+              verifiedUsers: { type: "integer", minimum: 0 },
+              activeSessions: { type: "integer", minimum: 0 },
+              pendingInvitations: { type: "integer", minimum: 0 },
+              failedInvitationDeliveries: { type: "integer", minimum: 0 },
+            },
+          },
+          organizations: {
+            type: "array",
+            maxItems: 250,
+            items: { $ref: "#/components/schemas/PlatformOrganization" },
+          },
+          users: {
+            type: "array",
+            maxItems: 500,
+            items: { $ref: "#/components/schemas/PlatformUser" },
+          },
+          invitations: {
+            type: "array",
+            maxItems: 500,
+            items: { $ref: "#/components/schemas/PlatformInvitation" },
+          },
+          audit: {
+            type: "array",
+            maxItems: 200,
+            items: { $ref: "#/components/schemas/PlatformAuditEvent" },
+          },
+          release: {
+            oneOf: [
+              { $ref: "#/components/schemas/RuntimeReleaseMetadata" },
+              { type: "null" },
+            ],
+          },
+          registrationMode: {
+            type: "string",
+            enum: ["closed", "invite_only", "public"],
+          },
+          generatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      PlatformOrganization: {
+        type: "object",
+        required: [
+          "id",
+          "name",
+          "slug",
+          "memberCount",
+          "workspaceCount",
+          "pendingInvitationCount",
+          "createdAt",
+        ],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" },
+          memberCount: { type: "integer", minimum: 0 },
+          workspaceCount: { type: "integer", minimum: 0 },
+          pendingInvitationCount: { type: "integer", minimum: 0 },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      PlatformUser: {
+        type: "object",
+        required: [
+          "authUserId",
+          "name",
+          "email",
+          "emailVerified",
+          "activeSessionCount",
+          "memberships",
+          "createdAt",
+        ],
+        properties: {
+          authUserId: { type: "string" },
+          appUserId: { type: "string" },
+          name: { type: "string" },
+          email: { type: "string", format: "email" },
+          emailVerified: { type: "boolean" },
+          activeSessionCount: { type: "integer", minimum: 0 },
+          lastSessionAt: { type: "string", format: "date-time" },
+          memberships: {
+            type: "array",
+            maxItems: 100,
+            items: {
+              type: "object",
+              required: [
+                "organizationId",
+                "organizationName",
+                "role",
+                "active",
+              ],
+              properties: {
+                organizationId: { type: "string" },
+                organizationName: { type: "string" },
+                role: {
+                  type: "string",
+                  enum: [
+                    "owner",
+                    "admin",
+                    "workspace_lead",
+                    "member",
+                    "guest",
+                    "viewer",
+                  ],
+                },
+                active: { type: "boolean" },
+              },
+            },
+          },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      PlatformInvitation: {
+        type: "object",
+        required: [
+          "id",
+          "organizationId",
+          "organizationName",
+          "email",
+          "role",
+          "status",
+          "deliveryStatus",
+          "sendCount",
+          "version",
+          "expiresAt",
+          "createdAt",
+          "updatedAt",
+        ],
+        properties: {
+          id: { type: "string" },
+          organizationId: { type: "string" },
+          organizationName: { type: "string" },
+          email: { type: "string", format: "email" },
+          role: {
+            type: "string",
+            enum: ["admin", "workspace_lead", "member", "guest", "viewer"],
+          },
+          status: {
+            type: "string",
+            enum: ["pending", "accepted", "revoked", "expired"],
+          },
+          deliveryStatus: {
+            type: "string",
+            enum: ["pending", "sent", "failed"],
+          },
+          sendCount: { type: "integer", minimum: 0 },
+          version: { type: "integer", minimum: 1 },
+          expiresAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+          acceptedAt: { type: "string", format: "date-time" },
+          revokedAt: { type: "string", format: "date-time" },
+          lastSentAt: { type: "string", format: "date-time" },
+          deliveryErrorCode: { type: "string" },
+        },
+      },
+      PlatformAuditEvent: {
+        type: "object",
+        required: [
+          "id",
+          "actorName",
+          "action",
+          "targetType",
+          "targetId",
+          "summary",
+          "createdAt",
+        ],
+        properties: {
+          id: { type: "string" },
+          actorName: { type: "string" },
+          action: { type: "string" },
+          targetType: { type: "string" },
+          targetId: { type: "string" },
+          summary: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      PlatformSessionRevocation: {
+        type: "object",
+        required: ["revokedSessions", "preservedCurrentSession"],
+        properties: {
+          revokedSessions: { type: "integer", minimum: 0 },
+          preservedCurrentSession: { type: "boolean" },
         },
       },
       OrganizationSelection: {

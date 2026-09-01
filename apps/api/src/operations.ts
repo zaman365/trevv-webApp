@@ -94,6 +94,7 @@ const apiV1RouteFamilies = new Set([
   "memberships",
   "onboarding",
   "operations",
+  "platform",
   "portfolios",
   "privacy",
   "readyz",

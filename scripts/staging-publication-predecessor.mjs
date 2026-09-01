@@ -378,6 +378,126 @@ export function validateSameMigrationTree(
   return { candidateMigrationTreeId, predecessorMigrationTreeId };
 }
 
+export function validateMigrationPublication(input) {
+  const predecessorManifestHead = input.manifest?.database?.migrationHead;
+  if (!migrationPattern.test(String(predecessorManifestHead ?? "")))
+    throw new Error("The predecessor publication migration head is invalid.");
+  const candidateHead = migrationHeadFromJournal(input.journal);
+  if (candidateHead === predecessorManifestHead) {
+    if (input.migrationChangeConfirmation)
+      throw new Error(
+        "migration_change_confirmation must be empty when the migration tree is unchanged.",
+      );
+    return {
+      candidateHead,
+      predecessorManifestHead,
+      ...validateSameMigrationTree(
+        input.predecessorMigrationTreeId,
+        input.candidateMigrationTreeId,
+      ),
+      policy: "same-head-and-tree-only",
+      requiresGuardedMigration: false,
+    };
+  }
+
+  if (!gitShaPattern.test(String(input.candidateSha ?? "")))
+    throw new Error("The migration-bearing candidate Git SHA is invalid.");
+  if (!digestPattern.test(String(input.predecessorManifestSha256 ?? "")))
+    throw new Error("The predecessor manifest digest is invalid.");
+  if (
+    !gitObjectIdPattern.test(String(input.predecessorMigrationTreeId ?? "")) ||
+    !gitObjectIdPattern.test(String(input.candidateMigrationTreeId ?? ""))
+  )
+    throw new Error("The migration tree object IDs are invalid.");
+  if (input.candidateMigrationTreeId === input.predecessorMigrationTreeId)
+    throw new Error(
+      "A changed migration head must have a different migration tree object ID.",
+    );
+
+  const previousEntries = migrationEntries(input.previousJournal, "deployed");
+  const candidateEntries = migrationEntries(input.journal, "candidate");
+  if (previousEntries.at(-1)?.tag !== predecessorManifestHead)
+    throw new Error(
+      "The deployed predecessor journal does not match its published migration head.",
+    );
+  if (candidateEntries.length <= previousEntries.length)
+    throw new Error(
+      "A migration-bearing publication must append at least one migration.",
+    );
+  if (
+    JSON.stringify(candidateEntries.slice(0, previousEntries.length)) !==
+    JSON.stringify(previousEntries)
+  )
+    throw new Error(
+      "A migration-bearing publication may not rewrite deployed journal entries.",
+    );
+
+  const appended = candidateEntries.slice(previousEntries.length);
+  const expectedChangedPaths = new Set([
+    "packages/db/migrations/meta/_journal.json",
+    ...appended.flatMap(({ tag }) => [
+      `packages/db/migrations/${tag}.sql`,
+      `packages/db/migrations/meta/${tag.slice(0, 4)}_snapshot.json`,
+    ]),
+  ]);
+  const changedPaths = Array.isArray(input.migrationChangedPaths)
+    ? input.migrationChangedPaths
+    : [];
+  const actualChangedPaths = new Set();
+  for (const change of changedPaths) {
+    if (!isRecord(change))
+      throw new Error("The migration path change set is invalid.");
+    const status = String(change.status ?? "");
+    const path = String(change.path ?? "");
+    const expectedStatus = path.endsWith("/meta/_journal.json") ? "M" : "A";
+    if (status !== expectedStatus || !expectedChangedPaths.has(path))
+      throw new Error(
+        "Migration-bearing publication changes must be additive SQL/snapshot files plus the journal append.",
+      );
+    if (actualChangedPaths.has(path))
+      throw new Error("The migration path change set contains duplicates.");
+    actualChangedPaths.add(path);
+  }
+  if (
+    JSON.stringify([...actualChangedPaths].sort()) !==
+    JSON.stringify([...expectedChangedPaths].sort())
+  )
+    throw new Error(
+      "The migration path change set does not exactly match the appended journal entries.",
+    );
+
+  const expectedConfirmation =
+    `publish-additive-migration-successor:${input.candidateSha}:` +
+    `${predecessorManifestHead}:${candidateHead}:${input.predecessorManifestSha256}`;
+  if (input.migrationChangeConfirmation !== expectedConfirmation)
+    throw new Error(
+      "migration_change_confirmation does not bind the candidate and exact additive migration transition.",
+    );
+  return {
+    candidateHead,
+    predecessorManifestHead,
+    candidateMigrationTreeId: input.candidateMigrationTreeId,
+    predecessorMigrationTreeId: input.predecessorMigrationTreeId,
+    appendedMigrationHeads: appended.map(({ tag }) => tag),
+    policy: "additive-forward-only-publication",
+    requiresGuardedMigration: true,
+  };
+}
+
+function migrationEntries(journal, label) {
+  if (!isRecord(journal) || !Array.isArray(journal.entries))
+    throw new Error(`The ${label} migration journal is invalid.`);
+  for (const [index, entry] of journal.entries.entries()) {
+    if (
+      !isRecord(entry) ||
+      entry.idx !== index ||
+      !migrationPattern.test(String(entry.tag ?? ""))
+    )
+      throw new Error(`The ${label} migration journal entries are invalid.`);
+  }
+  return journal.entries;
+}
+
 export function validateDeployedReadiness(readiness, manifest) {
   for (const service of ["web", "api", "worker"]) {
     const response = readiness?.[service];
@@ -437,11 +557,11 @@ export function createPredecessorReport(input) {
     ...input,
     publication,
   });
-  const migrationPolicy = validateSameMigrationHead(manifest, input.journal);
-  const migrationTrees = validateSameMigrationTree(
-    input.predecessorMigrationTreeId,
-    input.candidateMigrationTreeId,
-  );
+  const migrationPolicy = validateMigrationPublication({
+    ...input,
+    manifest,
+    predecessorManifestSha256: manifestSha256,
+  });
   const readinessReportedCohort = validateDeployedReadiness(
     input.readiness,
     manifest,
@@ -456,12 +576,12 @@ export function createPredecessorReport(input) {
     readinessReportedCohort,
     migrationPolicy: {
       ...migrationPolicy,
-      ...migrationTrees,
-      policy: "same-head-and-tree-only",
     },
     databaseState: {
       verifiedByPublisher: false,
-      requiredEvidence: "separate guarded migration rehearsal",
+      requiredEvidence: migrationPolicy.requiresGuardedMigration
+        ? "verified pre-migration dump, local restore, guarded migration, and post-migration journal inspection before service cutover"
+        : "separate guarded migration rehearsal",
     },
     deploymentState: {
       readinessIdentityVerified: true,
@@ -565,6 +685,9 @@ function parseArguments(argv) {
     "--manifest",
     "--digest-bundle",
     "--migration-journal",
+    "--previous-migration-journal",
+    "--migration-diff",
+    "--migration-change-confirmation",
     "--artifact-id",
     "--artifact-sha256",
     "--manifest-sha256",
@@ -582,6 +705,10 @@ function parseArguments(argv) {
     manifestPath: required("--manifest"),
     digestBundlePath: required("--digest-bundle"),
     migrationJournalPath: required("--migration-journal"),
+    previousMigrationJournalPath: required("--previous-migration-journal"),
+    migrationDiffPath: required("--migration-diff"),
+    migrationChangeConfirmation:
+      values.get("--migration-change-confirmation") ?? "",
     expectedArtifactId: Number(required("--artifact-id")),
     expectedArtifactSha256: required("--artifact-sha256"),
     expectedManifestSha256: required("--manifest-sha256"),
@@ -602,15 +729,28 @@ async function readJson(path, label) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [artifact, run, artifactBytes, manifestText, digestBundle, journal] =
-    await Promise.all([
-      readJson(options.artifactMetadataPath, "Artifact metadata"),
-      readJson(options.runMetadataPath, "Workflow run metadata"),
-      readFile(options.archivePath),
-      readFile(options.manifestPath, "utf8"),
-      readJson(options.digestBundlePath, "Image digest bundle"),
-      readJson(options.migrationJournalPath, "Migration journal"),
-    ]);
+  const [
+    artifact,
+    run,
+    artifactBytes,
+    manifestText,
+    digestBundle,
+    journal,
+    previousJournal,
+    migrationDiff,
+  ] = await Promise.all([
+    readJson(options.artifactMetadataPath, "Artifact metadata"),
+    readJson(options.runMetadataPath, "Workflow run metadata"),
+    readFile(options.archivePath),
+    readFile(options.manifestPath, "utf8"),
+    readJson(options.digestBundlePath, "Image digest bundle"),
+    readJson(options.migrationJournalPath, "Migration journal"),
+    readJson(
+      options.previousMigrationJournalPath,
+      "Previous migration journal",
+    ),
+    readFile(options.migrationDiffPath, "utf8"),
+  ]);
   const readiness = await fetchDeployedReadiness();
   const report = createPredecessorReport({
     ...options,
@@ -620,6 +760,8 @@ async function main() {
     manifestText,
     digestBundle,
     journal,
+    previousJournal,
+    migrationChangedPaths: parseMigrationDiff(migrationDiff),
     readiness,
   });
   process.stdout.write(
@@ -629,6 +771,18 @@ async function main() {
       2,
     )}\n`,
   );
+}
+
+function parseMigrationDiff(value) {
+  return value
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [status, path, unexpected] = line.split("\t");
+      if (!status || !path || unexpected)
+        throw new Error("The migration Git diff is invalid.");
+      return { status, path };
+    });
 }
 
 if (

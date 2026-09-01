@@ -246,6 +246,13 @@ test("dispatch binds the candidate to the selected deployed publication", () => 
     default: "",
     type: "string",
   });
+  assert.deepEqual(inputs.migration_change_confirmation, {
+    description:
+      "Leave empty unless publishing an exact additive migration transition",
+    required: false,
+    default: "",
+    type: "string",
+  });
   assert.equal(inputs.genesis_confirmation, undefined);
 
   const verify = stepNamed(
@@ -328,6 +335,10 @@ test("successor manifest authenticates and binds the deployed predecessor", () =
     predecessor.env.PREVIOUS_MANIFEST_SHA256,
     "${{ inputs.previous_manifest_sha256 }}",
   );
+  assert.equal(
+    predecessor.env.MIGRATION_CHANGE_CONFIRMATION,
+    "${{ inputs.migration_change_confirmation }}",
+  );
   for (const requiredPattern of [
     /actions\/artifacts\/\$\{PREVIOUS_ARTIFACT_ID\}/u,
     /actions\/runs\/\$\{previous_run_id\}/u,
@@ -343,11 +354,16 @@ test("successor manifest authenticates and binds the deployed predecessor", () =
     /--artifact-metadata "\$artifact_metadata"/u,
     /--run-metadata "\$run_metadata"/u,
     /--migration-journal packages\/db\/migrations\/meta\/_journal\.json/u,
+    /--previous-migration-journal "\$predecessor_journal"/u,
+    /--migration-diff "\$migration_diff"/u,
+    /--migration-change-confirmation "\$MIGRATION_CHANGE_CONFIRMATION"/u,
     /--predecessor-migration-tree "\$predecessor_migration_tree"/u,
     /--candidate-migration-tree "\$candidate_migration_tree"/u,
     /\.publication\.publishedMigrationHead/u,
     /\.migrationPolicy\.candidateHead/u,
     /\.migrationPolicy\.predecessorMigrationTreeId/u,
+    /additive-forward-only-publication/u,
+    /\.migrationPolicy\.requiresGuardedMigration/u,
     /readinessReportedCohort/u,
     /readinessObservedAt/u,
     /GITHUB_STEP_SUMMARY/u,

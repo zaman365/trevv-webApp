@@ -9,6 +9,7 @@ import {
   sha256,
   validateArtifactAndRun,
   validateDeployedReadiness,
+  validateMigrationPublication,
   validatePublishedManifest,
   validateSameMigrationHead,
   validateSameMigrationTree,
@@ -78,6 +79,7 @@ test("authenticates a selected publication as the currently deployed cohort", ()
     candidateMigrationTreeId: "3".repeat(40),
     predecessorMigrationTreeId: "3".repeat(40),
     policy: "same-head-and-tree-only",
+    requiresGuardedMigration: false,
   });
   assert.deepEqual(report.databaseState, {
     verifiedByPublisher: false,
@@ -332,6 +334,85 @@ test("rejects rewritten migration bytes even when the journal head is unchanged"
   );
 });
 
+test("allows only an explicitly bound additive migration publication", () => {
+  const fixture = predecessorFixture();
+  const previousJournal = structuredClone(fixture.journal);
+  const appendedTag = "0019_additive_platform_fixture";
+  fixture.journal.entries.push({
+    idx: fixture.journal.entries.length,
+    version: "7",
+    when: 1_788_100_000_000,
+    tag: appendedTag,
+    breakpoints: true,
+  });
+  const confirmation =
+    `publish-additive-migration-successor:${candidateSha}:` +
+    `${migrationHead}:${appendedTag}:${fixture.expectedManifestSha256}`;
+  assert.deepEqual(
+    validateMigrationPublication({
+      manifest: fixture.manifest,
+      previousJournal,
+      journal: fixture.journal,
+      predecessorMigrationTreeId: "3".repeat(40),
+      candidateMigrationTreeId: "4".repeat(40),
+      migrationChangedPaths: [
+        {
+          status: "M",
+          path: "packages/db/migrations/meta/_journal.json",
+        },
+        {
+          status: "A",
+          path: `packages/db/migrations/${appendedTag}.sql`,
+        },
+        {
+          status: "A",
+          path: "packages/db/migrations/meta/0019_snapshot.json",
+        },
+      ],
+      migrationChangeConfirmation: confirmation,
+      candidateSha,
+      predecessorManifestSha256: fixture.expectedManifestSha256,
+    }),
+    {
+      candidateHead: appendedTag,
+      predecessorManifestHead: migrationHead,
+      candidateMigrationTreeId: "4".repeat(40),
+      predecessorMigrationTreeId: "3".repeat(40),
+      appendedMigrationHeads: [appendedTag],
+      policy: "additive-forward-only-publication",
+      requiresGuardedMigration: true,
+    },
+  );
+});
+
+test("rejects a migration publication that rewrites deployed history", () => {
+  const fixture = predecessorFixture();
+  const previousJournal = structuredClone(fixture.journal);
+  fixture.journal.entries[0].when += 1;
+  fixture.journal.entries.push({
+    idx: fixture.journal.entries.length,
+    version: "7",
+    when: 1_788_100_000_000,
+    tag: "0019_additive_platform_fixture",
+    breakpoints: true,
+  });
+  assert.throws(
+    () =>
+      validateMigrationPublication({
+        manifest: fixture.manifest,
+        previousJournal,
+        journal: fixture.journal,
+        predecessorMigrationTreeId: "3".repeat(40),
+        candidateMigrationTreeId: "4".repeat(40),
+        migrationChangedPaths: [],
+        migrationChangeConfirmation: "wrong",
+        candidateSha,
+        predecessorManifestSha256: fixture.expectedManifestSha256,
+      }),
+    /may not rewrite deployed journal entries/u,
+  );
+});
+
 test("pins readiness fetches to the exact origins without redirects", async () => {
   const requests = [];
   const result = await fetchDeployedReadiness({
@@ -465,6 +546,9 @@ function predecessorFixture({
       fixtureRunId,
     }),
     journal: structuredClone(journal),
+    previousJournal: structuredClone(journal),
+    migrationChangedPaths: [],
+    migrationChangeConfirmation: "",
     predecessorMigrationTreeId: "3".repeat(40),
     candidateMigrationTreeId: "3".repeat(40),
     readiness: {

@@ -49,6 +49,11 @@ on:
         required: true
         default: ""
         type: string
+      migration_change_confirmation:
+        description: Leave empty unless publishing an exact additive migration transition
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -492,6 +497,7 @@ jobs:
           PREVIOUS_ARTIFACT_ID: ${{ inputs.previous_artifact_id }}
           PREVIOUS_ARTIFACT_SHA256: ${{ inputs.previous_artifact_sha256 }}
           PREVIOUS_MANIFEST_SHA256: ${{ inputs.previous_manifest_sha256 }}
+          MIGRATION_CHANGE_CONFIRMATION: ${{ inputs.migration_change_confirmation }}
         run: |
           predecessor_root="$RUNNER_TEMP/staging-predecessor"
           predecessor_archive="$predecessor_root/publication.zip"
@@ -499,6 +505,8 @@ jobs:
           artifact_metadata="$predecessor_root/artifact.json"
           run_metadata="$predecessor_root/run.json"
           predecessor_report="$predecessor_root/verified-deployed-predecessor.json"
+          predecessor_journal="$predecessor_root/previous-migration-journal.json"
+          migration_diff="$predecessor_root/migration-diff.txt"
           mkdir -p "$predecessor_files"
 
           gh api \
@@ -517,6 +525,12 @@ jobs:
             "${previous_source_sha}:packages/db/migrations")
           candidate_migration_tree=$(git rev-parse \
             "${SOURCE_SHA}:packages/db/migrations")
+          git show \
+            "${previous_source_sha}:packages/db/migrations/meta/_journal.json" \
+            > "$predecessor_journal"
+          git diff --name-status --no-renames \
+            "$previous_source_sha" "$SOURCE_SHA" -- packages/db/migrations \
+            > "$migration_diff"
 
           gh api \
             "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${PREVIOUS_ARTIFACT_ID}/zip" \
@@ -554,6 +568,9 @@ jobs:
             --manifest "$previous_manifest" \
             --digest-bundle "$predecessor_files/staging-image-digests.json" \
             --migration-journal packages/db/migrations/meta/_journal.json \
+            --previous-migration-journal "$predecessor_journal" \
+            --migration-diff "$migration_diff" \
+            --migration-change-confirmation "$MIGRATION_CHANGE_CONFIRMATION" \
             --artifact-id "$PREVIOUS_ARTIFACT_ID" \
             --artifact-sha256 "$PREVIOUS_ARTIFACT_SHA256" \
             --manifest-sha256 "$PREVIOUS_MANIFEST_SHA256" \
@@ -570,9 +587,25 @@ jobs:
             '.publication.publishedMigrationHead' "$predecessor_report")
           candidate_migration_head=$(jq -er \
             '.migrationPolicy.candidateHead' "$predecessor_report")
-          test "$published_migration_head" = "$candidate_migration_head"
-          test "$(jq -er '.migrationPolicy.predecessorMigrationTreeId' \
-            "$predecessor_report")" = "$candidate_migration_tree"
+          migration_policy=$(jq -er '.migrationPolicy.policy' \
+            "$predecessor_report")
+          case "$migration_policy" in
+            same-head-and-tree-only)
+              test "$published_migration_head" = "$candidate_migration_head"
+              test "$(jq -er '.migrationPolicy.predecessorMigrationTreeId' \
+                "$predecessor_report")" = "$candidate_migration_tree"
+              ;;
+            additive-forward-only-publication)
+              test "$published_migration_head" != "$candidate_migration_head"
+              test "$(jq -er '.migrationPolicy.requiresGuardedMigration' \
+                "$predecessor_report")" = "true"
+              test -n "$MIGRATION_CHANGE_CONFIRMATION"
+              ;;
+            *)
+              echo "::error::Unsupported migration publication policy."
+              exit 1
+              ;;
+          esac
 
           git cat-file -e "${previous_sha}^{commit}"
           if ! git merge-base --is-ancestor "$previous_sha" "$SOURCE_SHA"; then

@@ -119,6 +119,9 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
           availableOrganizations: resolved.availableOrganizations,
           managedWorkspaceIds: resolved.managedWorkspaceIds,
           expiresAt: identity.expiresAt.toISOString(),
+          ...(resolved.platformRole
+            ? { platformRole: resolved.platformRole }
+            : {}),
         },
       };
     },

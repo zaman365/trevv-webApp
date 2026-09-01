@@ -13,6 +13,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "bootstrap:staging": "node dist/staging-bootstrap.js",
+    "platform-owner:staging": "node dist/platform-owner.js",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",

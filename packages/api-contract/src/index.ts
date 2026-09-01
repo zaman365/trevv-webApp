@@ -166,6 +166,96 @@ export const sessionSchema = z.object({
   availableOrganizations: z.array(organizationSummarySchema).min(1).max(100),
   managedWorkspaceIds: z.array(idSchema).max(1_000),
   expiresAt: z.iso.datetime(),
+  platformRole: z.literal("owner").optional(),
+});
+
+export const platformOrganizationSchema = z.object({
+  id: idSchema,
+  name: z.string().min(1).max(160),
+  slug: z.string().min(1).max(120),
+  memberCount: z.number().int().nonnegative(),
+  workspaceCount: z.number().int().nonnegative(),
+  pendingInvitationCount: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+});
+
+export const platformMembershipSchema = z.object({
+  organizationId: idSchema,
+  organizationName: z.string().min(1).max(160),
+  role: roleSchema,
+  active: z.boolean(),
+});
+
+export const platformUserSchema = z.object({
+  authUserId: idSchema,
+  appUserId: idSchema.optional(),
+  name: z.string().min(1).max(160),
+  email: z.email(),
+  emailVerified: z.boolean(),
+  activeSessionCount: z.number().int().nonnegative(),
+  lastSessionAt: z.iso.datetime().optional(),
+  memberships: z.array(platformMembershipSchema).max(100),
+  createdAt: z.iso.datetime(),
+});
+
+export const platformInvitationSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  email: z.email(),
+  role: roleSchema.exclude(["owner"]),
+  status: z.enum(["pending", "accepted", "revoked", "expired"]),
+  deliveryStatus: z.enum(["pending", "sent", "failed"]),
+  version: z.number().int().positive(),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  acceptedAt: z.iso.datetime().optional(),
+  revokedAt: z.iso.datetime().optional(),
+  lastSentAt: z.iso.datetime().optional(),
+  workspaceId: idSchema.optional(),
+  teamId: idSchema.optional(),
+  organizationName: z.string().min(1).max(160),
+  sendCount: z.number().int().nonnegative(),
+  deliveryErrorCode: z.string().min(1).max(120).optional(),
+});
+
+export const platformAuditEventSchema = z.object({
+  id: idSchema,
+  actorName: z.string().min(1).max(160),
+  action: z.string().min(1).max(160),
+  targetType: z.string().min(1).max(120),
+  targetId: idSchema,
+  summary: z.string().min(1).max(500),
+  createdAt: z.iso.datetime(),
+});
+
+export const platformDashboardSchema = z.object({
+  role: z.literal("owner"),
+  owner: z.object({
+    id: idSchema,
+    name: z.string().min(1).max(160),
+    email: z.email(),
+  }),
+  summary: z.object({
+    organizations: z.number().int().nonnegative(),
+    users: z.number().int().nonnegative(),
+    verifiedUsers: z.number().int().nonnegative(),
+    activeSessions: z.number().int().nonnegative(),
+    pendingInvitations: z.number().int().nonnegative(),
+    failedInvitationDeliveries: z.number().int().nonnegative(),
+  }),
+  organizations: z.array(platformOrganizationSchema).max(250),
+  users: z.array(platformUserSchema).max(500),
+  invitations: z.array(platformInvitationSchema).max(500),
+  audit: z.array(platformAuditEventSchema).max(200),
+  release: runtimeReleaseMetadataSchema.nullable(),
+  registrationMode: z.enum(["closed", "invite_only", "public"]),
+  generatedAt: z.iso.datetime(),
+});
+
+export const platformSessionRevocationSchema = z.object({
+  revokedSessions: z.number().int().nonnegative(),
+  preservedCurrentSession: z.boolean(),
 });
 
 const productSlugSchema = z
@@ -1558,6 +1648,14 @@ export const apiErrorSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export type PlatformDashboard = z.infer<typeof platformDashboardSchema>;
+export type PlatformOrganization = z.infer<typeof platformOrganizationSchema>;
+export type PlatformUser = z.infer<typeof platformUserSchema>;
+export type PlatformInvitation = z.infer<typeof platformInvitationSchema>;
+export type PlatformAuditEvent = z.infer<typeof platformAuditEventSchema>;
+export type PlatformSessionRevocation = z.infer<
+  typeof platformSessionRevocationSchema
+>;
 export type RuntimeReleaseMetadata = z.infer<
   typeof runtimeReleaseMetadataSchema
 >;
