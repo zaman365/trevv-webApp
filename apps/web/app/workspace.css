@@ -10994,6 +10994,9 @@
 }
 
 @media (max-width: 620px) {
+  .focus-main.focus-main-inbox {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
   .unified-inbox-tabs {
     align-items: stretch;
     flex-direction: column;

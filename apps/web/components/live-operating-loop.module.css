@@ -873,6 +873,10 @@
     padding: 0.75rem;
   }
 
+  .main.inboxMain {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
   .hero {
     flex-direction: column;
     padding: 1rem;
