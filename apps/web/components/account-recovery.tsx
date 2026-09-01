@@ -257,21 +257,9 @@ export function VerifyEmailExperience({
     async function verify() {
       setPending(true);
       setRetryable(false);
-      setMessage(
-        "Preparing secure services. Your email has not been verified yet.",
-      );
+      setMessage("Verifying your email…");
       try {
-        if (!(await warmLiveApiReadiness())) {
-          if (!active) return;
-          setMessage(
-            "The secure services did not become ready in time. Your verification link was not submitted. Try verification again.",
-          );
-          setRetryable(true);
-          setPending(false);
-          return;
-        }
-        if (!active) return;
-        setMessage("Secure services are ready. Verifying your email…");
+        void warmLiveApiReadiness();
         const response = await fetch("/api/web/verify-email", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -314,16 +302,9 @@ export function VerifyEmailExperience({
       return;
     }
     setPending(true);
-    setMessage(
-      "Preparing secure services. No verification email has been requested yet.",
-    );
+    setMessage("Requesting a new verification email…");
     try {
-      if (!(await warmLiveApiReadiness())) {
-        setMessage(
-          "The secure services did not become ready in time. No verification email was requested. Try again.",
-        );
-        return;
-      }
+      void warmLiveApiReadiness();
       const response = await fetch("/api/auth/send-verification-email", {
         method: "POST",
         headers: { "content-type": "application/json" },

@@ -21,6 +21,27 @@ describe("registration admission experience", () => {
     expect(source).not.toContain("No sign-in or account request was sent");
   });
 
+  it("keeps verification retry and resend requests independent of readiness warming", () => {
+    const source = readFileSync(
+      new URL("./account-recovery.tsx", import.meta.url),
+      "utf8",
+    );
+    const verificationSource = source.slice(
+      source.indexOf("export function VerifyEmailExperience"),
+      source.indexOf("export function verificationResendMessage"),
+    );
+
+    expect(verificationSource).toContain("void warmLiveApiReadiness()");
+    expect(verificationSource).not.toContain("await warmLiveApiReadiness()");
+    expect(verificationSource).toContain(
+      'fetch("/api/auth/send-verification-email"',
+    );
+    expect(verificationSource).toContain('fetch("/api/web/verify-email"');
+    expect(verificationSource).not.toContain(
+      "The secure services did not become ready in time",
+    );
+  });
+
   it.each([
     ["sign-in", "closed", false],
     ["sign-up", "invite_only", false],
