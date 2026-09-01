@@ -174,6 +174,7 @@ export function LiveWorkView({
     (record) => record.slug === workspaceSlug,
   );
   const copy = viewCopy[view];
+  const isInbox = view === "inbox";
 
   if (!workspace) {
     return (
@@ -196,23 +197,27 @@ export function LiveWorkView({
   return (
     <WorkspaceFrame active={copy.active} workspaceSlug={workspaceSlug}>
       <main
-        className={styles.main}
+        className={`${styles.main} ${isInbox ? styles.inboxMain : ""}`}
         data-testid={`live-${view.replaceAll("-", "-")}`}
       >
-        <header className={styles.hero}>
-          <div>
-            <p>Workspace · {workspace.name}</p>
-            <h1>{copy.title}</h1>
-            <span>{copy.subtitle}</span>
-          </div>
-          <small>
-            Last synced{" "}
-            {formatLiveDate(
-              liveData.refreshedAt,
-              session.organization.timezone ?? "UTC",
-            )}
-          </small>
-        </header>
+        {isInbox ? (
+          <h1 className="sr-only">{copy.title}</h1>
+        ) : (
+          <header className={styles.hero}>
+            <div>
+              <p>Workspace · {workspace.name}</p>
+              <h1>{copy.title}</h1>
+              <span>{copy.subtitle}</span>
+            </div>
+            <small>
+              Last synced{" "}
+              {formatLiveDate(
+                liveData.refreshedAt,
+                session.organization.timezone ?? "UTC",
+              )}
+            </small>
+          </header>
+        )}
         {liveData.stale ? (
           <LiveStateNotice
             actions={

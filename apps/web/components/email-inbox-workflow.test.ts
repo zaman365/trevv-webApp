@@ -20,5 +20,6 @@ describe("unified Inbox composition", () => {
     expect(markup).toContain("Workspace Actionable");
     expect(markup).toContain("Captured work");
     expect(markup).toContain("Server-saved captured work");
+    expect(markup).toContain('data-layout="full-width"');
   });
 });

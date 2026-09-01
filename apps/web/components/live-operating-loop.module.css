@@ -9,6 +9,12 @@
   color: var(--text, #1f2433);
 }
 
+.main.inboxMain {
+  width: 100%;
+  margin: 0;
+  padding: clamp(0.75rem, 1.5vw, 1.25rem);
+}
+
 .hero {
   display: flex;
   align-items: flex-start;

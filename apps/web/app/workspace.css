@@ -9206,8 +9206,9 @@
 
 /* Complete Quick Capture and Actionable Inbox */
 .inbox-workflow {
-  max-width: 1180px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 .capture-card-complete {
   position: relative;
@@ -9980,9 +9981,16 @@
 }
 
 /* Universal email + actionable Inbox */
+.focus-main.focus-main-inbox {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(12px, 1.5vw, 20px);
+}
 .unified-inbox {
-  max-width: 1180px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 .unified-inbox-tabs {
   min-height: 48px;

@@ -314,7 +314,7 @@ export function InboxExperience({
   };
 
   return (
-    <div className="unified-inbox">
+    <div className="unified-inbox" data-layout="full-width">
       <div
         className="unified-inbox-tabs"
         role="tablist"

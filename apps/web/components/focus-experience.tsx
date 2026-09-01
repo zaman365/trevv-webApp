@@ -98,23 +98,29 @@ function FocusMain({ kind }: { kind: FocusKind }) {
       : productCopy.en.nav[kind === "settings" ? "settings" : kind];
   const workspaceName = scope.workspaces[0]?.name ?? "Selected workspace";
   return (
-    <main className="focus-main">
-      <header className="focus-header">
-        <div>
-          <p>
-            Workspace · {workspaceName} / {crumb}
-          </p>
-          <h1 className="page-title-with-hint">
-            {copy[titleKey]}
-            <Hint resourceId={focusHintIds[kind]} />
-          </h1>
-          <span>
-            {kind === "search"
-              ? "Search the fictional Workspace corpus. These sample results do not prove production permission enforcement."
-              : copy[subtitleKey]}
-          </span>
-        </div>
-      </header>
+    <main
+      className={`focus-main ${kind === "inbox" ? "focus-main-inbox" : ""}`}
+    >
+      {kind === "inbox" ? (
+        <h1 className="sr-only">{copy[titleKey]}</h1>
+      ) : (
+        <header className="focus-header">
+          <div>
+            <p>
+              Workspace · {workspaceName} / {crumb}
+            </p>
+            <h1 className="page-title-with-hint">
+              {copy[titleKey]}
+              <Hint resourceId={focusHintIds[kind]} />
+            </h1>
+            <span>
+              {kind === "search"
+                ? "Search the fictional Workspace corpus. These sample results do not prove production permission enforcement."
+                : copy[subtitleKey]}
+            </span>
+          </div>
+        </header>
+      )}
       {kind === "myWork" && <MyWorkWorkflow />}
       {kind === "inbox" && <InboxExperience />}
       {kind === "decisions" && <DecisionCenter />}
