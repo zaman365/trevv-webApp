@@ -79,7 +79,7 @@ test.describe.serial("live founder operating loop", () => {
       .getByLabel("Current priority")
       .fill("Close the founder operating loop");
     await workspaceDialog
-      .getByRole("button", { name: "Create workspace" })
+      .getByRole("button", { name: "Create project / workspace" })
       .click();
     await expect(
       page.getByText(`Server confirmed “${workspaceName}”`),
@@ -709,7 +709,9 @@ test.describe.serial("live founder operating loop", () => {
     await collaboratorPage.getByTestId("create-item-open").click();
     const createItem = collaboratorPage.getByTestId("create-item-dialog");
     await createItem.getByLabel("Title").fill(collaborationTitle);
-    await createItem.getByRole("button", { name: "Create item" }).click();
+    await createItem
+      .getByRole("button", { name: "Create task / work item" })
+      .click();
     await expect(
       collaboratorPage.getByText(`Server confirmed “${collaborationTitle}”`),
     ).toBeVisible();
@@ -841,6 +843,186 @@ test.describe.serial("live founder operating loop", () => {
 
     await collaboratorContext.close();
     await ownerContext.close();
+  });
+
+  test("owner creates a complete Portfolio to Task hierarchy from the interface", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext({
+      extraHTTPHeaders: clientHeaders(114),
+    });
+    const page = await context.newPage();
+    const hierarchySuffix = crypto.randomUUID().slice(0, 8);
+    const portfolioName = `Delivery Portfolio ${hierarchySuffix}`;
+    const projectName = `Customer Project ${hierarchySuffix}`;
+    const projectSlug = `customer-project-${hierarchySuffix}`;
+    const planName = `Launch Plan ${hierarchySuffix}`;
+    const teamName = `Delivery Team ${hierarchySuffix}`;
+    const taskName = `Confirm launch scope ${hierarchySuffix}`;
+    const updatedPriority = `Launch is approved ${hierarchySuffix}`;
+
+    await page.goto("/sign-in");
+    await submitSignIn(page, ownerEmail, password);
+    await page.waitForURL("**/app/portfolio");
+
+    await page.locator(".portfolio-switcher-trigger").click();
+    const portfolioSwitcher = page.getByRole("dialog", {
+      name: "Portfolio switcher",
+    });
+    await portfolioSwitcher
+      .getByRole("button", { name: "New portfolio" })
+      .click();
+    const portfolioDialog = page.getByRole("dialog", {
+      name: "Create a portfolio",
+    });
+    await portfolioDialog.getByLabel("Portfolio name").fill(portfolioName);
+    await portfolioDialog
+      .getByLabel("Purpose")
+      .fill("Coordinate customer delivery work from plan to completion.");
+    await portfolioDialog
+      .getByRole("button", { name: "Create portfolio" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: portfolioName, level: 1 }),
+    ).toBeVisible();
+
+    await page.getByTestId("create-workspace-open").click();
+    const projectDialog = page.getByTestId("create-workspace-dialog");
+    await projectDialog.getByLabel("Name").fill(projectName);
+    await projectDialog.getByLabel("Type").selectOption("project");
+    await projectDialog
+      .getByLabel("Current priority")
+      .fill("Deliver the first customer launch plan");
+    await projectDialog
+      .getByRole("button", { name: "Create project / workspace" })
+      .click();
+    await expect(
+      page.getByText(`Server confirmed “${projectName}”`),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Open workspace" }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/workspaces/${projectSlug}$`));
+
+    await page.getByTestId("create-board-open").click();
+    const planDialog = page.getByTestId("create-board-dialog");
+    await planDialog.getByLabel("Plan name").fill(planName);
+    await planDialog
+      .getByLabel("Description · Optional")
+      .fill("Coordinate the complete customer launch plan.");
+    await planDialog.getByLabel("Start date · Optional").fill("2026-09-01");
+    await planDialog.getByLabel("End date · Optional").fill("2026-09-30");
+    await planDialog.getByRole("button", { name: "Create plan" }).click();
+    await expect(
+      page.getByText(`Server confirmed “${planName}”`),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Open plan" }).click();
+
+    await page.getByTestId("create-item-open").click();
+    const taskDialog = page.getByTestId("create-item-dialog");
+    await taskDialog.getByLabel("Title").fill(taskName);
+    await taskDialog.getByLabel("Type").selectOption("task");
+    await taskDialog.getByLabel("Priority").selectOption("high");
+    await taskDialog
+      .getByLabel("Description · Optional")
+      .fill("Agree the durable launch scope with the delivery team.");
+    await taskDialog
+      .getByRole("button", { name: "Create task / work item" })
+      .click();
+    await expect(
+      page.getByText(`Server confirmed “${taskName}”`),
+    ).toBeVisible();
+
+    await page.goto(`/app/workspaces/${projectSlug}/teams`);
+    await page.getByRole("button", { name: "Create Team" }).click();
+    const teamDialog = page.getByRole("dialog", { name: "Create Team" });
+    await teamDialog.getByLabel("Team name").fill(teamName);
+    await teamDialog.getByLabel("Feature preset").selectOption("operations");
+    await teamDialog
+      .getByRole("checkbox", { name: /Founder Loop Owner/ })
+      .check();
+    await teamDialog
+      .getByLabel("Team lead")
+      .selectOption({ label: "Founder Loop Owner" });
+    await teamDialog
+      .getByRole("button", { name: "Create Team and room" })
+      .click();
+    await expect(
+      page.getByText(`Team “${teamName}” and its room were saved.`),
+    ).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole("heading", { name: teamName })).toBeVisible();
+    await page.goto(`/app/workspaces/${projectSlug}/settings`);
+    await page.getByLabel("Current priority").fill(updatedPriority);
+    await page
+      .getByLabel("Description")
+      .fill("A durable customer project managed from the Workspace settings.");
+    await page.getByRole("button", { name: "Save Workspace settings" }).click();
+    await expect(
+      page.getByText(`Server confirmed “${projectName}”`),
+    ).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel("Current priority")).toHaveValue(
+      updatedPriority,
+    );
+    await expect(page.getByLabel("Description")).toHaveValue(
+      "A durable customer project managed from the Workspace settings.",
+    );
+    const portfolios = await browserJson(page, "/api/v1/portfolios");
+    expect(
+      (portfolios.body as Array<{ name: string }>).some(
+        (portfolio) => portfolio.name === portfolioName,
+      ),
+    ).toBe(true);
+    const workspaces = await browserJson(page, "/api/v1/workspaces");
+    const project = (
+      workspaces.body as Array<{
+        id: string;
+        name: string;
+        slug: string;
+        priority: string;
+        description: string;
+      }>
+    ).find((workspace) => workspace.slug === projectSlug);
+    expect(project).toMatchObject({
+      name: projectName,
+      slug: projectSlug,
+      priority: updatedPriority,
+      description:
+        "A durable customer project managed from the Workspace settings.",
+    });
+    const boards = await browserJson(
+      page,
+      `/api/v1/boards?workspaceId=${encodeURIComponent(project!.id)}`,
+    );
+    expect(
+      (
+        boards.body as Array<{
+          name: string;
+          description: string;
+          startDate?: string;
+          endDate?: string;
+        }>
+      ).some(
+        (board) =>
+          board.name === planName &&
+          board.description ===
+            "Coordinate the complete customer launch plan." &&
+          board.startDate === "2026-09-01" &&
+          board.endDate === "2026-09-30",
+      ),
+    ).toBe(true);
+    const items = await browserJson(
+      page,
+      `/api/v1/items?workspaceId=${encodeURIComponent(project!.id)}&limit=100`,
+    );
+    expect(
+      (items.body as { data: Array<{ title: string; type: string }> }).data,
+    ).toContainEqual(
+      expect.objectContaining({ title: taskName, type: "task" }),
+    );
+
+    await context.close();
   });
 });
 

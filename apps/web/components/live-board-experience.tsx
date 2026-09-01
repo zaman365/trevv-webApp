@@ -291,11 +291,12 @@ export function LiveBoardExperience({
           <div>
             <p>
               <Link href={workspaceHref(workspaceSlug)}>{workspace.name}</Link>{" "}
-              / Board
+              / Plan board
             </p>
             <h1>{board?.name ?? "Loading board…"}</h1>
             <span>
-              Canonical WorkItems with versioned writes and durable evidence.
+              A durable plan with versioned tasks, decisions, approvals, and
+              evidence.
             </span>
           </div>
           <button
@@ -305,7 +306,7 @@ export function LiveBoardExperience({
             onClick={() => setCreateOpen(true)}
             type="button"
           >
-            <Plus size={15} /> New work item
+            <Plus size={15} /> New task / work item
           </button>
         </header>
 
@@ -561,8 +562,8 @@ function CreateWorkItemDialog({
             <Plus size={17} />
           </span>
           <div>
-            <h2 id="create-live-item-title">Create work item</h2>
-            <p>Board: {board.name}</p>
+            <h2 id="create-live-item-title">Create a task or work item</h2>
+            <p>Plan: {board.name}</p>
           </div>
           <button
             aria-label="Close work item creation"
@@ -685,7 +686,7 @@ function CreateWorkItemDialog({
                 ? "Waiting for confirmation…"
                 : error
                   ? "Retry same request"
-                  : "Create item"}
+                  : "Create task / work item"}
             </button>
           </div>
         </footer>

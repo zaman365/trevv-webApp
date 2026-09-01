@@ -6,7 +6,7 @@ import type {
 } from "@founderhq/api-contract";
 import { CheckCircle2, Save, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
@@ -83,6 +83,16 @@ export function LiveWorkspaceSettings({
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID(),
   );
+  const observedVersion = useRef(workspace.versionTag);
+
+  useEffect(() => {
+    if (workspace.versionTag === observedVersion.current) return;
+    observedVersion.current = workspace.versionTag;
+    setDraft(draftFrom(workspace));
+    setSaved((current) =>
+      current?.versionTag === workspace.versionTag ? current : null,
+    );
+  }, [workspace]);
 
   if (!canManage)
     return (
@@ -132,6 +142,7 @@ export function LiveWorkspaceSettings({
         workspace.versionTag,
         idempotencyKey,
       );
+      setDraft(draftFrom(result.data));
       setSaved(result.data);
       setIdempotencyKey(crypto.randomUUID());
       await liveData.refresh();

@@ -48,6 +48,9 @@ export function LiveWorkspaceOverview({
   const [loadError, setLoadError] = useState<unknown>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [boardName, setBoardName] = useState("");
+  const [boardDescription, setBoardDescription] = useState("");
+  const [boardStartDate, setBoardStartDate] = useState("");
+  const [boardEndDate, setBoardEndDate] = useState("");
   const [pending, setPending] = useState(false);
   const [mutationError, setMutationError] = useState<unknown>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
@@ -118,9 +121,11 @@ export function LiveWorkspaceOverview({
         {
           workspaceId,
           name: boardName.trim(),
-          description: "",
+          description: boardDescription.trim(),
           visibility: "private",
           progressMode: "task_completion",
+          ...(boardStartDate ? { startDate: boardStartDate } : {}),
+          ...(boardEndDate ? { endDate: boardEndDate } : {}),
         },
         idempotencyKey,
       );
@@ -128,6 +133,9 @@ export function LiveWorkspaceOverview({
       setConfirmedBoard(result.data);
       setCreateOpen(false);
       setBoardName("");
+      setBoardDescription("");
+      setBoardStartDate("");
+      setBoardEndDate("");
       setIdempotencyKey(crypto.randomUUID());
       await liveData.refresh();
     } catch (reason) {
@@ -203,10 +211,10 @@ export function LiveWorkspaceOverview({
               <Link
                 href={`${workspaceHref(workspace.slug)}/boards/${encodeURIComponent(confirmedBoard.id)}`}
               >
-                Open board
+                Open plan
               </Link>
             }
-            description="The board is durable and ready for canonical WorkItems."
+            description="The plan is durable and ready for tasks and other canonical WorkItems."
             kind="saved"
             title={`Server confirmed “${confirmedBoard.name}”`}
           />
@@ -241,15 +249,15 @@ export function LiveWorkspaceOverview({
           <section className={styles.panel} aria-labelledby="live-boards-title">
             <header>
               <div>
-                <p>Canonical work containers</p>
-                <h2 id="live-boards-title">Boards</h2>
+                <p>Durable plan boards</p>
+                <h2 id="live-boards-title">Plans</h2>
               </div>
               <button
                 data-testid="create-board-open"
                 onClick={() => setCreateOpen(true)}
                 type="button"
               >
-                <Plus size={14} /> New board
+                <Plus size={14} /> New plan
               </button>
             </header>
             {loadingBoards ? (
@@ -258,12 +266,12 @@ export function LiveWorkspaceOverview({
               <LiveStateNotice
                 actions={
                   <button onClick={() => setCreateOpen(true)} type="button">
-                    Create board
+                    Create plan
                   </button>
                 }
-                description="A board is required before Inbox captures can become WorkItems."
+                description="A plan is stored as a durable board so tasks, decisions, and approvals share one canonical work container."
                 kind="empty"
-                title="No boards yet"
+                title="No plans yet"
               />
             ) : (
               <div className={styles.list}>
@@ -421,11 +429,11 @@ export function LiveWorkspaceOverview({
                   <LayoutList size={17} />
                 </span>
                 <div>
-                  <h2 id="live-board-create-title">Create a board</h2>
-                  <p>Board ownership stays inside {workspace.name}.</p>
+                  <h2 id="live-board-create-title">Create a plan</h2>
+                  <p>Plans are durable boards owned by {workspace.name}.</p>
                 </div>
                 <button
-                  aria-label="Close board creation"
+                  aria-label="Close plan creation"
                   onClick={() => setCreateOpen(false)}
                   type="button"
                 >
@@ -441,13 +449,13 @@ export function LiveWorkspaceOverview({
                   />
                 ) : pending ? (
                   <LiveStateNotice
-                    description="Success appears only after the server commits the board."
+                    description="Success appears only after the server commits the plan."
                     kind="pending"
                     title="Waiting for server confirmation"
                   />
                 ) : null}
                 <label className={styles.field}>
-                  <span>Board name</span>
+                  <span>Plan name</span>
                   <input
                     autoFocus
                     maxLength={160}
@@ -462,6 +470,51 @@ export function LiveWorkspaceOverview({
                     value={boardName}
                   />
                 </label>
+                <label className={styles.field}>
+                  <span>Description · Optional</span>
+                  <textarea
+                    maxLength={5000}
+                    onChange={(event) => {
+                      if (mutationError) {
+                        setMutationError(null);
+                        setIdempotencyKey(crypto.randomUUID());
+                      }
+                      setBoardDescription(event.target.value);
+                    }}
+                    value={boardDescription}
+                  />
+                </label>
+                <div className={styles.formGrid}>
+                  <label className={styles.field}>
+                    <span>Start date · Optional</span>
+                    <input
+                      onChange={(event) => {
+                        if (mutationError) {
+                          setMutationError(null);
+                          setIdempotencyKey(crypto.randomUUID());
+                        }
+                        setBoardStartDate(event.target.value);
+                      }}
+                      type="date"
+                      value={boardStartDate}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>End date · Optional</span>
+                    <input
+                      min={boardStartDate || undefined}
+                      onChange={(event) => {
+                        if (mutationError) {
+                          setMutationError(null);
+                          setIdempotencyKey(crypto.randomUUID());
+                        }
+                        setBoardEndDate(event.target.value);
+                      }}
+                      type="date"
+                      value={boardEndDate}
+                    />
+                  </label>
+                </div>
               </div>
               <footer>
                 <span>Private to authorized organization members.</span>
@@ -480,7 +533,7 @@ export function LiveWorkspaceOverview({
                       "Retry same request"
                     ) : (
                       <>
-                        <CheckCircle2 size={14} /> Create board
+                        <CheckCircle2 size={14} /> Create plan
                       </>
                     )}
                   </button>

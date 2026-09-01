@@ -16,6 +16,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
+import { useWorkspace } from "@/lib/workspace-context";
 import {
   formatLiveDate,
   openWorkspaceItems,
@@ -31,6 +32,7 @@ type WorkspaceType = WorkspaceDto["type"];
 export function LivePortfolioExperience() {
   const session = useAppSession();
   const liveData = useLiveAppData();
+  const { portfolioId } = useWorkspace();
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<WorkspaceType>("project");
@@ -42,6 +44,7 @@ export function LivePortfolioExperience() {
   );
   const [confirmed, setConfirmed] = useState<WorkspaceDto | null>(null);
   const portfolio =
+    liveData.portfolios.find((record) => record.id === portfolioId) ??
     liveData.portfolios.find((record) => record.isDefault) ??
     liveData.portfolios[0];
   const canCreateWorkspace = ["owner", "admin"].includes(
@@ -116,7 +119,7 @@ export function LivePortfolioExperience() {
           health: "on_track",
           healthNote: "",
           priority: priority.trim(),
-          initialBoardName: `${name.trim()} Board`,
+          initialBoardName: `${name.trim()} Plan`,
         },
         idempotencyKey,
       );
@@ -154,7 +157,7 @@ export function LivePortfolioExperience() {
               onClick={() => setFormOpen(true)}
               type="button"
             >
-              <Plus size={15} /> Create workspace
+              <Plus size={15} /> Create project / workspace
             </button>
           ) : null}
         </header>
@@ -177,7 +180,7 @@ export function LivePortfolioExperience() {
             actions={
               <Link href={workspaceHref(confirmed.slug)}>Open workspace</Link>
             }
-            description="The workspace and its first board are durable and available to authorized organization members."
+            description="The project or workspace and its first plan board are durable and available to authorized organization members."
             kind="saved"
             title={`Server confirmed “${confirmed.name}”`}
           />
@@ -323,8 +326,10 @@ export function LivePortfolioExperience() {
                   <FolderKanban size={17} />
                 </span>
                 <div>
-                  <h2 id="live-workspace-create-title">Create a workspace</h2>
-                  <p>Creates the workspace and first board atomically.</p>
+                  <h2 id="live-workspace-create-title">
+                    Create a project or workspace
+                  </h2>
+                  <p>Creates it together with its first plan board.</p>
                 </div>
                 <button
                   aria-label="Close workspace creation"
@@ -343,9 +348,9 @@ export function LivePortfolioExperience() {
                   />
                 ) : pending ? (
                   <LiveStateNotice
-                    description="TREVV will only show success after the server commits both records."
+                    description="TREVV will only show success after the server commits the workspace and first plan."
                     kind="pending"
-                    title="Creating workspace and first board"
+                    title="Creating workspace and first plan"
                   />
                 ) : null}
                 <label className={styles.field}>
@@ -419,7 +424,7 @@ export function LivePortfolioExperience() {
                       "Retry same request"
                     ) : (
                       <>
-                        <CheckCircle2 size={14} /> Create workspace
+                        <CheckCircle2 size={14} /> Create project / workspace
                       </>
                     )}
                   </button>

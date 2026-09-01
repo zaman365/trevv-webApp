@@ -226,10 +226,7 @@ export function LiveWorkView({
         ) : null}
         {view === "settings" ? (
           <>
-            <LiveWorkspaceSettings
-              key={workspace.versionTag}
-              workspace={workspace}
-            />
+            <LiveWorkspaceSettings workspace={workspace} />
             <PrivateBetaSettingsStatus />
           </>
         ) : !supportedViews.has(view) ? (

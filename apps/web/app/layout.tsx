@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import type { ReactNode } from "react";
 import "@founderhq/design-tokens/css";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
@@ -61,8 +62,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <script
+        <Script
           dangerouslySetInnerHTML={{ __html: themePreferenceBootstrap }}
+          id="theme-preference-bootstrap"
+          strategy="beforeInteractive"
         />
         {children}
         <WebVitalsReporter />
