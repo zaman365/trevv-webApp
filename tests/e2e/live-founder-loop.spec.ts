@@ -44,7 +44,10 @@ test.describe.serial("live founder operating loop", () => {
   }) => {
     test.setTimeout(360_000);
     const context = await browser.newContext({
-      extraHTTPHeaders: clientHeaders(111),
+      extraHTTPHeaders: {
+        ...clientHeaders(111),
+        "x-trevv-test-registration-bootstrap": registrationBootstrapSecret,
+      },
     });
     const page = await context.newPage();
 
@@ -110,7 +113,16 @@ test.describe.serial("live founder operating loop", () => {
         const response = await route.fetch();
         expect(response.status()).toBe(201);
         simulatedLostResponse = true;
-        await route.abort("failed");
+        await route.fulfill({
+          contentType: "application/json",
+          status: 502,
+          body: JSON.stringify({
+            error: {
+              code: "simulated_lost_response",
+              message: "The confirmed response was lost in transit.",
+            },
+          }),
+        });
         return;
       }
       await route.continue();
@@ -285,7 +297,16 @@ test.describe.serial("live founder operating loop", () => {
         const response = await route.fetch();
         expect(response.status()).toBe(200);
         lostDecisionResponse = true;
-        await route.abort("failed");
+        await route.fulfill({
+          contentType: "application/json",
+          status: 502,
+          body: JSON.stringify({
+            error: {
+              code: "simulated_lost_response",
+              message: "The confirmed response was lost in transit.",
+            },
+          }),
+        });
         return;
       }
       await route.continue();
@@ -494,7 +515,9 @@ test.describe.serial("live founder operating loop", () => {
     await expect(collaboratorPage.getByTestId("live-messages")).toBeVisible();
     await ownerPage.goto(`/app/workspaces/${workspaceSlug}/teams`);
     await expect(ownerPage.getByTestId("live-teams")).toBeVisible();
-    await ownerPage.getByRole("button", { name: "Create Team" }).click();
+    const createTeam = ownerPage.getByTestId("create-team-open");
+    await expect(createTeam).toBeEnabled();
+    await createTeam.click();
     const teamCreator = ownerPage.getByRole("dialog", {
       name: "Create Team",
     });
@@ -933,7 +956,9 @@ test.describe.serial("live founder operating loop", () => {
     ).toBeVisible();
 
     await page.goto(`/app/workspaces/${projectSlug}/teams`);
-    await page.getByRole("button", { name: "Create Team" }).click();
+    const createHierarchyTeam = page.getByTestId("create-team-open");
+    await expect(createHierarchyTeam).toBeEnabled();
+    await createHierarchyTeam.click();
     const teamDialog = page.getByRole("dialog", { name: "Create Team" });
     await teamDialog.getByLabel("Team name").fill(teamName);
     await teamDialog.getByLabel("Feature preset").selectOption("operations");
@@ -1390,9 +1415,10 @@ function requiredMailSink(): string {
 }
 
 function clientHeaders(lastOctet: number): Record<string, string> {
-  const projectOffset = test.info().project.name.includes("webkit") ? 40 : 0;
+  const projectSubnet = test.info().project.name.includes("webkit") ? 10 : 0;
+  const retrySubnet = test.info().retry * 20;
   return {
-    "x-trevv-client-ip": `192.0.2.${lastOctet + projectOffset}`,
+    "x-trevv-client-ip": `10.200.${projectSubnet + retrySubnet}.${lastOctet}`,
   };
 }
 

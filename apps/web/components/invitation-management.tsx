@@ -37,12 +37,15 @@ export function InvitationManagement() {
   const [loading, setLoading] = useState(!session.demo);
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
   const mutationKeys = useRef(new Map<string, string>());
+  const dataRevision = useRef(0);
 
   const load = useCallback(async () => {
     if (session.demo) return;
+    const requestedRevision = dataRevision.current;
     setLoading(true);
-    setMessage("");
+    setLoadError("");
     try {
       const response = await fetch("/api/v1/invitations", {
         credentials: "same-origin",
@@ -53,15 +56,17 @@ export function InvitationManagement() {
         throw new Error(
           invitationError(body, "Invitations could not be loaded."),
         );
+      if (requestedRevision !== dataRevision.current) return;
       setInvitations(body as InvitationView[]);
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Invitations could not be loaded.",
-      );
+      if (requestedRevision === dataRevision.current)
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Invitations could not be loaded.",
+        );
     } finally {
-      setLoading(false);
+      if (requestedRevision === dataRevision.current) setLoading(false);
     }
   }, [session.demo]);
 
@@ -83,6 +88,8 @@ export function InvitationManagement() {
       setMessage("Enter a valid email address.");
       return;
     }
+    dataRevision.current += 1;
+    setLoading(false);
     setWorking("create");
     setMessage("");
     const fingerprint = `create:${email}:${role}:${workspaceId}`;
@@ -128,6 +135,8 @@ export function InvitationManagement() {
     invitation: InvitationView,
     action: "resend" | "revoke",
   ) {
+    dataRevision.current += 1;
+    setLoading(false);
     setWorking(invitation.id);
     setMessage("");
     const fingerprint = `${action}:${invitation.id}:${invitation.version}`;
@@ -283,6 +292,11 @@ export function InvitationManagement() {
               </button>
             </div>
             {loading ? <p role="status">Loading invitations…</p> : null}
+            {loadError ? (
+              <p className="auth-message" role="status">
+                {loadError}
+              </p>
+            ) : null}
             {!loading && invitations.length === 0 ? (
               <p>No invitations yet.</p>
             ) : null}

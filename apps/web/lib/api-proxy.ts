@@ -82,14 +82,28 @@ export async function proxyApiRequest(
           requestId,
         );
   if (body instanceof Response) return body;
-  const upstream = await fetch(upstreamUrl, {
-    method: request.method,
-    headers,
-    ...(body ? { body } : {}),
-    cache: "no-store",
-    redirect: "manual",
-    signal: request.signal,
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl, {
+      method: request.method,
+      headers,
+      ...(body ? { body } : {}),
+      cache: "no-store",
+      redirect: "manual",
+      signal: request.signal,
+    });
+  } catch (error) {
+    return proxyFailure(
+      request.signal.aborted || isAbortError(error) ? 499 : 502,
+      request.signal.aborted || isAbortError(error)
+        ? "request_cancelled"
+        : "upstream_unavailable",
+      request.signal.aborted || isAbortError(error)
+        ? "The browser cancelled this request."
+        : "The service could not complete this request. Try again.",
+      requestId,
+    );
+  }
   const responseHeaders = copyResponseHeaders(upstream.headers);
   if (!responseHeaders.has("x-request-id"))
     responseHeaders.set("x-request-id", requestId);
@@ -107,13 +121,29 @@ export async function proxyApiRequest(
     }
   }
 
-  const responseBody =
-    segments[0] === "auth"
-      ? await safeBrowserAuthBody(upstream, responseHeaders)
-      : request.method === "HEAD" ||
-          [101, 204, 205, 304].includes(upstream.status)
-        ? null
-        : upstream.body;
+  let responseBody: BodyInit | null;
+  try {
+    responseBody =
+      segments[0] === "auth"
+        ? await safeBrowserAuthBody(upstream, responseHeaders)
+        : request.method === "HEAD" ||
+            [101, 204, 205, 304].includes(upstream.status)
+          ? null
+          : responseHeaders.get("content-type")?.includes("text/event-stream")
+            ? upstream.body
+            : await upstream.arrayBuffer();
+  } catch (error) {
+    return proxyFailure(
+      request.signal.aborted || isAbortError(error) ? 499 : 502,
+      request.signal.aborted || isAbortError(error)
+        ? "request_cancelled"
+        : "upstream_response_failed",
+      request.signal.aborted || isAbortError(error)
+        ? "The browser cancelled this request."
+        : "The service response could not be read. Try again.",
+      requestId,
+    );
+  }
   return new Response(responseBody, {
     status: upstream.status,
     statusText: upstream.statusText,
@@ -237,6 +267,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function firstString(...values: unknown[]): string | undefined {
   return values.find(
     (value): value is string => typeof value === "string" && value.length > 0,
+  );
+}
+
+function isAbortError(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "name" in error &&
+    (error as { name?: unknown }).name === "AbortError",
   );
 }
 

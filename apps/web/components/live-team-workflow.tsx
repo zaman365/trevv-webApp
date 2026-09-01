@@ -172,6 +172,7 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
           {canCreate ? (
             <button
               className="primary-button"
+              data-testid="create-team-open"
               disabled={directoryAccessLost || directory.isLoading}
               onClick={() => {
                 setError(null);

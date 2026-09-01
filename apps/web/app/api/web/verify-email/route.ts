@@ -12,15 +12,22 @@ import { safeReturnPath, webCanonicalUrl } from "@/lib/web-runtime-config";
 
 export const dynamic = "force-dynamic";
 
+const completedVerificationCookie = "trevv.completed_email_verification";
+const completedVerificationMaxAgeSeconds = 60;
+
 export async function POST(request: Request) {
   if (!hasSameOrigin(request))
     return NextResponse.json(
       { error: "Invalid request origin." },
       { status: 403 },
     );
-  const token = (await cookies()).get(
-    authActionCookies.emailVerification,
-  )?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(authActionCookies.emailVerification)?.value;
+  if (
+    !token &&
+    cookieStore.get(completedVerificationCookie)?.value === "confirmed"
+  )
+    return verificationSuccess();
   if (!token) return verificationError(400);
 
   const raw: unknown = await request.json().catch(() => null);
@@ -48,15 +55,22 @@ export async function POST(request: Request) {
     (upstream.ok || (upstream.status >= 300 && upstream.status < 400));
   const retryable = upstream.status === 429 || upstream.status >= 500;
   const response = successful
-    ? NextResponse.json({ success: true })
+    ? verificationSuccess()
     : verificationError(
         upstream.status === 429 ? 429 : upstream.status >= 500 ? 502 : 400,
       );
-  response.headers.set("cache-control", "private, no-store, max-age=0");
-  response.headers.set("referrer-policy", "no-referrer");
   appendSetCookieHeaders(upstream.headers, response.headers);
   if (retryable) forwardRetryHeaders(upstream.headers, response.headers);
   if (successful || !retryable) clearVerificationCookie(response, request);
+  if (successful) markVerificationCompleted(response, request);
+  else if (!retryable) clearCompletedVerification(response, request);
+  return response;
+}
+
+function verificationSuccess() {
+  const response = NextResponse.json({ success: true });
+  response.headers.set("cache-control", "private, no-store, max-age=0");
+  response.headers.set("referrer-policy", "no-referrer");
   return response;
 }
 
@@ -93,4 +107,26 @@ function clearVerificationCookie(response: NextResponse, request: Request) {
     ),
     maxAge: 0,
   });
+}
+
+function markVerificationCompleted(response: NextResponse, request: Request) {
+  response.cookies.set(completedVerificationCookie, "confirmed", {
+    ...verificationCookieOptions(request),
+    maxAge: completedVerificationMaxAgeSeconds,
+  });
+}
+
+function clearCompletedVerification(response: NextResponse, request: Request) {
+  response.cookies.set(completedVerificationCookie, "", {
+    ...verificationCookieOptions(request),
+    maxAge: 0,
+  });
+}
+
+function verificationCookieOptions(request: Request) {
+  return authActionCookieOptions(
+    authActionCookiePaths.emailVerification,
+    process.env.NODE_ENV === "production" ||
+      new URL(request.url).protocol === "https:",
+  );
 }

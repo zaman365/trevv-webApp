@@ -83,11 +83,13 @@ export function LiveWorkspaceSettings({
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID(),
   );
-  const observedVersion = useRef(workspace.versionTag);
+  const baselineVersion = useRef(workspace.versionTag);
+  const dirty = useRef(false);
 
   useEffect(() => {
-    if (workspace.versionTag === observedVersion.current) return;
-    observedVersion.current = workspace.versionTag;
+    if (workspace.versionTag === baselineVersion.current || dirty.current)
+      return;
+    baselineVersion.current = workspace.versionTag;
     setDraft(draftFrom(workspace));
     setSaved((current) =>
       current?.versionTag === workspace.versionTag ? current : null,
@@ -107,6 +109,7 @@ export function LiveWorkspaceSettings({
     field: Field,
     value: WorkspaceSettingsDraft[Field],
   ) {
+    dirty.current = true;
     setDraft((current) => ({ ...current, [field]: value }));
     setSaved(null);
     if (error) {
@@ -139,9 +142,11 @@ export function LiveWorkspaceSettings({
       const result = await liveData.client.updateWorkspace(
         workspace.id,
         input,
-        workspace.versionTag,
+        baselineVersion.current,
         idempotencyKey,
       );
+      baselineVersion.current = result.data.versionTag;
+      dirty.current = false;
       setDraft(draftFrom(result.data));
       setSaved(result.data);
       setIdempotencyKey(crypto.randomUUID());
@@ -173,7 +178,14 @@ export function LiveWorkspaceSettings({
         <LiveStateNotice
           actions={
             presentedError.kind === "version-conflict" ? (
-              <button onClick={() => void liveData.refresh()} type="button">
+              <button
+                onClick={() => {
+                  dirty.current = false;
+                  setError(null);
+                  void liveData.refresh();
+                }}
+                type="button"
+              >
                 Load latest settings
               </button>
             ) : undefined

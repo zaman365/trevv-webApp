@@ -95,7 +95,10 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
   expect(await anonymous.text()).not.toContain("Northstar Apparel");
 
   const ownerContext = await browser.newContext({
-    extraHTTPHeaders: clientHeaders(101),
+    extraHTTPHeaders: {
+      ...clientHeaders(101),
+      "x-trevv-test-registration-bootstrap": registrationBootstrapSecret,
+    },
   });
   const ownerPage = await ownerContext.newPage();
   await signUpAndVerify(
@@ -621,8 +624,9 @@ function requiredMailSink(): string {
 }
 
 function clientHeaders(lastOctet: number): Record<string, string> {
-  const projectOffset = test.info().project.name.includes("webkit") ? 40 : 0;
+  const projectSubnet = test.info().project.name.includes("webkit") ? 10 : 0;
+  const retrySubnet = test.info().retry * 20;
   return {
-    "x-trevv-client-ip": `192.0.2.${lastOctet + projectOffset}`,
+    "x-trevv-client-ip": `10.200.${projectSubnet + retrySubnet}.${lastOctet}`,
   };
 }

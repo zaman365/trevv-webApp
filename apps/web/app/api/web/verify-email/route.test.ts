@@ -68,6 +68,39 @@ describe("Web email verification", () => {
     );
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
+
+  it("briefly remembers a successful verification so an interrupted redirect can resume", async () => {
+    mocks.serverAuthFetch.mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://trevv.test/onboarding" },
+      }),
+    );
+
+    const response = await POST(sameOriginRequest());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain(
+      "trevv.completed_email_verification=confirmed",
+    );
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=60");
+  });
+
+  it("accepts only the scoped completion marker when the one-time token was already consumed", async () => {
+    mocks.cookies.mockResolvedValue({
+      get: vi.fn((name: string) =>
+        name === "trevv.completed_email_verification"
+          ? { value: "confirmed" }
+          : undefined,
+      ),
+    });
+
+    const response = await POST(sameOriginRequest());
+
+    expect(response.status).toBe(200);
+    expect(mocks.serverAuthFetch).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({ success: true });
+  });
 });
 
 function sameOriginRequest() {

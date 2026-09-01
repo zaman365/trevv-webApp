@@ -381,4 +381,40 @@ describe("browser API proxy boundary", () => {
     expect(upstreamSignal?.aborted).toBe(true);
     await reader.cancel();
   });
+
+  it("contains a cancelled upstream request instead of rejecting the route handler", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi.fn().mockRejectedValue(
+      Object.assign(new Error("The request was cancelled."), {
+        name: "AbortError",
+      }),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/v1/workspaces"),
+      ["v1", "workspaces"],
+    );
+
+    expect(response.status).toBe(499);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "request_cancelled" },
+    });
+  });
+
+  it("buffers ordinary API responses so downstream cancellation cannot abort the upstream body", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi
+      .fn()
+      .mockResolvedValue(Response.json([{ id: "workspace-a" }]));
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/v1/workspaces"),
+      ["v1", "workspaces"],
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([{ id: "workspace-a" }]);
+  });
 });
