@@ -12,6 +12,7 @@ import {
   createConversationSchema,
   createInvitationSchema,
   createItemSchema,
+  createPortfolioSchema,
   createPrivacyRequestSchema,
   createTeamSchema,
   createWaitingSchema,
@@ -32,6 +33,7 @@ import {
   updateMembershipSchema,
   updateRetentionPolicySchema,
   updateTeamSchema,
+  updateWorkspaceSchema,
   waitingActionSchema,
   weeklyReviewInputSchema,
   workItemEvidenceInputSchema,
@@ -861,6 +863,34 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     ),
   );
 
+  api.post("/api/v1/portfolios", async (context) => {
+    const parsed = createPortfolioSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Portfolio fields.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const result = await dependencies.dataPlane.createPortfolio(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/portfolios",
+        parsed.data,
+        idempotency,
+        201,
+      ),
+      parsed.data,
+    );
+    setIdempotencyHeaders(context, idempotency, result.replayed);
+    return context.json(result.value, 201);
+  });
+
   api.get("/api/v1/portfolio", async (context) =>
     context.json(
       await dependencies.dataPlane.getPortfolio(
@@ -1204,6 +1234,43 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     );
     setIdempotencyHeaders(context, idempotency, result.replayed);
     return context.json(result.value, 201);
+  });
+
+  api.patch("/api/v1/workspaces/:workspaceId/settings", async (context) => {
+    const expectedVersionTag = readVersionTagIfMatch(context);
+    if (expectedVersionTag instanceof Response) return expectedVersionTag;
+    const parsed = updateWorkspaceSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the Workspace changes.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const workspaceId = context.req.param("workspaceId");
+    const result = await dependencies.dataPlane.updateWorkspace(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/workspaces/:workspaceId/settings",
+        { workspaceId, expectedVersionTag, patch: parsed.data },
+        idempotency,
+      ),
+      workspaceId,
+      expectedVersionTag,
+      parsed.data,
+    );
+    setVersionTagMutationHeaders(
+      context,
+      result.value.versionTag,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
   });
 
   api.get("/api/v1/workspaces/:slug", async (context) =>
@@ -2709,6 +2776,7 @@ export function createUnavailableLiveDependencies(): {
     mode: "live",
     readiness: unavailable,
     listPortfolios: unavailable,
+    createPortfolio: unavailable,
     getPortfolio: unavailable,
     listAttention: unavailable,
     actOnAttention: unavailable,
@@ -2724,6 +2792,7 @@ export function createUnavailableLiveDependencies(): {
     previewImport: unavailable,
     listWorkspaces: unavailable,
     createWorkspace: unavailable,
+    updateWorkspace: unavailable,
     getWorkspace: unavailable,
     listTeamDirectory: unavailable,
     getTeam: unavailable,
@@ -3196,6 +3265,30 @@ function readIfMatch(context: {
   return version;
 }
 
+function readVersionTagIfMatch(context: {
+  req: { header(name: string): string | undefined };
+  get(name: "requestId"): string;
+}): string | Response {
+  const header = context.req.header("if-match");
+  if (!header)
+    return failure(
+      context,
+      428,
+      "precondition_required",
+      "Provide the current quoted Workspace ETag in If-Match.",
+    );
+  const matched = /^"([^"]+)"$/u.exec(header.trim());
+  const parsed = z.iso.datetime().safeParse(matched?.[1]);
+  if (!parsed.success)
+    return failure(
+      context,
+      422,
+      "invalid_etag",
+      "If-Match must contain the quoted Workspace version timestamp.",
+    );
+  return parsed.data;
+}
+
 function readIdempotencyKey(
   context: {
     req: { header(name: string): string | undefined };
@@ -3245,6 +3338,16 @@ function setMutationHeaders(
   replayed?: boolean,
 ): void {
   context.header("etag", `"${version}"`);
+  setIdempotencyHeaders(context, idempotencyKey, replayed);
+}
+
+function setVersionTagMutationHeaders(
+  context: { header(name: string, value: string): void },
+  versionTag: string,
+  idempotencyKey?: string,
+  replayed?: boolean,
+): void {
+  context.header("etag", `"${versionTag}"`);
   setIdempotencyHeaders(context, idempotencyKey, replayed);
 }
 

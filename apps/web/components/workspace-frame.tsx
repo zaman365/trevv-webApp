@@ -32,6 +32,10 @@ import {
   Users,
   X,
 } from "lucide-react";
+import type {
+  CreatePortfolioInput,
+  PortfolioDto,
+} from "@founderhq/api-contract";
 import { demoWorkspaces, demoItems, demoPortfolios } from "@founderhq/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -62,7 +66,10 @@ import {
   LiveUnreadBadge,
 } from "@/lib/live-collaboration";
 import { presentLiveError } from "@/lib/live-errors";
-import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";
+import {
+  clearLiveDraftStorage,
+  formatCompactWorkspaceDate,
+} from "@/lib/live-workflow-ui";
 import { LiveStateNotice } from "./live-state";
 import {
   LiveQuickCaptureDialog,
@@ -73,7 +80,6 @@ import {
   portfolioAccentOptions,
   portfolioVisualFor,
   useCustomPortfolios,
-  type CustomPortfolioRecord,
 } from "@/lib/custom-portfolios";
 import {
   workspaceHref,
@@ -119,13 +125,6 @@ function workspaceWorkCounts(projectId: string, items = demoItems) {
     open: openItems.length,
     blocked: openItems.filter((item) => item.status === "blocked").length,
   };
-}
-
-function formatWorkspaceDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(`${value}T12:00:00`));
 }
 
 function initialsForUser(name: string) {
@@ -515,7 +514,7 @@ function WorkspaceChrome({
                         </span>
                         <span>
                           <strong>
-                            {formatWorkspaceDate(
+                            {formatCompactWorkspaceDate(
                               contextProject.nextMilestone.date,
                             )}
                           </strong>
@@ -523,7 +522,8 @@ function WorkspaceChrome({
                         </span>
                       </div>
                       <p className="workspace-switcher-milestone">
-                        {contextProject.nextMilestone.title}
+                        {contextProject.nextMilestone.title ||
+                          "No milestone scheduled"}
                       </p>
                       <div className="workspace-switcher-actions">
                         <Link
@@ -936,7 +936,8 @@ function WorkspaceChrome({
                     })}
                   </div>
 
-                  {appSession.demo ? (
+                  {appSession.demo ||
+                  canManageOrganization(appSession.organization.role) ? (
                     <button
                       type="button"
                       className="portfolio-switcher-create"
@@ -949,7 +950,11 @@ function WorkspaceChrome({
                         <Plus size={16} />
                       </span>
                       <span>
-                        <strong>New portfolio</strong>
+                        <strong>
+                          {appSession.demo
+                            ? "New fictional portfolio"
+                            : "New portfolio"}
+                        </strong>
                         <small>Create a new Workspace collection</small>
                       </span>
                     </button>
@@ -1354,12 +1359,31 @@ function WorkspaceChrome({
             }}
           />
         ) : null)}
-      {portfolioCreateOpen && (
+      {portfolioCreateOpen && (appSession.demo || liveData) && (
         <PortfolioCreateDialog
+          existingSlugs={accessiblePortfolios.map(
+            (portfolio) => portfolio.slug,
+          )}
+          mode={appSession.demo ? "demo" : "live"}
           onClose={() => setPortfolioCreateOpen(false)}
-          onCreated={(record) => {
+          {...(liveData
+            ? {
+                onCreateLive: async (
+                  input: CreatePortfolioInput,
+                  idempotencyKey: string,
+                ) => {
+                  const result = await liveData.client.createPortfolio(
+                    input,
+                    idempotencyKey,
+                  );
+                  await liveData.refresh();
+                  return result.data;
+                },
+              }
+            : {})}
+          onCreated={(portfolio) => {
             setPortfolioCreateOpen(false);
-            setPortfolioId(record.portfolio.id);
+            setPortfolioId(portfolio.id);
             setOpen(false);
             router.push("/app/portfolio");
           }}
@@ -1452,30 +1476,78 @@ function availableSlug(name: string, existingSlugs: readonly string[]) {
 }
 
 function PortfolioCreateDialog({
+  mode,
+  existingSlugs,
   onClose,
+  onCreateLive,
   onCreated,
 }: {
+  mode: "demo" | "live";
+  existingSlugs: readonly string[];
   onClose: () => void;
-  onCreated: (record: CustomPortfolioRecord) => void;
+  onCreateLive?: (
+    input: CreatePortfolioInput,
+    idempotencyKey: string,
+  ) => Promise<PortfolioDto>;
+  onCreated: (portfolio: Pick<PortfolioDto, "id">) => void;
 }) {
   const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
   const [description, setDescription] = useState("");
   const [mark, setMark] = useState("");
   const [markEdited, setMarkEdited] = useState(false);
   const [accent, setAccent] = useState<string>(portfolioAccentOptions[0]);
+  const [isDefault, setIsDefault] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  );
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!name.trim()) return;
-    onCreated(
-      createCustomPortfolio({
-        name,
-        description,
-        mark: mark || name.trim().slice(0, 1),
-        accent,
-      }),
-    );
+  const resetFailedAttempt = () => {
+    if (!error) return;
+    setError(null);
+    setIdempotencyKey(crypto.randomUUID());
   };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || pending) return;
+    if (mode === "demo") {
+      onCreated(
+        createCustomPortfolio({
+          name,
+          description,
+          mark: mark || name.trim().slice(0, 1),
+          accent,
+        }).portfolio,
+      );
+      return;
+    }
+    if (!onCreateLive || !slug.trim()) return;
+    setPending(true);
+    setError(null);
+    try {
+      onCreated(
+        await onCreateLive(
+          {
+            name: name.trim(),
+            slug: slug.trim(),
+            description: description.trim(),
+            isDefault,
+          },
+          idempotencyKey,
+        ),
+      );
+    } catch (reason) {
+      setError(reason);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const presentedError = error ? presentLiveError(error) : null;
 
   return (
     <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
@@ -1512,59 +1584,118 @@ function PortfolioCreateDialog({
         </header>
 
         <div className="create-portfolio-fields">
+          {presentedError ? (
+            <LiveStateNotice
+              description={presentedError.description}
+              kind={presentedError.kind}
+              title={presentedError.title}
+            />
+          ) : pending ? (
+            <LiveStateNotice
+              description="TREVV will show the Portfolio only after the server commits it."
+              kind="pending"
+              title="Creating Portfolio"
+            />
+          ) : null}
           <label>
             Portfolio name
             <input
               autoFocus
+              disabled={pending}
+              maxLength={160}
               onChange={(event) => {
                 const nextName = event.currentTarget.value;
                 setName(nextName);
                 if (!markEdited)
                   setMark(nextName.trim().slice(0, 1).toUpperCase());
+                if (!slugEdited)
+                  setSlug(availableSlug(nextName, existingSlugs));
+                resetFailedAttempt();
               }}
               placeholder="For example, European Ventures"
               required
               value={name}
             />
           </label>
-          <div className="portfolio-identity-fields">
-            <label>
-              Logo mark
-              <input
-                aria-describedby="portfolio-mark-help"
-                maxLength={2}
-                onChange={(event) => {
-                  setMarkEdited(true);
-                  setMark(event.currentTarget.value.toUpperCase());
-                }}
-                placeholder="EV"
-                value={mark}
-              />
-              <small id="portfolio-mark-help">One or two characters</small>
-            </label>
-            <fieldset>
-              <legend>Brand colour</legend>
-              <div className="portfolio-accent-options">
-                {portfolioAccentOptions.map((option) => (
-                  <button
-                    type="button"
-                    aria-label={`Use portfolio colour ${option}`}
-                    aria-pressed={accent === option}
-                    className={accent === option ? "selected" : ""}
-                    key={option}
-                    onClick={() => setAccent(option)}
-                    style={{ "--portfolio-accent": option } as CSSProperties}
-                  >
-                    {accent === option && <CheckCircle2 size={13} />}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          </div>
+          {mode === "live" ? (
+            <div className="portfolio-identity-fields">
+              <label>
+                URL slug
+                <input
+                  disabled={pending}
+                  maxLength={80}
+                  minLength={2}
+                  onChange={(event) => {
+                    setSlugEdited(true);
+                    setSlug(event.currentTarget.value);
+                    resetFailedAttempt();
+                  }}
+                  pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                  required
+                  value={slug}
+                />
+                <small>Lowercase letters, numbers, and single hyphens</small>
+              </label>
+              <label>
+                <input
+                  checked={isDefault}
+                  disabled={pending}
+                  onChange={(event) => {
+                    setIsDefault(event.currentTarget.checked);
+                    resetFailedAttempt();
+                  }}
+                  type="checkbox"
+                />{" "}
+                Make this the default Portfolio
+              </label>
+            </div>
+          ) : (
+            <div className="portfolio-identity-fields">
+              <label>
+                Logo mark
+                <input
+                  aria-describedby="portfolio-mark-help"
+                  disabled={pending}
+                  maxLength={2}
+                  onChange={(event) => {
+                    setMarkEdited(true);
+                    setMark(event.currentTarget.value.toUpperCase());
+                  }}
+                  placeholder="EV"
+                  value={mark}
+                />
+                <small id="portfolio-mark-help">One or two characters</small>
+              </label>
+              <fieldset>
+                <legend>Brand colour</legend>
+                <div className="portfolio-accent-options">
+                  {portfolioAccentOptions.map((option) => (
+                    <button
+                      type="button"
+                      aria-label={`Use portfolio colour ${option}`}
+                      aria-pressed={accent === option}
+                      className={accent === option ? "selected" : ""}
+                      disabled={pending}
+                      key={option}
+                      onClick={() => setAccent(option)}
+                      style={{ "--portfolio-accent": option } as CSSProperties}
+                    >
+                      {accent === option && <CheckCircle2 size={13} />}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+          )}
           <label>
             Purpose
             <textarea
-              onChange={(event) => setDescription(event.currentTarget.value)}
+              disabled={pending}
+              maxLength={1_000}
+              onChange={(event) => {
+                setDescription(event.currentTarget.value);
+                resetFailedAttempt();
+              }}
               placeholder="What related Workspaces and outcomes belong here?"
               rows={3}
               value={description}
@@ -1580,10 +1711,14 @@ function PortfolioCreateDialog({
             </button>
             <button
               className="primary-button"
-              disabled={!name.trim()}
+              disabled={
+                pending ||
+                !name.trim() ||
+                (mode === "live" && slug.trim().length < 2)
+              }
               type="submit"
             >
-              <Plus size={14} /> Create portfolio
+              <Plus size={14} /> {pending ? "Creating…" : "Create portfolio"}
             </button>
           </div>
         </footer>

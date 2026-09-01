@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clearLiveDraftStorage,
+  formatCompactWorkspaceDate,
   isLiveDraftEnvelope,
   liveDraftStorageKey,
   workspaceSlugFromName,
@@ -92,5 +93,11 @@ describe("live workflow UI helpers", () => {
         "munchen-launch-2",
       ]),
     ).toBe("munchen-launch-3");
+  });
+
+  it("renders a safe empty milestone instead of throwing a RangeError", () => {
+    expect(formatCompactWorkspaceDate("")).toBe("Not scheduled");
+    expect(formatCompactWorkspaceDate("not-a-date")).toBe("Not scheduled");
+    expect(formatCompactWorkspaceDate("2026-09-01")).toBe("Sep 1");
   });
 });

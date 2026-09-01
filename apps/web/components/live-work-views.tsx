@@ -44,6 +44,7 @@ import {
 } from "@/lib/live-workflow-ui";
 import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
+import { LiveWorkspaceSettings } from "./live-workspace-settings";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
 
@@ -142,7 +143,7 @@ const viewCopy: Record<
   settings: {
     title: "Workspace Settings",
     subtitle:
-      "Production integrations and destructive settings are not enabled here.",
+      "Manage the canonical Workspace identity and operating configuration.",
     active: "settings",
   },
 };
@@ -224,7 +225,13 @@ export function LiveWorkView({
           />
         ) : null}
         {view === "settings" ? (
-          <PrivateBetaSettingsStatus />
+          <>
+            <LiveWorkspaceSettings
+              key={workspace.versionTag}
+              workspace={workspace}
+            />
+            <PrivateBetaSettingsStatus />
+          </>
         ) : !supportedViews.has(view) ? (
           <UnavailableLiveSurface
             title={copy.title}

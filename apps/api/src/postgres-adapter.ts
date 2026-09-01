@@ -146,6 +146,28 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         .map(toPortfolioDto);
     },
 
+    async createPortfolio(context, input) {
+      requireAccess(context.access, "create", "portfolio", {
+        organizationId: context.access.organizationId,
+      });
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).portfolios.create(
+        {
+          name: input.name,
+          slug: input.slug,
+          description: input.description,
+          isDefault: input.isDefault,
+        },
+        mutation(context),
+      );
+      return {
+        value: toPortfolioDto(result.value),
+        replayed: result.replayed,
+      };
+    },
+
     async getPortfolio(context, requestedPortfolioId) {
       const repositories = scoped(options.repositories, context);
       const portfolio = requestedPortfolioId
@@ -543,6 +565,53 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
           replayed: workspaceResult.replayed,
         };
       });
+    },
+
+    async updateWorkspace(context, workspaceId, expectedVersionTag, input) {
+      const repositories = scoped(options.repositories, context);
+      const workspace = (await repositories.workspaces.list()).find(
+        (candidate) => candidate.id === workspaceId,
+      );
+      if (!workspace) throw notFound();
+      requireAccess(context.access, "update", "workspace", {
+        organizationId: context.access.organizationId,
+        portfolioId: workspace.portfolioId,
+        workspaceId: workspace.id,
+        explicitlyShared: true,
+      });
+      const result = await repositories.workspaces.update(
+        workspace.id,
+        new Date(expectedVersionTag),
+        {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.slug !== undefined ? { slug: input.slug } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.type !== undefined ? { type: input.type } : {}),
+          ...(input.accent !== undefined ? { accentColor: input.accent } : {}),
+          ...(input.icon !== undefined ? { icon: input.icon } : {}),
+          ...(input.stage !== undefined ? { lifecycleStage: input.stage } : {}),
+          ...(input.health !== undefined ? { health: input.health } : {}),
+          ...(input.healthNote !== undefined
+            ? { healthNote: input.healthNote }
+            : {}),
+          ...(input.priority !== undefined
+            ? { currentPriority: input.priority }
+            : {}),
+          ...(input.nextMilestoneTitle !== undefined
+            ? { nextMilestoneSummary: input.nextMilestoneTitle }
+            : {}),
+          ...(input.nextMilestoneDate !== undefined
+            ? { nextMilestoneDate: input.nextMilestoneDate }
+            : {}),
+        },
+        mutation(context),
+      );
+      return {
+        value: toWorkspaceDto(result.value),
+        replayed: result.replayed,
+      };
     },
 
     async getWorkspace(context, slug) {

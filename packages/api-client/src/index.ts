@@ -22,6 +22,7 @@ import {
   createConversationSchema,
   createInvitationSchema,
   createItemSchema,
+  createPortfolioSchema,
   createTeamSchema,
   createWaitingSchema,
   createWorkspaceSchema,
@@ -62,6 +63,8 @@ import {
   updateRetentionPolicySchema,
   updateMessageResponseSchema,
   updateTeamSchema,
+  updateWorkspaceSchema,
+  versionTagEntityTagSchema,
   waitingActionSchema,
   waitingStateSchema,
   weeklyReviewInputSchema,
@@ -93,6 +96,7 @@ import {
   type ConvertInboxItemInput,
   type ConvertedInboxItem,
   type CreateInvitationInput,
+  type CreatePortfolioInput,
   type CreateConversationInput,
   type CreateConversationMessageInput,
   type CreateTeamInput,
@@ -128,6 +132,7 @@ import {
   type UpdateMembershipInput,
   type UpdateRetentionPolicyInput,
   type UpdateTeamInput,
+  type UpdateWorkspaceInput,
   type WaitingAction,
   type WaitingStateDto,
   type WeeklyReviewInput,
@@ -373,6 +378,23 @@ export function createApiClient({
     portfolios: async () =>
       portfolioSchema.array().parse((await request("/portfolios")).body),
 
+    createPortfolio: async (
+      input: CreatePortfolioInput,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<ReturnType<typeof portfolioSchema.parse>>> => {
+      const response = await request("/portfolios", {
+        method: "POST",
+        headers: {
+          "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+        },
+        body: JSON.stringify(createPortfolioSchema.parse(input)),
+      });
+      return {
+        data: portfolioSchema.parse(response.body),
+        ...mutationMetadata(response.response),
+      };
+    },
+
     attention: async (
       filters: {
         portfolioId?: string;
@@ -444,6 +466,39 @@ export function createApiClient({
         data: workspaceCreationSchema.parse(response.body),
         ...mutationMetadata(response.response),
       };
+    },
+
+    updateWorkspace: async (
+      workspaceId: string,
+      input: UpdateWorkspaceInput,
+      versionTag: string,
+      idempotencyKey: string,
+    ): Promise<
+      MutationResponse<WorkspaceDetailDto["workspace"]> & { etag: string }
+    > => {
+      const response = await request(
+        `/workspaces/${encodeURIComponent(workspaceId)}/settings`,
+        {
+          method: "PATCH",
+          headers: {
+            "if-match": `"${versionTag}"`,
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(updateWorkspaceSchema.parse(input)),
+        },
+      );
+      const data = workspaceSchema.parse(response.body);
+      const etag = versionTagEntityTagSchema.parse(
+        response.response.headers.get("etag"),
+      );
+      if (etag !== `"${data.versionTag}"`)
+        throw new TrevvApiError(
+          "unexpected_response",
+          "The response ETag did not match the Workspace version.",
+          response.response.headers.get("x-request-id") ?? "unknown",
+          response.response.status,
+        );
+      return { data, etag, ...mutationMetadata(response.response) };
     },
 
     workspace: async (slug: string): Promise<WorkspaceDetailDto> =>

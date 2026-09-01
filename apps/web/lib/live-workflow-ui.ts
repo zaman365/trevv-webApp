@@ -115,6 +115,15 @@ export function formatLiveDateOnly(value: string, timezone: string) {
   });
 }
 
+export function formatCompactWorkspaceDate(value: string) {
+  const parsed = new Date(`${value}T12:00:00`);
+  if (!value || Number.isNaN(parsed.valueOf())) return "Not scheduled";
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+  }).format(parsed);
+}
+
 export function workItemStatusLabel(status: WorkItemDto["status"]) {
   return status.replaceAll("_", " ");
 }

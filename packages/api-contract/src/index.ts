@@ -439,6 +439,15 @@ export const workspaceSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
+export const createPortfolioSchema = z
+  .object({
+    name: z.string().trim().min(2).max(160),
+    slug: productSlugSchema,
+    description: z.string().trim().max(1_000).default(""),
+    isDefault: z.boolean().default(false),
+  })
+  .strict();
+
 export const createWorkspaceSchema = z
   .object({
     portfolioId: idSchema,
@@ -456,6 +465,30 @@ export const createWorkspaceSchema = z
     initialBoardName: z.string().trim().min(1).max(160).optional(),
   })
   .strict();
+
+export const updateWorkspaceSchema = z
+  .object({
+    name: z.string().trim().min(2).max(160).optional(),
+    slug: productSlugSchema.optional(),
+    description: z.string().trim().max(5_000).optional(),
+    type: workspaceTypeSchema.optional(),
+    accent: z
+      .string()
+      .regex(/^#[0-9a-f]{6}$/i)
+      .optional(),
+    icon: z.string().trim().min(1).max(12).optional(),
+    stage: lifecycleStageSchema.optional(),
+    health: workspaceHealthSchema.optional(),
+    healthNote: z.string().trim().max(1_000).optional(),
+    priority: z.string().trim().max(500).optional(),
+    nextMilestoneTitle: z.string().trim().max(500).optional(),
+    nextMilestoneDate: z.iso.date().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    "Change at least one Workspace field.",
+  );
 
 export const boardVisibilitySchema = z.enum(["private", "organization"]);
 export const progressModeSchema = z.enum([
@@ -1636,6 +1669,10 @@ export const updateItemSchema = workItemBaseSchema
 
 export const idempotencyKeySchema = z.string().uuid();
 export const entityTagSchema = z.string().regex(/^"\d+"$/);
+export const versionTagEntityTagSchema = z.string().refine((value) => {
+  const matched = /^"([^"]+)"$/u.exec(value);
+  return z.iso.datetime().safeParse(matched?.[1]).success;
+}, "Expected a quoted ISO date-time ETag.");
 
 export const apiErrorSchema = z.object({
   error: z.object({
@@ -1670,8 +1707,10 @@ export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
 export type InvitationAcceptance = z.infer<typeof invitationAcceptanceSchema>;
 export type Membership = z.infer<typeof membershipSchema>;
 export type UpdateMembershipInput = z.infer<typeof updateMembershipSchema>;
+export type CreatePortfolioInput = z.infer<typeof createPortfolioSchema>;
 export type WorkspaceDto = z.infer<typeof workspaceSchema>;
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
+export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceSchema>;
 export type WorkspaceCreation = z.infer<typeof workspaceCreationSchema>;
 export type BoardDto = z.infer<typeof boardSchema>;
 export type CreateBoardInput = z.infer<typeof createBoardSchema>;

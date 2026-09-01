@@ -4,6 +4,15 @@ import { createApiClient, TrevvApiError } from "./index";
 const timestamp = "2026-08-29T12:00:00.000Z";
 const idempotencyKey = "81111111-1111-4111-8111-111111111111";
 
+const portfolio = {
+  id: "portfolio-1",
+  organizationId: "organization-1",
+  name: "Company Portfolio",
+  slug: "company-portfolio",
+  description: "Canonical company work",
+  isDefault: false,
+} as const;
+
 const workspace = {
   id: "workspace-1",
   portfolioId: "portfolio-1",
@@ -53,6 +62,42 @@ const item = {
 } as const;
 
 describe("Phase 3 API client", () => {
+  it("creates a durable Portfolio with an idempotency key", async () => {
+    const fetchMock = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+        Response.json(portfolio, {
+          status: 201,
+          headers: {
+            "idempotency-key": idempotencyKey,
+            "idempotency-replayed": "false",
+          },
+        }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(
+      client.createPortfolio(
+        {
+          name: portfolio.name,
+          slug: portfolio.slug,
+          description: portfolio.description,
+          isDefault: false,
+        },
+        idempotencyKey,
+      ),
+    ).resolves.toMatchObject({ data: portfolio, replayed: false });
+
+    const [requested, init] = fetchMock.mock.calls[0] ?? [];
+    expect(new URL(String(requested)).pathname).toBe("/api/v1/portfolios");
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("idempotency-key")).toBe(
+      idempotencyKey,
+    );
+  });
+
   it("accepts a durable registration claim without resending the raw token", async () => {
     const acceptance = {
       invitationId: "invitation-claimed-1",
@@ -146,6 +191,49 @@ describe("Phase 3 API client", () => {
     });
     const requestHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
     expect(requestHeaders.get("idempotency-key")).toBe(idempotencyKey);
+  });
+
+  it("updates Workspace settings against the timestamp ETag", async () => {
+    const updated = {
+      ...workspace,
+      name: "Updated Workspace",
+      versionTag: "2026-08-29T12:00:01.000Z",
+      updatedAt: "2026-08-29T12:00:01.000Z",
+    };
+    const fetchMock = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+        Response.json(updated, {
+          headers: {
+            etag: `"${updated.versionTag}"`,
+            "idempotency-key": idempotencyKey,
+            "idempotency-replayed": "false",
+          },
+        }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(
+      client.updateWorkspace(
+        workspace.id,
+        { name: updated.name },
+        workspace.versionTag,
+        idempotencyKey,
+      ),
+    ).resolves.toMatchObject({
+      data: updated,
+      etag: `"${updated.versionTag}"`,
+    });
+
+    const [requested, init] = fetchMock.mock.calls[0] ?? [];
+    expect(new URL(String(requested)).pathname).toBe(
+      "/api/v1/workspaces/workspace-1/settings",
+    );
+    const headers = new Headers(init?.headers);
+    expect(headers.get("if-match")).toBe(`"${workspace.versionTag}"`);
+    expect(headers.get("idempotency-key")).toBe(idempotencyKey);
   });
 
   it("binds Waiting creation to the canonical WorkItem ETag", async () => {

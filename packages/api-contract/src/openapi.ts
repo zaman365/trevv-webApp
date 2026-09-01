@@ -617,6 +617,42 @@ export const openApiDocument = {
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
+      post: {
+        tags: ["Portfolio"],
+        operationId: "createPortfolio",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePortfolio" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durable organization-scoped Portfolio",
+            headers: {
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Portfolio" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
     },
     "/api/v1/attention": {
       get: {
@@ -1316,6 +1352,50 @@ export const openApiDocument = {
           },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/workspaces/{workspaceId}/settings": {
+      patch: {
+        tags: ["Workspaces"],
+        operationId: "updateWorkspace",
+        parameters: [
+          { $ref: "#/components/parameters/WorkspaceId" },
+          { $ref: "#/components/parameters/IfMatchVersionTag" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateWorkspace" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated canonical Workspace settings",
+            headers: {
+              ETag: { $ref: "#/components/headers/VersionTagETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Workspace" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -2709,12 +2789,30 @@ export const openApiDocument = {
           'Strong numeric ETag returned by the resource, from "0" through "2147483647"; for example "3".',
         schema: { type: "string", pattern: '^"[0-9]+"$' },
       },
+      IfMatchVersionTag: {
+        name: "If-Match",
+        in: "header",
+        required: true,
+        description:
+          "Quoted ISO 8601 Workspace version timestamp returned in the ETag header.",
+        schema: {
+          type: "string",
+          pattern: '^"[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z"$',
+        },
+      },
     },
     headers: {
       ETag: {
         description:
           'Strong quoted PostgreSQL integer resource version, from "0" through "2147483647".',
         schema: { type: "string", pattern: '^"[0-9]+"$' },
+      },
+      VersionTagETag: {
+        description: "Strong quoted ISO 8601 Workspace version timestamp.",
+        schema: {
+          type: "string",
+          pattern: '^"[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z"$',
+        },
       },
       IdempotencyKey: {
         description:
@@ -3472,6 +3570,22 @@ export const openApiDocument = {
           isDefault: { type: "boolean" },
         },
       },
+      CreatePortfolio: {
+        type: "object",
+        required: ["name", "slug"],
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", minLength: 2, maxLength: 160 },
+          slug: {
+            type: "string",
+            minLength: 2,
+            maxLength: 80,
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          },
+          description: { type: "string", maxLength: 1000, default: "" },
+          isDefault: { type: "boolean", default: false },
+        },
+      },
       WorkspaceMetric: {
         type: "object",
         required: ["label", "value"],
@@ -4172,6 +4286,66 @@ export const openApiDocument = {
           priority: { type: "string", maxLength: 500, default: "" },
           leadUserId: { type: "string", minLength: 3, maxLength: 128 },
           initialBoardName: { type: "string", minLength: 1, maxLength: 160 },
+        },
+      },
+      UpdateWorkspace: {
+        type: "object",
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", minLength: 2, maxLength: 160 },
+          slug: {
+            type: "string",
+            minLength: 2,
+            maxLength: 80,
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          },
+          description: { type: "string", maxLength: 5000 },
+          type: {
+            type: "string",
+            enum: [
+              "business",
+              "brand",
+              "client",
+              "product",
+              "department",
+              "venture",
+              "initiative",
+              "investment",
+              "campaign",
+              "program",
+              "project",
+              "shared_function",
+              "client_program",
+              "journey",
+              "other",
+            ],
+          },
+          accent: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+          icon: { type: "string", minLength: 1, maxLength: 12 },
+          stage: {
+            type: "string",
+            enum: [
+              "idea",
+              "validate",
+              "build",
+              "launch",
+              "grow",
+              "operate",
+              "paused",
+              "archived",
+            ],
+          },
+          health: {
+            type: "string",
+            enum: ["on_track", "watch", "critical", "parked"],
+          },
+          healthNote: { type: "string", maxLength: 1000 },
+          priority: { type: "string", maxLength: 500 },
+          nextMilestoneTitle: { type: "string", maxLength: 500 },
+          nextMilestoneDate: {
+            oneOf: [{ type: "string", format: "date" }, { type: "null" }],
+          },
         },
       },
       Board: {

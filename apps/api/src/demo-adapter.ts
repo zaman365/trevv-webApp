@@ -160,6 +160,12 @@ export function createDemoAdapter(): DemoAdapter {
       ) as PortfolioDto[];
     },
 
+    async createPortfolio() {
+      throw demoUnavailable(
+        "Portfolio creation is available only in the persistent live preview.",
+      );
+    },
+
     async getPortfolio(context, requestedPortfolioId) {
       requireAccess(context.access, "read", "portfolio", {
         organizationId: "org-demo",
@@ -405,6 +411,12 @@ export function createDemoAdapter(): DemoAdapter {
     async createWorkspace() {
       throw demoUnavailable(
         "Workspace creation is available only in the persistent live preview.",
+      );
+    },
+
+    async updateWorkspace() {
+      throw demoUnavailable(
+        "Workspace settings are available only in the persistent live preview.",
       );
     },
 

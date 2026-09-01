@@ -16,6 +16,7 @@ import type {
   CreateBoardInput,
   CreateConversationInput,
   CreateConversationMessageInput,
+  CreatePortfolioInput,
   CreatePrivacyRequestInput,
   CreateItemInput,
   CreateTeamInput,
@@ -57,6 +58,7 @@ import type {
   WorkspaceDto,
   UpdateItemInput,
   UpdateTeamInput,
+  UpdateWorkspaceInput,
   UpdateRetentionPolicyInput,
 } from "@founderhq/api-contract";
 import type { AccessContext } from "@founderhq/permissions";
@@ -114,6 +116,10 @@ export interface DataPlane {
   readonly mode: ApiMode;
   readiness(): Promise<Pick<Readiness, "database">>;
   listPortfolios(context: ApiRequestContext): Promise<PortfolioDto[]>;
+  createPortfolio(
+    context: ApiMutationContext,
+    input: CreatePortfolioInput,
+  ): Promise<MutationResult<PortfolioDto>>;
   getPortfolio(
     context: ApiRequestContext,
     portfolioId?: string,
@@ -157,6 +163,12 @@ export interface DataPlane {
     context: ApiMutationContext,
     input: CreateWorkspaceInput,
   ): Promise<MutationResult<WorkspaceCreation>>;
+  updateWorkspace(
+    context: ApiMutationContext,
+    workspaceId: string,
+    expectedVersionTag: string,
+    input: UpdateWorkspaceInput,
+  ): Promise<MutationResult<WorkspaceDto>>;
   getWorkspace(
     context: ApiRequestContext,
     slug: string,

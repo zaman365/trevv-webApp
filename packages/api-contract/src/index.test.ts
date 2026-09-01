@@ -4,6 +4,7 @@ import {
   collaborationEventBatchSchema,
   conversationSchema,
   createPrivacyRequestSchema,
+  createPortfolioSchema,
   createConversationMessageSchema,
   createConversationSchema,
   createTeamSchema,
@@ -17,6 +18,8 @@ import {
   teamSchema,
   teamFeatureCapabilitiesForPreset,
   updateMessageResponseSchema,
+  updateWorkspaceSchema,
+  versionTagEntityTagSchema,
   workspaceCreationSchema,
 } from "./index";
 import { openApiDocument } from "./openapi";
@@ -124,6 +127,42 @@ describe("Phase 2 identity contract", () => {
 });
 
 describe("Phase 3 API contract", () => {
+  it("distinguishes timestamp resource ETags", () => {
+    expect(versionTagEntityTagSchema.parse(`"${timestamp}"`)).toBe(
+      `"${timestamp}"`,
+    );
+    expect(
+      versionTagEntityTagSchema.safeParse('"not-a-timestamp"').success,
+    ).toBe(false);
+  });
+
+  it("publishes owner-managed Portfolio creation and Workspace settings", () => {
+    expect(
+      createPortfolioSchema.parse({
+        name: "Company Portfolio",
+        slug: "company-portfolio",
+      }),
+    ).toMatchObject({ description: "", isDefault: false });
+    expect(() => updateWorkspaceSchema.parse({})).toThrow();
+    expect(
+      updateWorkspaceSchema.parse({
+        name: "Updated Workspace",
+        nextMilestoneDate: null,
+      }),
+    ).toEqual({
+      name: "Updated Workspace",
+      nextMilestoneDate: null,
+    });
+
+    expect(openApiDocument.paths["/api/v1/portfolios"].post.operationId).toBe(
+      "createPortfolio",
+    );
+    expect(
+      openApiDocument.paths["/api/v1/workspaces/{workspaceId}/settings"].patch
+        .operationId,
+    ).toBe("updateWorkspace");
+  });
+
   it("requires organization timezone and durable Workspace versions", () => {
     expect(() =>
       sessionSchema.parse({

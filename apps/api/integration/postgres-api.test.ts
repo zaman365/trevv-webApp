@@ -158,6 +158,176 @@ describe("PostgreSQL-backed API", () => {
     }
   });
 
+  it("lets organization managers create Portfolios and durably edit Workspaces", async () => {
+    const live = createLiveHarness();
+    const ownerClient = clientFor(
+      live.app,
+      fixture.first.ownerId,
+      fixture.first.organizationId,
+    );
+    const memberClient = clientFor(
+      live.app,
+      fixture.first.memberId,
+      fixture.first.organizationId,
+    );
+    const keys = {
+      portfolio: "00000000-0000-4000-8000-000000000421",
+      workspace: "00000000-0000-4000-8000-000000000422",
+      update: "00000000-0000-4000-8000-000000000423",
+      staleUpdate: "00000000-0000-4000-8000-000000000424",
+      memberPortfolio: "00000000-0000-4000-8000-000000000425",
+      memberUpdate: "00000000-0000-4000-8000-000000000426",
+    } as const;
+
+    try {
+      const portfolioInput = {
+        name: "Operating Portfolio",
+        slug: "operating-portfolio",
+        description: "Owner-managed Portfolio coverage.",
+        isDefault: false,
+      };
+      const createdPortfolio = await ownerClient.createPortfolio(
+        portfolioInput,
+        keys.portfolio,
+      );
+      expect(createdPortfolio).toMatchObject({
+        idempotencyKey: keys.portfolio,
+        replayed: false,
+        data: portfolioInput,
+      });
+      await expect(
+        ownerClient.createPortfolio(portfolioInput, keys.portfolio),
+      ).resolves.toEqual({ ...createdPortfolio, replayed: true });
+
+      await expect(
+        memberClient.createPortfolio(
+          {
+            name: "Member Portfolio",
+            slug: "member-portfolio",
+            description: "Must not be created.",
+            isDefault: false,
+          },
+          keys.memberPortfolio,
+        ),
+      ).rejects.toMatchObject({
+        code: "resource_not_found",
+        status: 404,
+      } satisfies Partial<TrevvApiError>);
+
+      const workspaceInput = {
+        portfolioId: createdPortfolio.data.id,
+        name: "Editable Workspace",
+        slug: "editable-workspace",
+        description: "Initial Workspace settings.",
+        type: "project" as const,
+        accent: "#5b56db",
+        icon: "E",
+        stage: "idea" as const,
+        health: "on_track" as const,
+        healthNote: "",
+        priority: "Establish the operating rhythm",
+        initialBoardName: "Editable Workspace Board",
+      };
+      const createdWorkspace = await ownerClient.createWorkspace(
+        workspaceInput,
+        keys.workspace,
+      );
+      expect(createdWorkspace).toMatchObject({
+        idempotencyKey: keys.workspace,
+        replayed: false,
+        data: {
+          workspace: {
+            portfolioId: createdPortfolio.data.id,
+            slug: workspaceInput.slug,
+            versionTag: expect.any(String),
+          },
+          board: { name: workspaceInput.initialBoardName },
+        },
+      });
+
+      const original = createdWorkspace.data.workspace;
+      const updateInput = {
+        name: "Edited Workspace",
+        slug: "edited-workspace",
+        description: "Durably edited Workspace settings.",
+        stage: "build" as const,
+        health: "watch" as const,
+        healthNote: "A dependency needs active management.",
+        priority: "Resolve the launch dependency",
+        nextMilestoneTitle: "Launch readiness review",
+        nextMilestoneDate: "2026-09-30",
+      };
+      const updated = await ownerClient.updateWorkspace(
+        original.id,
+        updateInput,
+        original.versionTag,
+        keys.update,
+      );
+      expect(updated).toMatchObject({
+        idempotencyKey: keys.update,
+        replayed: false,
+        data: {
+          id: original.id,
+          name: updateInput.name,
+          slug: updateInput.slug,
+          description: updateInput.description,
+          stage: updateInput.stage,
+          health: updateInput.health,
+          healthNote: updateInput.healthNote,
+          priority: updateInput.priority,
+          versionTag: expect.any(String),
+          nextMilestone: {
+            title: updateInput.nextMilestoneTitle,
+            date: updateInput.nextMilestoneDate,
+          },
+        },
+      });
+      expect(updated.etag).toBe(`"${updated.data.versionTag}"`);
+      expect(updated.data.versionTag).not.toBe(original.versionTag);
+      await expect(
+        ownerClient.updateWorkspace(
+          original.id,
+          updateInput,
+          original.versionTag,
+          keys.update,
+        ),
+      ).resolves.toEqual({ ...updated, replayed: true });
+      await expect(
+        ownerClient.updateWorkspace(
+          updated.data.id,
+          { priority: "A stale update must not replace the saved value." },
+          original.versionTag,
+          keys.staleUpdate,
+        ),
+      ).rejects.toMatchObject({
+        code: "version_conflict",
+        status: 409,
+      } satisfies Partial<TrevvApiError>);
+      await expect(
+        memberClient.updateWorkspace(
+          updated.data.id,
+          { priority: "A member must not change Workspace settings." },
+          updated.data.versionTag,
+          keys.memberUpdate,
+        ),
+      ).rejects.toMatchObject({
+        code: "resource_not_found",
+        status: 404,
+      } satisfies Partial<TrevvApiError>);
+      await expect(
+        ownerClient.workspace(updated.data.slug),
+      ).resolves.toMatchObject({
+        workspace: {
+          id: original.id,
+          priority: updateInput.priority,
+          versionTag: updated.data.versionTag,
+        },
+      });
+    } finally {
+      await live.close();
+    }
+  });
+
   it("enforces the composed collaboration authorization matrix through live HTTP", async () => {
     const identities = {
       owner: fixture.first.ownerId,

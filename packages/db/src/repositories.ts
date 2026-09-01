@@ -286,7 +286,15 @@ export interface CreateWorkspaceInput {
 }
 
 export type UpdateWorkspaceInput = Partial<
-  Omit<CreateWorkspaceInput, "portfolioId" | "type">
+  Omit<
+    CreateWorkspaceInput,
+    | "portfolioId"
+    | "type"
+    | "leadUserId"
+    | "nextMilestoneDate"
+    | "nextReviewDate"
+    | "manualProgressValue"
+  >
 > & {
   type?: (typeof workspaces.$inferInsert)["type"];
   leadUserId?: string | null;
