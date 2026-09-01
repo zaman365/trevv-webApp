@@ -50,6 +50,7 @@ CREATE TABLE "workspace_calendars" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX "workspace_calendars_org_workspace_id_unique" ON "workspace_calendars" USING btree ("organization_id","workspace_id","id");--> statement-breakpoint
 ALTER TABLE "calendar_events" ADD CONSTRAINT "calendar_events_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "calendar_events" ADD CONSTRAINT "calendar_events_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "calendar_events" ADD CONSTRAINT "calendar_events_calendar_id_workspace_calendars_id_fk" FOREIGN KEY ("calendar_id") REFERENCES "public"."workspace_calendars"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -96,7 +97,6 @@ CREATE UNIQUE INDEX "calendar_events_external_unique" ON "calendar_events" USING
 CREATE INDEX "calendar_events_workspace_time_idx" ON "calendar_events" USING btree ("organization_id","workspace_id","start_at");--> statement-breakpoint
 CREATE INDEX "calendar_events_calendar_time_idx" ON "calendar_events" USING btree ("organization_id","calendar_id","start_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "workspace_calendars_org_id_unique" ON "workspace_calendars" USING btree ("organization_id","id");--> statement-breakpoint
-CREATE UNIQUE INDEX "workspace_calendars_org_workspace_id_unique" ON "workspace_calendars" USING btree ("organization_id","workspace_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "workspace_calendars_primary_unique" ON "workspace_calendars" USING btree ("organization_id","workspace_id") WHERE "workspace_calendars"."provider" = 'trevv' and "workspace_calendars"."is_primary" = true and "workspace_calendars"."deleted_at" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "workspace_calendars_external_unique" ON "workspace_calendars" USING btree ("organization_id","workspace_id","provider","external_calendar_id") WHERE "workspace_calendars"."external_calendar_id" is not null and "workspace_calendars"."deleted_at" is null;--> statement-breakpoint
 CREATE INDEX "workspace_calendars_workspace_idx" ON "workspace_calendars" USING btree ("organization_id","workspace_id");
