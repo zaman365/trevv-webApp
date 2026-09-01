@@ -120,7 +120,8 @@ describe("browser API proxy boundary", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          cookie: "trevv.registration_invitation=opaque-server-validated-token",
+          cookie:
+            "cf_clearance=unrelated-edge-cookie; trevv.registration_invitation=opaque-server-validated-token; theme=dark",
         },
         body: JSON.stringify({
           name: "Invited Test Registration",
@@ -136,9 +137,44 @@ describe("browser API proxy boundary", () => {
     const upstreamHeaders = new Headers(
       (upstream.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
     );
-    expect(upstreamHeaders.get("cookie")).toContain(
+    expect(upstreamHeaders.get("cookie")).toBe(
       "trevv.registration_invitation=opaque-server-validated-token",
     );
+  });
+
+  it("does not forward unrelated browser cookies with sign-in credentials", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi.fn().mockResolvedValue(
+      Response.json(
+        {
+          code: "INVALID_EMAIL_OR_PASSWORD",
+          message: "Email or password is incorrect.",
+        },
+        { status: 401 },
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    await proxyApiRequest(
+      new Request("https://trevv.test/api/auth/sign-in/email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie:
+            "cf_clearance=unrelated-edge-cookie; __Secure-trevv_alpha.session_token=stale; theme=dark",
+        },
+        body: JSON.stringify({
+          email: "founder@example.test",
+          password: "not-a-real-password",
+        }),
+      }),
+      ["auth", "sign-in", "email"],
+    );
+
+    const upstreamHeaders = new Headers(
+      (upstream.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+    );
+    expect(upstreamHeaders.has("cookie")).toBe(false);
   });
 
   it("strips caller-supplied network identity before crossing the proxy boundary", async () => {
@@ -231,6 +267,30 @@ describe("browser API proxy boundary", () => {
       message: "Email or password is incorrect.",
     });
     expect(text).not.toContain("must-not-cross-the-web-boundary");
+  });
+
+  it("returns an actionable safe error when the auth edge does not return JSON", async () => {
+    const upstream = vi.fn().mockResolvedValue(
+      new Response("temporary edge response", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/auth/sign-in/email", {
+        method: "POST",
+      }),
+      ["auth", "sign-in", "email"],
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      code: "AUTH_UPSTREAM_UNAVAILABLE",
+      message:
+        "The secure authentication service could not accept the request. Try again.",
+    });
   });
 
   it.each([

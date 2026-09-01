@@ -2,6 +2,7 @@ import { webApiOrigin, webRegistrationMode } from "./web-runtime-config";
 import { appendSetCookieHeaders } from "./response-cookies";
 import { webRequestId } from "./security-headers";
 import { readBoundedRequestBody } from "./bounded-request-body";
+import { authActionCookies } from "./auth-action-cookies";
 
 const allowedNamespaces = new Set(["auth", "v1"]);
 const browserAuthOperations = new Set([
@@ -66,6 +67,7 @@ export async function proxyApiRequest(
 
   const headers = new Headers(request.headers);
   for (const name of strippedRequestHeaders) headers.delete(name);
+  restrictBrowserAuthCookies(headers, segments);
   headers.set("x-forwarded-host", incoming.host);
   headers.set("x-forwarded-proto", incoming.protocol.replace(":", ""));
   const requestId = webRequestId(headers.get("x-request-id"));
@@ -117,6 +119,27 @@ export async function proxyApiRequest(
     statusText: upstream.statusText,
     headers: responseHeaders,
   });
+}
+
+function restrictBrowserAuthCookies(
+  headers: Headers,
+  segments: readonly string[],
+): void {
+  if (segments[0] !== "auth") return;
+
+  const incoming = headers.get("cookie");
+  headers.delete("cookie");
+  if (!incoming || segments.slice(1).join("/") !== "sign-up/email") return;
+
+  const invitation = incoming
+    .split(";")
+    .map((part) => part.trim())
+    .find(
+      (part) =>
+        part.slice(0, part.indexOf("=")) ===
+        authActionCookies.invitationRegistration,
+    );
+  if (invitation) headers.set("cookie", invitation);
 }
 
 async function boundedRequestBody(
@@ -193,7 +216,10 @@ async function safeBrowserAuthBody(
   );
   return JSON.stringify({
     ...(code ? { code } : {}),
-    message: message ?? "Authentication request failed.",
+    ...(!code && !message ? { code: "AUTH_UPSTREAM_UNAVAILABLE" } : {}),
+    message:
+      message ??
+      "The secure authentication service could not accept the request. Try again.",
   });
 }
 
