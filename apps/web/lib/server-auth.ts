@@ -16,6 +16,7 @@ import {
   webRuntimeMode,
 } from "./web-runtime-config";
 import { webRequestId } from "./security-headers";
+import { fetchWithTransientUpstreamRetry } from "./transient-upstream-fetch";
 
 type ApiClient = ReturnType<typeof createApiClient>;
 export type WebAppSession = Awaited<ReturnType<ApiClient["session"]>>;
@@ -212,11 +213,14 @@ export async function serverAuthFetch(
   forwardOperationalHeaders(requestHeaders, outgoing);
   if (init.body && !outgoing.has("content-type"))
     outgoing.set("content-type", "application/json");
-  return fetch(new URL(`/api/auth${path}`, webApiOrigin()), {
-    ...init,
-    headers: outgoing,
-    cache: "no-store",
-  });
+  return fetchWithTransientUpstreamRetry(
+    new URL(`/api/auth${path}`, webApiOrigin()),
+    {
+      ...init,
+      headers: outgoing,
+      cache: "no-store",
+    },
+  );
 }
 
 export async function serverApiFetch(
@@ -232,11 +236,14 @@ export async function serverApiFetch(
   forwardOperationalHeaders(requestHeaders, outgoing);
   if (init.body && !outgoing.has("content-type"))
     outgoing.set("content-type", "application/json");
-  return fetch(new URL(`/api/v1${path}`, webApiOrigin()), {
-    ...init,
-    headers: outgoing,
-    cache: "no-store",
-  });
+  return fetchWithTransientUpstreamRetry(
+    new URL(`/api/v1${path}`, webApiOrigin()),
+    {
+      ...init,
+      headers: outgoing,
+      cache: "no-store",
+    },
+  );
 }
 
 async function serverApiClient() {
@@ -250,7 +257,7 @@ async function serverApiClient() {
       const origin = forwarded.get("origin");
       if (origin) outgoing.set("origin", origin);
       forwardOperationalHeaders(forwarded, outgoing);
-      return fetch(input, {
+      return fetchWithTransientUpstreamRetry(input, {
         ...init,
         headers: outgoing,
         cache: "no-store",
