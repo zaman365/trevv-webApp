@@ -70,7 +70,7 @@ export default defineConfig({
     },
     {
       command:
-        "pnpm --filter @founderhq/web build && pnpm --filter @founderhq/web exec next start --hostname 127.0.0.1 --port 3200",
+        "pnpm --filter @founderhq/web... build && pnpm --filter @founderhq/web exec next start --hostname 127.0.0.1 --port 3200",
       url: `${webOrigin}/sign-up`,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
