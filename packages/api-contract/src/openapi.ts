@@ -25,6 +25,7 @@ export const openApiDocument = {
     { name: "Teams" },
     { name: "Messages" },
     { name: "Boards" },
+    { name: "Calendar" },
     { name: "Inbox" },
     { name: "Items" },
     { name: "Operations" },
@@ -1977,6 +1978,147 @@ export const openApiDocument = {
           },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/workspaces/{workspaceId}/calendar": {
+      get: {
+        tags: ["Calendar"],
+        operationId: "getWorkspaceCalendar",
+        parameters: [
+          {
+            name: "workspaceId",
+            in: "path",
+            required: true,
+            schema: { type: "string", minLength: 3, maxLength: 128 },
+          },
+          {
+            name: "from",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "to",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "date-time" },
+          },
+        ],
+        responses: {
+          "200": {
+            description:
+              "Workspace calendar sources, events, and provider readiness",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkspaceCalendar" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/workspaces/{workspaceId}/calendar/events": {
+      post: {
+        tags: ["Calendar"],
+        operationId: "createCalendarEvent",
+        parameters: [
+          {
+            name: "workspaceId",
+            in: "path",
+            required: true,
+            schema: { type: "string", minLength: 3, maxLength: 128 },
+          },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateCalendarEvent" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Durably created native TREVV calendar event",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CalendarEvent" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/calendar/events/{id}": {
+      patch: {
+        tags: ["Calendar"],
+        operationId: "updateCalendarEvent",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateCalendarEvent" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated native TREVV calendar event",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CalendarEvent" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+      delete: {
+        tags: ["Calendar"],
+        operationId: "deleteCalendarEvent",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        responses: {
+          "200": {
+            description: "Deleted native TREVV calendar event",
+            headers: { ETag: { $ref: "#/components/headers/ETag" } },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CalendarEvent" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
           "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
@@ -4408,6 +4550,207 @@ export const openApiDocument = {
           progressMode: { type: "string", default: "task_completion" },
           startDate: { type: "string", format: "date" },
           endDate: { type: "string", format: "date" },
+        },
+      },
+      Calendar: {
+        type: "object",
+        required: [
+          "id",
+          "workspaceId",
+          "provider",
+          "name",
+          "color",
+          "isPrimary",
+          "visibleByDefault",
+          "readOnly",
+          "connectionState",
+          "syncState",
+          "version",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          provider: {
+            type: "string",
+            enum: ["trevv", "google_calendar", "microsoft_outlook_calendar"],
+          },
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+          isPrimary: { type: "boolean" },
+          visibleByDefault: { type: "boolean" },
+          readOnly: { type: "boolean" },
+          connectionState: {
+            type: "string",
+            enum: [
+              "native",
+              "disconnected",
+              "connected",
+              "reauthorization_required",
+              "error",
+            ],
+          },
+          syncState: { type: "string", enum: ["idle", "syncing", "error"] },
+          lastSyncedAt: { type: "string", format: "date-time" },
+          version: { type: "integer", minimum: 0 },
+        },
+      },
+      CalendarEvent: {
+        type: "object",
+        required: [
+          "id",
+          "workspaceId",
+          "calendarId",
+          "source",
+          "kind",
+          "title",
+          "description",
+          "startAt",
+          "endAt",
+          "allDay",
+          "timezone",
+          "location",
+          "attendees",
+          "status",
+          "readOnly",
+          "version",
+          "createdAt",
+          "updatedAt",
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", minLength: 3, maxLength: 128 },
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          calendarId: { type: "string", minLength: 3, maxLength: 128 },
+          source: {
+            type: "string",
+            enum: ["trevv", "google_calendar", "microsoft_outlook_calendar"],
+          },
+          kind: { type: "string", enum: ["event", "meeting", "focus"] },
+          title: { type: "string", minLength: 1, maxLength: 300 },
+          description: { type: "string", maxLength: 10000 },
+          startAt: { type: "string", format: "date-time" },
+          endAt: { type: "string", format: "date-time" },
+          allDay: { type: "boolean" },
+          timezone: { type: "string", minLength: 1, maxLength: 120 },
+          location: { type: "string", maxLength: 500 },
+          meetingUrl: { type: "string", format: "uri" },
+          attendees: {
+            type: "array",
+            maxItems: 100,
+            items: { type: "string", format: "email" },
+          },
+          recurrenceRule: { type: "string", maxLength: 500 },
+          linkedWorkItemId: { type: "string", minLength: 3, maxLength: 128 },
+          status: {
+            type: "string",
+            enum: ["confirmed", "tentative", "cancelled"],
+          },
+          readOnly: { type: "boolean" },
+          version: { type: "integer", minimum: 0 },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CreateCalendarEvent: {
+        type: "object",
+        required: ["calendarId", "title", "startAt", "endAt", "timezone"],
+        additionalProperties: false,
+        properties: {
+          calendarId: { type: "string", minLength: 3, maxLength: 128 },
+          kind: {
+            type: "string",
+            enum: ["event", "meeting", "focus"],
+            default: "event",
+          },
+          title: { type: "string", minLength: 1, maxLength: 300 },
+          description: { type: "string", maxLength: 10000, default: "" },
+          startAt: { type: "string", format: "date-time" },
+          endAt: { type: "string", format: "date-time" },
+          allDay: { type: "boolean", default: false },
+          timezone: { type: "string", minLength: 1, maxLength: 120 },
+          location: { type: "string", maxLength: 500, default: "" },
+          meetingUrl: { type: "string", format: "uri" },
+          attendees: {
+            type: "array",
+            maxItems: 100,
+            default: [],
+            items: { type: "string", format: "email" },
+          },
+          recurrenceRule: { type: "string", maxLength: 500 },
+        },
+      },
+      UpdateCalendarEvent: {
+        type: "object",
+        minProperties: 1,
+        additionalProperties: false,
+        properties: {
+          calendarId: { type: "string", minLength: 3, maxLength: 128 },
+          kind: { type: "string", enum: ["event", "meeting", "focus"] },
+          title: { type: "string", minLength: 1, maxLength: 300 },
+          description: { type: "string", maxLength: 10000 },
+          startAt: { type: "string", format: "date-time" },
+          endAt: { type: "string", format: "date-time" },
+          allDay: { type: "boolean" },
+          timezone: { type: "string", minLength: 1, maxLength: 120 },
+          location: { type: "string", maxLength: 500 },
+          meetingUrl: { type: "string", format: "uri" },
+          attendees: {
+            type: "array",
+            maxItems: 100,
+            items: { type: "string", format: "email" },
+          },
+          recurrenceRule: { type: "string", maxLength: 500 },
+        },
+      },
+      WorkspaceCalendar: {
+        type: "object",
+        required: [
+          "workspaceId",
+          "range",
+          "calendars",
+          "events",
+          "providerAvailability",
+        ],
+        additionalProperties: false,
+        properties: {
+          workspaceId: { type: "string", minLength: 3, maxLength: 128 },
+          range: {
+            type: "object",
+            required: ["from", "to"],
+            additionalProperties: false,
+            properties: {
+              from: { type: "string", format: "date-time" },
+              to: { type: "string", format: "date-time" },
+            },
+          },
+          calendars: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Calendar" },
+          },
+          events: {
+            type: "array",
+            items: { $ref: "#/components/schemas/CalendarEvent" },
+          },
+          providerAvailability: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["provider", "label", "state", "message"],
+              properties: {
+                provider: {
+                  type: "string",
+                  enum: ["google_calendar", "microsoft_outlook_calendar"],
+                },
+                label: { type: "string" },
+                state: {
+                  type: "string",
+                  enum: ["not_configured", "available", "connected"],
+                },
+                message: { type: "string" },
+              },
+            },
+          },
         },
       },
       WorkspaceCreation: {

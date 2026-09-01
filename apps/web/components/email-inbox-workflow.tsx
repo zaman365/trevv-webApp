@@ -33,6 +33,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import {
   emailProvider,
@@ -44,7 +45,7 @@ import {
 import { InboxWorkflow, type EmailInboxAction } from "./inbox-workflow";
 import { CapabilityNotice } from "./capability-status";
 
-type InboxArea = "email" | "actionable";
+type InboxArea = "email" | "actionable" | "captured";
 type MailFolder = "inbox" | "starred" | "sent" | "drafts" | "archive" | "trash";
 type ComposeMode = "new" | "reply" | "forward";
 
@@ -282,10 +283,14 @@ function getEmailAccountsSnapshot() {
 
 export function InboxExperience({
   initialArea = "actionable",
+  capturedWork,
 }: {
   initialArea?: InboxArea;
+  capturedWork?: ReactNode;
 }) {
-  const [area, setArea] = useState<InboxArea>(initialArea);
+  const [area, setArea] = useState<InboxArea>(
+    initialArea === "captured" && !capturedWork ? "actionable" : initialArea,
+  );
   const [promotedMessages, setPromotedMessages] = useState<EmailInboxAction[]>(
     [],
   );
@@ -335,16 +340,30 @@ export function InboxExperience({
           Workspace Actionable
           <b>{4 + promotedMessages.length}</b>
         </button>
+        {capturedWork ? (
+          <button
+            role="tab"
+            aria-selected={area === "captured"}
+            className={area === "captured" ? "active" : ""}
+            onClick={() => setArea("captured")}
+          >
+            <Inbox size={16} />
+            Captured work
+            <b>Live</b>
+          </button>
+        ) : null}
         <span>
-          Fictional email stays separate; promote a sample message to explore
-          tracked Workspace work.
+          Email preview, Workspace actions, and durable capture remain separate
+          but available in one Inbox.
         </span>
       </div>
       <div role="tabpanel">
         {area === "email" ? (
           <EmailInboxWorkflow onPromote={promoteMessage} />
-        ) : (
+        ) : area === "actionable" ? (
           <InboxWorkflow emailActions={promotedMessages} />
+        ) : (
+          capturedWork
         )}
       </div>
     </div>

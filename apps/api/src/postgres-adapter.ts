@@ -1,6 +1,8 @@
 import type {
   AttentionSignalDto,
   BoardDto,
+  CalendarDto,
+  CalendarEventDto,
   CollaborationEventBatch,
   CollaborationUserDto,
   DataLifecycleRequestDto,
@@ -18,6 +20,7 @@ import type {
   WorkItemDto,
   WorkspaceSnapshotDto,
   WorkspaceDto,
+  WorkspaceCalendarDto,
 } from "@founderhq/api-contract";
 import { teamFeatureCapabilitiesForPreset } from "@founderhq/api-contract";
 import type {
@@ -1088,6 +1091,135 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       return { value: toBoardDto(result.value), replayed: result.replayed };
     },
 
+    async getWorkspaceCalendar(context, workspaceId, range) {
+      requireWorkspaceAccess(context.access, "read", workspaceId);
+      const repositories = scoped(options.repositories, context);
+      const [calendars, events] = await Promise.all([
+        repositories.calendars.list(workspaceId),
+        repositories.calendarEvents.list({ workspaceId, ...range }),
+      ]);
+      return {
+        workspaceId,
+        range: {
+          from: range.from.toISOString(),
+          to: range.to.toISOString(),
+        },
+        calendars: calendars.map(toCalendarDto),
+        events: events.map((event) =>
+          toCalendarEventDto(
+            event,
+            calendars.find((calendar) => calendar.id === event.calendarId)
+              ?.readOnly ?? true,
+          ),
+        ),
+        providerAvailability: [
+          {
+            provider: "google_calendar",
+            label: "Google Calendar",
+            state: "not_configured",
+            message:
+              "Secure OAuth credentials and calendar sync are not configured for this release.",
+          },
+          {
+            provider: "microsoft_outlook_calendar",
+            label: "Microsoft Outlook",
+            state: "not_configured",
+            message:
+              "Secure OAuth credentials and calendar sync are not configured for this release.",
+          },
+        ],
+      } satisfies WorkspaceCalendarDto;
+    },
+
+    async createCalendarEvent(context, workspaceId, input) {
+      requireWorkspaceAccess(context.access, "create", workspaceId);
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).calendarEvents.create(
+        {
+          workspaceId,
+          calendarId: input.calendarId,
+          kind: input.kind,
+          title: input.title,
+          description: input.description,
+          startAt: new Date(input.startAt),
+          endAt: new Date(input.endAt),
+          allDay: input.allDay,
+          timezone: input.timezone,
+          location: input.location,
+          ...(input.meetingUrl ? { meetingUrl: input.meetingUrl } : {}),
+          attendees: input.attendees,
+          ...(input.recurrenceRule
+            ? { recurrenceRule: input.recurrenceRule }
+            : {}),
+        },
+        mutation(context),
+      );
+      return {
+        value: toCalendarEventDto(result.value, false),
+        replayed: result.replayed,
+      };
+    },
+
+    async updateCalendarEvent(context, eventId, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const current = await repositories.calendarEvents.get(eventId);
+      requireWorkspaceAccess(context.access, "update", current.workspaceId);
+      const result = await repositories.calendarEvents.update(
+        eventId,
+        expectedVersion,
+        {
+          ...(input.calendarId !== undefined
+            ? { calendarId: input.calendarId }
+            : {}),
+          ...(input.kind !== undefined ? { kind: input.kind } : {}),
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.startAt !== undefined
+            ? { startAt: new Date(input.startAt) }
+            : {}),
+          ...(input.endAt !== undefined
+            ? { endAt: new Date(input.endAt) }
+            : {}),
+          ...(input.allDay !== undefined ? { allDay: input.allDay } : {}),
+          ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
+          ...(input.location !== undefined ? { location: input.location } : {}),
+          ...(input.meetingUrl !== undefined
+            ? { meetingUrl: input.meetingUrl }
+            : {}),
+          ...(input.attendees !== undefined
+            ? { attendees: input.attendees }
+            : {}),
+          ...(input.recurrenceRule !== undefined
+            ? { recurrenceRule: input.recurrenceRule }
+            : {}),
+        },
+        mutation(context),
+      );
+      return {
+        value: toCalendarEventDto(result.value, false),
+        replayed: result.replayed,
+      };
+    },
+
+    async deleteCalendarEvent(context, eventId, expectedVersion) {
+      const repositories = scoped(options.repositories, context);
+      const current = await repositories.calendarEvents.get(eventId);
+      requireWorkspaceAccess(context.access, "update", current.workspaceId);
+      const result = await repositories.calendarEvents.remove(
+        eventId,
+        expectedVersion,
+        mutation(context),
+      );
+      return {
+        value: toCalendarEventDto(result.value, false),
+        replayed: result.replayed,
+      };
+    },
+
     async listInbox(context) {
       return (await scoped(options.repositories, context).inbox.list()).map(
         toInboxItemDto,
@@ -2083,6 +2215,109 @@ function toBoardDto(
     createdAt: board.createdAt.toISOString(),
     updatedAt: board.updatedAt.toISOString(),
   };
+}
+
+function toCalendarDto(
+  calendar: Awaited<
+    ReturnType<OrganizationScopedRepositories["calendars"]["get"]>
+  >,
+): CalendarDto {
+  return {
+    id: calendar.id,
+    workspaceId: calendar.workspaceId,
+    provider: calendarProvider(calendar.provider),
+    name: calendar.name,
+    color: calendar.color,
+    isPrimary: calendar.isPrimary,
+    visibleByDefault: calendar.visibleByDefault,
+    readOnly: calendar.readOnly,
+    connectionState: calendarConnectionState(calendar.connectionState),
+    syncState: calendarSyncState(calendar.syncState),
+    ...(calendar.lastSyncedAt
+      ? { lastSyncedAt: calendar.lastSyncedAt.toISOString() }
+      : {}),
+    version: calendar.version,
+  };
+}
+
+function toCalendarEventDto(
+  event: Awaited<
+    ReturnType<OrganizationScopedRepositories["calendarEvents"]["get"]>
+  >,
+  readOnly: boolean,
+): CalendarEventDto {
+  const attendees = Array.isArray(event.attendees)
+    ? event.attendees.filter(
+        (attendee): attendee is string => typeof attendee === "string",
+      )
+    : [];
+  return {
+    id: event.id,
+    workspaceId: event.workspaceId,
+    calendarId: event.calendarId,
+    source: calendarProvider(event.source),
+    kind: calendarEventKind(event.kind),
+    title: event.title,
+    description: event.description,
+    startAt: event.startAt.toISOString(),
+    endAt: event.endAt.toISOString(),
+    allDay: event.allDay,
+    timezone: event.timezone,
+    location: event.location,
+    ...(event.meetingUrl ? { meetingUrl: event.meetingUrl } : {}),
+    attendees,
+    ...(event.recurrenceRule ? { recurrenceRule: event.recurrenceRule } : {}),
+    ...(event.linkedWorkItemId
+      ? { linkedWorkItemId: event.linkedWorkItemId }
+      : {}),
+    status: calendarEventStatus(event.status),
+    readOnly,
+    version: event.version,
+    createdAt: event.createdAt.toISOString(),
+    updatedAt: event.updatedAt.toISOString(),
+  };
+}
+
+function calendarProvider(value: string): CalendarDto["provider"] {
+  if (
+    value === "trevv" ||
+    value === "google_calendar" ||
+    value === "microsoft_outlook_calendar"
+  )
+    return value;
+  throw invalidManagementValue("calendar provider");
+}
+
+function calendarConnectionState(
+  value: string,
+): CalendarDto["connectionState"] {
+  if (
+    value === "native" ||
+    value === "disconnected" ||
+    value === "connected" ||
+    value === "reauthorization_required" ||
+    value === "error"
+  )
+    return value;
+  throw invalidManagementValue("calendar connection state");
+}
+
+function calendarSyncState(value: string): CalendarDto["syncState"] {
+  if (value === "idle" || value === "syncing" || value === "error")
+    return value;
+  throw invalidManagementValue("calendar sync state");
+}
+
+function calendarEventKind(value: string): CalendarEventDto["kind"] {
+  if (value === "event" || value === "meeting" || value === "focus")
+    return value;
+  throw invalidManagementValue("calendar event kind");
+}
+
+function calendarEventStatus(value: string): CalendarEventDto["status"] {
+  if (value === "confirmed" || value === "tentative" || value === "cancelled")
+    return value;
+  throw invalidManagementValue("calendar event status");
 }
 
 function toInboxItemDto(item: InboxItemProjection): InboxItemDto {

@@ -34,6 +34,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   lte,
   ne,
   or,
@@ -47,6 +48,7 @@ import {
   attentionSignals,
   auditLogs,
   boards,
+  calendarEvents,
   collaborationEvents,
   comments,
   conversationMessages,
@@ -74,6 +76,7 @@ import {
   workspaceSnapshots,
   workspaceUpdates,
   workspaceMembers,
+  workspaceCalendars,
   workspaces,
   teams,
   teamMembers,
@@ -455,6 +458,37 @@ export interface CreateBoardInput {
   endDate?: string;
 }
 
+export interface CreateCalendarEventInput {
+  workspaceId: string;
+  calendarId: string;
+  kind: "event" | "meeting" | "focus";
+  title: string;
+  description?: string;
+  startAt: Date;
+  endAt: Date;
+  allDay?: boolean;
+  timezone: string;
+  location?: string;
+  meetingUrl?: string;
+  attendees?: string[];
+  recurrenceRule?: string;
+}
+
+export interface UpdateCalendarEventInput {
+  calendarId?: string;
+  kind?: "event" | "meeting" | "focus";
+  title?: string;
+  description?: string;
+  startAt?: Date;
+  endAt?: Date;
+  allDay?: boolean;
+  timezone?: string;
+  location?: string;
+  meetingUrl?: string | null;
+  attendees?: string[];
+  recurrenceRule?: string | null;
+}
+
 export interface UpdateBoardInput {
   name?: string;
   description?: string;
@@ -660,6 +694,35 @@ export interface OrganizationScopedRepositories {
       input: UpdateBoardInput,
       context: MutationContext,
     ) => Promise<MutationResult<typeof boards.$inferSelect>>;
+  };
+  calendars: {
+    list: (
+      workspaceId: string,
+    ) => Promise<Array<typeof workspaceCalendars.$inferSelect>>;
+    get: (id: string) => Promise<typeof workspaceCalendars.$inferSelect>;
+  };
+  calendarEvents: {
+    list: (filters: {
+      workspaceId: string;
+      from: Date;
+      to: Date;
+    }) => Promise<Array<typeof calendarEvents.$inferSelect>>;
+    get: (id: string) => Promise<typeof calendarEvents.$inferSelect>;
+    create: (
+      input: CreateCalendarEventInput,
+      context: MutationContext,
+    ) => Promise<MutationResult<typeof calendarEvents.$inferSelect>>;
+    update: (
+      id: string,
+      expectedVersion: number,
+      input: UpdateCalendarEventInput,
+      context: MutationContext,
+    ) => Promise<MutationResult<typeof calendarEvents.$inferSelect>>;
+    remove: (
+      id: string,
+      expectedVersion: number,
+      context: MutationContext,
+    ) => Promise<MutationResult<typeof calendarEvents.$inferSelect>>;
   };
   workItems: {
     list: (filters?: {
@@ -1048,6 +1111,81 @@ function createScopedRepositories(
     return getActiveBoard(database, scope.organizationId, id);
   };
 
+  const listCalendars = async (workspaceId: string) => {
+    await assertWorkspace(database, scope.organizationId, workspaceId);
+    return database
+      .select()
+      .from(workspaceCalendars)
+      .where(
+        and(
+          eq(workspaceCalendars.organizationId, scope.organizationId),
+          eq(workspaceCalendars.workspaceId, workspaceId),
+          isNull(workspaceCalendars.archivedAt),
+          isNull(workspaceCalendars.deletedAt),
+        ),
+      )
+      .orderBy(
+        desc(workspaceCalendars.isPrimary),
+        asc(workspaceCalendars.name),
+      );
+  };
+
+  const getCalendar = async (id: string) => {
+    const [calendar] = await database
+      .select()
+      .from(workspaceCalendars)
+      .where(
+        and(
+          eq(workspaceCalendars.organizationId, scope.organizationId),
+          eq(workspaceCalendars.id, id),
+          isNull(workspaceCalendars.archivedAt),
+          isNull(workspaceCalendars.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!calendar) throw notFound();
+    return calendar;
+  };
+
+  const listCalendarEvents = async (filters: {
+    workspaceId: string;
+    from: Date;
+    to: Date;
+  }) => {
+    await assertWorkspace(database, scope.organizationId, filters.workspaceId);
+    return database
+      .select()
+      .from(calendarEvents)
+      .where(
+        and(
+          eq(calendarEvents.organizationId, scope.organizationId),
+          eq(calendarEvents.workspaceId, filters.workspaceId),
+          lt(calendarEvents.startAt, filters.to),
+          gt(calendarEvents.endAt, filters.from),
+          isNull(calendarEvents.archivedAt),
+          isNull(calendarEvents.deletedAt),
+        ),
+      )
+      .orderBy(asc(calendarEvents.startAt), asc(calendarEvents.id));
+  };
+
+  const getCalendarEvent = async (id: string) => {
+    const [event] = await database
+      .select()
+      .from(calendarEvents)
+      .where(
+        and(
+          eq(calendarEvents.organizationId, scope.organizationId),
+          eq(calendarEvents.id, id),
+          isNull(calendarEvents.archivedAt),
+          isNull(calendarEvents.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!event) throw notFound();
+    return event;
+  };
+
   const listWorkItemRecords = async (filters?: {
     workspaceId?: string;
     boardId?: string;
@@ -1272,6 +1410,33 @@ function createScopedRepositories(
       update: (id, input, context) =>
         runInTransaction((transaction) =>
           updateBoard(transaction, scope, id, input, context),
+        ),
+    },
+    calendars: {
+      list: listCalendars,
+      get: getCalendar,
+    },
+    calendarEvents: {
+      list: listCalendarEvents,
+      get: getCalendarEvent,
+      create: (input, context) =>
+        runInTransaction((transaction) =>
+          createCalendarEvent(transaction, scope, input, context),
+        ),
+      update: (id, expectedVersion, input, context) =>
+        runInTransaction((transaction) =>
+          updateCalendarEvent(
+            transaction,
+            scope,
+            id,
+            expectedVersion,
+            input,
+            context,
+          ),
+        ),
+      remove: (id, expectedVersion, context) =>
+        runInTransaction((transaction) =>
+          removeCalendarEvent(transaction, scope, id, expectedVersion, context),
         ),
     },
     workItems: {
@@ -3942,6 +4107,22 @@ async function createWorkspace(
         updatedAt: now,
       })),
     );
+    await transaction.insert(workspaceCalendars).values({
+      id: crypto.randomUUID(),
+      organizationId: scope.organizationId,
+      workspaceId: id,
+      ownerUserId: scope.userId,
+      provider: "trevv",
+      name: `${input.name} calendar`,
+      color: input.accentColor,
+      isPrimary: true,
+      visibleByDefault: true,
+      readOnly: false,
+      connectionState: "native",
+      syncState: "idle",
+      createdAt: now,
+      updatedAt: now,
+    });
     await writeAuditAndOutbox(transaction, scope, {
       action: "workspace.created",
       aggregateType: "workspace",
@@ -5951,6 +6132,278 @@ function dateInTimezone(value: Date, timezone: string): string {
       cause,
     );
   }
+}
+
+async function requireWritableCalendar(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  calendarId: string,
+  workspaceId?: string,
+) {
+  const [calendar] = await database
+    .select()
+    .from(workspaceCalendars)
+    .where(
+      and(
+        eq(workspaceCalendars.organizationId, scope.organizationId),
+        eq(workspaceCalendars.id, calendarId),
+        workspaceId
+          ? eq(workspaceCalendars.workspaceId, workspaceId)
+          : undefined,
+        eq(workspaceCalendars.provider, "trevv"),
+        eq(workspaceCalendars.readOnly, false),
+        isNull(workspaceCalendars.archivedAt),
+        isNull(workspaceCalendars.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!calendar) throw notFound();
+  return calendar;
+}
+
+async function createCalendarEvent(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  input: CreateCalendarEventInput,
+  context: MutationContext,
+): Promise<MutationResult<typeof calendarEvents.$inferSelect>> {
+  return withIdempotency(
+    transaction,
+    scope,
+    context,
+    input,
+    async () => {
+      await assertActorMembership(transaction, scope);
+      const calendar = await requireWritableCalendar(
+        transaction,
+        scope,
+        input.calendarId,
+        input.workspaceId,
+      );
+      if (input.endAt <= input.startAt)
+        throw new RepositoryError(
+          "constraint_conflict",
+          "The event end must be after its start.",
+        );
+      const now = context.now ?? new Date();
+      const id = crypto.randomUUID();
+      const [created] = await transaction
+        .insert(calendarEvents)
+        .values({
+          id,
+          organizationId: scope.organizationId,
+          workspaceId: calendar.workspaceId,
+          calendarId: calendar.id,
+          creatorId: scope.userId,
+          source: "trevv",
+          kind: input.kind,
+          title: input.title,
+          description: input.description ?? "",
+          startAt: input.startAt,
+          endAt: input.endAt,
+          allDay: input.allDay ?? false,
+          timezone: input.timezone,
+          location: input.location ?? "",
+          meetingUrl: input.meetingUrl,
+          attendees: input.attendees ?? [],
+          recurrenceRule: input.recurrenceRule,
+          status: "confirmed",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!created)
+        throw new RepositoryError(
+          "repository_unavailable",
+          "The calendar event could not be created.",
+        );
+      await writeAuditAndOutbox(transaction, scope, {
+        action: "calendar_event.created",
+        aggregateType: "calendar_event",
+        aggregateId: id,
+        eventType: "calendar.event.created",
+        payload: { workspaceId: calendar.workspaceId, calendarId: calendar.id },
+        now,
+      });
+      return created;
+    },
+    (value) =>
+      restoreRowWithDates<typeof calendarEvents.$inferSelect>(value, [
+        ...standardDateFields,
+        "startAt",
+        "endAt",
+        "externalUpdatedAt",
+      ]),
+  );
+}
+
+async function updateCalendarEvent(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  id: string,
+  expectedVersion: number,
+  input: UpdateCalendarEventInput,
+  context: MutationContext,
+): Promise<MutationResult<typeof calendarEvents.$inferSelect>> {
+  return withIdempotency(
+    transaction,
+    scope,
+    context,
+    { id, expectedVersion, ...input },
+    async () => {
+      await assertActorMembership(transaction, scope);
+      const [existing] = await transaction
+        .select()
+        .from(calendarEvents)
+        .where(
+          and(
+            eq(calendarEvents.organizationId, scope.organizationId),
+            eq(calendarEvents.id, id),
+            isNull(calendarEvents.archivedAt),
+            isNull(calendarEvents.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!existing) throw notFound();
+      if (existing.version !== expectedVersion)
+        throw new RepositoryError("version_conflict", "The event has changed.");
+      const calendar = await requireWritableCalendar(
+        transaction,
+        scope,
+        input.calendarId ?? existing.calendarId,
+        existing.workspaceId,
+      );
+      const startAt = input.startAt ?? existing.startAt;
+      const endAt = input.endAt ?? existing.endAt;
+      if (endAt <= startAt)
+        throw new RepositoryError(
+          "constraint_conflict",
+          "The event end must be after its start.",
+        );
+      const now = context.now ?? new Date();
+      const [updated] = await transaction
+        .update(calendarEvents)
+        .set({
+          calendarId: calendar.id,
+          kind: input.kind,
+          title: input.title,
+          description: input.description,
+          startAt: input.startAt,
+          endAt: input.endAt,
+          allDay: input.allDay,
+          timezone: input.timezone,
+          location: input.location,
+          meetingUrl: input.meetingUrl,
+          attendees: input.attendees,
+          recurrenceRule: input.recurrenceRule,
+          version: sql`${calendarEvents.version} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(calendarEvents.organizationId, scope.organizationId),
+            eq(calendarEvents.id, id),
+            eq(calendarEvents.version, expectedVersion),
+          ),
+        )
+        .returning();
+      if (!updated)
+        throw new RepositoryError("version_conflict", "The event has changed.");
+      await writeAuditAndOutbox(transaction, scope, {
+        action: "calendar_event.updated",
+        aggregateType: "calendar_event",
+        aggregateId: id,
+        eventType: "calendar.event.updated",
+        payload: { workspaceId: existing.workspaceId, calendarId: calendar.id },
+        now,
+      });
+      return updated;
+    },
+    (value) =>
+      restoreRowWithDates<typeof calendarEvents.$inferSelect>(value, [
+        ...standardDateFields,
+        "startAt",
+        "endAt",
+        "externalUpdatedAt",
+      ]),
+  );
+}
+
+async function removeCalendarEvent(
+  transaction: TrevvDatabase,
+  scope: OrganizationScope,
+  id: string,
+  expectedVersion: number,
+  context: MutationContext,
+): Promise<MutationResult<typeof calendarEvents.$inferSelect>> {
+  return withIdempotency(
+    transaction,
+    scope,
+    context,
+    { id, expectedVersion },
+    async () => {
+      await assertActorMembership(transaction, scope);
+      const [existing] = await transaction
+        .select()
+        .from(calendarEvents)
+        .where(
+          and(
+            eq(calendarEvents.organizationId, scope.organizationId),
+            eq(calendarEvents.id, id),
+            isNull(calendarEvents.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!existing) throw notFound();
+      await requireWritableCalendar(
+        transaction,
+        scope,
+        existing.calendarId,
+        existing.workspaceId,
+      );
+      if (existing.version !== expectedVersion)
+        throw new RepositoryError("version_conflict", "The event has changed.");
+      const now = context.now ?? new Date();
+      const [removed] = await transaction
+        .update(calendarEvents)
+        .set({
+          deletedAt: now,
+          version: sql`${calendarEvents.version} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(calendarEvents.organizationId, scope.organizationId),
+            eq(calendarEvents.id, id),
+            eq(calendarEvents.version, expectedVersion),
+          ),
+        )
+        .returning();
+      if (!removed)
+        throw new RepositoryError("version_conflict", "The event has changed.");
+      await writeAuditAndOutbox(transaction, scope, {
+        action: "calendar_event.deleted",
+        aggregateType: "calendar_event",
+        aggregateId: id,
+        eventType: "calendar.event.deleted",
+        payload: {
+          workspaceId: existing.workspaceId,
+          calendarId: existing.calendarId,
+        },
+        now,
+      });
+      return removed;
+    },
+    (value) =>
+      restoreRowWithDates<typeof calendarEvents.$inferSelect>(value, [
+        ...standardDateFields,
+        "startAt",
+        "endAt",
+        "externalUpdatedAt",
+      ]),
+  );
 }
 
 async function createWorkItem(

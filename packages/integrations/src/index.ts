@@ -1,6 +1,7 @@
 export type ProviderKey =
   | "google_drive"
   | "google_calendar"
+  | "microsoft_outlook_calendar"
   | "figma"
   | "github"
   | "canva"
@@ -67,6 +68,7 @@ export interface EncryptedProviderCredential {
 
 export const privateBetaProviderCatalog = [
   "google_calendar",
+  "microsoft_outlook_calendar",
   "github",
   "slack",
   "google_drive",

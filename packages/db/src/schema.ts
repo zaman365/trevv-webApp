@@ -625,6 +625,169 @@ export const workItems = pgTable(
   ],
 );
 
+export const workspaceCalendars = pgTable(
+  "workspace_calendars",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerUserId: text("owner_user_id").references(() => users.id),
+    provider: text("provider").notNull().default("trevv"),
+    externalCalendarId: text("external_calendar_id"),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#5b57d9"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    visibleByDefault: boolean("visible_by_default").notNull().default(true),
+    readOnly: boolean("read_only").notNull().default(false),
+    connectionState: text("connection_state").notNull().default("native"),
+    syncState: text("sync_state").notNull().default("idle"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    version: integer("version").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workspace_calendars_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    uniqueIndex("workspace_calendars_org_workspace_id_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.id,
+    ),
+    uniqueIndex("workspace_calendars_primary_unique")
+      .on(table.organizationId, table.workspaceId)
+      .where(
+        sql`${table.provider} = 'trevv' and ${table.isPrimary} = true and ${table.deletedAt} is null`,
+      ),
+    uniqueIndex("workspace_calendars_external_unique")
+      .on(
+        table.organizationId,
+        table.workspaceId,
+        table.provider,
+        table.externalCalendarId,
+      )
+      .where(
+        sql`${table.externalCalendarId} is not null and ${table.deletedAt} is null`,
+      ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "workspace_calendars_org_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.ownerUserId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "workspace_calendars_org_owner_membership_fk",
+    }),
+    index("workspace_calendars_workspace_idx").on(
+      table.organizationId,
+      table.workspaceId,
+    ),
+  ],
+);
+
+export const calendarEvents = pgTable(
+  "calendar_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    calendarId: text("calendar_id")
+      .notNull()
+      .references(() => workspaceCalendars.id, { onDelete: "cascade" }),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => users.id),
+    source: text("source").notNull().default("trevv"),
+    externalEventId: text("external_event_id"),
+    kind: text("kind").notNull().default("event"),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+    endAt: timestamp("end_at", { withTimezone: true }).notNull(),
+    allDay: boolean("all_day").notNull().default(false),
+    timezone: text("timezone").notNull().default("UTC"),
+    location: text("location").notNull().default(""),
+    meetingUrl: text("meeting_url"),
+    attendees: jsonb("attendees").notNull().default([]),
+    recurrenceRule: text("recurrence_rule"),
+    linkedWorkItemId: text("linked_work_item_id").references(
+      () => workItems.id,
+      { onDelete: "set null" },
+    ),
+    status: text("status").notNull().default("confirmed"),
+    externalUpdatedAt: timestamp("external_updated_at", { withTimezone: true }),
+    version: integer("version").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("calendar_events_org_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+    uniqueIndex("calendar_events_external_unique")
+      .on(table.organizationId, table.calendarId, table.externalEventId)
+      .where(
+        sql`${table.externalEventId} is not null and ${table.deletedAt} is null`,
+      ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "calendar_events_org_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.calendarId],
+      foreignColumns: [
+        workspaceCalendars.organizationId,
+        workspaceCalendars.workspaceId,
+        workspaceCalendars.id,
+      ],
+      name: "calendar_events_org_workspace_calendar_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.creatorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "calendar_events_org_creator_membership_fk",
+    }),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.linkedWorkItemId,
+      ],
+      foreignColumns: [
+        workItems.organizationId,
+        workItems.workspaceId,
+        workItems.id,
+      ],
+      name: "calendar_events_org_workspace_work_item_fk",
+    }),
+    check(
+      "calendar_events_time_range_check",
+      sql`${table.endAt} > ${table.startAt}`,
+    ),
+    index("calendar_events_workspace_time_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.startAt,
+    ),
+    index("calendar_events_calendar_time_idx").on(
+      table.organizationId,
+      table.calendarId,
+      table.startAt,
+    ),
+  ],
+);
+
 export const itemAssignees = pgTable(
   "item_assignees",
   {

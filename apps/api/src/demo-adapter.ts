@@ -1,5 +1,7 @@
 import type {
   BoardDto,
+  CalendarDto,
+  CalendarEventDto,
   AttentionSignalDto,
   InboxItemDto,
   PortfolioDto,
@@ -88,6 +90,25 @@ export function createDemoAdapter(): DemoAdapter {
       },
     ]),
   );
+  const calendarStore = new Map<string, CalendarDto>(
+    demoWorkspaces.map((workspace) => [
+      `calendar-${workspace.id}`,
+      {
+        id: `calendar-${workspace.id}`,
+        workspaceId: workspace.id,
+        provider: "trevv",
+        name: `${workspace.name} calendar`,
+        color: workspace.accent,
+        isPrimary: true,
+        visibleByDefault: true,
+        readOnly: false,
+        connectionState: "native",
+        syncState: "idle",
+        version: 0,
+      },
+    ]),
+  );
+  const calendarEventStore = new Map<string, CalendarEventDto>();
   const inboxStore = new Map<string, InboxItemDto>();
   const evidenceStore = new Map<string, WorkItemEvidenceDto[]>();
   const historyStore = new Map<string, WorkItemHistoryEntryDto[]>();
@@ -484,6 +505,144 @@ export function createDemoAdapter(): DemoAdapter {
       throw demoUnavailable(
         "Board creation is available only in the persistent live preview.",
       );
+    },
+
+    async getWorkspaceCalendar(context, workspaceId, range) {
+      requireAccess(context.access, "read", "workspace", {
+        organizationId: "org-demo",
+        workspaceId,
+      });
+      const calendars = [...calendarStore.values()].filter(
+        (calendar) => calendar.workspaceId === workspaceId,
+      );
+      return {
+        workspaceId,
+        range: {
+          from: range.from.toISOString(),
+          to: range.to.toISOString(),
+        },
+        calendars,
+        events: [...calendarEventStore.values()].filter(
+          (event) =>
+            event.workspaceId === workspaceId &&
+            event.startAt < range.to.toISOString() &&
+            event.endAt > range.from.toISOString(),
+        ),
+        providerAvailability: [
+          {
+            provider: "google_calendar",
+            label: "Google Calendar",
+            state: "not_configured",
+            message: "Secure OAuth setup is required before connecting.",
+          },
+          {
+            provider: "microsoft_outlook_calendar",
+            label: "Microsoft Outlook",
+            state: "not_configured",
+            message: "Secure OAuth setup is required before connecting.",
+          },
+        ],
+      };
+    },
+
+    async createCalendarEvent(context, workspaceId, input) {
+      return withIdempotency(idempotencyStore, context, () => {
+        requireAccess(context.access, "create", "workspace", {
+          organizationId: "org-demo",
+          workspaceId,
+        });
+        const calendar = calendarStore.get(input.calendarId);
+        if (!calendar || calendar.workspaceId !== workspaceId) throw notFound();
+        const event: CalendarEventDto = {
+          id: context.newId(),
+          workspaceId,
+          calendarId: calendar.id,
+          source: "trevv",
+          kind: input.kind,
+          title: input.title,
+          description: input.description,
+          startAt: input.startAt,
+          endAt: input.endAt,
+          allDay: input.allDay,
+          timezone: input.timezone,
+          location: input.location,
+          ...(input.meetingUrl ? { meetingUrl: input.meetingUrl } : {}),
+          attendees: input.attendees,
+          ...(input.recurrenceRule
+            ? { recurrenceRule: input.recurrenceRule }
+            : {}),
+          status: "confirmed",
+          readOnly: false,
+          version: 0,
+          createdAt: context.now.toISOString(),
+          updatedAt: context.now.toISOString(),
+        };
+        calendarEventStore.set(event.id, event);
+        return event;
+      });
+    },
+
+    async updateCalendarEvent(context, eventId, expectedVersion, input) {
+      return withIdempotency(idempotencyStore, context, () => {
+        const existing = calendarEventStore.get(eventId);
+        if (!existing) throw notFound();
+        requireAccess(context.access, "update", "workspace", {
+          organizationId: "org-demo",
+          workspaceId: existing.workspaceId,
+        });
+        if (existing.version !== expectedVersion)
+          throw new DataPlaneError(
+            "version_conflict",
+            "The event has changed.",
+          );
+        const updated: CalendarEventDto = {
+          ...existing,
+          ...(input.calendarId !== undefined
+            ? { calendarId: input.calendarId }
+            : {}),
+          ...(input.kind !== undefined ? { kind: input.kind } : {}),
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.startAt !== undefined ? { startAt: input.startAt } : {}),
+          ...(input.endAt !== undefined ? { endAt: input.endAt } : {}),
+          ...(input.allDay !== undefined ? { allDay: input.allDay } : {}),
+          ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
+          ...(input.location !== undefined ? { location: input.location } : {}),
+          ...(input.meetingUrl !== undefined
+            ? { meetingUrl: input.meetingUrl }
+            : {}),
+          ...(input.attendees !== undefined
+            ? { attendees: input.attendees }
+            : {}),
+          ...(input.recurrenceRule !== undefined
+            ? { recurrenceRule: input.recurrenceRule }
+            : {}),
+          version: existing.version + 1,
+          updatedAt: context.now.toISOString(),
+        };
+        calendarEventStore.set(eventId, updated);
+        return updated;
+      });
+    },
+
+    async deleteCalendarEvent(context, eventId, expectedVersion) {
+      return withIdempotency(idempotencyStore, context, () => {
+        const existing = calendarEventStore.get(eventId);
+        if (!existing) throw notFound();
+        requireAccess(context.access, "update", "workspace", {
+          organizationId: "org-demo",
+          workspaceId: existing.workspaceId,
+        });
+        if (existing.version !== expectedVersion)
+          throw new DataPlaneError(
+            "version_conflict",
+            "The event has changed.",
+          );
+        calendarEventStore.delete(eventId);
+        return { ...existing, version: existing.version + 1 };
+      });
     },
 
     async listInbox(context) {

@@ -43,6 +43,7 @@ import {
   type LiveDraftEnvelope,
 } from "@/lib/live-workflow-ui";
 import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
+import { InboxExperience } from "./email-inbox-workflow";
 import { LiveStateNotice } from "./live-state";
 import { LiveWorkspaceSettings } from "./live-workspace-settings";
 import { WorkspaceFrame } from "./workspace-frame";
@@ -86,7 +87,8 @@ const viewCopy: Record<
   },
   inbox: {
     title: "Inbox",
-    subtitle: "Durable capture before work is organized into a board.",
+    subtitle:
+      "Email preview, actionable requests, and durable capture in one workspace Inbox.",
     active: "inbox",
   },
   decisions: {
@@ -235,7 +237,15 @@ export function LiveWorkView({
             workspaceSlug={workspaceSlug}
           />
         ) : view === "inbox" ? (
-          <LiveInbox workspaceId={workspace.id} workspaceSlug={workspaceSlug} />
+          <InboxExperience
+            capturedWork={
+              <LiveInbox
+                workspaceId={workspace.id}
+                workspaceSlug={workspaceSlug}
+              />
+            }
+            initialArea="email"
+          />
         ) : view === "my-work" ? (
           <LiveMyWork items={items} workspaceSlug={workspaceSlug} />
         ) : view === "attention" ? (

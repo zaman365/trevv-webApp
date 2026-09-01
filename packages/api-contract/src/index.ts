@@ -536,6 +536,122 @@ export const workspaceCreationSchema = z.object({
   board: boardSchema,
 });
 
+export const calendarProviderSchema = z.enum([
+  "trevv",
+  "google_calendar",
+  "microsoft_outlook_calendar",
+]);
+export const calendarConnectionStateSchema = z.enum([
+  "native",
+  "disconnected",
+  "connected",
+  "reauthorization_required",
+  "error",
+]);
+export const calendarEventKindSchema = z.enum(["event", "meeting", "focus"]);
+
+export const calendarSchema = z.object({
+  id: idSchema,
+  workspaceId: idSchema,
+  provider: calendarProviderSchema,
+  name: z.string().min(1).max(160),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i),
+  isPrimary: z.boolean(),
+  visibleByDefault: z.boolean(),
+  readOnly: z.boolean(),
+  connectionState: calendarConnectionStateSchema,
+  syncState: z.enum(["idle", "syncing", "error"]),
+  lastSyncedAt: z.iso.datetime().optional(),
+  version: z.number().int().nonnegative(),
+});
+
+export const calendarEventSchema = z.object({
+  id: idSchema,
+  workspaceId: idSchema,
+  calendarId: idSchema,
+  source: calendarProviderSchema,
+  kind: calendarEventKindSchema,
+  title: z.string().min(1).max(300),
+  description: z.string().max(10_000),
+  startAt: z.iso.datetime(),
+  endAt: z.iso.datetime(),
+  allDay: z.boolean(),
+  timezone: z.string().min(1).max(120),
+  location: z.string().max(500),
+  meetingUrl: z.url().optional(),
+  attendees: z.array(z.email()).max(100),
+  recurrenceRule: z.string().max(500).optional(),
+  linkedWorkItemId: idSchema.optional(),
+  status: z.enum(["confirmed", "tentative", "cancelled"]),
+  readOnly: z.boolean(),
+  version: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const calendarProviderAvailabilitySchema = z.object({
+  provider: z.enum(["google_calendar", "microsoft_outlook_calendar"]),
+  label: z.string().min(1).max(80),
+  state: z.enum(["not_configured", "available", "connected"]),
+  message: z.string().min(1).max(500),
+});
+
+export const workspaceCalendarSchema = z.object({
+  workspaceId: idSchema,
+  range: z.object({ from: z.iso.datetime(), to: z.iso.datetime() }),
+  calendars: z.array(calendarSchema),
+  events: z.array(calendarEventSchema),
+  providerAvailability: z.array(calendarProviderAvailabilitySchema),
+});
+
+const calendarEventFieldsSchema = z.object({
+  calendarId: idSchema,
+  kind: calendarEventKindSchema,
+  title: z.string().trim().min(1).max(300),
+  description: z.string().trim().max(10_000),
+  startAt: z.iso.datetime(),
+  endAt: z.iso.datetime(),
+  allDay: z.boolean(),
+  timezone: z.string().trim().min(1).max(120),
+  location: z.string().trim().max(500),
+  meetingUrl: z.url().optional(),
+  attendees: z.array(z.email()).max(100),
+  recurrenceRule: z.string().trim().max(500).optional(),
+});
+
+function calendarEndsAfterStart(value: {
+  startAt?: string | undefined;
+  endAt?: string | undefined;
+}) {
+  return !value.startAt || !value.endAt || value.endAt > value.startAt;
+}
+
+export const createCalendarEventSchema = calendarEventFieldsSchema
+  .extend({
+    kind: calendarEventKindSchema.default("event"),
+    description: z.string().trim().max(10_000).default(""),
+    allDay: z.boolean().default(false),
+    location: z.string().trim().max(500).default(""),
+    attendees: z.array(z.email()).max(100).default([]),
+  })
+  .strict()
+  .refine(calendarEndsAfterStart, {
+    path: ["endAt"],
+    message: "The event end must be after its start.",
+  });
+
+export const updateCalendarEventSchema = calendarEventFieldsSchema
+  .partial()
+  .strict()
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    "Change at least one calendar-event field.",
+  )
+  .refine(calendarEndsAfterStart, {
+    path: ["endAt"],
+    message: "The event end must be after its start.",
+  });
+
 const workItemBaseSchema = z.object({
   id: idSchema,
   workspaceId: idSchema,
@@ -1714,6 +1830,16 @@ export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceSchema>;
 export type WorkspaceCreation = z.infer<typeof workspaceCreationSchema>;
 export type BoardDto = z.infer<typeof boardSchema>;
 export type CreateBoardInput = z.infer<typeof createBoardSchema>;
+export type CalendarProvider = z.infer<typeof calendarProviderSchema>;
+export type CalendarDto = z.infer<typeof calendarSchema>;
+export type CalendarEventDto = z.infer<typeof calendarEventSchema>;
+export type WorkspaceCalendarDto = z.infer<typeof workspaceCalendarSchema>;
+export type CreateCalendarEventInput = z.infer<
+  typeof createCalendarEventSchema
+>;
+export type UpdateCalendarEventInput = z.infer<
+  typeof updateCalendarEventSchema
+>;
 export type WorkItemDto = z.infer<typeof workItemSchema>;
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;

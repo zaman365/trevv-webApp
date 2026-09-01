@@ -14,6 +14,11 @@ const DashboardExperience = dynamic(
     ),
   { loading },
 );
+const CalendarExperience = dynamic(
+  () =>
+    import("./calendar-experience").then((module) => module.CalendarExperience),
+  { loading },
+);
 const FocusExperience = dynamic(
   () => import("./focus-experience").then((module) => module.FocusExperience),
   { loading },
@@ -108,6 +113,9 @@ export function WorkspaceModuleLoader({
   view: WorkspaceView;
   workspaceSlug: string;
 }) {
+  if (view === "calendar") {
+    return <CalendarExperience workspaceSlug={workspaceSlug} />;
+  }
   if (runtimeMode === "live") {
     if (view === "dashboard") {
       return <LiveWorkspaceOverview dashboard workspaceSlug={workspaceSlug} />;

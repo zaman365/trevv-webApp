@@ -7,6 +7,8 @@ import {
   attentionSignalSchema,
   blockWorkItemSchema,
   boardSchema,
+  calendarEventSchema,
+  workspaceCalendarSchema,
   captureInboxItemSchema,
   changeRadarSchema,
   collaborationEventBatchSchema,
@@ -18,6 +20,7 @@ import {
   convertedInboxItemSchema,
   createPrivacyRequestSchema,
   createBoardSchema,
+  createCalendarEventSchema,
   createConversationMessageSchema,
   createConversationSchema,
   createInvitationSchema,
@@ -58,6 +61,7 @@ import {
   teamSchema,
   resolveWorkItemSchema,
   updateInboxItemSchema,
+  updateCalendarEventSchema,
   updateItemSchema,
   updateMembershipSchema,
   updateRetentionPolicySchema,
@@ -85,6 +89,7 @@ import {
   type AssignWorkItemInput,
   type BlockWorkItemInput,
   type BoardDto,
+  type CalendarEventDto,
   type CaptureInboxItemInput,
   type ChangeRadarDto,
   type CollaborationEventBatch,
@@ -102,6 +107,7 @@ import {
   type CreateTeamInput,
   type CreateItemInput,
   type CreateBoardInput,
+  type CreateCalendarEventInput,
   type CreateWaitingInput,
   type CreateWorkspaceInput,
   type DecisionTransitionInput,
@@ -128,6 +134,7 @@ import {
   type TeamDto,
   type ResolveWorkItemInput,
   type UpdateInboxItemInput,
+  type UpdateCalendarEventInput,
   type UpdateItemInput,
   type UpdateMembershipInput,
   type UpdateRetentionPolicyInput,
@@ -146,6 +153,7 @@ import {
   type WorkspaceSnapshotDto,
   type WorkspaceCreation,
   type WorkspaceDetailDto,
+  type WorkspaceCalendarDto,
 } from "@founderhq/api-contract";
 
 export class TrevvApiError extends Error {
@@ -815,6 +823,70 @@ export function createApiClient({
         data: boardSchema.parse(response.body),
         ...mutationMetadata(response.response),
       };
+    },
+
+    workspaceCalendar: async (
+      workspaceId: string,
+      range: { from: string; to: string },
+    ): Promise<WorkspaceCalendarDto> => {
+      const query = new URLSearchParams(range);
+      return workspaceCalendarSchema.parse(
+        (
+          await request(
+            `/workspaces/${encodeURIComponent(workspaceId)}/calendar?${query}`,
+          )
+        ).body,
+      );
+    },
+
+    createCalendarEvent: async (
+      workspaceId: string,
+      input: CreateCalendarEventInput,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<CalendarEventDto>> => {
+      const response = await request(
+        `/workspaces/${encodeURIComponent(workspaceId)}/calendar/events`,
+        {
+          method: "POST",
+          headers: {
+            "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+          },
+          body: JSON.stringify(createCalendarEventSchema.parse(input)),
+        },
+      );
+      return parseVersionedMutation(response, calendarEventSchema);
+    },
+
+    updateCalendarEvent: async (
+      eventId: string,
+      input: UpdateCalendarEventInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<CalendarEventDto>> => {
+      const response = await request(
+        `/calendar/events/${encodeURIComponent(eventId)}`,
+        {
+          method: "PATCH",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(updateCalendarEventSchema.parse(input)),
+        },
+      );
+      return parseVersionedMutation(response, calendarEventSchema);
+    },
+
+    deleteCalendarEvent: async (
+      eventId: string,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<CalendarEventDto>> => {
+      const response = await request(
+        `/calendar/events/${encodeURIComponent(eventId)}`,
+        {
+          method: "DELETE",
+          headers: mutationHeaders(version, idempotencyKey),
+        },
+      );
+      return parseVersionedMutation(response, calendarEventSchema);
     },
 
     inbox: async (): Promise<InboxItemDto[]> =>

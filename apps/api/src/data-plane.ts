@@ -5,6 +5,7 @@ import type {
   AttentionAction,
   BlockWorkItemInput,
   BoardDto,
+  CalendarEventDto,
   CaptureInboxItemInput,
   ChangeRadarDto,
   CollaborationEventBatch,
@@ -14,6 +15,7 @@ import type {
   ConvertInboxItemInput,
   ConvertedInboxItem,
   CreateBoardInput,
+  CreateCalendarEventInput,
   CreateConversationInput,
   CreateConversationMessageInput,
   CreatePortfolioInput,
@@ -41,6 +43,7 @@ import type {
   TeamDirectoryDto,
   TeamDto,
   UpdateInboxItemInput,
+  UpdateCalendarEventInput,
   WaitingAction,
   WaitingStateDto,
   WeeklyReviewInput,
@@ -55,6 +58,7 @@ import type {
   WorkspaceCreation,
   WorkspaceSnapshotDto,
   WorkspaceDetailDto,
+  WorkspaceCalendarDto,
   WorkspaceDto,
   UpdateItemInput,
   UpdateTeamInput,
@@ -268,6 +272,27 @@ export interface DataPlane {
     context: ApiMutationContext,
     input: CreateBoardInput,
   ): Promise<MutationResult<BoardDto>>;
+  getWorkspaceCalendar(
+    context: ApiRequestContext,
+    workspaceId: string,
+    range: { from: Date; to: Date },
+  ): Promise<WorkspaceCalendarDto>;
+  createCalendarEvent(
+    context: ApiMutationContext,
+    workspaceId: string,
+    input: CreateCalendarEventInput,
+  ): Promise<MutationResult<CalendarEventDto>>;
+  updateCalendarEvent(
+    context: ApiMutationContext,
+    eventId: string,
+    expectedVersion: number,
+    input: UpdateCalendarEventInput,
+  ): Promise<MutationResult<CalendarEventDto>>;
+  deleteCalendarEvent(
+    context: ApiMutationContext,
+    eventId: string,
+    expectedVersion: number,
+  ): Promise<MutationResult<CalendarEventDto>>;
   listInbox(context: ApiRequestContext): Promise<InboxItemDto[]>;
   captureInboxItem(
     context: ApiMutationContext,

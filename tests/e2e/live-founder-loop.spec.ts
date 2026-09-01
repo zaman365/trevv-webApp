@@ -161,6 +161,13 @@ test.describe.serial("live founder operating loop", () => {
     capturedItemId = inboxRecord!.id;
 
     await page.goto(`/app/workspaces/${workspaceSlug}/inbox`);
+    await expect(
+      page.getByRole("tab", { name: /^Sample Email/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: /^Workspace Actionable/ }),
+    ).toBeVisible();
+    await page.getByRole("tab", { name: /^Captured work/ }).click();
     const inboxCard = page.getByTestId(`inbox-item-${capturedItemId}`);
     await expect(inboxCard).toContainText(capturedTitle);
     await inboxCard.getByRole("button", { name: "Mark done" }).click();

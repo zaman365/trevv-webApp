@@ -134,6 +134,13 @@
       "when": 1788254667117,
       "tag": "0018_black_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788288298041,
+      "tag": "0019_steady_wallop",
+      "breakpoints": true
     }
   ]
 }

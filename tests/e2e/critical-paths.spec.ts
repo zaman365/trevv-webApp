@@ -373,6 +373,10 @@ test("Inbox is actionable while Quick Capture remains separate", async ({
   page,
 }) => {
   await gotoCanonical(page, workspaceRoute("inbox"));
+  await page.getByRole("tab", { name: /^Sample Email/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Manage sample accounts" }),
+  ).toBeVisible();
   await page.getByRole("tab", { name: /^Workspace Actionable/ }).click();
   await expect(
     page.getByRole("heading", {

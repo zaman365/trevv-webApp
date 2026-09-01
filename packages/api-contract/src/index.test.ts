@@ -7,6 +7,7 @@ import {
   createPortfolioSchema,
   createConversationMessageSchema,
   createConversationSchema,
+  createCalendarEventSchema,
   createTeamSchema,
   createWaitingSchema,
   readRuntimeReleaseMetadata,
@@ -18,6 +19,7 @@ import {
   teamSchema,
   teamFeatureCapabilitiesForPreset,
   updateMessageResponseSchema,
+  updateCalendarEventSchema,
   updateWorkspaceSchema,
   versionTagEntityTagSchema,
   workspaceCreationSchema,
@@ -25,6 +27,40 @@ import {
 import { openApiDocument } from "./openapi";
 
 const timestamp = "2026-08-29T12:00:00.000Z";
+
+describe("workspace calendar contract", () => {
+  const validEvent = {
+    calendarId: "calendar-1",
+    title: "Planning review",
+    startAt: "2026-09-02T09:00:00.000Z",
+    endAt: "2026-09-02T10:00:00.000Z",
+    timezone: "Europe/Berlin",
+  };
+
+  it("normalizes a safe native event and rejects reversed time ranges", () => {
+    expect(createCalendarEventSchema.parse(validEvent)).toMatchObject({
+      kind: "event",
+      allDay: false,
+      attendees: [],
+    });
+    expect(
+      createCalendarEventSchema.safeParse({
+        ...validEvent,
+        endAt: "2026-09-02T08:00:00.000Z",
+      }).success,
+    ).toBe(false);
+    expect(updateCalendarEventSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("publishes the calendar read and mutation endpoints", () => {
+    for (const path of [
+      "/api/v1/workspaces/{workspaceId}/calendar",
+      "/api/v1/workspaces/{workspaceId}/calendar/events",
+      "/api/v1/calendar/events/{id}",
+    ] as const)
+      expect(openApiDocument.paths).toHaveProperty(path);
+  });
+});
 
 describe("runtime release metadata", () => {
   const valid = {

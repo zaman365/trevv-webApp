@@ -259,6 +259,23 @@ export const workerEventCatalog = {
     effect: "acknowledge_audit_only",
     reason: "Board metadata does not affect the current signal rules.",
   },
+  "calendar.event.created": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason:
+      "Native calendar events are complete when their transaction commits.",
+  },
+  "calendar.event.updated": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason: "Native calendar event changes need no asynchronous projection.",
+  },
+  "calendar.event.deleted": {
+    handler: "audit",
+    effect: "acknowledge_audit_only",
+    reason:
+      "Native calendar event deletion is durable in the source transaction.",
+  },
   "item.created": {
     handler: "attention",
     effect: "recompute_attention",

@@ -8,6 +8,7 @@ import {
   completeOnboardingSchema,
   convertInboxItemSchema,
   createBoardSchema,
+  createCalendarEventSchema,
   createConversationMessageSchema,
   createConversationSchema,
   createInvitationSchema,
@@ -28,6 +29,7 @@ import {
   setConversationParticipantSchema,
   setTeamMemberSchema,
   updateInboxItemSchema,
+  updateCalendarEventSchema,
   updateItemSchema,
   updateMessageResponseSchema,
   updateMembershipSchema,
@@ -1868,6 +1870,136 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     return context.json(result.value, 201);
   });
 
+  api.get(
+    "/api/v1/workspaces/:workspaceId/calendar",
+    zValidator(
+      "query",
+      z
+        .object({ from: z.iso.datetime(), to: z.iso.datetime() })
+        .refine(({ from, to }) => {
+          const duration = new Date(to).getTime() - new Date(from).getTime();
+          return duration > 0 && duration <= 366 * 86_400_000;
+        }, "Choose a calendar range of no more than one year."),
+      queryValidation("Choose a valid calendar range."),
+    ),
+    async (context) => {
+      const range = context.req.valid("query");
+      return context.json(
+        await dependencies.dataPlane.getWorkspaceCalendar(
+          requestContext(context, clock, idGenerator),
+          context.req.param("workspaceId"),
+          { from: new Date(range.from), to: new Date(range.to) },
+        ),
+      );
+    },
+  );
+
+  api.post(
+    "/api/v1/workspaces/:workspaceId/calendar/events",
+    async (context) => {
+      const parsed = createCalendarEventSchema.safeParse(
+        await context.req.json().catch(() => undefined),
+      );
+      if (!parsed.success)
+        return validationFailure(
+          context,
+          "Review the calendar event fields.",
+          parsed.error.flatten(),
+        );
+      const idempotency = readIdempotencyKey(context, true);
+      if (idempotency instanceof Response) return idempotency;
+      const workspaceId = context.req.param("workspaceId");
+      const result = await dependencies.dataPlane.createCalendarEvent(
+        await mutationContext(
+          context,
+          clock,
+          idGenerator,
+          "/api/v1/workspaces/:workspaceId/calendar/events",
+          { workspaceId, ...parsed.data },
+          idempotency,
+          201,
+        ),
+        workspaceId,
+        parsed.data,
+      );
+      setMutationHeaders(
+        context,
+        result.value.version,
+        idempotency,
+        result.replayed,
+      );
+      return context.json(result.value, 201);
+    },
+  );
+
+  api.patch("/api/v1/calendar/events/:id", async (context) => {
+    const parsed = updateCalendarEventSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the calendar event fields.",
+        parsed.error.flatten(),
+      );
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.updateCalendarEvent(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/calendar/events/:id",
+        { id, ...parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
+  api.delete("/api/v1/calendar/events/:id", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.deleteCalendarEvent(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/calendar/events/:id",
+        { id, action: "delete" },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
   api.get("/api/v1/inbox", async (context) =>
     context.json(
       await dependencies.dataPlane.listInbox(
@@ -2814,6 +2946,10 @@ export function createUnavailableLiveDependencies(): {
     listBoards: unavailable,
     getBoard: unavailable,
     createBoard: unavailable,
+    getWorkspaceCalendar: unavailable,
+    createCalendarEvent: unavailable,
+    updateCalendarEvent: unavailable,
+    deleteCalendarEvent: unavailable,
     listInbox: unavailable,
     captureInboxItem: unavailable,
     updateInboxItem: unavailable,

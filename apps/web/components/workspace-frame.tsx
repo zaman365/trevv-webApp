@@ -5,6 +5,7 @@ import {
   BookOpenText,
   Building2,
   ChartColumn,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
@@ -91,6 +92,7 @@ type ActivePage =
   | "home"
   | "portfolio"
   | "dashboard"
+  | "calendar"
   | "attention"
   | "myWork"
   | "inbox"
@@ -422,6 +424,7 @@ function WorkspaceChrome({
         ]
       : []),
     ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
+    ["calendar", "Calendar", scopedHref("calendar"), CalendarDays, undefined],
     [
       "attention",
       copy.nav.attention,
@@ -1125,6 +1128,13 @@ function WorkspaceChrome({
                         onClick={() => setUserMenuOpen(false)}
                       >
                         <Users size={14} /> Teams and access
+                      </Link>
+                      <Link
+                        href={scopedHref("calendar")}
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <CalendarDays size={14} /> Calendar and connections
                       </Link>
                     </>
                   )}
