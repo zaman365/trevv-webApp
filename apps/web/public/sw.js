@@ -1,5 +1,4 @@
-const CACHE_PREFIX = "trevv-";
-const STATIC_CACHE = "trevv-static-v5";
+const STATIC_CACHE = "trevv-static-v6";
 const OFFLINE_SHELL_URL = new URL(
   "/__trevv-offline-shell__",
   self.location.origin,
@@ -101,11 +100,7 @@ async function seedOfflineShell() {
 
 async function purgeManagedCaches({ restoreOfflineShell = true } = {}) {
   const keys = await caches.keys();
-  await Promise.all(
-    keys
-      .filter((key) => key.startsWith(CACHE_PREFIX))
-      .map((key) => caches.delete(key)),
-  );
+  await Promise.all(keys.map((key) => caches.delete(key)));
 
   if (restoreOfflineShell) await seedOfflineShell();
 }
@@ -122,9 +117,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter(
-              (key) => key.startsWith(CACHE_PREFIX) && key !== STATIC_CACHE,
-            )
+            .filter((key) => key !== STATIC_CACHE)
             .map((key) => caches.delete(key)),
         ),
       )
@@ -158,10 +151,10 @@ self.addEventListener("fetch", (event) => {
   // from Cache Storage.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(
-        async () =>
-          (await caches.match(OFFLINE_SHELL_URL)) ?? offlineResponse(),
-      ),
+      fetch(request).catch(async () => {
+        const cache = await caches.open(STATIC_CACHE);
+        return (await cache.match(OFFLINE_SHELL_URL)) ?? offlineResponse();
+      }),
     );
     return;
   }
@@ -173,12 +166,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then(async (cached) => {
+    caches.open(STATIC_CACHE).then(async (cache) => {
+      const cached = await cache.match(request);
       if (cached) return cached;
 
       const response = await fetch(request);
       if (responseIsPublicAndImmutable(response)) {
-        const cache = await caches.open(STATIC_CACHE);
         await cache.put(request, response.clone());
       }
       return response;

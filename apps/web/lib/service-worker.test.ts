@@ -9,7 +9,7 @@ const workerSource = readFileSync(
 );
 
 const ORIGIN = "https://trevv.test";
-const STATIC_CACHE = "trevv-static-v5";
+const STATIC_CACHE = "trevv-static-v6";
 const OFFLINE_SHELL = `${ORIGIN}/__trevv-offline-shell__`;
 
 type WorkerRequest = {
@@ -238,6 +238,29 @@ describe("service worker cache safety", () => {
     expect(harness.fetchMock).toHaveBeenCalledOnce();
   });
 
+  it("never reads a matching asset from a foreign origin cache", async () => {
+    const harness = createHarness();
+    const assetRequest = request("/_next/static/chunks/app-a1b2c3.js", {
+      destination: "script",
+    });
+    const foreign = await harness.caches.open("foreign-storefront-cache");
+    await foreign.put(assetRequest, new Response("foreign storefront asset"));
+    await harness.dispatchLifecycle("install");
+    harness.fetchMock.mockResolvedValueOnce(
+      new Response("console.log('trevv')", {
+        headers: {
+          "Cache-Control": "public, max-age=31536000, immutable",
+          "Content-Type": "text/javascript",
+        },
+      }),
+    );
+
+    const response = await harness.dispatchFetch(assetRequest);
+
+    await expect(response?.text()).resolves.toContain("trevv");
+    expect(harness.fetchMock).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["no-store response", {}, "public, immutable, no-store"],
     ["private response", {}, "private, immutable"],
@@ -265,19 +288,27 @@ describe("service worker cache safety", () => {
     expect(await harness.caches.match(assetRequest)).toBeUndefined();
   });
 
-  it("removes a legacy private cache on activation", async () => {
+  it("removes every legacy or foreign cache on activation", async () => {
     const harness = createHarness();
     const legacy = await harness.caches.open("trevv-v4");
     await legacy.put(
       request("/api/v1/portfolio"),
       new Response('{"owner":"user-a"}'),
     );
+    const foreign = await harness.caches.open("foreign-storefront-cache");
+    await foreign.put(
+      request("/sign-in", { mode: "navigate" }),
+      new Response("Foreign storefront document"),
+    );
 
     await harness.dispatchLifecycle("activate");
 
     expect(harness.deleted).toContain("trevv-v4");
+    expect(harness.deleted).toContain("foreign-storefront-cache");
     expect(harness.stores.has("trevv-v4")).toBe(false);
+    expect(harness.stores.has("foreign-storefront-cache")).toBe(false);
     expect(await harness.caches.match("/api/v1/portfolio")).toBeUndefined();
+    expect(await harness.caches.match("/sign-in")).toBeUndefined();
     expect(harness.self.clients.claim).toHaveBeenCalledOnce();
   });
 
