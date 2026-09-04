@@ -528,11 +528,15 @@
       "evidence": [
         {
           "path": "docs/known-limitations.md",
-          "detail": "Demo/live boundary and remaining native fallback limitation."
+          "detail": "Demo/live boundary; Expo and Tauri remain foundations rather than release artifacts."
         },
         {
           "path": "apps/desktop/src/desktop-app.tsx",
-          "detail": "Desktop foundation still substitutes demo Workspaces on API failure."
+          "detail": "Desktop renders explicit loading, failure, and empty states and no longer substitutes demo Workspaces on API failure."
+        },
+        {
+          "path": "apps/mobile/app/index.tsx",
+          "detail": "Mobile renders an offline/retry screen rather than substituting demo data."
         }
       ]
     }

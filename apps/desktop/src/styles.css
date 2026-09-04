@@ -195,6 +195,15 @@ input {
   border-radius: 9px;
   font-size: 8px;
 }
+.desktop-notice {
+  margin-top: 16px;
+  padding: 10px;
+  color: var(--fh-muted);
+  background: var(--fh-surface);
+  border: 1px solid var(--fh-border);
+  border-radius: 9px;
+  font-size: 8px;
+}
 .desktop-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -1,5 +1,4 @@
 import { createApiClient } from "@founderhq/api-client";
-import { demoWorkspaces } from "@founderhq/core";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, Grid2X2, Plus, RefreshCw, Search } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,21 +20,13 @@ function DesktopPortfolio() {
     queryKey: ["portfolio"],
     queryFn: () => api.portfolio(),
     retry: 1,
+    // A desktop client talks to a configured API, so an unreachable API is a
+    // real failure to report rather than a reason to pause and wait for the
+    // browser's network flag.
+    networkMode: "always",
   });
   const [query, setQuery] = useState("");
-  const workspaces =
-    portfolio.data?.workspaces ??
-    demoWorkspaces.map((workspace) => ({
-      workspace,
-      rollup: {
-        open: 0,
-        overdue: 0,
-        blocked: 0,
-        decisions: 0,
-        approvals: 0,
-        score: 0,
-      },
-    }));
+  const workspaces = portfolio.data?.workspaces ?? [];
   return (
     <div className="desktop-shell">
       <aside>
@@ -102,10 +93,18 @@ function DesktopPortfolio() {
               Refresh
             </button>
           </div>
-          {portfolio.isError && (
+          {portfolio.isPending && portfolio.fetchStatus !== "paused" && (
+            <div className="desktop-notice">Loading Workspaces…</div>
+          )}
+          {(portfolio.isError || portfolio.fetchStatus === "paused") && (
             <div className="desktop-offline">
-              API unavailable — showing a safe local shell. Configure
-              VITE_API_URL to load live Workspaces.
+              Couldn’t reach the API, so no Workspaces are shown. Check that
+              VITE_API_URL points at a running API, then choose Refresh.
+            </div>
+          )}
+          {portfolio.isSuccess && workspaces.length === 0 && (
+            <div className="desktop-notice">
+              No Workspaces yet. Create one in the web app, then choose Refresh.
             </div>
           )}
           <div className="desktop-grid">
