@@ -34,7 +34,11 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": []
+    },
+    "@founderhq/mobile#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
     }
   }
 }
