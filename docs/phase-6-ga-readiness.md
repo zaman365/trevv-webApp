@@ -16,18 +16,20 @@ measured reliability window, reviewed legal package, independent security
 review, or restore/incident exercise.
 
 The current diff configures formatting, route/asset performance budgets,
-Chromium/WebKit browser gates, and bounded RUM ingestion. Those are repository
-capabilities, not completed operating evidence: the workflow has not run
-remotely. Local Chromium, WebKit, and mobile-Chromium execution is directional
-engineering evidence only.
+Chromium/WebKit browser gates, and bounded RUM ingestion. The candidate branch
+has since exercised those gates in GitHub Actions, and as of 4 September 2026
+every required job passed on the head commit. That is still not completed
+operating evidence: a branch run is not retained, signed, or bound to a release
+manifest, and it exercises no operated remote environment. Local Chromium,
+WebKit, and mobile-Chromium execution is directional engineering evidence only.
 
 The production-shaped topology also now carries one validated candidate
 release ID and full Git SHA plus the actual service-specific Docker image IDs
 through Web, both APIs, and both Workers. Readiness and Worker startup logs
 expose that identity, while CI is configured to compare it with the running
-containers and the one-shot migration image. This closes a configuration blind spot, but it is not remote CI or
-production evidence until the workflow runs and its immutable output is
-retained.
+containers and the one-shot migration image. This closes a configuration blind
+spot. The workflow does now run remotely, but its output is not retained as
+immutable release evidence, so it remains short of production evidence.
 
 The only honest release scope today is the hosted fictional-data technical
 preview. The intended eventual GA scope is Web/PWA and English only. Mobile,

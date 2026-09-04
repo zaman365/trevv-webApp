@@ -25,7 +25,7 @@ Better Auth owns credential hashing, HTTP-only session cookies, session expiry, 
 
 The current privacy ledger is not deletion-safe. Account-level requests require an active selected organization, so a user who loses their final membership cannot use the authenticated route. Direct organization/user/membership foreign keys also mean a physical deletion can be blocked by the ledger or cascade away its proof. Public beta requires a reviewed identity-scoped request path and a pseudonymized, non-cascading evidence design before any destructive processor is enabled. The public privacy and terms pages remain engineering previews pending legal review.
 
-The 2026-08-29 dependency audit reports zero advisories and no allowlisted exceptions. The gate continues to fail on any high or critical finding.
+The 2026-09-04 dependency audit reports five advisories: two high and three moderate. Both high findings are `image-size` parser denial-of-service issues (`GHSA-w3rx-r6r6-pgpr`, `GHSA-5p2g-fcmc-qvqq`) for which no patched npm release exists. They are reachable only through the Expo/Metro toolchain under `apps/mobile`, which is outside the Web/PWA release scope. `scripts/audit.mjs` allowlists exactly those two advisory IDs and re-blocks them if the module name or the Expo/Metro-only dependency paths ever change. The three moderate findings (`esbuild` reached through `drizzle-kit`, plus `uuid` and `decode-uri-component` reached through the Expo toolchain) are build-time dependencies below the gate threshold. The gate continues to fail on any other high or critical finding.
 
 ## Production hardening checklist
 
