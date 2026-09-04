@@ -90,7 +90,6 @@ function LiveAppDataQuery({
   const {
     data: queryData,
     error,
-    isFetching,
     refetch,
   } = useQuery({
     queryKey: liveAppDataKey,
@@ -129,19 +128,30 @@ function LiveAppDataQuery({
     return () => window.clearTimeout(timeout);
   }, [data.refreshedAt]);
   const stale = Boolean(error) || expiredRefreshedAt === data.refreshedAt;
+  // Background polling must not be surfaced as activity. `isFetching` flips on
+  // every poll, and including it here handed all ten live components a new
+  // context value on that cadence, re-rendering the whole application shell
+  // several times a minute even when the payload was byte-identical. Only an
+  // explicitly requested refresh counts as refreshing.
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const value = useMemo<LiveAppDataContextValue>(
     () => ({
       ...data,
       client,
       error,
-      refreshing: isFetching,
+      refreshing: manualRefreshing,
       stale,
       accessLost,
       refresh: async () => {
-        await refetch();
+        setManualRefreshing(true);
+        try {
+          await refetch();
+        } finally {
+          setManualRefreshing(false);
+        }
       },
     }),
-    [accessLost, client, data, error, isFetching, refetch, stale],
+    [accessLost, client, data, error, manualRefreshing, refetch, stale],
   );
 
   return (

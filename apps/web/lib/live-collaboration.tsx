@@ -9,6 +9,7 @@ import {
 } from "@founderhq/api-contract";
 import { TrevvApiError } from "@founderhq/api-client";
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -232,6 +233,7 @@ export function useLiveTeamDirectory(
     queryKey: collaborationKeys.teams(workspaceId ?? "unavailable"),
     queryFn: () => client.teamDirectory(workspaceId!),
     enabled: enabled && Boolean(workspaceId),
+    placeholderData: keepPreviousData,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -247,6 +249,7 @@ export function useLiveConversations(
     queryKey: collaborationKeys.conversations(workspaceId ?? "unavailable"),
     queryFn: () => fetchEveryConversation(client, workspaceId!),
     enabled: enabled && Boolean(workspaceId),
+    placeholderData: keepPreviousData,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -265,6 +268,7 @@ export function useLiveConversation(
     ),
     queryFn: () => client.conversation(conversationId!),
     enabled: Boolean(workspaceId && conversationId),
+    placeholderData: keepPreviousData,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
   });
@@ -291,6 +295,7 @@ export function useLiveConversationMessages(
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled:
       options.enabled !== false && Boolean(workspaceId && conversationId),
+    placeholderData: keepPreviousData,
     refetchInterval: 4_000,
     refetchIntervalInBackground: false,
   });
