@@ -47,22 +47,6 @@ interface LiveAppDataContextValue extends LiveAppDataSnapshot {
 const LiveAppDataContext = createContext<LiveAppDataContextValue | null>(null);
 const liveAppDataKey = ["live-app-data"] as const;
 
-/**
- * Backstop cadence for the whole-account snapshot. Every mutation calls
- * `refresh()` explicitly, so a member always sees their own writes immediately;
- * this interval only bounds how long another member's change can go unseen.
- * It was five seconds, which re-fetched the entire account — including every
- * work item, paginated — twelve times a minute against a free-tier API.
- */
-const liveAppDataBackstopMs = 30_000;
-
-/**
- * How long a snapshot may go unrefreshed before the views warn that it may be
- * stale. It must stay comfortably above the backstop, otherwise a healthy
- * account shows a staleness warning for most of every polling cycle.
- */
-const liveAppDataStaleAfterMs = liveAppDataBackstopMs * 3;
-
 export function LiveAppDataProvider({
   children,
   initialData,
@@ -81,7 +65,7 @@ export function LiveAppDataProvider({
                 error instanceof TrevvApiError &&
                 [401, 403, 404, 409, 422, 429].includes(error.status)
               ),
-            staleTime: liveAppDataBackstopMs,
+            staleTime: 3_000,
           },
           mutations: { retry: false },
         },
@@ -111,7 +95,7 @@ function LiveAppDataQuery({
     queryKey: liveAppDataKey,
     queryFn: () => fetchLiveAppData(client),
     initialData,
-    refetchInterval: liveAppDataBackstopMs,
+    refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -136,7 +120,7 @@ function LiveAppDataQuery({
     null,
   );
   useEffect(() => {
-    const expiresAt = Date.parse(data.refreshedAt) + liveAppDataStaleAfterMs;
+    const expiresAt = Date.parse(data.refreshedAt) + 15_000;
     const timeout = window.setTimeout(
       () => setExpiredRefreshedAt(data.refreshedAt),
       Math.max(0, expiresAt - Date.now()),
