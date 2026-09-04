@@ -6,6 +6,28 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "routes": [{ "pattern": "trevv.de", "custom_domain": true }],
+  // Cloudflare Workers expose no ambient process environment, so the Web
+  // runtime configuration this app validates at startup must be declared here.
+  // Secrets never belong in this file: every value below is public
+  // configuration, and the Worker holds no database, auth, or mail credential.
+  "vars": {
+    "NODE_ENV": "production",
+    "DEMO_MODE": "false",
+    "REGISTRATION_MODE": "invite_only",
+    "NEXT_PUBLIC_APP_URL": "https://trevv.de",
+    "API_ORIGIN": "https://trevv-free-preview-api-zaman365.onrender.com",
+    "CSP_MODE": "report-only",
+    "HSTS_ENABLED": "false",
+    // Must equal the cookie prefix the API issues, or sessions silently fail.
+    "AUTH_COOKIE_PREFIX": "trevv_alpha",
+    "RELEASE_METADATA_REQUIRED": "true",
+    "RELEASE_ID": "rehearsal-candidate-33918690865-1",
+    "RELEASE_GIT_SHA": "0c91fe541f58e6bfb5c1cca4d5f64960faa34910",
+    // This edge deploy runs no container. The digest below is the Web image
+    // built from the same source release, carried for lineage only; do not
+    // read it as the identity of a container running at this origin.
+    "RELEASE_IMAGE_ID": "sha256:075c1a764d2a46cbae12c8ede61d7e75c27341a1fd8ebf0742a8aed086c24140",
+  },
   "observability": {
     "enabled": true,
     "logs": {
