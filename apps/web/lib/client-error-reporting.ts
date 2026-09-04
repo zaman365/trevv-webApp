@@ -1,6 +1,6 @@
 "use client";
 
-export type ClientErrorSurface = "root-render" | "app-route";
+export type ClientErrorSurface = "root-render" | "root-boundary" | "app-route";
 
 export function reportClientError(
   surface: ClientErrorSurface,

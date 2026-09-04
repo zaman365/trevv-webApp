@@ -47,7 +47,11 @@ export async function POST(request: Request) {
 function parseReport(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
-  if (input.surface !== "root-render" && input.surface !== "app-route")
+  if (
+    input.surface !== "root-render" &&
+    input.surface !== "root-boundary" &&
+    input.surface !== "app-route"
+  )
     return null;
   const errorName = boundedToken(input.errorName, 64);
   const digest = boundedToken(input.digest, 128);
