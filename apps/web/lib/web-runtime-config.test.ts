@@ -154,41 +154,50 @@ describe("Web runtime configuration", () => {
     ).not.toThrow();
   });
 
-  it("uses an isolated, explicit session-cookie namespace only on alpha", () => {
+  it("derives the session-cookie namespace from the origin when unset", () => {
     expect(webAuthCookiePrefix(secureProduction)).toBe("trevv");
     expect(webSessionCookieNames(secureProduction)).toEqual([
       "trevv.session_token",
       "__Secure-trevv.session_token",
     ]);
 
-    const alphaProduction = {
+    const alphaUnset = {
       ...secureProduction,
       NEXT_PUBLIC_APP_URL: "https://alpha.trevv.de",
-      AUTH_COOKIE_PREFIX: "trevv_alpha",
+      AUTH_COOKIE_PREFIX: undefined,
     };
-    expect(webAuthCookiePrefix(alphaProduction)).toBe("trevv_alpha");
-    expect(webSessionCookieNames(alphaProduction)).toEqual([
+    expect(webAuthCookiePrefix(alphaUnset)).toBe("trevv_alpha");
+    expect(webSessionCookieNames(alphaUnset)).toEqual([
       "trevv_alpha.session_token",
       "__Secure-trevv_alpha.session_token",
     ]);
+    expect(() => validateProductionWebConfiguration(alphaUnset)).not.toThrow();
+  });
+
+  it("lets an explicit session-cookie namespace win over the origin", () => {
+    // One API issues one cookie name across every Web origin it trusts, and a
+    // Web build cannot see that list, so an explicit value is authoritative.
+    const alphaSharingDefaultPrefix = {
+      ...secureProduction,
+      NEXT_PUBLIC_APP_URL: "https://alpha.trevv.de",
+      AUTH_COOKIE_PREFIX: "trevv",
+    };
+    expect(webAuthCookiePrefix(alphaSharingDefaultPrefix)).toBe("trevv");
     expect(() =>
-      validateProductionWebConfiguration({
-        ...alphaProduction,
-        AUTH_COOKIE_PREFIX: undefined,
-      }),
-    ).toThrow(/must explicitly equal trevv_alpha/u);
+      validateProductionWebConfiguration(alphaSharingDefaultPrefix),
+    ).not.toThrow();
+
+    const primarySharingAlphaPrefix = {
+      ...secureProduction,
+      AUTH_COOKIE_PREFIX: "trevv_alpha",
+    };
+    expect(webAuthCookiePrefix(primarySharingAlphaPrefix)).toBe("trevv_alpha");
     expect(() =>
-      validateProductionWebConfiguration({
-        ...alphaProduction,
-        AUTH_COOKIE_PREFIX: "trevv",
-      }),
-    ).toThrow(/must explicitly equal trevv_alpha/u);
-    expect(() =>
-      validateProductionWebConfiguration({
-        ...secureProduction,
-        AUTH_COOKIE_PREFIX: "trevv_alpha",
-      }),
-    ).toThrow(/reserved for https:\/\/alpha\.trevv\.de/u);
+      validateProductionWebConfiguration(primarySharingAlphaPrefix),
+    ).not.toThrow();
+  });
+
+  it("still rejects a session-cookie namespace outside the allowed set", () => {
     expect(() =>
       validateProductionWebConfiguration({
         ...secureProduction,

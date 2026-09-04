@@ -137,7 +137,7 @@ export interface ApiAppDependencies {
   mailFrom?: string;
   webOrigin?: string;
   invitationTtlMs?: number;
-  corsOrigin?: string;
+  corsOrigin?: string | readonly string[];
   operations?: ApiOperations;
   exposeInternalMetrics?: boolean;
 }
@@ -191,10 +191,11 @@ export function createApiApp(dependencies: ApiAppDependencies) {
   api.use(
     "/api/v1/*",
     cors({
-      origin:
+      origin: resolveCorsOrigins(
         dependencies.corsOrigin ??
-        process.env.WEB_ORIGIN ??
-        "http://localhost:3000",
+          process.env.WEB_ORIGIN ??
+          "http://localhost:3000",
+      ),
       credentials: true,
       allowHeaders: [
         "content-type",
@@ -354,7 +355,7 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       context.req.header("cookie") &&
       !hasTrustedMutationOrigin(
         context.req.header("origin"),
-        dependencies.webOrigin ?? dependencies.corsOrigin,
+        dependencies.corsOrigin ?? dependencies.webOrigin,
         context.req.header("sec-fetch-site"),
       )
     ) {
@@ -2821,7 +2822,7 @@ export function createRuntimeApi(
     databaseUrl: configuration.databaseUrl,
     baseUrl: configuration.authBaseUrl,
     secret: configuration.authSecret,
-    trustedOrigins: [configuration.webOrigin],
+    trustedOrigins: [...configuration.webOrigins],
     cookiePrefix: configuration.cookiePrefix,
     registrationMode: configuration.registrationMode,
     ...(configuration.testRegistrationBootstrapSecret
@@ -2867,7 +2868,7 @@ export function createRuntimeApi(
       mailDelivery,
       mailFrom: configuration.mailFrom,
       webOrigin: configuration.webOrigin,
-      corsOrigin: configuration.webOrigin,
+      corsOrigin: configuration.webOrigins,
       exposeInternalMetrics: configuration.internalMetricsEnabled,
       operations: {
         ...(rateLimitStore ? { rateLimitStore } : {}),
@@ -3282,18 +3283,27 @@ function withoutTrailingSlash(pathname: string): string {
 
 function hasTrustedMutationOrigin(
   suppliedOrigin: string | undefined,
-  configuredOrigin: string | undefined,
+  configuredOrigin: string | readonly string[] | undefined,
   fetchSite: string | undefined,
 ): boolean {
-  if (!configuredOrigin) return false;
+  const configured = configuredOrigin
+    ? resolveCorsOrigins(configuredOrigin)
+    : [];
+  if (configured.length === 0) return false;
   if (suppliedOrigin) {
+    let supplied: string;
     try {
-      return (
-        new URL(suppliedOrigin).origin === new URL(configuredOrigin).origin
-      );
+      supplied = new URL(suppliedOrigin).origin;
     } catch {
       return false;
     }
+    return configured.some((candidate) => {
+      try {
+        return new URL(candidate).origin === supplied;
+      } catch {
+        return false;
+      }
+    });
   }
   return fetchSite === "same-origin";
 }
@@ -3696,4 +3706,14 @@ function observe(operation: () => void): void {
   } catch {
     // Telemetry is deliberately best-effort and cannot change product state.
   }
+}
+
+/**
+ * Accept either one origin or a comma-separated list, so a deployment serving
+ * several trusted Web origins sends the matching `Access-Control-Allow-Origin`
+ * per request instead of a single fixed value.
+ */
+function resolveCorsOrigins(value: string | readonly string[]): string[] {
+  const entries = Array.isArray(value) ? [...value] : String(value).split(",");
+  return entries.map((entry) => entry.trim()).filter((entry) => entry.length);
 }

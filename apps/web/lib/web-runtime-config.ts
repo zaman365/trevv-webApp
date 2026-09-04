@@ -85,23 +85,24 @@ export function webApiOrigin(environment: Environment = process.env): URL {
 export function webAuthCookiePrefix(
   environment: Environment = process.env,
 ): WebAuthCookiePrefix {
-  const prefix =
-    environment.AUTH_COOKIE_PREFIX?.trim() || defaultAuthCookiePrefix;
-  if (prefix !== defaultAuthCookiePrefix && prefix !== alphaAuthCookiePrefix)
+  const configured = environment.AUTH_COOKIE_PREFIX?.trim();
+  const alphaOrigin =
+    webCanonicalUrl(environment).origin === alphaCanonicalOrigin;
+  // Unset keeps deriving the name from the canonical origin, so a deployment
+  // that never configured a prefix behaves exactly as it did before.
+  if (!configured)
+    return alphaOrigin ? alphaAuthCookiePrefix : defaultAuthCookiePrefix;
+  if (
+    configured !== defaultAuthCookiePrefix &&
+    configured !== alphaAuthCookiePrefix
+  )
     throw new Error(
       `AUTH_COOKIE_PREFIX must be ${defaultAuthCookiePrefix} or ${alphaAuthCookiePrefix}.`,
     );
-  const alphaOrigin =
-    webCanonicalUrl(environment).origin === alphaCanonicalOrigin;
-  if (alphaOrigin && prefix !== alphaAuthCookiePrefix)
-    throw new Error(
-      `AUTH_COOKIE_PREFIX must explicitly equal ${alphaAuthCookiePrefix} for ${alphaCanonicalOrigin}.`,
-    );
-  if (!alphaOrigin && prefix === alphaAuthCookiePrefix)
-    throw new Error(
-      `AUTH_COOKIE_PREFIX=${alphaAuthCookiePrefix} is reserved for ${alphaCanonicalOrigin}.`,
-    );
-  return prefix;
+  // An explicit value wins. One API issues one cookie name across every Web
+  // origin it trusts, and a Web build cannot see that list, so the operator
+  // states the shared name rather than having it inferred from this origin.
+  return configured;
 }
 
 export function webSessionCookieNames(

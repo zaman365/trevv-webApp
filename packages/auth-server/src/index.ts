@@ -85,6 +85,11 @@ export function resolveAuthCookiePrefix(
       return false;
     }
   });
+  // One API issues one cookie name, so a deployment serving several trusted
+  // Web origins must be free to pick a single shared prefix. The origin-derived
+  // rules below still apply verbatim whenever exactly one origin is trusted,
+  // which is every existing single-origin deployment.
+  if (trustedOrigins.length > 1) return prefix;
   if (alphaOriginTrusted && prefix !== alphaAuthCookiePrefix)
     throw new Error(
       `AUTH_COOKIE_PREFIX must explicitly equal ${alphaAuthCookiePrefix} for ${ALPHA_WEB_ORIGIN}.`,

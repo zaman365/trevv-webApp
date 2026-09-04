@@ -21,6 +21,7 @@ export type RuntimeConfiguration =
       authBaseUrl: string;
       authSecret: string;
       webOrigin: string;
+      webOrigins: readonly string[];
       cookiePrefix: AuthCookiePrefix;
       registrationMode: RegistrationMode;
       releaseMetadata: RuntimeReleaseMetadata | null;
@@ -69,15 +70,22 @@ export function readRuntimeConfiguration(
     required(environment, "BETTER_AUTH_URL"),
     production,
   );
-  const webOrigin = canonicalOrigin(
-    "WEB_ORIGIN",
-    required(environment, "WEB_ORIGIN"),
-    production,
-  );
+  const webOrigins = required(environment, "WEB_ORIGIN")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => canonicalOrigin("WEB_ORIGIN", entry, production));
+  if (webOrigins.length === 0)
+    throw new Error("WEB_ORIGIN must contain at least one origin.");
+  if (new Set(webOrigins).size !== webOrigins.length)
+    throw new Error("WEB_ORIGIN must not repeat an origin.");
+  // The first entry stays canonical: it is the origin used for links the API
+  // generates, while every entry is trusted for browser-originated requests.
+  const webOrigin = webOrigins[0] as string;
   const authSecret = required(environment, "BETTER_AUTH_SECRET");
   const cookiePrefix = resolveAuthCookiePrefix(
     optional(environment, "AUTH_COOKIE_PREFIX"),
-    [webOrigin],
+    webOrigins,
   );
   validateAuthSecret(authSecret);
   validatePostgresDatabaseUrl(databaseUrl, { production });
@@ -108,7 +116,8 @@ export function readRuntimeConfiguration(
     );
 
   const cookieDomain = optional(environment, "AUTH_COOKIE_DOMAIN");
-  validateCookieTopology(authBaseUrl, webOrigin, cookieDomain, production);
+  for (const origin of webOrigins)
+    validateCookieTopology(authBaseUrl, origin, cookieDomain, production);
 
   const testMailSinkFile = optional(environment, "MAIL_SINK_FILE");
   if (production && testMailSinkFile)
@@ -202,6 +211,7 @@ export function readRuntimeConfiguration(
     authBaseUrl,
     authSecret,
     webOrigin,
+    webOrigins,
     cookiePrefix,
     registrationMode,
     releaseMetadata,
