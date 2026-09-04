@@ -20,6 +20,14 @@ import { useLiveAppData } from "./live-app-data";
 import { liveDraftStorageKey } from "./live-workflow-ui";
 
 const collaborationRoot = "live-collaboration";
+
+/**
+ * Backstop cadence for collaboration reads. The event stream below invalidates
+ * these keys as changes happen, so polling exists only to keep correctness from
+ * depending on an uninterrupted stream. Four to five seconds made that backstop
+ * the primary traffic source rather than a safety net.
+ */
+const collaborationBackstopMs = 30_000;
 const eventCursors = new Map<string, number>();
 
 export const collaborationKeys = {
@@ -234,7 +242,7 @@ export function useLiveTeamDirectory(
     queryFn: () => client.teamDirectory(workspaceId!),
     enabled: enabled && Boolean(workspaceId),
     placeholderData: keepPreviousData,
-    refetchInterval: 5_000,
+    refetchInterval: collaborationBackstopMs,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -250,7 +258,7 @@ export function useLiveConversations(
     queryFn: () => fetchEveryConversation(client, workspaceId!),
     enabled: enabled && Boolean(workspaceId),
     placeholderData: keepPreviousData,
-    refetchInterval: 5_000,
+    refetchInterval: collaborationBackstopMs,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -269,7 +277,7 @@ export function useLiveConversation(
     queryFn: () => client.conversation(conversationId!),
     enabled: Boolean(workspaceId && conversationId),
     placeholderData: keepPreviousData,
-    refetchInterval: 5_000,
+    refetchInterval: collaborationBackstopMs,
     refetchIntervalInBackground: false,
   });
 }
@@ -296,7 +304,7 @@ export function useLiveConversationMessages(
     enabled:
       options.enabled !== false && Boolean(workspaceId && conversationId),
     placeholderData: keepPreviousData,
-    refetchInterval: 4_000,
+    refetchInterval: collaborationBackstopMs,
     refetchIntervalInBackground: false,
   });
 }

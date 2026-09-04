@@ -25,7 +25,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const [store, session] = await Promise.all([cookies(), requireAppSession()]);
   // Resolve identity and onboarding first so an anonymous request redirects
   // cleanly instead of racing a protected data request into the error boundary.
-  const liveData = mode === "live" ? await loadLiveAppData() : undefined;
+  // Start the account read but do not await it: awaiting here blocked the whole
+  // response on portfolios, workspaces, attention, waiting and every work item
+  // before a single byte of HTML, so a cold API meant a blank page for as long
+  // as it took to wake. The shell streams and the snapshot resolves under the
+  // Suspense boundary inside AppShellProviders.
+  const liveData = mode === "live" ? loadLiveAppData() : undefined;
   const storedSelection = parseWorkspaceSelection(
     store.get(workspaceSelectionCookie)?.value,
   );
