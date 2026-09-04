@@ -10,7 +10,7 @@ import {
 } from "@founderhq/core";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Suspense, use, useMemo, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { WorkspaceProvider } from "@/lib/workspace-context";
 import type { Theme } from "@/lib/display-preferences";
@@ -25,7 +25,7 @@ import {
   type LiveAppDataSnapshot,
 } from "@/lib/live-app-data";
 import { LearningCenterProvider } from "./learning-center";
-import { LiveStateNotice, RouteLoadingState } from "./live-state";
+import { LiveStateNotice } from "./live-state";
 
 const workspaceSlugFrom = (pathname: string) => {
   const match = /^\/app\/workspaces\/([^/]+)/.exec(pathname);
@@ -49,10 +49,7 @@ export function AppShellProviders({
   session: AppSessionView;
   storedSelection?: StoredWorkspaceSelection;
   initialTheme?: Theme;
-  // A promise rather than a snapshot: the app layout must not block the whole
-  // response on the account read. Handing the pending promise across lets the
-  // shell stream immediately and the data fill in under the boundary below.
-  liveData?: Promise<LiveAppDataSnapshot>;
+  liveData?: LiveAppDataSnapshot;
 }) {
   const content = (
     <AppShellProviderContent
@@ -64,26 +61,9 @@ export function AppShellProviders({
     </AppShellProviderContent>
   );
   return liveData ? (
-    <Suspense fallback={<RouteLoadingState label="Loading your workspace" />}>
-      <ResolvedLiveAppData snapshot={liveData}>{content}</ResolvedLiveAppData>
-    </Suspense>
+    <LiveAppDataProvider initialData={liveData}>{content}</LiveAppDataProvider>
   ) : (
     content
-  );
-}
-
-/** Unwrap the streamed account snapshot beneath the shell's Suspense boundary. */
-function ResolvedLiveAppData({
-  children,
-  snapshot,
-}: {
-  children: ReactNode;
-  snapshot: Promise<LiveAppDataSnapshot>;
-}) {
-  return (
-    <LiveAppDataProvider initialData={use(snapshot)}>
-      {children}
-    </LiveAppDataProvider>
   );
 }
 
