@@ -20,7 +20,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import {

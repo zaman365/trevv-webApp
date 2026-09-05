@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { LiveStateNotice } from "@/components/live-state";
 
 export default function NotFound() {

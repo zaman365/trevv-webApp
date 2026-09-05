@@ -38,7 +38,11 @@ export function AppSessionProvider({
 }
 
 export function useAppSession(): AppSessionView {
-  const session = useContext(AppSessionContext);
+  const session = useOptionalAppSession();
   if (!session) throw new Error("App session provider is missing.");
   return session;
+}
+
+export function useOptionalAppSession() {
+  return useContext(AppSessionContext);
 }

@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   Smartphone,
 } from "lucide-react";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useCallback, useEffect, useState } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";

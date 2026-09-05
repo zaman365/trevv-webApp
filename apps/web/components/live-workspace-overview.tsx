@@ -14,7 +14,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";

@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { demoWorkspaces, demoItems } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useRef, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";

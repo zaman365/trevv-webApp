@@ -23,7 +23,7 @@ import {
   demoWorkspaces,
   demoInsights,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { scoreOpportunity } from "@/lib/workflow-rules";

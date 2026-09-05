@@ -25,7 +25,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import {
   useEffect,
   useId,

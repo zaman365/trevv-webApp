@@ -35,7 +35,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import {
   Fragment,
   useEffect,

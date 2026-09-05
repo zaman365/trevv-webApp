@@ -17,7 +17,7 @@ import {
   type WorkItem,
 } from "@founderhq/core";
 import { getMessages } from "@founderhq/i18n";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { ProgressRing } from "./ui-kit";
 import { labelForType } from "@/lib/terminology";
 import { workspaceHref } from "@/lib/workspace-routes";

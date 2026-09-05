@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { demoBoards, demoWorkspaces } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   storeCapturedWork,

@@ -34,7 +34,7 @@ import {
   type Portfolio,
   type WorkItem,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { type GroupedSignal, NOW } from "@/lib/attention";
 import { useCapturedWork } from "@/lib/captured-work";

@@ -130,6 +130,16 @@ export async function requireWorkspaceAccess(
   returnTo: string,
   options: { details?: boolean } = {},
 ) {
+  // Both endpoints authorize the same incoming request. Overlap independent
+  // reads, but resolve session flow first even if workspace access fails early.
+  // Settling immediately also prevents an unhandled rejection after a redirect.
+  const workspaceRead =
+    webRuntimeMode() === "live" && options.details === false
+      ? loadAccessibleWorkspaces().then(
+          (workspaces) => ({ workspaces }),
+          (error: unknown) => ({ error }),
+        )
+      : undefined;
   await requireAppSession(returnTo);
   if (webRuntimeMode() === "demo") {
     const workspace = demoWorkspaces.find(
@@ -145,7 +155,9 @@ export async function requireWorkspaceAccess(
   }
   try {
     if (options.details === false) {
-      const workspace = (await loadAccessibleWorkspaces()).find(
+      const result = await workspaceRead!;
+      if ("error" in result) throw result.error;
+      const workspace = result.workspaces.find(
         (candidate) => candidate.slug === workspaceSlug,
       );
       if (!workspace) notFound();

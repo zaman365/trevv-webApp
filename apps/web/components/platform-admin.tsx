@@ -24,7 +24,7 @@ import {
   type PlatformInvitation,
   type PlatformUser,
 } from "@founderhq/api-contract";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import {
   useCallback,
   useEffect,

@@ -39,7 +39,7 @@ import {
   demoWaitingStates,
   type AttentionSignal,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useMemo, useState } from "react";
 import { type GroupedSignal } from "@/lib/attention";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";

@@ -30,7 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { demoBoards, demoWorkspaces, demoItems } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import {
   useEffect,
   useMemo,

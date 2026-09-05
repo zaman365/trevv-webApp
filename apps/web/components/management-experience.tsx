@@ -39,7 +39,7 @@ import {
   type Portfolio,
   type WaitingState,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";

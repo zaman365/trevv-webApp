@@ -27,7 +27,7 @@ import {
   itemsForWorkspace,
   rollupWorkspace,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { PageHero, StatTile } from "./ui-kit";

@@ -70,6 +70,52 @@ afterEach(() => {
 });
 
 describe("workspace routing without loading its item history", () => {
+  it("starts workspace access while session resolution is pending", async () => {
+    let completeSession!: (response: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            completeSession = resolve;
+          }),
+      ),
+    );
+    const result = requireWorkspaceAccess(
+      "allowed",
+      "/app/workspaces/allowed",
+      { details: false },
+    );
+    await vi.waitFor(() => expect(state.workspaces).toHaveBeenCalledOnce());
+    completeSession(Response.json(session));
+    expect((await result).workspace?.id).toBe("workspace-one");
+  });
+
+  it.each(["pending", "failed"])(
+    "redirects an anonymous session without waiting for %s workspace access",
+    async (outcome) => {
+      state.workspaces.mockImplementation(() =>
+        outcome === "pending"
+          ? new Promise(() => {})
+          : Promise.reject(new Error("workspace failed")),
+      );
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json(
+            { error: { code: "unauthenticated" } },
+            { status: 401 },
+          ),
+        ),
+      );
+      await expect(
+        requireWorkspaceAccess("allowed", "/app/workspaces/allowed", {
+          details: false,
+        }),
+      ).rejects.toThrow("NEXT_REDIRECT;/sign-in?next=");
+    },
+  );
+
   it("uses the authoritative accessible list and never requests full detail for route checks", async () => {
     const result = await requireWorkspaceAccess(
       "allowed",

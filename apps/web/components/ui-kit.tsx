@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import type { ReactNode } from "react";
 import { Hint } from "./learning-center";
 

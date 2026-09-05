@@ -23,7 +23,7 @@ import {
   demoPortfolios,
   type WorkspaceHealth,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useState } from "react";
 import { SIGNAL_TONES, type SignalTone } from "@/lib/attention";
 import { summarizePortfolio } from "@/lib/portfolios";

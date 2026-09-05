@@ -3,7 +3,7 @@
 import { dateTimeFormatter } from "@/lib/date-format";
 
 import { MailPlus, RefreshCw, RotateCw, UserPlus, XCircle } from "lucide-react";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import {
   useCallback,
   useEffect,

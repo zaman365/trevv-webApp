@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import type { ReactNode } from "react";
 import styles from "./legal-preview-notice.module.css";
 

@@ -1886,7 +1886,10 @@ describe("PostgreSQL-backed API", () => {
     const inviteeAuthId = `auth-api-claimed-invite-${suffix}`;
     const inviteeEmail = `${inviteeAuthId}@example.test`;
     const unclaimedAuthId = `auth-api-unclaimed-${suffix}`;
-    const live = createLiveHarness();
+    // The registration trigger validates expiry against the database clock.
+    // Keep this claim current without changing fixed-clock expiry scenarios.
+    const claimTime = new Date();
+    const live = createLiveHarness(() => claimTime);
     try {
       const ownerClient = clientFor(
         live.app,

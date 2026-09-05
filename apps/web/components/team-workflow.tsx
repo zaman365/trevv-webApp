@@ -26,7 +26,7 @@ import {
   demoItems,
   type ResourcePressure,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";

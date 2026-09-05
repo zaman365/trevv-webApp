@@ -131,3 +131,37 @@ fresh data after identity changes, cold-load retry, normalized navigation header
 workspace denial/revocation, complete detail compatibility, and immediate link
 feedback during an intentionally delayed navigation. Production backend and
 network latency still contribute to end-to-end page-switch time.
+
+## Avoiding unusable navigation prefetches (2026-09-05)
+
+The production Worker client classified visible app links as eligible for full
+automatic RSC prefetching, while authenticated dynamic responses had a zero-second
+cache lifetime. Those completed prefetches could not serve the later navigation.
+The compiled `73bcff9` client made ten unsolicited page requests in a 1.5-second
+observation window on a fictional workspace. Each competed for backend identity
+and workspace reads before any click.
+
+App links now share a policy that avoids automatic private-page RSC requests.
+Pointer hover and keyboard focus warm only the destination's static loader and
+experience modules, including the correct live or demo implementation. Module
+promises are bounded by a fixed module-key set, shared across workspace slugs,
+and failed warmups can retry. Public links retain their prefetch settings and
+all links retain their existing markup, destinations and event handlers. The
+navigation bar retains its pending indicator.
+
+Workspace route checks also start session and accessible-workspace reads in
+parallel. Session redirects and errors take precedence without waiting for a
+slow workspace response. Workspace failures are observed immediately and mapped
+through the existing 401/403/404 handling after session validation. No session or
+authorization cache lifetime has been extended. Complete initial snapshots,
+five-second polling, route modes and all existing destinations remain available.
+
+`pnpm test:worker-navigation` builds the production Worker client and exercises
+the real adapter against a fictional loopback API. Its local server configuration
+uses test mode solely to permit the HTTP fixture; the browser bundle is compiled
+for production. The same observation window now produces zero unsolicited RSC
+requests. Hover/focus produces no RSC request, clicks and repeat visits each make
+one fresh navigation request, Calendar data finishes loading, and both document
+and RSC workspace denials retain HTTP 404. CI runs this alongside the existing
+Next browser and responsiveness gates. These request counts are an isolated
+regression measurement, not a production latency guarantee.

@@ -9,7 +9,7 @@ import {
   type Workspace,
 } from "@founderhq/core";
 import { usePathname } from "next/navigation";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, type ReactNode } from "react";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { WorkspaceProvider } from "@/lib/workspace-context";

@@ -63,7 +63,7 @@ import {
   type Workspace,
   type WorkItem,
 } from "@founderhq/core";
-import Link from "next/link";
+import { AppLink as Link } from "@/components/navigation-link";
 import {
   Fragment,
   useCallback,
