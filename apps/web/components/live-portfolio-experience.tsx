@@ -14,16 +14,15 @@ import {
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
-import { useLiveAppData } from "@/lib/live-app-data";
+import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import {
-  formatLiveDate,
   openWorkspaceItems,
   workspaceSlugFromName,
 } from "@/lib/live-workflow-ui";
 import { workspaceHref } from "@/lib/workspace-routes";
-import { LiveStateNotice } from "./live-state";
+import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
 
@@ -171,7 +170,7 @@ export function LivePortfolioExperience() {
             }
             description="The last-known portfolio remains visible while TREVV reconnects."
             kind="stale"
-            lastSyncedAt={liveData.refreshedAt}
+            synced
             title="Portfolio data may be stale"
           />
         ) : null}
@@ -222,10 +221,7 @@ export function LivePortfolioExperience() {
             </div>
             <small>
               Last synced{" "}
-              {formatLiveDate(
-                liveData.refreshedAt,
-                session.organization.timezone ?? "UTC",
-              )}
+              <LiveSyncedAt timezone={session.organization.timezone ?? "UTC"} />
             </small>
           </header>
           {workspaces.length === 0 ? (

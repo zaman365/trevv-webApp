@@ -1,3 +1,4 @@
+import { dateTimeFormatter } from "@/lib/date-format";
 import type { WorkItemDto } from "@founderhq/api-contract";
 
 export const LIVE_DRAFT_STORAGE_PREFIX = "trevv:live-draft:v1:";
@@ -100,7 +101,7 @@ export function formatLiveDate(
     timeStyle: "short",
   },
 ) {
-  return new Intl.DateTimeFormat(undefined, {
+  return dateTimeFormatter(undefined, {
     ...options,
     timeZone: timezone,
   }).format(new Date(value));
@@ -118,7 +119,7 @@ export function formatLiveDateOnly(value: string, timezone: string) {
 export function formatCompactWorkspaceDate(value: string) {
   const parsed = new Date(`${value}T12:00:00`);
   if (!value || Number.isNaN(parsed.valueOf())) return "Not scheduled";
-  return new Intl.DateTimeFormat("en", {
+  return dateTimeFormatter("en", {
     month: "short",
     day: "numeric",
   }).format(parsed);

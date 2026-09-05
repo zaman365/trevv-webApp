@@ -9,14 +9,14 @@ import {
 } from "@founderhq/api-contract";
 import { TrevvApiError } from "@founderhq/api-client";
 import {
-  keepPreviousData,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
   type QueryKey,
+  type QueryClient,
 } from "@tanstack/react-query";
 import { useEffect, useRef, type RefObject } from "react";
-import { useLiveAppData } from "./live-app-data";
+import { useLiveAppRecords as useLiveAppData } from "./live-app-data";
 import { liveDraftStorageKey } from "./live-workflow-ui";
 
 const collaborationRoot = "live-collaboration";
@@ -184,6 +184,36 @@ export function collaborationQueryKeysForEvent(
   return uniqueQueryKeys(keys);
 }
 
+/** Coalesce a finite SSE batch into one refresh per affected active query. */
+export function createCollaborationInvalidationBatch(queryClient: QueryClient) {
+  const pending = new Map<string, QueryKey>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+    const keys = [...pending.values()];
+    pending.clear();
+    if (!keys.length) return;
+    void queryClient.invalidateQueries({
+      predicate: (query) =>
+        keys.some((key) =>
+          key.every((part, index) => part === query.queryKey[index]),
+        ),
+    });
+  };
+  return {
+    add(keys: readonly QueryKey[]) {
+      for (const key of keys) pending.set(JSON.stringify(key), key);
+      timer ??= setTimeout(flush, 32);
+    },
+    flush,
+    dispose() {
+      if (timer !== undefined) clearTimeout(timer);
+      pending.clear();
+    },
+  };
+}
+
 export function mergeConversationMessagePages(
   pages: readonly PaginatedConversationMessages[] | undefined,
 ): ConversationMessageDto[] {
@@ -228,12 +258,13 @@ export function useLiveTeamDirectory(
   workspaceId: string | undefined,
   enabled = true,
 ) {
+  // Query keys retain background data within one scope. Cross-key placeholders
+  // would put another workspace's records under the newly selected heading.
   const { client } = useLiveAppData();
   return useQuery({
     queryKey: collaborationKeys.teams(workspaceId ?? "unavailable"),
     queryFn: () => client.teamDirectory(workspaceId!),
     enabled: enabled && Boolean(workspaceId),
-    placeholderData: keepPreviousData,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -249,7 +280,6 @@ export function useLiveConversations(
     queryKey: collaborationKeys.conversations(workspaceId ?? "unavailable"),
     queryFn: () => fetchEveryConversation(client, workspaceId!),
     enabled: enabled && Boolean(workspaceId),
-    placeholderData: keepPreviousData,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -268,7 +298,6 @@ export function useLiveConversation(
     ),
     queryFn: () => client.conversation(conversationId!),
     enabled: Boolean(workspaceId && conversationId),
-    placeholderData: keepPreviousData,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
   });
@@ -295,7 +324,6 @@ export function useLiveConversationMessages(
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled:
       options.enabled !== false && Boolean(workspaceId && conversationId),
-    placeholderData: keepPreviousData,
     refetchInterval: 4_000,
     refetchIntervalInBackground: false,
   });
@@ -318,6 +346,7 @@ export function LiveCollaborationEventBridge({
     let source: EventSource | null = null;
     let reconnectTimer: number | undefined;
     let disposed = false;
+    const invalidations = createCollaborationInvalidationBatch(queryClient);
 
     const scheduleReconnect = (delay = 2_500) => {
       if (disposed || reconnectTimer !== undefined) return;
@@ -338,18 +367,15 @@ export function LiveCollaborationEventBridge({
         const parsed = parseCollaborationEvent(rawEvent.data);
         if (!parsed) {
           if (rawEvent.type === "reset") {
-            void queryClient.invalidateQueries({
-              queryKey: collaborationKeys.workspace(workspaceId),
-            });
+            invalidations.add([collaborationKeys.workspace(workspaceId)]);
           }
           return;
         }
         eventCursors.set(workspaceId, parsed.cursor);
-        for (const queryKey of collaborationQueryKeysForEvent(parsed)) {
-          void queryClient.invalidateQueries({ queryKey });
-        }
+        invalidations.add(collaborationQueryKeysForEvent(parsed));
       };
       const checkpoint = (rawEvent: MessageEvent<string>) => {
+        invalidations.flush();
         const cursor = parseCheckpointCursor(rawEvent.data);
         if (cursor !== null) eventCursors.set(workspaceId, cursor);
         source?.close();
@@ -374,6 +400,7 @@ export function LiveCollaborationEventBridge({
     connect();
     return () => {
       disposed = true;
+      invalidations.dispose();
       source?.close();
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
     };

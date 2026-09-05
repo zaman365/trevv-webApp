@@ -21,8 +21,9 @@ import {
 } from "@/lib/app-session-context";
 import {
   LiveAppDataProvider,
-  useOptionalLiveAppData,
+  useOptionalLiveAppRecords as useOptionalLiveAppData,
   type LiveAppDataSnapshot,
+  type LiveAppRecords,
 } from "@/lib/live-app-data";
 import { LearningCenterProvider } from "./learning-center";
 import { LiveStateNotice } from "./live-state";
@@ -132,7 +133,7 @@ function AppShellProviderContent({
   );
 }
 
-function toWorkspaceLiveSource(data: LiveAppDataSnapshot) {
+function toWorkspaceLiveSource(data: LiveAppRecords) {
   return {
     portfolios: data.portfolios.map((portfolio): Portfolio => ({
       ...portfolio,
@@ -215,7 +216,6 @@ function toWorkspaceLiveSource(data: LiveAppDataSnapshot) {
         : {}),
       metadata: signal.metadata,
     })),
-    refreshedAt: data.refreshedAt,
   };
 }
 

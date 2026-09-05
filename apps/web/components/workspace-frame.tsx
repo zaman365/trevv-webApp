@@ -50,7 +50,7 @@ import {
 } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { useLearningCenter } from "./learning-center";
 import type { CapturedWorkItem } from "@/lib/captured-work";
 import { UniversalCreateDialog } from "./universal-create";
@@ -61,7 +61,7 @@ import {
   useCustomWorkspaces,
 } from "@/lib/custom-workspaces";
 import { useAppSession } from "@/lib/app-session-context";
-import { useOptionalLiveAppData } from "@/lib/live-app-data";
+import { useOptionalLiveAppRecords as useOptionalLiveAppData } from "@/lib/live-app-data";
 import {
   LiveCollaborationEventBridge,
   LiveUnreadBadge,
@@ -215,7 +215,6 @@ function WorkspaceChrome({
     allPortfolios,
     allWorkspaces,
     allItems,
-    lastRefreshedAt,
   } = useWorkspace();
   const customWorkspaceRecords = useCustomWorkspaces();
   const customPortfolioRecords = useCustomPortfolios();
@@ -1215,9 +1214,7 @@ function WorkspaceChrome({
                     description:
                       "TREVV has not completed a recent refresh. New writes remain unavailable until acknowledged.",
                   })}
-              {...(lastRefreshedAt !== undefined
-                ? { lastSyncedAt: lastRefreshedAt }
-                : {})}
+              synced
               actions={
                 <button type="button" onClick={() => void liveData.refresh()}>
                   Retry now

@@ -47,7 +47,7 @@ import {
   type DashboardViewLevel,
 } from "@/lib/dashboard-access";
 import { vocabularyFor } from "@/lib/terminology";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { WorkspaceFrame } from "./workspace-frame";
 import { BarChart, DonutChart, type Bar, type Slice } from "./charts";

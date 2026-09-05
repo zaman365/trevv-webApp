@@ -19,12 +19,18 @@ import {
 } from "@tanstack/react-query";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import {
+  LiveAppFreshnessContext,
+  useLiveAppRefreshedAt,
+} from "./live-app-freshness";
+export { useLiveAppRefreshedAt } from "./live-app-freshness";
 
 export interface LiveAppDataSnapshot {
   portfolios: PortfolioDto[];
@@ -35,7 +41,9 @@ export interface LiveAppDataSnapshot {
   refreshedAt: string;
 }
 
-interface LiveAppDataContextValue extends LiveAppDataSnapshot {
+export type LiveAppRecords = Omit<LiveAppDataSnapshot, "refreshedAt">;
+
+interface LiveAppRecordsContextValue extends LiveAppRecords {
   client: TrevvApiClient;
   error: unknown;
   refreshing: boolean;
@@ -44,7 +52,9 @@ interface LiveAppDataContextValue extends LiveAppDataSnapshot {
   refresh(): Promise<void>;
 }
 
-const LiveAppDataContext = createContext<LiveAppDataContextValue | null>(null);
+const LiveAppDataContext = createContext<LiveAppRecordsContextValue | null>(
+  null,
+);
 const liveAppDataKey = ["live-app-data"] as const;
 
 export function LiveAppDataProvider({
@@ -134,42 +144,81 @@ function LiveAppDataQuery({
   // several times a minute even when the payload was byte-identical. Only an
   // explicitly requested refresh counts as refreshing.
   const [manualRefreshing, setManualRefreshing] = useState(false);
-  const value = useMemo<LiveAppDataContextValue>(
+  const refresh = useCallback(async () => {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [refetch]);
+  const { portfolios, workspaces, items, attention, waiting } = data;
+  const value = useMemo<LiveAppRecordsContextValue>(
     () => ({
-      ...data,
+      portfolios,
+      workspaces,
+      items,
+      attention,
+      waiting,
       client,
       error,
       refreshing: manualRefreshing,
       stale,
       accessLost,
-      refresh: async () => {
-        setManualRefreshing(true);
-        try {
-          await refetch();
-        } finally {
-          setManualRefreshing(false);
-        }
-      },
+      refresh,
     }),
-    [accessLost, client, data, error, manualRefreshing, refetch, stale],
+    [
+      accessLost,
+      client,
+      portfolios,
+      workspaces,
+      items,
+      attention,
+      waiting,
+      error,
+      manualRefreshing,
+      refresh,
+      stale,
+    ],
   );
 
   return (
     <LiveAppDataContext.Provider value={value}>
-      {children}
+      <LiveAppFreshnessContext.Provider value={data.refreshedAt}>
+        {children}
+      </LiveAppFreshnessContext.Provider>
     </LiveAppDataContext.Provider>
   );
 }
 
-export function useLiveAppData(): LiveAppDataContextValue {
+/** Record consumers do not subscribe to the clock that changes on every poll. */
+export function useLiveAppRecords(): LiveAppRecordsContextValue {
   const value = useContext(LiveAppDataContext);
   if (!value)
     throw new Error("Live application data is unavailable in demo mode.");
   return value;
 }
 
-export function useOptionalLiveAppData(): LiveAppDataContextValue | null {
+export function useOptionalLiveAppRecords(): LiveAppRecordsContextValue | null {
   return useContext(LiveAppDataContext);
+}
+
+// Keep the full snapshot hooks available for consumers that need both records
+// and refresh time. Large views use the record-only hooks; clock labels subscribe
+// independently so a successful unchanged poll does not repaint the application.
+export function useLiveAppData() {
+  const records = useLiveAppRecords();
+  const refreshedAt = useLiveAppRefreshedAt()!;
+  return useMemo(() => ({ ...records, refreshedAt }), [records, refreshedAt]);
+}
+
+export function useOptionalLiveAppData() {
+  const records = useOptionalLiveAppRecords();
+  const refreshedAt = useLiveAppRefreshedAt()!;
+  return useMemo(
+    () => (records ? { ...records, refreshedAt } : null),
+    [records, refreshedAt],
+  );
 }
 
 export async function fetchLiveAppData(

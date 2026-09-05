@@ -28,7 +28,7 @@ import { useMemo, useState } from "react";
 import { SIGNAL_TONES, type SignalTone } from "@/lib/attention";
 import { summarizePortfolio } from "@/lib/portfolios";
 import { vocabularyFor } from "@/lib/terminology";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { WorkspaceFrame } from "./workspace-frame";
 import { AttentionRow, WorkspaceMark } from "./management-experience";
 import { ProjectTile } from "./project-tile";

@@ -28,7 +28,7 @@ import {
 } from "@founderhq/core";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import {
   capabilitiesForMember,

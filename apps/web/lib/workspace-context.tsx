@@ -1,6 +1,7 @@
 "use client";
 
 import { getMessages } from "@founderhq/i18n";
+import { replaceEqualDeep } from "@tanstack/react-query";
 import type {
   AttentionSignal,
   Portfolio,
@@ -40,6 +41,8 @@ import {
   type Theme,
 } from "./display-preferences";
 
+import { useLiveAppRefreshedAt } from "./live-app-freshness";
+
 export type WorkspaceLevel = "portfolio" | "project";
 
 interface WorkspaceContextValue {
@@ -70,7 +73,7 @@ export interface WorkspaceLiveSource {
   items: readonly WorkItem[];
   waiting: readonly WaitingState[];
   attention: readonly AttentionSignal[];
-  refreshedAt: string;
+  refreshedAt?: string;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -96,6 +99,7 @@ export function WorkspaceProvider({
   portfolioScoped?: boolean;
   liveSource?: WorkspaceLiveSource;
 }) {
+  const refreshedAt = useLiveAppRefreshedAt();
   const defaultPortfolioId =
     liveSource?.portfolios.find((portfolio) => portfolio.isDefault)?.id ??
     liveSource?.portfolios[0]?.id ??
@@ -205,12 +209,12 @@ export function WorkspaceProvider({
     setThemePreference(next);
   }, [theme]);
 
-  const scope = useMemo(
+  const calculatedScope = useMemo(
     () =>
       liveSource
         ? scopeWorkspaceFromData(
             activePortfolioId,
-            new Date(),
+            refreshedAt ? new Date(refreshedAt) : new Date(),
             liveSource,
             !portfolioScoped && activeWorkspaceLevel === "project"
               ? (activeProjectId ?? undefined)
@@ -233,8 +237,18 @@ export function WorkspaceProvider({
       customWorkspaces,
       liveSource,
       portfolioScoped,
+      refreshedAt,
     ],
   );
+
+  // Re-evaluate time-sensitive snoozes and scores on the authoritative clock,
+  // but notify workspace consumers only when the derived result changes.
+  const [previousScope, setPreviousScope] = useState(calculatedScope);
+  const scope = useMemo(
+    () => replaceEqualDeep(previousScope, calculatedScope),
+    [previousScope, calculatedScope],
+  );
+  if (scope !== previousScope) setPreviousScope(scope);
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({
@@ -259,7 +273,9 @@ export function WorkspaceProvider({
       allPortfolios: liveSource?.portfolios ?? [],
       allWorkspaces,
       allItems: liveSource?.items ?? [],
-      ...(liveSource ? { lastRefreshedAt: liveSource.refreshedAt } : {}),
+      ...(liveSource?.refreshedAt
+        ? { lastRefreshedAt: liveSource.refreshedAt }
+        : {}),
       captureOpen,
       setCaptureOpen,
     }),
@@ -285,10 +301,20 @@ export function WorkspaceProvider({
   );
 }
 
-export function useWorkspace() {
+export function useWorkspaceState() {
   const value = useContext(WorkspaceContext);
   if (!value) {
     throw new Error("useWorkspace must be used inside a WorkspaceProvider");
   }
   return value;
+}
+
+/** Compatibility hook for consumers that also need the latest sync timestamp. */
+export function useWorkspace() {
+  const value = useWorkspaceState();
+  const refreshedAt = useLiveAppRefreshedAt();
+  return useMemo(
+    () => (refreshedAt ? { ...value, lastRefreshedAt: refreshedAt } : value),
+    [value, refreshedAt],
+  );
 }

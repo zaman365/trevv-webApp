@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import { MailPlus, RefreshCw, RotateCw, UserPlus, XCircle } from "lucide-react";
 import Link from "next/link";
 import {
@@ -10,7 +12,7 @@ import {
   type FormEvent,
 } from "react";
 import { useAppSession } from "@/lib/app-session-context";
-import { useOptionalLiveAppData } from "@/lib/live-app-data";
+import { useOptionalLiveAppRecords as useOptionalLiveAppData } from "@/lib/live-app-data";
 
 interface InvitationView {
   id: string;
@@ -424,7 +426,7 @@ function roleLabel(role: string) {
 }
 
 function formatInvitationDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
+  return dateTimeFormatter("en", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

@@ -37,7 +37,7 @@ import {
   type LearningCategory,
   type LearningResource,
 } from "@/lib/learning-resources";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { resolveLearningRoute } from "@/lib/learning-routes";
 
 interface LearningCenterContextValue {

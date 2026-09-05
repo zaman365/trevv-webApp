@@ -28,7 +28,7 @@ import {
   useAccessibleDialog,
   useLiveTeamDirectory,
 } from "@/lib/live-collaboration";
-import { useLiveAppData } from "@/lib/live-app-data";
+import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";

@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   Laptop,
   LogOut,
@@ -255,7 +257,7 @@ function errorMessage(value: unknown, fallback: string): string {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("en", {
+  return dateTimeFormatter("en", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

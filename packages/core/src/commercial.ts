@@ -212,20 +212,24 @@ export function rankAttentionSignals(
   signals: readonly AttentionSignal[],
   now = new Date(),
 ): AttentionSignal[] {
-  return signals
-    .filter((signal) => attentionState(signal, now) === "active")
-    .filter(
-      (signal, index, all) =>
-        all.findIndex(
-          (candidate) =>
-            candidate.entityType === signal.entityType &&
-            candidate.entityId === signal.entityId &&
-            candidate.signalType === signal.signalType,
-        ) === index,
-    )
-    .sort(
-      (left, right) => attentionScore(right, now) - attentionScore(left, now),
-    );
+  const seen = new Set<string>();
+  const ranked: Array<{ signal: AttentionSignal; score: number }> = [];
+  for (const signal of signals) {
+    if (attentionState(signal, now) !== "active") continue;
+    // A tuple preserves identity even when identifiers contain delimiters.
+    const key = JSON.stringify([
+      signal.entityType,
+      signal.entityId,
+      signal.signalType,
+    ]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ranked.push({ signal, score: attentionScore(signal, now) });
+  }
+  // Stable sorting preserves the first active signal and input order on ties.
+  return ranked
+    .sort((left, right) => right.score - left.score)
+    .map(({ signal }) => signal);
 }
 
 export interface AttentionEvidenceWorkspace {

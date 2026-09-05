@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   ArrowRight,
   BellRing,
@@ -484,7 +486,7 @@ function downloadFile(name: string, body: string, type: string) {
 }
 
 function formatAuditTime(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return dateTimeFormatter("en-GB", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Europe/Berlin",

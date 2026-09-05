@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import { createApiClient } from "@founderhq/api-client";
 import { demoItems, demoWorkspaces } from "@founderhq/core";
 import type {
@@ -25,8 +27,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
-import { useOptionalLiveAppData } from "@/lib/live-app-data";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useOptionalLiveAppRecords as useOptionalLiveAppData } from "@/lib/live-app-data";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./calendar-experience.module.css";
@@ -1085,14 +1087,14 @@ function localInputToIso(date: string, time: string, addDay = 0) {
   return value.toISOString();
 }
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return dateTimeFormatter(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
 }
 function rangeLabel(anchor: Date, view: CalendarView) {
   if (view === "month")
-    return new Intl.DateTimeFormat(undefined, {
+    return dateTimeFormatter(undefined, {
       month: "long",
       year: "numeric",
     }).format(anchor);
@@ -1100,18 +1102,18 @@ function rangeLabel(anchor: Date, view: CalendarView) {
   const first = days[0] ?? anchor;
   const last = days.at(-1) ?? anchor;
   if (view === "day")
-    return new Intl.DateTimeFormat(undefined, {
+    return dateTimeFormatter(undefined, {
       weekday: "long",
       day: "numeric",
       month: "long",
       year: "numeric",
     }).format(first);
-  return `${new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(first)} – ${new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(last)}`;
+  return `${dateTimeFormatter(undefined, { day: "numeric", month: "short" }).format(first)} – ${dateTimeFormatter(undefined, { day: "numeric", month: "short", year: "numeric" }).format(last)}`;
 }
 function formatDateTimeRange(event: CalendarEventDto) {
   if (event.allDay)
     return `${new Date(event.startAt).toLocaleDateString()} · All day`;
-  return `${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.startAt))} – ${formatTime(event.endAt)}`;
+  return `${dateTimeFormatter(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.startAt))} – ${formatTime(event.endAt)}`;
 }
 function providerLabel(provider: string) {
   if (provider === "google_calendar") return "Google Calendar";

@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import type {
   BoardDto,
   WorkItemDto,
@@ -27,7 +29,7 @@ import {
   type FormEvent,
 } from "react";
 import { useAppSession } from "@/lib/app-session-context";
-import { useLiveAppData } from "@/lib/live-app-data";
+import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import {
   formatLiveDate,
@@ -35,7 +37,7 @@ import {
   workItemStatusLabel,
 } from "@/lib/live-workflow-ui";
 import { workspaceHref } from "@/lib/workspace-routes";
-import { LiveStateNotice } from "./live-state";
+import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
 
@@ -322,7 +324,7 @@ export function LiveBoardExperience({
             }
             description="Last-known board data is still visible and timestamped."
             kind="stale"
-            lastSyncedAt={liveData.refreshedAt}
+            synced
             title="Board data may be stale"
           />
         ) : null}
@@ -358,7 +360,7 @@ export function LiveBoardExperience({
               <h2 id="board-items-title">Work items</h2>
             </div>
             <small>
-              Last synced {formatLiveDate(liveData.refreshedAt, timezone)}
+              Last synced <LiveSyncedAt timezone={timezone} />
             </small>
           </header>
           {items.length === 0 && !loading ? (
@@ -717,7 +719,7 @@ function WorkItemDetail({
   const [reason, setReason] = useState("");
   const [evidenceBody, setEvidenceBody] = useState("");
   const [waitingDate, setWaitingDate] = useState(() =>
-    tomorrowInTimeZone(timezone, liveData.refreshedAt),
+    tomorrowInTimeZone(timezone, new Date().toISOString()),
   );
   const [assignees, setAssignees] = useState<
     Array<{ id: string; name: string }>
@@ -1123,7 +1125,7 @@ function editableStatusOptions(current: WorkItemDto["status"]) {
 
 function tomorrowInTimeZone(timezone: string, referenceTime: string) {
   const tomorrow = new Date(Date.parse(referenceTime) + 86_400_000);
-  const parts = new Intl.DateTimeFormat("en", {
+  const parts = dateTimeFormatter("en", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

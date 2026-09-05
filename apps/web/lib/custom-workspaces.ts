@@ -97,15 +97,20 @@ export function createCustomWorkspace(
 }
 
 function subscribe(notify: () => void): () => void {
-  const handleChange = () => {
+  // Local writes already update the shared snapshot. Do not parse it once per
+  // subscriber or overwrite a successful in-memory write when storage is blocked.
+  const handleChange = () => notify();
+  const handleStorage = (event: StorageEvent) => {
+    if (event.storageArea !== window.localStorage) return;
+    if (event.key !== null && event.key !== storageKey) return;
     cachedSnapshot = readStorage();
     notify();
   };
   window.addEventListener(changeEvent, handleChange);
-  window.addEventListener("storage", handleChange);
+  window.addEventListener("storage", handleStorage);
   return () => {
     window.removeEventListener(changeEvent, handleChange);
-    window.removeEventListener("storage", handleChange);
+    window.removeEventListener("storage", handleStorage);
   };
 }
 

@@ -8,7 +8,7 @@ import { CheckCircle2, Save, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
-import { useLiveAppData } from "@/lib/live-app-data";
+import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";

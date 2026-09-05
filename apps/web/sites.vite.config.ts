@@ -3,11 +3,12 @@ import { sites } from "@openai/sites-vite-plugin";
 import tailwindcss from "@tailwindcss/postcss";
 import vinext from "vinext";
 import { defineConfig } from "vite";
+import workerNextConfig from "./worker-next.config";
 
 export default defineConfig({
   css: { postcss: { plugins: [tailwindcss()] } },
   plugins: [
-    vinext(),
+    vinext({ nextConfig: workerNextConfig }),
     sites(),
     cloudflare({
       viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },

@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
-import { useLiveAppData } from "@/lib/live-app-data";
+import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import {
   formatLiveDate,
@@ -189,7 +189,7 @@ export function LiveWorkspaceOverview({
             }
             description="Last-known workspace data remains timestamped while TREVV reconnects."
             kind="stale"
-            lastSyncedAt={liveData.refreshedAt}
+            synced
             title="Workspace data may be stale"
           />
         ) : null}

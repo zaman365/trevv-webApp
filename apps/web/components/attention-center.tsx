@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   AlertTriangle,
   ArrowRight,
@@ -40,7 +42,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { type GroupedSignal } from "@/lib/attention";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint } from "./learning-center";
 
@@ -1351,7 +1353,7 @@ function capitalize(value: string) {
 
 function formatDate(value?: string) {
   if (!value) return "No date";
-  return new Intl.DateTimeFormat("en-GB", {
+  return dateTimeFormatter("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",

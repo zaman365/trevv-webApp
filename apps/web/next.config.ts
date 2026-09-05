@@ -18,7 +18,7 @@ const sensitiveAuthHeaders = [
   { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
 ];
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   output: "standalone",
   poweredByHeader: false,
   // The development badge is a fixed overlay. In browser CI it can cover the
@@ -68,6 +68,6 @@ const nextConfig: NextConfig = {
       ].map((source) => ({ source, headers: sensitiveAuthHeaders })),
     ];
   },
-};
+} satisfies NextConfig;
 
 export default nextConfig;

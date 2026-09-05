@@ -1,13 +1,15 @@
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import type {
   CollaborationEventDto,
   ConversationDto,
   ConversationMessageDto,
   PaginatedConversationMessages,
 } from "@founderhq/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   clampConversationRailWidth,
   collaborationKeys,
+  createCollaborationInvalidationBatch,
   collaborationQueryKeysForEvent,
   conversationRailWidth,
   conversationGroupFor,
@@ -263,3 +265,53 @@ function conversation(
     ...overrides,
   };
 }
+
+describe("collaboration event batching", () => {
+  it("refetches each matching feed once for a burst, including reply feeds", async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient();
+    const queries = [
+      collaborationKeys.messages("one", "room"),
+      collaborationKeys.messages("one", "room", "parent"),
+      collaborationKeys.conversations("one"),
+      collaborationKeys.messages("two", "other"),
+    ].map((queryKey) => {
+      const queryFn = vi.fn(async () => ["updated"]);
+      const observer = new QueryObserver(client, {
+        queryKey,
+        queryFn,
+        initialData: ["initial"],
+        staleTime: Infinity,
+      });
+      return { queryFn, unsubscribe: observer.subscribe(() => {}) };
+    });
+    const batch = createCollaborationInvalidationBatch(client);
+    try {
+      for (let index = 0; index < 100; index++) {
+        batch.add([
+          collaborationKeys.messages("one", "room"),
+          collaborationKeys.conversations("one"),
+        ]);
+      }
+      await vi.advanceTimersByTimeAsync(32);
+      expect(queries.map(({ queryFn }) => queryFn.mock.calls.length)).toEqual([
+        1, 1, 1, 0,
+      ]);
+      batch.add([collaborationKeys.workspace("one")]);
+      batch.flush();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(queries.map(({ queryFn }) => queryFn.mock.calls.length)).toEqual([
+        2, 2, 2, 0,
+      ]);
+      batch.add([collaborationKeys.workspace("one")]);
+      batch.dispose();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(queries[0]!.queryFn).toHaveBeenCalledTimes(2);
+    } finally {
+      batch.dispose();
+      queries.forEach(({ unsubscribe }) => unsubscribe());
+      client.clear();
+      vi.useRealTimers();
+    }
+  });
+});

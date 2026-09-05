@@ -41,7 +41,7 @@ import {
 } from "react";
 import { storeCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { labelForProjectType } from "@/lib/terminology";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import {
   conversationGroupFor,

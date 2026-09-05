@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   AlertTriangle,
   ArrowRight,
@@ -34,7 +36,7 @@ import {
 } from "@founderhq/core";
 import { useMemo, useState } from "react";
 import { useCapturedWork } from "@/lib/captured-work";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { Hint, useLearningCenter } from "./learning-center";
 
@@ -1143,7 +1145,7 @@ function dueLabel(item: MyWorkRecord) {
     );
     return `${days}d overdue`;
   }
-  return new Intl.DateTimeFormat("en-GB", {
+  return dateTimeFormatter("en-GB", {
     day: "numeric",
     month: "short",
     timeZone: "UTC",

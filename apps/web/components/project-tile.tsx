@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   AlertTriangle,
   Archive,
@@ -154,7 +156,7 @@ export function ProjectTile({
               <span className="ui-label">{copy.common.milestone}</span>
               <strong>{workspace.nextMilestone.title}</strong>
               <time dateTime={workspace.nextMilestone.date}>
-                {new Intl.DateTimeFormat("en", {
+                {dateTimeFormatter("en", {
                   month: "short",
                   day: "numeric",
                 }).format(new Date(workspace.nextMilestone.date))}

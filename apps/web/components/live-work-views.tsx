@@ -32,7 +32,10 @@ import {
   type ReactNode,
 } from "react";
 import { useAppSession } from "@/lib/app-session-context";
-import { useLiveAppData } from "@/lib/live-app-data";
+import {
+  useLiveAppRecords as useLiveAppData,
+  useLiveAppRefreshedAt,
+} from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import {
   formatLiveDate,
@@ -44,7 +47,7 @@ import {
 } from "@/lib/live-workflow-ui";
 import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
 import { InboxExperience } from "./email-inbox-workflow";
-import { LiveStateNotice } from "./live-state";
+import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { LiveWorkspaceSettings } from "./live-workspace-settings";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
@@ -211,10 +214,7 @@ export function LiveWorkView({
             </div>
             <small>
               Last synced{" "}
-              {formatLiveDate(
-                liveData.refreshedAt,
-                session.organization.timezone ?? "UTC",
-              )}
+              <LiveSyncedAt timezone={session.organization.timezone ?? "UTC"} />
             </small>
           </header>
         )}
@@ -227,7 +227,7 @@ export function LiveWorkView({
             }
             description="Last-known data remains visible with its sync timestamp."
             kind="stale"
-            lastSyncedAt={liveData.refreshedAt}
+            synced
             title="This view may be stale"
           />
         ) : null}
@@ -935,6 +935,7 @@ function LiveMyWork({
 function LiveAttention({ signals }: { signals: AttentionSignalDto[] }) {
   const session = useAppSession();
   const liveData = useLiveAppData();
+  const refreshedAt = useLiveAppRefreshedAt()!;
   const [records, setRecords] = useState(signals);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<ReactNode>(null);
@@ -979,7 +980,7 @@ function LiveAttention({ signals }: { signals: AttentionSignalDto[] }) {
       ...(action === "snooze"
         ? {
             snoozedUntil: new Date(
-              Date.parse(liveData.refreshedAt) + 86_400_000,
+              Date.parse(refreshedAt) + 86_400_000,
             ).toISOString(),
           }
         : {}),

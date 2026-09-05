@@ -21,7 +21,7 @@ import {
 import { demoWorkspaces, demoItems } from "@founderhq/core";
 import { useMemo, useState, type FormEvent } from "react";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { Hint } from "./learning-center";
 
 type DecisionState =

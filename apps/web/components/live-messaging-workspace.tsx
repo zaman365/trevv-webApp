@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import type {
   ConversationDto,
   ConversationMessageDto,
@@ -37,6 +39,7 @@ import Link from "next/link";
 import {
   Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -64,7 +67,7 @@ import {
   useLiveTeamDirectory,
   type ConversationGroup,
 } from "@/lib/live-collaboration";
-import { useLiveAppData } from "@/lib/live-app-data";
+import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import {
   isLiveDraftEnvelope,
@@ -223,6 +226,7 @@ export function LiveMessagingWorkspace({
   const loadingHistoryRef = useRef(false);
   const followTimelineRef = useRef(true);
   const previousConversationRef = useRef<string | null>(null);
+  const previousMessageCountRef = useRef(0);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const canCreateConversation = canCreateMessages(session.organization.role);
   const canSendMessage = session.organization.role !== "viewer";
@@ -389,15 +393,23 @@ export function LiveMessagingWorkspace({
     workspace,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loadingHistoryRef.current) return;
     const conversationChanged =
       previousConversationRef.current !== effectiveSelectedId;
+    const firstMessages = previousMessageCountRef.current === 0;
     previousConversationRef.current = effectiveSelectedId;
+    previousMessageCountRef.current = messages.length;
+    if (conversationChanged) followTimelineRef.current = true;
     if (!conversationChanged && !followTimelineRef.current) return;
     timelineRef.current?.scrollTo({
       top: timelineRef.current.scrollHeight,
-      behavior: "smooth",
+      behavior:
+        conversationChanged ||
+        firstMessages ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
     });
   }, [delivery?.clientMessageId, effectiveSelectedId, messages.length]);
 
@@ -511,12 +523,23 @@ export function LiveMessagingWorkspace({
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
+    let frame: number | undefined;
+    let nextWidth = startWidth;
+    const commitWidth = () => {
+      frame = undefined;
+      setConversationRailWidthValue(nextWidth);
+    };
     const move = (pointerEvent: PointerEvent) => {
-      setConversationRailWidthValue(
-        clampConversationRailWidth(startWidth + pointerEvent.clientX - startX),
+      nextWidth = clampConversationRailWidth(
+        startWidth + pointerEvent.clientX - startX,
       );
+      frame ??= window.requestAnimationFrame(commitWidth);
     };
     const stop = () => {
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame);
+        commitWidth();
+      }
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
@@ -2235,7 +2258,7 @@ function initials(name: string) {
 }
 
 function formatMessageTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return dateTimeFormatter(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: timezone,

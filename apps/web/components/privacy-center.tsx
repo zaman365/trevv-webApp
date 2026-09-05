@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   createApiClient,
   TrevvApiError,
@@ -418,7 +420,7 @@ function errorKind(error: unknown): LiveStateKind {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+  return dateTimeFormatter(undefined, { dateStyle: "medium" }).format(
     new Date(value),
   );
 }

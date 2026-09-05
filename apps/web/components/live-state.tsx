@@ -1,3 +1,7 @@
+"use client";
+
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   AlertCircle,
   CheckCircle2,
@@ -11,6 +15,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useLiveAppRefreshedAt } from "@/lib/live-app-freshness";
+import { formatLiveDate } from "@/lib/live-workflow-ui";
 import styles from "./live-state.module.css";
 
 export type LiveStateKind =
@@ -51,6 +57,7 @@ export function LiveStateNotice({
   title,
   description,
   lastSyncedAt,
+  synced = false,
   actions,
   compact = false,
   role,
@@ -59,13 +66,14 @@ export function LiveStateNotice({
   title: string;
   description?: string;
   lastSyncedAt?: string | Date;
+  synced?: boolean;
   actions?: ReactNode;
   compact?: boolean;
   role?: "alert" | "status";
 }) {
   const Icon = icons[kind];
   const timestamp = lastSyncedAt
-    ? new Intl.DateTimeFormat(undefined, {
+    ? dateTimeFormatter(undefined, {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(
@@ -89,11 +97,26 @@ export function LiveStateNotice({
         {description ? <p>{description}</p> : null}
         {timestamp ? (
           <small className={styles.timestamp}>Last synced {timestamp}</small>
+        ) : synced ? (
+          <small className={styles.timestamp}>
+            Last synced <LiveSyncedAt />
+          </small>
         ) : null}
       </div>
       {actions ? <div className={styles.actions}>{actions}</div> : null}
     </section>
   );
+}
+
+/** Only the timestamp subscribes to successful unchanged background polls. */
+export function LiveSyncedAt({ timezone }: { timezone?: string }) {
+  const refreshedAt = useLiveAppRefreshedAt();
+  return refreshedAt
+    ? formatLiveDate(
+        refreshedAt,
+        timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      )
+    : null;
 }
 
 export function RouteLoadingState({ label = "Loading current data" }) {

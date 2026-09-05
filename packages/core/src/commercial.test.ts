@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   attentionScore,
+  attentionState,
+  rankAttentionSignals,
   calculateResourcePressure,
   changesSinceCheckpoint,
   checkEntitlement,
@@ -163,5 +165,62 @@ describe("TREVV commercial domain", () => {
     expect(pressure.some((person) => person.workspaceIds.length > 1)).toBe(
       true,
     );
+  });
+});
+
+describe("Attention ranking at workspace scale", () => {
+  const template = generateAttentionSignals(
+    "org-demo",
+    demoWorkspaces,
+    demoItems,
+    demoWaitingStates,
+    now,
+    demoDependencies,
+  )[0]!;
+
+  it("retains the first active duplicate, filters inactive records and preserves stable ties", () => {
+    const first = {
+      ...template,
+      id: "first",
+      entityId: "same",
+    };
+    const second = { ...first, id: "duplicate", urgency: 100 };
+    const tied = { ...first, id: "tied", entityId: "other" };
+    const inactive = {
+      ...first,
+      id: "inactive",
+      resolvedAt: now.toISOString(),
+    };
+    expect(rankAttentionSignals([inactive, first, second, tied], now)).toEqual([
+      first,
+      tied,
+    ]);
+  });
+
+  it("matches the original ranking with 10,000 records without changing its input", () => {
+    const signals = Array.from({ length: 10_000 }, (_, index) => ({
+      ...template,
+      id: `signal-${index}`,
+      entityId: `item-${index % 7_500}`,
+      urgency: (index % 5) + 1,
+    }));
+    const active = signals.filter(
+      (signal) => attentionState(signal, now) === "active",
+    );
+    const expected = active
+      .filter(
+        (signal, index, all) =>
+          all.findIndex(
+            (candidate) =>
+              candidate.entityType === signal.entityType &&
+              candidate.entityId === signal.entityId &&
+              candidate.signalType === signal.signalType,
+          ) === index,
+      )
+      .sort(
+        (left, right) => attentionScore(right, now) - attentionScore(left, now),
+      );
+    expect(rankAttentionSignals(signals, now)).toEqual(expected);
+    expect(signals[0]!.id).toBe("signal-0");
   });
 });

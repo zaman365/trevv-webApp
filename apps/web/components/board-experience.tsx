@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   DndContext,
   KeyboardSensor,
@@ -98,7 +100,7 @@ interface BoardItem {
 
 const formatDueDate = (dueDate?: string) =>
   dueDate
-    ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
+    ? dateTimeFormatter("en", { month: "short", day: "numeric" }).format(
         new Date(`${dueDate}T12:00:00Z`),
       )
     : "No date";

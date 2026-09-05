@@ -23,7 +23,7 @@ import { useMemo, useRef, useState } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { productCopy } from "@/lib/product-copy";
 import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import {
   currentMessagingUserId,

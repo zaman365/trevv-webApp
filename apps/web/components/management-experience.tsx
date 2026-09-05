@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   AlertTriangle,
   ArrowRight,
@@ -40,7 +42,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { type GroupedSignal } from "@/lib/attention";
 import { Hint } from "./learning-center";
 import { IdeasWorkflow } from "./ideas-workflow";
@@ -619,7 +621,7 @@ function ReviewsMain() {
               <span className={`trend-dot ${snapshot.health}`} />
               {index < snapshots.length - 1 && <i />}
               <strong>
-                {new Intl.DateTimeFormat("en", {
+                {dateTimeFormatter("en", {
                   month: "short",
                   day: "2-digit",
                 }).format(new Date(snapshot.capturedAt))}

@@ -1,5 +1,7 @@
 "use client";
 
+import { dateTimeFormatter } from "@/lib/date-format";
+
 import {
   Activity,
   Building2,
@@ -767,7 +769,7 @@ function roleLabel(value: string): string {
 }
 
 function formatDate(value: string, includeTime = true): string {
-  return new Intl.DateTimeFormat(
+  return dateTimeFormatter(
     "en",
     includeTime
       ? { dateStyle: "medium", timeStyle: "short" }
