@@ -16,6 +16,6 @@ export default async function WorkspaceImportPage({
 }) {
   const { workspaceSlug } = await params;
   const returnTo = `${workspaceHref(workspaceSlug)}/settings/import`;
-  await requireWorkspaceAccess(workspaceSlug, returnTo);
+  await requireWorkspaceAccess(workspaceSlug, returnTo, { details: false });
   return <ImportExperience workspaceSlug={workspaceSlug} />;
 }

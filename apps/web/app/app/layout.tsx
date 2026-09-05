@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShellProviders } from "@/components/app-shell-providers";
@@ -8,6 +8,7 @@ import {
 } from "@/lib/workspace-selection";
 import { requireAppSession } from "@/lib/server-auth";
 import { loadLiveAppData } from "@/lib/server-live-data";
+import { clientNavigationHeader } from "@/lib/navigation-request";
 import { webRuntimeMode } from "@/lib/web-runtime-config";
 import {
   parseThemePreference,
@@ -22,10 +23,22 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // Read on the server so the shell renders the member's workspace on the
   // first paint instead of correcting itself after hydration.
   const mode = webRuntimeMode();
-  const [store, session] = await Promise.all([cookies(), requireAppSession()]);
+  const [store, session, requestHeaders] = await Promise.all([
+    cookies(),
+    requireAppSession(),
+    headers(),
+  ]);
   // Resolve identity and onboarding first so an anonymous request redirects
   // cleanly instead of racing a protected data request into the error boundary.
-  const liveData = mode === "live" ? await loadLiveAppData() : undefined;
+  // RSC navigation reuses the mounted query provider. Vinext still executes
+  // dynamic layouts for these requests, so reloading every item here made each
+  // page switch wait for a redundant organization-wide snapshot. This header
+  // only controls the initial seed: session and leaf authorization always run,
+  // and a newly mounted provider without a seed fetches its own authorized data.
+  const liveData =
+    mode === "live" && requestHeaders.get(clientNavigationHeader) !== "1"
+      ? await loadLiveAppData()
+      : undefined;
   const storedSelection = parseWorkspaceSelection(
     store.get(workspaceSelectionCookie)?.value,
   );

@@ -124,14 +124,30 @@ function ConversationReader() {
     </>
   );
 }
-createRoot(document.getElementById("root")!).render(
-  <LiveAppDataProvider initialData={initialData}>
-    <Workspace>
-      <Records />
-      <WorkspaceRecords />
-      <Clock />
-      <StorageRecords />
-      {location.hash === "#conversation" ? <ConversationReader /> : null}
-    </Workspace>
-  </LiveAppDataProvider>,
-);
+function Harness() {
+  const [seeded, setSeeded] = useState(location.hash !== "#cold-navigation");
+  const [identity, setIdentity] = useState("one");
+  return (
+    <>
+      <button onClick={() => setSeeded(false)}>Navigate without seed</button>
+      <button
+        onClick={() => {
+          setSeeded(false);
+          setIdentity("two");
+        }}
+      >
+        Change identity
+      </button>
+      <LiveAppDataProvider key={identity} {...(seeded ? { initialData } : {})}>
+        <Workspace>
+          <Records />
+          <WorkspaceRecords />
+          <Clock />
+          <StorageRecords />
+          {location.hash === "#conversation" ? <ConversationReader /> : null}
+        </Workspace>
+      </LiveAppDataProvider>
+    </>
+  );
+}
+createRoot(document.getElementById("root")!).render(<Harness />);

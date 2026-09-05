@@ -2,7 +2,10 @@ import "server-only";
 
 import { createApiClient } from "@founderhq/api-client";
 import type { LiveAppDataSnapshot } from "./live-app-data";
-import { forwardedRequestHeaders } from "./server-auth";
+import {
+  forwardedRequestHeaders,
+  loadAccessibleWorkspaces,
+} from "./server-auth";
 import { webApiOrigin } from "./web-runtime-config";
 
 export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
@@ -34,7 +37,7 @@ export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
   const [portfolios, workspaces, attention, waiting, items] = await Promise.all(
     [
       client.portfolios(),
-      client.workspaces(),
+      loadAccessibleWorkspaces(),
       client.attention(),
       client.waiting(),
       fetchEveryWorkItem(client),

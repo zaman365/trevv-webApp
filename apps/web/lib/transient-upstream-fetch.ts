@@ -23,28 +23,47 @@ export async function fetchWithTransientUpstreamRetry(
   const retryDelaysMs = options.retryDelaysMs ?? defaultTransientRetryDelaysMs;
   const sleep = options.sleep ?? sleepWithAbort;
   const method = requestMethod(input, init);
+  const signal =
+    init.signal !== undefined
+      ? init.signal
+      : input instanceof Request
+        ? input.signal
+        : undefined;
 
   if (method !== "GET" && method !== "HEAD") {
     return fetchImpl(input, init);
   }
 
   for (let attempt = 0; ; attempt += 1) {
-    throwIfAborted(init.signal);
+    throwIfAborted(signal);
 
     try {
-      const response = await fetchImpl(input, init);
+      // Framework request memoization also covers no-store GETs. In Vinext it
+      // can retain a transient gateway response for the life of this render.
+      // A signal opts subsequent attempts out, so a retry contacts the upstream
+      // instead of replaying the original 503 for the entire backoff window.
+      const retryInit =
+        attempt === 0
+          ? init
+          : {
+              ...init,
+              signal: signal ?? new AbortController().signal,
+            };
+      const response = await fetchImpl(input, retryInit);
       if (
         !transientUpstreamStatuses.has(response.status) ||
         attempt >= retryDelaysMs.length
       ) {
         return response;
       }
-      await response.body?.cancel().catch(() => undefined);
+      // A memoized response may be one branch of a tee. Awaiting cancellation
+      // waits for the retained branch as well and can strand the retry forever.
+      void response.body?.cancel().catch(() => undefined);
     } catch (error) {
-      if (attempt >= retryDelaysMs.length || init.signal?.aborted) throw error;
+      if (attempt >= retryDelaysMs.length || signal?.aborted) throw error;
     }
 
-    await sleep(retryDelaysMs[attempt] ?? 0, init.signal);
+    await sleep(retryDelaysMs[attempt] ?? 0, signal);
   }
 }
 

@@ -13,7 +13,7 @@ export default async function WorkspaceModulePage({
   const returnTo = isWorkspaceView(view)
     ? workspaceHref(workspaceSlug, view)
     : workspaceHref(workspaceSlug);
-  await requireWorkspaceAccess(workspaceSlug, returnTo);
+  await requireWorkspaceAccess(workspaceSlug, returnTo, { details: false });
   if (!isWorkspaceView(view)) notFound();
 
   return (

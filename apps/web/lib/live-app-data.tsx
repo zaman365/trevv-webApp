@@ -30,6 +30,7 @@ import {
   LiveAppFreshnessContext,
   useLiveAppRefreshedAt,
 } from "./live-app-freshness";
+import { LiveStateNotice, RouteLoadingState } from "@/components/live-state";
 export { useLiveAppRefreshedAt } from "./live-app-freshness";
 
 export interface LiveAppDataSnapshot {
@@ -56,13 +57,21 @@ const LiveAppDataContext = createContext<LiveAppRecordsContextValue | null>(
   null,
 );
 const liveAppDataKey = ["live-app-data"] as const;
+const emptySnapshot: LiveAppDataSnapshot = {
+  portfolios: [],
+  workspaces: [],
+  items: [],
+  attention: [],
+  waiting: [],
+  refreshedAt: "1970-01-01T00:00:00.000Z",
+};
 
 export function LiveAppDataProvider({
   children,
   initialData,
 }: {
   children: ReactNode;
-  initialData: LiveAppDataSnapshot;
+  initialData?: LiveAppDataSnapshot;
 }) {
   const [queryClient] = useState(
     () =>
@@ -84,7 +93,9 @@ export function LiveAppDataProvider({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <LiveAppDataQuery initialData={initialData}>{children}</LiveAppDataQuery>
+      <LiveAppDataQuery {...(initialData ? { initialData } : {})}>
+        {children}
+      </LiveAppDataQuery>
     </QueryClientProvider>
   );
 }
@@ -94,7 +105,7 @@ function LiveAppDataQuery({
   initialData,
 }: {
   children: ReactNode;
-  initialData: LiveAppDataSnapshot;
+  initialData?: LiveAppDataSnapshot;
 }) {
   const client = useMemo(() => createApiClient({ baseUrl: "/api/v1" }), []);
   const {
@@ -104,7 +115,7 @@ function LiveAppDataQuery({
   } = useQuery({
     queryKey: liveAppDataKey,
     queryFn: () => fetchLiveAppData(client),
-    initialData,
+    ...(initialData ? { initialData } : {}),
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -121,9 +132,9 @@ function LiveAppDataQuery({
             items: [],
             attention: [],
             waiting: [],
-            refreshedAt: queryData.refreshedAt,
+            refreshedAt: queryData?.refreshedAt ?? emptySnapshot.refreshedAt,
           }
-        : queryData,
+        : (queryData ?? emptySnapshot),
     [accessLost, queryData],
   );
   const [expiredRefreshedAt, setExpiredRefreshedAt] = useState<string | null>(
@@ -185,7 +196,34 @@ function LiveAppDataQuery({
   return (
     <LiveAppDataContext.Provider value={value}>
       <LiveAppFreshnessContext.Provider value={data.refreshedAt}>
-        {children}
+        {queryData ? (
+          children
+        ) : error ? (
+          <main className="route-state-shell">
+            <LiveStateNotice
+              kind={accessLost ? "permission-loss" : "failed"}
+              title={
+                accessLost
+                  ? "Your access has changed"
+                  : "Unable to load your workspace"
+              }
+              description={
+                accessLost
+                  ? "Sign in again, or ask an organization owner to restore access."
+                  : "Your workspace could not be loaded. Try again."
+              }
+              actions={
+                accessLost ? (
+                  <a href="/sign-in">Return to sign in</a>
+                ) : (
+                  <button onClick={() => void refresh()}>Try again</button>
+                )
+              }
+            />
+          </main>
+        ) : (
+          <RouteLoadingState label="Loading your workspace" />
+        )}
       </LiveAppFreshnessContext.Provider>
     </LiveAppDataContext.Provider>
   );

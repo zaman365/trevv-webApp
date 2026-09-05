@@ -1,0 +1,18 @@
+.link {
+  position: relative;
+}
+
+.pending {
+  position: absolute;
+  inset-inline: 10px;
+  inset-block-end: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pending[data-navigation-pending] {
+  opacity: 0.75;
+}

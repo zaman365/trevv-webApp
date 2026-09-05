@@ -38,7 +38,7 @@ import type {
   PortfolioDto,
 } from "@founderhq/api-contract";
 import { demoWorkspaces, demoItems, demoPortfolios } from "@founderhq/core";
-import Link from "next/link";
+import { NavigationLink as Link } from "./navigation-link";
 import { useRouter } from "next/navigation";
 import {
   useEffect,

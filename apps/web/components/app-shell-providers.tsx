@@ -61,10 +61,15 @@ export function AppShellProviders({
       {children}
     </AppShellProviderContent>
   );
-  return liveData ? (
-    <LiveAppDataProvider initialData={liveData}>{content}</LiveAppDataProvider>
-  ) : (
+  return session.demo ? (
     content
+  ) : (
+    <LiveAppDataProvider
+      key={`${session.user.id}:${session.organization.id}`}
+      {...(liveData ? { initialData: liveData } : {})}
+    >
+      {content}
+    </LiveAppDataProvider>
   );
 }
 

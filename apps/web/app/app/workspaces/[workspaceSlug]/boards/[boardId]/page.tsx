@@ -10,7 +10,7 @@ export default async function WorkspaceBoardPage({
 }) {
   const { workspaceSlug, boardId } = await params;
   const returnTo = `${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(boardId)}`;
-  await requireWorkspaceAccess(workspaceSlug, returnTo);
+  await requireWorkspaceAccess(workspaceSlug, returnTo, { details: false });
   return (
     <BoardLoader
       boardId={boardId}

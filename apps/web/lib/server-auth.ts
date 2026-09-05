@@ -128,6 +128,7 @@ export async function requireOnboardingAccess(): Promise<void> {
 export async function requireWorkspaceAccess(
   workspaceSlug: string,
   returnTo: string,
+  options: { details?: boolean } = {},
 ) {
   await requireAppSession(returnTo);
   if (webRuntimeMode() === "demo") {
@@ -143,6 +144,13 @@ export async function requireWorkspaceAccess(
     return { workspace: null, rollup: null, items: [] };
   }
   try {
+    if (options.details === false) {
+      const workspace = (await loadAccessibleWorkspaces()).find(
+        (candidate) => candidate.slug === workspaceSlug,
+      );
+      if (!workspace) notFound();
+      return { workspace, rollup: null, items: [] };
+    }
     return await (await serverApiClient()).workspace(workspaceSlug);
   } catch (error) {
     const apiError = apiErrorDetails(error);
@@ -154,6 +162,12 @@ export async function requireWorkspaceAccess(
     throw error;
   }
 }
+
+// Request-scoped only: never reuse an authorization result across requests.
+// Routing needs the authorized workspace identity, not its complete item history.
+export const loadAccessibleWorkspaces = cache(async () =>
+  (await serverApiClient()).workspaces(),
+);
 
 function apiErrorDetails(
   error: unknown,

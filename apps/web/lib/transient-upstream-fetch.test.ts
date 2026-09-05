@@ -4,6 +4,71 @@ import { fetchWithTransientUpstreamRetry } from "./transient-upstream-fetch";
 const noDelay = vi.fn(async () => undefined);
 
 describe("transient upstream fetch", () => {
+  it("honors cancellation supplied on the Request object", async () => {
+    const controller = new AbortController();
+    const input = new Request("https://api.example.test/session", {
+      signal: controller.signal,
+    });
+    controller.abort();
+    const fetchImpl = vi.fn<typeof fetch>();
+    await expect(
+      fetchWithTransientUpstreamRetry(input, {}, { fetchImpl }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("does not wait for a retained response branch to cancel before retrying", async () => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(new ReadableStream({ cancel }), { status: 503 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    const response = await fetchWithTransientUpstreamRetry(
+      "https://api.example.test/session",
+      {},
+      { fetchImpl, retryDelaysMs: [1], sleep: async () => {} },
+    );
+    expect(response.status).toBe(200);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("bypasses a renderer's cached gateway error when retrying a safe read", async () => {
+    let upstreamCalls = 0;
+    let memoized: Response | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      if (!init?.signal && memoized) return memoized.clone();
+      upstreamCalls++;
+      const response = new Response(null, {
+        status: upstreamCalls === 1 ? 503 : 200,
+      });
+      if (!init?.signal) memoized = response.clone();
+      return response;
+    };
+    const response = await fetchWithTransientUpstreamRetry(
+      "https://api.example.test/session",
+      { cache: "no-store" },
+      { fetchImpl, retryDelaysMs: [1, 2], sleep: async () => {} },
+    );
+    expect(response.status).toBe(200);
+    expect(upstreamCalls).toBe(2);
+  });
+
+  it("preserves the caller's cancellation signal through a retry", async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await fetchWithTransientUpstreamRetry(
+      "https://api.example.test/session",
+      { signal: controller.signal },
+      { fetchImpl, retryDelaysMs: [1], sleep: async () => {} },
+    );
+    expect(fetchImpl.mock.calls[1]?.[1]?.signal).toBe(controller.signal);
+  });
+
   it("recovers a safe read after transient gateway responses", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

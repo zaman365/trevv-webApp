@@ -16,6 +16,6 @@ export default async function WorkspaceStakeholderPage({
 }) {
   const { workspaceSlug } = await params;
   const returnTo = `${workspaceHref(workspaceSlug)}/stakeholder`;
-  await requireWorkspaceAccess(workspaceSlug, returnTo);
+  await requireWorkspaceAccess(workspaceSlug, returnTo, { details: false });
   return <StakeholderExperience slug={workspaceSlug} />;
 }

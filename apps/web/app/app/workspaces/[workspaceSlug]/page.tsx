@@ -9,7 +9,9 @@ export default async function WorkspacePage({
   params: Promise<{ workspaceSlug: string }>;
 }) {
   const { workspaceSlug } = await params;
-  await requireWorkspaceAccess(workspaceSlug, workspaceHref(workspaceSlug));
+  await requireWorkspaceAccess(workspaceSlug, workspaceHref(workspaceSlug), {
+    details: false,
+  });
   return (
     <WorkspaceOverviewLoader
       runtimeMode={webRuntimeMode()}

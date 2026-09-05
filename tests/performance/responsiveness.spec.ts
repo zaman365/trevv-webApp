@@ -29,6 +29,93 @@ test.beforeAll(async () => {
   });
   script = await readFile(resolve(outputDirectory, "harness.js"), "utf8");
 });
+
+test("navigation without a new snapshot keeps cached records and drafts, while identity changes fetch afresh", async ({
+  page,
+}) => {
+  let requests = 0;
+  let release!: () => void;
+  const paused = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("http://trevv.test/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<div id="root"></div>',
+      });
+    requests++;
+    await paused;
+    const body =
+      url.pathname === "/api/v1/portfolios"
+        ? [
+            {
+              id: "portfolio-two",
+              organizationId: "org-two",
+              name: "Second identity",
+              slug: "second",
+              description: "",
+              isDefault: true,
+            },
+          ]
+        : url.pathname === "/api/v1/items"
+          ? { data: [], nextCursor: null }
+          : [];
+    await route.fulfill({ json: body });
+  });
+  await page.goto("http://trevv.test/");
+  await page.addScriptTag({ content: script });
+  await page
+    .getByRole("textbox", { name: "Draft" })
+    .fill("Keep while navigating");
+  await page.getByRole("button", { name: "Navigate without seed" }).click();
+  await expect(page.locator("#records")).toHaveText("Original");
+  await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue(
+    "Keep while navigating",
+  );
+  expect(requests).toBe(0);
+  await page.getByRole("button", { name: "Change identity" }).click();
+  await expect(
+    page.getByRole("main", { name: "Loading your workspace", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("#records")).toHaveCount(0);
+  release();
+  await expect(page.locator("#records")).toHaveText("Second identity");
+  await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue("");
+});
+
+test("a cold navigation fetch failure has retry and never renders a fake empty success", async ({
+  page,
+}) => {
+  let status = 429;
+  await page.route("http://trevv.test/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<div id="root"></div>',
+      });
+    return route.fulfill({
+      status,
+      json:
+        status === 429
+          ? { error: { code: "rate_limited", message: "Try again" } }
+          : url.pathname === "/api/v1/items"
+            ? { data: [], nextCursor: null }
+            : [],
+    });
+  });
+  await page.goto("http://trevv.test/#cold-navigation");
+  await page.addScriptTag({ content: script });
+  await expect(
+    page.getByText("Unable to load your workspace", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("#records")).toHaveCount(0);
+  status = 200;
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.locator("#access")).toHaveText("active");
+});
 test.afterAll(async () => {
   if (outputDirectory)
     await rm(outputDirectory, { recursive: true, force: true });

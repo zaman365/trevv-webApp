@@ -15,7 +15,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:integration": "pnpm --filter @founderhq/db test:integration && pnpm --filter @founderhq/api test:integration",
-    "test:e2e": "playwright test tests/e2e/critical-paths.spec.ts tests/e2e/capability-truth.spec.ts tests/e2e/visual-regressions.spec.ts",
+    "test:e2e": "playwright test tests/e2e/critical-paths.spec.ts tests/e2e/capability-truth.spec.ts tests/e2e/visual-regressions.spec.ts tests/e2e/navigation.spec.ts",
     "test:e2e:live": "playwright test --config=playwright.live.config.ts",
     "test:performance": "playwright test --config=playwright.performance.config.ts",
     "test:a11y": "playwright test tests/e2e/accessibility.spec.ts",

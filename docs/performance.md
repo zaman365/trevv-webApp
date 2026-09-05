@@ -88,3 +88,46 @@ runtime dependency. Both Worker configurations now reuse all shared settings
 without requesting Node packaging; the Next build still emits its original
 standalone server. The Sites Worker build passes. Run the two build targets
 sequentially because their framework type generators share `.next/types`.
+
+## Page-navigation repair (2026-09-05)
+
+The Worker adapter re-executes dynamic layouts during RSC page navigation. The
+layout previously downloaded the whole organization snapshot on every switch,
+including every page of work items, despite the browser retaining its query cache.
+Navigation now retains that cache and skips only the redundant server seed. Cold
+RSC entry has explicit loading, failure, retry, and access-loss states. Changing
+the signed-in user or organization creates a fresh query provider. Normal HTML
+loads still receive the complete initial snapshot.
+
+Workspace leaf pages now check the authoritative accessible-workspace list rather
+than requesting an unused full workspace detail and item-history rollup. The
+existing detail-returning access helper remains available with its default
+behavior. Session checks, per-page authorization, true 404 responses, and the
+five-second access refresh are preserved. Navigation links show pending feedback
+while the current page remains interactive; no root Suspense/loading boundary was
+introduced.
+
+The production Worker was exercised locally against an isolated fixture API.
+An authorized document fetched session plus the five snapshot resources. A page
+switch fetched only session and the accessible-workspace list; it requested no
+item pages or workspace detail. Inaccessible workspaces returned HTTP 404 for both
+HTML and RSC requests. Both runtimes hide Flight headers from layout code; the
+proxy normalizes its navigation marker from RSC or the adapter's explicit
+`text/x-component` Accept type and overwrites any incoming marker.
+
+A separate retry defect amplified transient backend failures. Vinext request
+memoization could replay the original 503 for all eight retries (55 seconds of
+backoff), and awaiting cancellation of its retained response-stream branch could
+stall before any retry. Retries now bypass request memoization using an abort
+signal and cancel discarded bodies without waiting for the retained branch.
+An isolated check using the installed Vinext runtime and a fake 503-then-200
+upstream now makes two upstream calls with one 1-second scheduled delay, including
+responses with bodies. Delays were recorded without sleeping; this is a recovery
+behavior check, not a production latency measurement. Mutations remain single
+attempt, and caller cancellation is preserved.
+
+Regression coverage includes retained records/drafts without a new server seed,
+fresh data after identity changes, cold-load retry, normalized navigation headers,
+workspace denial/revocation, complete detail compatibility, and immediate link
+feedback during an intentionally delayed navigation. Production backend and
+network latency still contribute to end-to-end page-switch time.

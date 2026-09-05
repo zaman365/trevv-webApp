@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { proxy } from "../proxy";
+import { clientNavigationHeader } from "./navigation-request";
 
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://trevv.test");
@@ -13,6 +14,49 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("optimistic private-route boundary", () => {
+  it("normalizes the navigation marker without accepting a forged document marker", () => {
+    vi.stubEnv("DEMO_MODE", "false");
+    for (const navigation of [false, true]) {
+      const response = proxy(
+        new NextRequest("https://trevv.test/app/portfolio", {
+          headers: {
+            cookie: "trevv.session_token=opaque",
+            [clientNavigationHeader]: "1",
+            ...(navigation ? { rsc: "1" } : {}),
+          },
+        }),
+      );
+      expect(
+        response.headers.get(`x-middleware-request-${clientNavigationHeader}`),
+      ).toBe(navigation ? "1" : null);
+    }
+  });
+
+  it("still redirects anonymous RSC navigation before the application renders", () => {
+    vi.stubEnv("DEMO_MODE", "false");
+    const response = proxy(
+      new NextRequest("https://trevv.test/app/portfolio", {
+        headers: { rsc: "1", [clientNavigationHeader]: "1" },
+      }),
+    );
+    expect(response.headers.get("location")).toContain("/sign-in?");
+  });
+
+  it("recognizes Vinext's RSC Accept type after the adapter strips Flight headers", () => {
+    vi.stubEnv("DEMO_MODE", "false");
+    const response = proxy(
+      new NextRequest("https://trevv.test/app/portfolio", {
+        headers: {
+          accept: "text/x-component",
+          cookie: "trevv.session_token=opaque",
+        },
+      }),
+    );
+    expect(
+      response.headers.get(`x-middleware-request-${clientNavigationHeader}`),
+    ).toBe("1");
+  });
+
   it("keeps process liveness independent of application runtime admission", () => {
     vi.stubEnv("DEMO_MODE", "invalid");
 

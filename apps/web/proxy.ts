@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { clientNavigationHeader } from "./lib/navigation-request";
 import {
   authActionCookieOptions,
   authActionCookiePaths,
@@ -20,6 +21,15 @@ export function proxy(request: NextRequest) {
   const requestId = webRequestId(request.headers.get("x-request-id"));
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
+  requestHeaders.delete(clientNavigationHeader);
+  // Vinext strips Flight headers before Proxy too, but retains its explicit
+  // RSC Accept type. This only selects the seed strategy, never authorization.
+  const acceptsRsc = request.headers
+    .get("accept")
+    ?.split(",")
+    .some((value) => value.trim().split(";")[0] === "text/x-component");
+  if (request.headers.get("rsc") === "1" || acceptsRsc)
+    requestHeaders.set(clientNavigationHeader, "1");
   const nextResponse = () =>
     NextResponse.next({ request: { headers: requestHeaders } });
   const finish = (response: NextResponse) => {
