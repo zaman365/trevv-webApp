@@ -1,0 +1,61 @@
+name: Keep preview warm
+
+# Render Free instances sleep after roughly fifteen minutes without traffic and
+# then take about half a minute to answer their first request. The Web layout
+# resolves identity and the account snapshot before it returns any HTML, so a
+# slept API turns into a blank page for the whole of that wake-up.
+#
+# This sends one liveness request to each preview service every ten minutes so
+# the first visitor does not pay that cost. It is a mitigation for a Free-plan
+# limit, not a substitute for an always-on runtime, and it closes no readiness
+# gate: the services remain public, backup-free and disposable.
+#
+# Every request below is an unauthenticated GET against a liveness endpoint.
+# Liveness is used rather than readiness deliberately, so warming traffic never
+# opens a database round trip.
+
+on:
+  schedule:
+    # Ten minutes, to stay comfortably inside the fifteen-minute idle window.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-preview-warm
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    name: Warm the free preview services
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Request each liveness endpoint
+        run: |
+          set -u
+          endpoints=(
+            "https://trevv-free-preview-api-zaman365.onrender.com/api/v1/health"
+            "https://trevv-free-preview-worker-zaman365.onrender.com/livez"
+            "https://alpha.trevv.de/api/web/livez"
+          )
+          failures=0
+          for endpoint in "${endpoints[@]}"; do
+            # A sleeping instance can take well over thirty seconds to answer,
+            # so allow generous time before treating silence as a failure.
+            status=$(curl --silent --show-error --location \
+              --max-time 90 --output /dev/null --write-out '%{http_code}' \
+              "$endpoint" || echo "000")
+            printf '%s %s\n' "$status" "$endpoint"
+            if [ "$status" != "200" ]; then
+              failures=$((failures + 1))
+            fi
+          done
+          # Report a bad run rather than passing quietly: a preview that cannot
+          # answer liveness is worth seeing, even though nothing depends on it.
+          if [ "$failures" -ne 0 ]; then
+            echo "::warning::${failures} preview service(s) did not return 200."
+            exit 1
+          fi
