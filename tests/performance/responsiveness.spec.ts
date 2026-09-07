@@ -30,6 +30,187 @@ test.beforeAll(async () => {
   script = await readFile(resolve(outputDirectory, "harness.js"), "utf8");
 });
 
+const organization = {
+  id: "org-one",
+  name: "Original",
+  slug: "original",
+  role: "owner",
+  timezone: "Europe/Berlin",
+};
+const scopedAccess = (workspaceIds = ["workspace-one"], revision = "one") => ({
+  protocol: 1,
+  revision,
+  session: {
+    user: {
+      id: "user-one",
+      role: "owner",
+      email: "owner@example.test",
+      name: "Owner",
+      locale: "en",
+    },
+    organizationId: organization.id,
+    organization,
+    availableOrganizations: [organization],
+    managedWorkspaceIds: [],
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  },
+  portfolios: [
+    {
+      id: "portfolio-one",
+      organizationId: organization.id,
+      name: "Original",
+      slug: "original",
+      description: "",
+      isDefault: true,
+    },
+  ],
+  workspaces: workspaceIds.map((id) => ({
+    id,
+    portfolioId: "portfolio-one",
+    slug: id,
+    name: id,
+    description: "",
+    icon: "W",
+    accent: "#5555aa",
+    type: "business",
+    stage: "idea",
+    health: "on_track",
+    healthNote: "",
+    priority: "Normal",
+    metrics: [],
+    versionTag: "2026-09-07T10:00:00.000Z",
+    updatedAt: "2026-09-07T10:00:00.000Z",
+  })),
+});
+
+test("adding a workspace preserves the mounted summary page and draft during refresh", async ({
+  page,
+}) => {
+  let access = scopedAccess();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("http://trevv.test/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<div id="root"></div>',
+      });
+    if (path === "/api/v1/sync/status") return route.fulfill({ json: access });
+    if (path === "/api/v1/sync/summary") {
+      if (access.revision === "two") await held;
+      return route.fulfill({
+        json: {
+          protocol: 1,
+          revision: access.revision,
+          portfolios: [],
+          workspaces: access.workspaces.map(({ id }) => ({
+            workspaceId: id,
+            open: 0,
+            blocked: 0,
+            pendingDecisions: 0,
+            attention: 0,
+            attentionEntities: 0,
+          })),
+        },
+      });
+    }
+    throw new Error(`Unexpected record read: ${path}`);
+  });
+  try {
+    await page.goto("http://trevv.test/#scope");
+    await page.addScriptTag({ content: script });
+    await expect(page.locator("#summary-workspaces")).toHaveText("1");
+    await page
+      .getByRole("textbox", { name: "Draft" })
+      .fill("Keep after create");
+    access = scopedAccess(["workspace-one", "workspace-created"], "two");
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(page.locator("#workspace-ids")).toHaveText(
+      "workspace-one,workspace-created",
+    );
+    await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue(
+      "Keep after create",
+    );
+    await expect(page.locator("#summary-workspaces")).toHaveText("1");
+    release();
+    await expect(page.locator("#summary-workspaces")).toHaveText("2");
+    await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue(
+      "Keep after create",
+    );
+  } finally {
+    release();
+  }
+});
+
+for (const legacy of [false, true])
+  test(`account freshness follows access checks without record reads and still reports outages (legacy=${legacy})`, async ({
+    page,
+  }) => {
+    await page.clock.install({ time: new Date("2026-09-07T10:00:00Z") });
+    const access = scopedAccess();
+    let status = 200;
+    let checks = 0;
+    await page.route("http://trevv.test/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/")
+        return route.fulfill({
+          contentType: "text/html",
+          body: '<div id="root"></div>',
+        });
+      if (legacy && path === "/api/v1/sync/status")
+        return route.fulfill({ status: 501, json: {} });
+      if (path === (legacy ? "/api/v1/session" : "/api/v1/sync/status"))
+        checks++;
+      const body =
+        path === "/api/v1/sync/status"
+          ? access
+          : path === "/api/v1/session"
+            ? access.session
+            : path === "/api/v1/portfolios"
+              ? access.portfolios
+              : path === "/api/v1/workspaces"
+                ? access.workspaces
+                : undefined;
+      if (!body) throw new Error(`Unexpected record read: ${path}`);
+      return route.fulfill({
+        status,
+        json:
+          status === 200
+            ? body
+            : {
+                error: { code: "unavailable", message: "Test access failure" },
+              },
+      });
+    });
+    await page.goto("http://trevv.test/#account");
+    await page.addScriptTag({ content: script });
+    await expect(page.locator("#clock")).toContainText("2026-09-07");
+    for (let poll = 0; poll < 4; poll++) {
+      const before = checks;
+      await page.clock.fastForward(5_000);
+      await expect.poll(() => checks).toBeGreaterThan(before);
+      await page.clock.runFor(50);
+      await expect(page.locator("#stale")).toHaveText("false");
+    }
+    const lastSuccessfulCheck = await page.locator("#clock").textContent();
+    status = 503;
+    await page.clock.fastForward(5_000);
+    await expect(page.locator("#stale")).toHaveText("true");
+    await expect(page.locator("#clock")).toHaveText(lastSuccessfulCheck!);
+    status = 200;
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(page.locator("#stale")).toHaveText("false");
+    status = 403;
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(
+      page.getByText("Your access has changed", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Draft" })).toHaveCount(0);
+  });
+
 test("navigation without a new snapshot keeps cached records and drafts, while identity changes fetch afresh", async ({
   page,
 }) => {

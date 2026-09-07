@@ -90,6 +90,37 @@ export function accessScopeKey(access: LiveAppAccessSnapshot): string {
   ]);
 }
 
+/** Existing cached data remains authorized only when identities/roles stay fixed and scope does not shrink. */
+export function retainsAccessScope(
+  before: LiveAppAccessSnapshot,
+  after: LiveAppAccessSnapshot,
+): boolean {
+  const containsAll = (previous: string[], current: string[]) => {
+    const allowed = new Set(current);
+    return previous.every((id) => allowed.has(id));
+  };
+  return (
+    before.session.user.id === after.session.user.id &&
+    before.session.user.role === after.session.user.role &&
+    before.session.organization.id === after.session.organization.id &&
+    before.session.organization.role === after.session.organization.role &&
+    (before.session.platformRole ?? null) ===
+      (after.session.platformRole ?? null) &&
+    containsAll(
+      before.session.managedWorkspaceIds,
+      after.session.managedWorkspaceIds,
+    ) &&
+    containsAll(
+      before.portfolios.map(({ id }) => id),
+      after.portfolios.map(({ id }) => id),
+    ) &&
+    containsAll(
+      before.workspaces.map(({ id }) => id),
+      after.workspaces.map(({ id }) => id),
+    )
+  );
+}
+
 /** A slow record refresh must never delay an authoritative permission reduction. */
 export function restrictSnapshotToAccess(
   snapshot: LiveAppDataSnapshot,

@@ -3,6 +3,7 @@ import { TrevvApiError, type TrevvApiClient } from "@founderhq/api-client";
 import {
   createLiveAccessReader,
   readVerifiedSnapshot,
+  retainsAccessScope,
   restrictSnapshotToAccess,
   type LiveAppAccessSnapshot,
 } from "./live-app-sync";
@@ -14,7 +15,7 @@ const access = (revision: string | null = "one") =>
     revision,
     checkedAt: "2026-09-05T00:00:00Z",
     session: {
-      user: { id: "user" },
+      user: { id: "user", role: "owner" },
       organization: { id: "org", role: "owner" },
       managedWorkspaceIds: [],
     },
@@ -28,6 +29,46 @@ const snapshot = (): LiveAppDataSnapshot => ({
   waiting: [],
   attention: [],
   refreshedAt: "2026-09-05T00:00:00Z",
+});
+
+describe("cache preservation during scope changes", () => {
+  it("retains existing access when a workspace or portfolio is added", () => {
+    const before = access();
+    const after = access("two");
+    after.workspaces.push({ ...after.workspaces[0]!, id: "created" });
+    after.portfolios.push({ ...after.portfolios[0]!, id: "created-portfolio" });
+    after.session.managedWorkspaceIds.push("created");
+    expect(retainsAccessScope(before, after)).toBe(true);
+    expect(retainsAccessScope(after, before)).toBe(false);
+  });
+
+  it.each([
+    ["workspace removal", (next) => (next.workspaces = [])],
+    ["portfolio removal", (next) => (next.portfolios = [])],
+    ["user change", (next) => (next.session.user.id = "other")],
+    ["organization change", (next) => (next.session.organization.id = "other")],
+    ["user role change", (next) => (next.session.user.role = "member")],
+    [
+      "organization role change",
+      (next) => (next.session.organization.role = "member"),
+    ],
+    ["platform role change", (next) => (next.session.platformRole = "owner")],
+  ] satisfies Array<[string, (next: LiveAppAccessSnapshot) => unknown]>)(
+    "does not retain caches after %s, even when a workspace is also added",
+    (_name, change) => {
+      const before = access();
+      const after = access("two");
+      change(after);
+      after.workspaces.push({ ...before.workspaces[0]!, id: "created" });
+      expect(retainsAccessScope(before, after)).toBe(false);
+    },
+  );
+
+  it("does not retain caches when managed workspace access shrinks", () => {
+    const before = access();
+    before.session.managedWorkspaceIds = ["allowed"];
+    expect(retainsAccessScope(before, access("two"))).toBe(false);
+  });
 });
 
 describe("authoritative snapshot revisions", () => {

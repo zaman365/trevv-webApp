@@ -770,29 +770,68 @@ test.describe.serial("live founder operating loop", () => {
     const staleRow = collaboratorPage.getByTestId(
       `work-item-${collaborationItem!.id}`,
     );
+    await expect(staleRow).toBeVisible();
     const latestBeforeConflict = await browserJson(
       ownerPage,
       `/api/v1/items/${encodeURIComponent(collaborationItem!.id)}`,
     );
     const currentVersion = (latestBeforeConflict.body as { version: number })
       .version;
-    const ownerMutation = await browserJson(
-      ownerPage,
-      `/api/v1/items/${encodeURIComponent(collaborationItem!.id)}`,
-      {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          "if-match": `"${currentVersion}"`,
-          "idempotency-key": crypto.randomUUID(),
+    await expect(staleRow).toContainText(`v${currentVersion}`);
+    // Hold the collaborator's actual write while the owner commits. Deferred
+    // loading and background sync can otherwise refresh the row before it edits.
+    const updatePattern = `**/api/v1/items/${encodeURIComponent(collaborationItem!.id)}`;
+    let releaseUpdate!: () => void;
+    const heldUpdate = new Promise<void>((resolve) => {
+      releaseUpdate = resolve;
+    });
+    await collaboratorPage.route(updatePattern, async (route) => {
+      if (route.request().method() === "PATCH") await heldUpdate;
+      await route.continue();
+    });
+    try {
+      const pendingUpdate = collaboratorPage.waitForRequest(
+        (request) =>
+          request.method() === "PATCH" &&
+          new URL(request.url()).pathname ===
+            `/api/v1/items/${encodeURIComponent(collaborationItem!.id)}`,
+      );
+      const updateResponse = collaboratorPage.waitForResponse(
+        (response) =>
+          response.request().method() === "PATCH" &&
+          new URL(response.url()).pathname ===
+            `/api/v1/items/${encodeURIComponent(collaborationItem!.id)}`,
+      );
+      await staleRow
+        .getByLabel(`Status for ${collaborationTitle}`)
+        .selectOption("review");
+      expect((await pendingUpdate).headers()["if-match"]).toBe(
+        `"${currentVersion}"`,
+      );
+      const ownerMutation = await browserJson(
+        ownerPage,
+        `/api/v1/items/${encodeURIComponent(collaborationItem!.id)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            "if-match": `"${currentVersion}"`,
+            "idempotency-key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({ status: "working" }),
         },
-        body: JSON.stringify({ status: "working" }),
-      },
-    );
-    expect(ownerMutation.status).toBe(200);
-    await staleRow
-      .getByLabel(`Status for ${collaborationTitle}`)
-      .selectOption("review");
+      );
+      expect(ownerMutation.status).toBe(200);
+      expect(ownerMutation.body).toMatchObject({
+        status: "working",
+        version: currentVersion + 1,
+      });
+      releaseUpdate();
+      expect((await updateResponse).status()).toBe(409);
+    } finally {
+      releaseUpdate();
+      await collaboratorPage.unroute(updatePattern);
+    }
     await expect(
       collaboratorPage.locator('[data-live-state="version-conflict"]'),
     ).toBeVisible();
@@ -822,7 +861,8 @@ test.describe.serial("live founder operating loop", () => {
       "Failed capture",
     );
 
-    await ownerPage.route("**/api/v1/workspaces", async (route) => {
+    const accessReadPattern = /\/api\/v1\/(?:workspaces|sync\/status)$/;
+    await ownerPage.route(accessReadPattern, async (route) => {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
@@ -838,7 +878,7 @@ test.describe.serial("live founder operating loop", () => {
     await expect(ownerPage.getByText("Your access has changed")).toBeVisible({
       timeout: 12_000,
     });
-    await ownerPage.unroute("**/api/v1/workspaces");
+    await ownerPage.unroute(accessReadPattern);
     await ownerPage.reload();
     await expect(
       ownerPage.getByTestId("live-workspace-overview"),

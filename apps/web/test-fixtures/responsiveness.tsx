@@ -2,6 +2,7 @@ import { Profiler, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   LiveAppDataProvider,
+  LiveAppRecordsBoundary,
   useLiveAppRecords,
   useLiveAppRefreshedAt,
   type LiveAppDataSnapshot,
@@ -63,6 +64,10 @@ function Records() {
       </output>
       <output id="access">{data.accessLost ? "lost" : "active"}</output>
       <output id="stale">{String(data.stale)}</output>
+      <output id="workspace-ids">
+        {data.workspaces.map(({ id }) => id).join(",")}
+      </output>
+      <output id="summary-workspaces">{data.summary?.workspaces.length}</output>
       <input
         aria-label="Draft"
         value={draft}
@@ -160,4 +165,28 @@ function Harness() {
     </>
   );
 }
-createRoot(document.getElementById("root")!).render(<Harness />);
+
+function ScopedHarness() {
+  const account = location.hash === "#account";
+  return (
+    <LiveAppDataProvider
+      identity={{ userId: "user-one", organizationId: "org-one" }}
+      allowShell
+      recordScope="summary"
+      loadRecords={!account}
+    >
+      <LiveAppRecordsBoundary required={!account}>
+        <Records />
+        <Clock />
+      </LiveAppRecordsBoundary>
+    </LiveAppDataProvider>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  ["#scope", "#account"].includes(location.hash) ? (
+    <ScopedHarness />
+  ) : (
+    <Harness />
+  ),
+);

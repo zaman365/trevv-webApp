@@ -46,6 +46,12 @@ hooks remain available for callers that need both records and the latest clock.
 Five-second permission polling, focus refresh, retry behavior, stale notices,
 mutation acknowledgement, and server-side tenant-boundary checks remain intact.
 
+Adding a Workspace or Portfolio retains the mounted page and its cached summary
+while the expanded scope refreshes, preserving drafts and creation confirmation.
+Identity or role changes and scope reductions still clear affected caches. Account
+pages that do not load work records derive freshness from their successful access
+checks; real access failures still surface as stale or permission-loss states.
+
 Collaboration event bursts are collected for at most 32 ms (or until the SSE
 checkpoint) and invalidate each matching active query once, including thread
 feeds. Background refresh retains each query's existing data. Changing workspace,

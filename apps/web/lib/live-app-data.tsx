@@ -39,6 +39,7 @@ import {
   accessScopeKey,
   createLiveAccessReader,
   readVerifiedSnapshot,
+  retainsAccessScope,
   restrictSnapshotToAccess,
   type AppIdentity,
   type LiveAppAccessSnapshot,
@@ -308,7 +309,7 @@ function LiveAppDataQuery({
   const error =
     access.error ??
     (recordsEnabled ? records.error : null) ??
-    summaries.error ??
+    (loadRecords ? summaries.error : null) ??
     latchedAccessError;
   const directAccessError = isAccessDenied(access.error, true)
     ? access.error
@@ -328,12 +329,24 @@ function LiveAppDataQuery({
     setLatchedAccessError(directAccessError);
   }
   const scope = accessData ? accessScopeKey(accessData) : undefined;
-  const previousScope = useRef(scope);
+  const previousAccess = useRef(accessData);
   useEffect(() => {
-    const changed =
-      previousScope.current !== undefined && previousScope.current !== scope;
-    previousScope.current = scope;
+    const before = previousAccess.current;
+    const changed = before !== undefined && accessScopeKey(before) !== scope;
+    previousAccess.current = accessData;
     if (!accessLost && !changed) return;
+    if (
+      !accessLost &&
+      before &&
+      accessData &&
+      retainsAccessScope(before, accessData)
+    ) {
+      // Creating a workspace expands access. Keep the authorized cache and
+      // mounted page so refresh cannot discard drafts or mutation confirmation.
+      void queryClient.invalidateQueries({ queryKey: liveAppDataKey });
+      void queryClient.invalidateQueries({ queryKey: liveAppSummaryKey });
+      return;
+    }
     const nonAccessQuery = (query: { queryKey: readonly unknown[] }) =>
       query.queryKey[0] !== liveAppAccessKey[0];
     let active = true;
@@ -404,7 +417,9 @@ function LiveAppDataQuery({
     ? summary?.revision
     : queryData?.revision;
   const refreshedAt =
-    accessData?.revision && accessData.revision === displayedRevision
+    accessData &&
+    (!loadRecords ||
+      (accessData.revision && accessData.revision === displayedRevision))
       ? accessData.checkedAt
       : summaryOnly && summaries.dataUpdatedAt
         ? new Date(summaries.dataUpdatedAt).toISOString()

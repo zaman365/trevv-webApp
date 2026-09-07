@@ -116,6 +116,7 @@ for (const legacy of [false, true])
     await expect(
       page.getByText("Loading invitations", { exact: false }),
     ).toHaveCount(0);
+    await expect(page.locator('[data-live-state="stale"]')).toHaveCount(0);
     await page.locator(".avatar-button").click();
     await page
       .getByRole("menuitem", { name: "Sessions and sign-in", exact: true })
@@ -131,6 +132,7 @@ for (const legacy of [false, true])
       page.getByRole("heading", { name: "Invitations", exact: true }),
     ).toBeVisible();
     expect(invitationReads).toBe(1);
+    await expect(page.locator('[data-live-state="stale"]')).toHaveCount(0);
     const paths = (await (
       await request.get(`${api}/test/requests`)
     ).json()) as string[];
