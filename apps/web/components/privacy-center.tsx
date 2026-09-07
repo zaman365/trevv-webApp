@@ -16,13 +16,8 @@ import type {
 } from "@founderhq/api-contract";
 import { Database, FileClock, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { useAccountResource } from "@/lib/use-account-resource";
 import { useAppSession } from "@/lib/app-session-context";
 import { presentLiveError } from "@/lib/live-errors";
 import { LiveStateNotice, type LiveStateKind } from "./live-state";
@@ -55,10 +50,32 @@ export function PrivacyCenter() {
     () => createApiClient({ baseUrl: "/api/v1" }),
     [],
   );
-  const [program, setProgram] = useState<PrivacyProgramStatusDto | null>(null);
-  const [requests, setRequests] = useState<DataLifecycleRequestDto[]>([]);
-  const [loading, setLoading] = useState(!session.demo);
-  const [error, setError] = useState<unknown>(null);
+  const [actionError, setError] = useState<unknown>(null);
+  const resource = useAccountResource<{
+    program: PrivacyProgramStatusDto | null;
+    requests: DataLifecycleRequestDto[];
+  }>(
+    "privacy",
+    async (signal) => {
+      const reader = client.withSignal(signal);
+      const [program, requests] = await Promise.all([
+        reader.privacyProgram(),
+        reader.privacyRequests(),
+      ]);
+      return { program, requests };
+    },
+    { program: null, requests: [] },
+  );
+  const { program, requests } = resource.value;
+  const loading = resource.loading;
+  const error = actionError ?? resource.error;
+  const setRequests = (
+    update: (current: DataLifecycleRequestDto[]) => DataLifecycleRequestDto[],
+  ) =>
+    resource.setValue((current) => ({
+      ...current,
+      requests: update(current.requests),
+    }));
   const [working, setWorking] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState("");
   const [kind, setKind] = useState<PrivacyRequestKind>("access");
@@ -68,31 +85,14 @@ export function PrivacyCenter() {
   );
   const canRequestOrganizationErasure = session.organization.role === "owner";
 
-  const load = useCallback(async () => {
-    if (session.demo) return;
-    setLoading(true);
+  const load = async () => {
     setError(null);
-    try {
-      const [nextProgram, nextRequests] = await Promise.all([
-        client.privacyProgram(),
-        client.privacyRequests(),
-      ]);
-      setProgram(nextProgram);
-      setRequests(nextRequests);
-    } catch (nextError) {
-      setError(nextError);
-    } finally {
-      setLoading(false);
-    }
-  }, [client, session.demo]);
-
-  useEffect(() => {
-    const task = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(task);
-  }, [load]);
+    await resource.refresh();
+  };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await resource.cancel();
     setWorking("create");
     setError(null);
     setSavedMessage("");
@@ -127,6 +127,7 @@ export function PrivacyCenter() {
   }
 
   async function cancel(request: DataLifecycleRequestDto) {
+    await resource.cancel();
     setWorking(request.id);
     setError(null);
     setSavedMessage("");

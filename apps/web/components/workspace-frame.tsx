@@ -33,28 +33,31 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type {
-  CreatePortfolioInput,
-  PortfolioDto,
-} from "@founderhq/api-contract";
+import type { CreatePortfolioInput } from "@founderhq/api-contract";
 import { demoWorkspaces, demoItems, demoPortfolios } from "@founderhq/core";
 import { NavigationLink as Link } from "./navigation-link";
-import { useRouter } from "next/navigation";
+import { useAppNavigation } from "@/lib/use-app-navigation";
 import {
+  createContext,
+  useContext,
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
-  type FormEvent,
   type ReactNode,
 } from "react";
 import { productCopy } from "@/lib/product-copy";
 import { trevvBrand } from "@/lib/branding";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
-import { useLearningCenter } from "./learning-center";
+import { useLearningCenter } from "./learning-center-context";
 import type { CapturedWorkItem } from "@/lib/captured-work";
-import { UniversalCreateDialog } from "./universal-create";
-import { CreateWorkspaceDialog } from "./create-workspace-dialog";
+import {
+  UniversalCreateDialog,
+  CreateWorkspaceDialog,
+  PortfolioCreateDialog,
+  LiveQuickCaptureDialog,
+  warmCreateDialog,
+} from "./lazy-create-dialogs";
+import { availableSlug } from "@/lib/available-slug";
 import { TechnicalPreviewBadge } from "./capability-status";
 import {
   createCustomWorkspace,
@@ -72,13 +75,8 @@ import {
   formatCompactWorkspaceDate,
 } from "@/lib/live-workflow-ui";
 import { LiveStateNotice } from "./live-state";
+import type { LiveCaptureSuccess } from "./live-quick-capture";
 import {
-  LiveQuickCaptureDialog,
-  type LiveCaptureSuccess,
-} from "./live-quick-capture";
-import {
-  createCustomPortfolio,
-  portfolioAccentOptions,
   portfolioVisualFor,
   useCustomPortfolios,
 } from "@/lib/custom-portfolios";
@@ -88,28 +86,27 @@ import {
   type WorkspaceView,
 } from "@/lib/workspace-routes";
 
-type ActivePage =
-  | "home"
-  | "portfolio"
-  | "dashboard"
-  | "calendar"
-  | "attention"
-  | "myWork"
-  | "inbox"
-  | "mail"
-  | "messages"
-  | "waiting"
-  | "decisions"
-  | "approvals"
-  | "ideas"
-  | "teams"
-  | "reviews"
-  | "notifications"
-  | "search"
-  | "templates"
-  | "platform"
-  | "settings"
-  | "workspace";
+type ActivePage = import("@/lib/workspace-shell-route").ActiveWorkspacePage;
+const PersistentWorkspaceShell = createContext(false);
+
+/** Keep chrome and event connections mounted across page-component changes. */
+export function WorkspaceShell({
+  children,
+  active,
+  workspaceSlug,
+}: {
+  children: ReactNode;
+  active: ActivePage;
+  workspaceSlug?: string;
+}) {
+  return (
+    <PersistentWorkspaceShell.Provider value={true}>
+      <WorkspaceChrome active={active} workspaceSlug={workspaceSlug}>
+        {children}
+      </WorkspaceChrome>
+    </PersistentWorkspaceShell.Provider>
+  );
+}
 
 const workspaceHealthLabels = {
   on_track: "On track",
@@ -163,7 +160,9 @@ export function WorkspaceFrame({
   active: ActivePage;
   workspaceSlug?: string | undefined;
 }) {
-  // Providers live in app/app/layout.tsx so they survive navigation.
+  const persistent = useContext(PersistentWorkspaceShell);
+  if (persistent) return children;
+  // Compatibility for isolated routes/tests that still own their frame.
   return (
     <WorkspaceChrome active={active} workspaceSlug={workspaceSlug}>
       {children}
@@ -197,7 +196,7 @@ function WorkspaceChrome({
   const [portfolioCreateOpen, setPortfolioCreateOpen] = useState(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const portfolioMenuRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
+  const router = useAppNavigation();
   const {
     copy: messages,
     scope,
@@ -214,7 +213,6 @@ function WorkspaceChrome({
     dataMode,
     allPortfolios,
     allWorkspaces,
-    allItems,
   } = useWorkspace();
   const customWorkspaceRecords = useCustomWorkspaces();
   const customPortfolioRecords = useCustomPortfolios();
@@ -280,10 +278,11 @@ function WorkspaceChrome({
     },
   );
   const contextProjectCounts = contextProject
-    ? workspaceWorkCounts(
-        contextProject.id,
-        dataMode === "live" ? [...allItems] : demoItems,
-      )
+    ? dataMode === "live"
+      ? liveData?.summary?.workspaces.find(
+          (row) => row.workspaceId === contextProject.id,
+        )
+      : workspaceWorkCounts(contextProject.id, demoItems)
     : undefined;
   const contextPortfolioVisual = contextPortfolio
     ? portfolioVisualFor(contextPortfolio, customPortfolioRecords)
@@ -406,7 +405,16 @@ function WorkspaceChrome({
   }, [portfolioMenuOpen]);
 
   // One number, from one place. See lib/attention.ts.
-  const attentionCount = scope.attentionCount;
+  const attentionCount =
+    dataMode === "live" && liveData?.summary
+      ? scope.projectId
+        ? (liveData.summary.workspaces.find(
+            (row) => row.workspaceId === scope.projectId,
+          )?.attentionEntities ?? 0)
+        : (liveData.summary.portfolios.find(
+            (row) => row.portfolioId === scope.portfolioId,
+          )?.attentionEntities ?? 0)
+      : scope.attentionCount;
   const scopedHref = (view?: WorkspaceView) =>
     workspaceScopeHref(contextProject?.slug, view);
 
@@ -450,6 +458,11 @@ function WorkspaceChrome({
 
   return (
     <div className="product-shell workspace-product">
+      {router.pending ? (
+        <span className="sr-only" role="status">
+          Opening page
+        </span>
+      ) : null}
       <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
         <div className="brand-row workspace-context-row">
           {contextPortfolio ? (
@@ -459,9 +472,10 @@ function WorkspaceChrome({
                 className="workspace-context-switcher workspace-context-project workspace-switcher-trigger"
                 aria-haspopup="dialog"
                 aria-expanded={workspaceMenuOpen}
-                onClick={() =>
-                  setWorkspaceMenuOpen((currentOpen) => !currentOpen)
-                }
+                onClick={() => {
+                  liveData?.ensureSummary();
+                  setWorkspaceMenuOpen((currentOpen) => !currentOpen);
+                }}
               >
                 <span className="workspace-context-icon project">
                   {contextProject?.icon ?? <FolderKanban size={15} />}
@@ -556,10 +570,12 @@ function WorkspaceChrome({
                       <strong>{visibleWorkspaceProjects.length}</strong>
                     </header>
                     {visibleWorkspaceProjects.map((project) => {
-                      const counts = workspaceWorkCounts(
-                        project.id,
-                        dataMode === "live" ? [...allItems] : demoItems,
-                      );
+                      const counts =
+                        dataMode === "live"
+                          ? liveData?.summary?.workspaces.find(
+                              (row) => row.workspaceId === project.id,
+                            )
+                          : workspaceWorkCounts(project.id, demoItems);
                       const isSelected = project.id === contextProject?.id;
 
                       return (
@@ -568,6 +584,12 @@ function WorkspaceChrome({
                           className={`workspace-switcher-option ${isSelected ? "selected" : ""}`}
                           aria-pressed={isSelected}
                           key={project.id}
+                          onPointerEnter={() =>
+                            router.warm(workspaceHref(project.slug))
+                          }
+                          onFocus={() =>
+                            router.warm(workspaceHref(project.slug))
+                          }
                           onClick={() => {
                             selectProject(project.id, project.portfolioId);
                             setWorkspaceMenuOpen(false);
@@ -597,8 +619,10 @@ function WorkspaceChrome({
                                 aria-hidden="true"
                               />
                               {workspaceHealthLabels[project.health]} ·{" "}
-                              {counts.open} open
-                              {counts.blocked > 0
+                              {counts
+                                ? `${counts.open} open`
+                                : "Loading counts…"}
+                              {counts && counts.blocked > 0
                                 ? ` · ${counts.blocked} blocked`
                                 : ""}
                             </small>
@@ -620,6 +644,8 @@ function WorkspaceChrome({
                     <button
                       type="button"
                       className="workspace-switcher-create"
+                      onPointerEnter={() => warmCreateDialog("workspace")}
+                      onFocus={() => warmCreateDialog("workspace")}
                       onClick={() => {
                         setWorkspaceMenuOpen(false);
                         setOpen(false);
@@ -745,6 +771,16 @@ function WorkspaceChrome({
               </Link>
               <button
                 className="nav-item nav-button"
+                onPointerEnter={() =>
+                  warmCreateDialog(
+                    appSession.demo ? "demo-capture" : "live-capture",
+                  )
+                }
+                onFocus={() =>
+                  warmCreateDialog(
+                    appSession.demo ? "demo-capture" : "live-capture",
+                  )
+                }
                 onClick={() => setCaptureOpen(true)}
               >
                 <Plus size={16} />
@@ -755,7 +791,10 @@ function WorkspaceChrome({
             <button
               className="nav-item nav-button workspace-nav-select"
               type="button"
-              onClick={() => setWorkspaceMenuOpen(true)}
+              onClick={() => {
+                liveData?.ensureSummary();
+                setWorkspaceMenuOpen(true);
+              }}
             >
               <FolderKanban size={17} />
               <span>Choose a workspace</span>
@@ -943,6 +982,8 @@ function WorkspaceChrome({
                     <button
                       type="button"
                       className="portfolio-switcher-create"
+                      onPointerEnter={() => warmCreateDialog("portfolio")}
+                      onFocus={() => warmCreateDialog("portfolio")}
                       onClick={() => {
                         setPortfolioMenuOpen(false);
                         setPortfolioCreateOpen(true);
@@ -1000,6 +1041,16 @@ function WorkspaceChrome({
               <>
                 <button
                   className="quiet-button capture-button topbar-create-button"
+                  onPointerEnter={() =>
+                    warmCreateDialog(
+                      appSession.demo ? "demo-capture" : "live-capture",
+                    )
+                  }
+                  onFocus={() =>
+                    warmCreateDialog(
+                      appSession.demo ? "demo-capture" : "live-capture",
+                    )
+                  }
                   onClick={() => setCaptureOpen(true)}
                   aria-label="Create work"
                   aria-describedby="create-work-shortcut"
@@ -1239,7 +1290,19 @@ function WorkspaceChrome({
               <ClipboardCheck size={19} />
               <span>{messages.nav.myWork}</span>
             </Link>
-            <button onClick={() => setCaptureOpen(true)}>
+            <button
+              onPointerEnter={() =>
+                warmCreateDialog(
+                  appSession.demo ? "demo-capture" : "live-capture",
+                )
+              }
+              onFocus={() =>
+                warmCreateDialog(
+                  appSession.demo ? "demo-capture" : "live-capture",
+                )
+              }
+              onClick={() => setCaptureOpen(true)}
+            >
               <span className="mobile-capture">
                 <Plus size={22} />
               </span>
@@ -1266,7 +1329,12 @@ function WorkspaceChrome({
               <Grid2X2 size={19} />
               <span>Portfolio</span>
             </Link>
-            <button onClick={() => setWorkspaceMenuOpen(true)}>
+            <button
+              onClick={() => {
+                liveData?.ensureSummary();
+                setWorkspaceMenuOpen(true);
+              }}
+            >
               <FolderKanban size={19} />
               <span>Workspace</span>
             </button>
@@ -1464,272 +1532,4 @@ function WorkspaceChrome({
 
 function canManageOrganization(role: string): boolean {
   return role === "owner" || role === "admin";
-}
-
-function availableSlug(name: string, existingSlugs: readonly string[]) {
-  const base =
-    name
-      .trim()
-      .toLocaleLowerCase()
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "workspace";
-  const existing = new Set(existingSlugs);
-  let candidate = base;
-  let suffix = 2;
-  while (existing.has(candidate)) candidate = `${base}-${suffix++}`;
-  return candidate;
-}
-
-function PortfolioCreateDialog({
-  mode,
-  existingSlugs,
-  onClose,
-  onCreateLive,
-  onCreated,
-}: {
-  mode: "demo" | "live";
-  existingSlugs: readonly string[];
-  onClose: () => void;
-  onCreateLive?: (
-    input: CreatePortfolioInput,
-    idempotencyKey: string,
-  ) => Promise<PortfolioDto>;
-  onCreated: (portfolio: Pick<PortfolioDto, "id">) => void;
-}) {
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugEdited, setSlugEdited] = useState(false);
-  const [description, setDescription] = useState("");
-  const [mark, setMark] = useState("");
-  const [markEdited, setMarkEdited] = useState(false);
-  const [accent, setAccent] = useState<string>(portfolioAccentOptions[0]);
-  const [isDefault, setIsDefault] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState(() =>
-    crypto.randomUUID(),
-  );
-
-  const resetFailedAttempt = () => {
-    if (!error) return;
-    setError(null);
-    setIdempotencyKey(crypto.randomUUID());
-  };
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!name.trim() || pending) return;
-    if (mode === "demo") {
-      onCreated(
-        createCustomPortfolio({
-          name,
-          description,
-          mark: mark || name.trim().slice(0, 1),
-          accent,
-        }).portfolio,
-      );
-      return;
-    }
-    if (!onCreateLive || !slug.trim()) return;
-    setPending(true);
-    setError(null);
-    try {
-      onCreated(
-        await onCreateLive(
-          {
-            name: name.trim(),
-            slug: slug.trim(),
-            description: description.trim(),
-            isDefault,
-          },
-          idempotencyKey,
-        ),
-      );
-    } catch (reason) {
-      setError(reason);
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const presentedError = error ? presentLiveError(error) : null;
-
-  return (
-    <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
-      <form
-        className="capture-dialog create-portfolio-dialog"
-        aria-labelledby="create-portfolio-title"
-        aria-modal="true"
-        onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={submit}
-        role="dialog"
-      >
-        <header>
-          <span
-            className="portfolio-logo-preview"
-            style={{ background: `${accent}18`, color: accent }}
-            aria-hidden="true"
-          >
-            {mark || name.trim().slice(0, 1).toUpperCase() || "P"}
-          </span>
-          <div>
-            <h2 id="create-portfolio-title">Create a portfolio</h2>
-            <p>
-              Group related Workspaces under one recognizable identity and
-              overview.
-            </p>
-          </div>
-          <button
-            aria-label="Close portfolio creation"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={17} />
-          </button>
-        </header>
-
-        <div className="create-portfolio-fields">
-          {presentedError ? (
-            <LiveStateNotice
-              description={presentedError.description}
-              kind={presentedError.kind}
-              title={presentedError.title}
-            />
-          ) : pending ? (
-            <LiveStateNotice
-              description="TREVV will show the Portfolio only after the server commits it."
-              kind="pending"
-              title="Creating Portfolio"
-            />
-          ) : null}
-          <label>
-            Portfolio name
-            <input
-              autoFocus
-              disabled={pending}
-              maxLength={160}
-              onChange={(event) => {
-                const nextName = event.currentTarget.value;
-                setName(nextName);
-                if (!markEdited)
-                  setMark(nextName.trim().slice(0, 1).toUpperCase());
-                if (!slugEdited)
-                  setSlug(availableSlug(nextName, existingSlugs));
-                resetFailedAttempt();
-              }}
-              placeholder="For example, European Ventures"
-              required
-              value={name}
-            />
-          </label>
-          {mode === "live" ? (
-            <div className="portfolio-identity-fields">
-              <label>
-                URL slug
-                <input
-                  disabled={pending}
-                  maxLength={80}
-                  minLength={2}
-                  onChange={(event) => {
-                    setSlugEdited(true);
-                    setSlug(event.currentTarget.value);
-                    resetFailedAttempt();
-                  }}
-                  pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                  required
-                  value={slug}
-                />
-                <small>Lowercase letters, numbers, and single hyphens</small>
-              </label>
-              <label>
-                <input
-                  checked={isDefault}
-                  disabled={pending}
-                  onChange={(event) => {
-                    setIsDefault(event.currentTarget.checked);
-                    resetFailedAttempt();
-                  }}
-                  type="checkbox"
-                />{" "}
-                Make this the default Portfolio
-              </label>
-            </div>
-          ) : (
-            <div className="portfolio-identity-fields">
-              <label>
-                Logo mark
-                <input
-                  aria-describedby="portfolio-mark-help"
-                  disabled={pending}
-                  maxLength={2}
-                  onChange={(event) => {
-                    setMarkEdited(true);
-                    setMark(event.currentTarget.value.toUpperCase());
-                  }}
-                  placeholder="EV"
-                  value={mark}
-                />
-                <small id="portfolio-mark-help">One or two characters</small>
-              </label>
-              <fieldset>
-                <legend>Brand colour</legend>
-                <div className="portfolio-accent-options">
-                  {portfolioAccentOptions.map((option) => (
-                    <button
-                      type="button"
-                      aria-label={`Use portfolio colour ${option}`}
-                      aria-pressed={accent === option}
-                      className={accent === option ? "selected" : ""}
-                      disabled={pending}
-                      key={option}
-                      onClick={() => setAccent(option)}
-                      style={{ "--portfolio-accent": option } as CSSProperties}
-                    >
-                      {accent === option && <CheckCircle2 size={13} />}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            </div>
-          )}
-          <label>
-            Purpose
-            <textarea
-              disabled={pending}
-              maxLength={1_000}
-              onChange={(event) => {
-                setDescription(event.currentTarget.value);
-                resetFailedAttempt();
-              }}
-              placeholder="What related Workspaces and outcomes belong here?"
-              rows={3}
-              value={description}
-            />
-          </label>
-        </div>
-
-        <footer>
-          <span>You can add the first workspace immediately afterwards.</span>
-          <div>
-            <button onClick={onClose} type="button">
-              Cancel
-            </button>
-            <button
-              className="primary-button"
-              disabled={
-                pending ||
-                !name.trim() ||
-                (mode === "live" && slug.trim().length < 2)
-              }
-              type="submit"
-            >
-              <Plus size={14} /> {pending ? "Creating…" : "Create portfolio"}
-            </button>
-          </div>
-        </footer>
-      </form>
-    </div>
-  );
 }

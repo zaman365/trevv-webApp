@@ -25,15 +25,27 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
+import { groupByKey, uniqueById } from "@/lib/collection-index";
+import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useOptionalLiveAppRecords as useOptionalLiveAppData } from "@/lib/live-app-data";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
+import { WindowedCollection } from "./windowed-collection";
 import styles from "./calendar-experience.module.css";
 
-type CalendarView = "month" | "week" | "day";
+import {
+  calendarRange,
+  calendarDays,
+  dateKey,
+  localDateKey,
+  startOfLocalDay,
+  type CalendarView,
+} from "@/lib/calendar-range";
 type ComposerKind = "event" | "task";
 
 interface TaskCalendarEntry {
@@ -43,6 +55,8 @@ interface TaskCalendarEntry {
   status: string;
   priority: string;
 }
+
+const calendarEntryKey = (entry: { id: string }) => entry.id;
 
 const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -64,15 +78,10 @@ export function CalendarExperience({
     ) ?? demoWorkspaces.find((candidate) => candidate.slug === workspaceSlug);
   const [view, setView] = useState<CalendarView>("month");
   const [anchor, setAnchor] = useState(() => startOfLocalDay(new Date()));
-  const [snapshot, setSnapshot] = useState<WorkspaceCalendarDto | null>(null);
-  const [boards, setBoards] = useState<BoardDto[]>([]);
-  const [selectedSources, setSelectedSources] = useState<Set<string>>(
-    new Set(),
+  const [sourceSelection, setSourceSelection] = useState<Set<string> | null>(
+    null,
   );
   const [showTasks, setShowTasks] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [createdTasks, setCreatedTasks] = useState<TaskCalendarEntry[]>([]);
@@ -83,54 +92,59 @@ export function CalendarExperience({
   const range = useMemo(() => calendarRange(anchor, view), [anchor, view]);
   const timezone = session.organization.timezone ?? "Europe/Berlin";
 
-  useEffect(() => {
-    if (!workspace) return;
-    let active = true;
-    Promise.all([
-      client.workspaceCalendar(workspace.id, {
+  const queryClient = useQueryClient();
+  const calendarKey = workspaceResourceKeys.calendar(
+    session.organization.id,
+    workspace?.id ?? "",
+    range.from.toISOString(),
+    range.to.toISOString(),
+  );
+  const calendarQuery = useQuery({
+    queryKey: calendarKey,
+    queryFn: ({ signal }) =>
+      client.withSignal(signal).workspaceCalendar(workspace!.id, {
         from: range.from.toISOString(),
         to: range.to.toISOString(),
       }),
-      client.boards(workspace.id),
-    ])
-      .then(([nextSnapshot, nextBoards]) => {
-        if (!active) return;
-        setSnapshot(nextSnapshot);
-        setBoards(nextBoards);
-        setSelectedSources((current) => {
-          const available = new Set(
-            nextSnapshot.calendars
-              .filter((calendar) => calendar.visibleByDefault)
-              .map((calendar) => calendar.id),
-          );
-          if (current.size === 0) return available;
-          return new Set(
-            [...current].filter((source) =>
-              nextSnapshot.calendars.some((calendar) => calendar.id === source),
-            ),
-          );
-        });
-        setError("");
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "The calendar could not be loaded.",
-          );
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [client, range.from, range.to, refreshKey, workspace]);
+    enabled: Boolean(workspace),
+    staleTime: 30_000,
+  });
+  const boardsQuery = useQuery({
+    queryKey: workspaceResourceKeys.boards(
+      session.organization.id,
+      workspace?.id ?? "",
+    ),
+    queryFn: ({ signal }) => client.withSignal(signal).boards(workspace!.id),
+    enabled: Boolean(workspace),
+    staleTime: 30_000,
+  });
+  useReportRouteReady(calendarQuery.isSuccess && boardsQuery.isSuccess);
+  const snapshot = calendarQuery.data;
+  const boards = boardsQuery.data ?? [];
+  const loading = calendarQuery.isFetching;
+  const taskRecordsComplete = liveData?.recordsComplete ?? true;
+  const error =
+    calendarQuery.error?.message ?? boardsQuery.error?.message ?? "";
+  const selectedSources = useMemo(
+    () =>
+      sourceSelection ??
+      new Set(
+        (snapshot?.calendars ?? [])
+          .filter((calendar) => calendar.visibleByDefault)
+          .map((calendar) => calendar.id),
+      ),
+    [snapshot?.calendars, sourceSelection],
+  );
+  const setSelectedSources = (
+    update: Set<string> | ((current: Set<string>) => Set<string>),
+  ) =>
+    setSourceSelection(
+      typeof update === "function" ? update(selectedSources) : update,
+    );
 
   const taskEntries = useMemo<TaskCalendarEntry[]>(
     () =>
-      [
+      uniqueById([
         ...(workspaceContext.dataMode === "live"
           ? workspaceContext.allItems
           : demoItems
@@ -147,10 +161,7 @@ export function CalendarExperience({
             priority: item.priority,
           })),
         ...createdTasks,
-      ].filter(
-        (entry, index, entries) =>
-          entries.findIndex((candidate) => candidate.id === entry.id) === index,
-      ),
+      ]),
     [
       createdTasks,
       workspace?.id,
@@ -158,11 +169,15 @@ export function CalendarExperience({
       workspaceContext.dataMode,
     ],
   );
-  const visibleEvents = (snapshot?.events ?? []).filter(
-    (event) =>
-      selectedSources.has(event.calendarId) && event.status !== "cancelled",
+  const visibleEvents = useMemo(
+    () =>
+      (snapshot?.events ?? []).filter(
+        (event) =>
+          selectedSources.has(event.calendarId) && event.status !== "cancelled",
+      ),
+    [snapshot?.events, selectedSources],
   );
-  const days = calendarDays(anchor, view);
+  const days = useMemo(() => calendarDays(anchor, view), [anchor, view]);
   const allSelected = Boolean(
     snapshot?.calendars.length &&
     snapshot.calendars.every((calendar) => selectedSources.has(calendar.id)),
@@ -215,7 +230,10 @@ export function CalendarExperience({
               actions={
                 <button
                   type="button"
-                  onClick={() => setRefreshKey((key) => key + 1)}
+                  onClick={() => {
+                    void calendarQuery.refetch();
+                    void boardsQuery.refetch();
+                  }}
                 >
                   <RefreshCw size={15} /> Try again
                 </button>
@@ -313,7 +331,7 @@ export function CalendarExperience({
                 checked={showTasks}
                 color="#d48535"
                 label="Tasks and deadlines"
-                detail={`${taskEntries.length} scheduled`}
+                detail={`${taskEntries.length} ${taskRecordsComplete ? "scheduled" : "loaded · more loading"}`}
                 onChange={() => setShowTasks((current) => !current)}
               />
             </section>
@@ -349,7 +367,10 @@ export function CalendarExperience({
             </section>
           </aside>
 
-          <section className={styles.calendar} aria-busy={loading}>
+          <section
+            className={styles.calendar}
+            aria-busy={loading || (showTasks && !taskRecordsComplete)}
+          >
             {view === "month" ? (
               <MonthGrid
                 days={days}
@@ -364,6 +385,7 @@ export function CalendarExperience({
               />
             ) : (
               <AgendaGrid
+                tasksLoading={showTasks && !taskRecordsComplete}
                 days={days}
                 events={visibleEvents}
                 tasks={showTasks ? taskEntries : []}
@@ -401,10 +423,12 @@ export function CalendarExperience({
               input,
               crypto.randomUUID(),
             );
-            setSnapshot((current) =>
-              current
-                ? { ...current, events: [...current.events, result.data] }
-                : current,
+            queryClient.setQueryData<WorkspaceCalendarDto>(
+              calendarKey,
+              (current) =>
+                current
+                  ? { ...current, events: [...current.events, result.data] }
+                  : current,
             );
           }}
           onCreateTask={async (input) => {
@@ -457,6 +481,14 @@ function MonthGrid({
   onCreate(day: Date): void;
   onEvent(event: CalendarEventDto): void;
 }) {
+  const eventsByDay = useMemo(
+    () => groupByKey(events, (event) => localDateKey(event.startAt)),
+    [events],
+  );
+  const tasksByDay = useMemo(
+    () => groupByKey(tasks, (task) => task.date),
+    [tasks],
+  );
   return (
     <div className={styles.monthGrid}>
       {weekdayLabels.map((label) => (
@@ -466,10 +498,8 @@ function MonthGrid({
       ))}
       {days.map((day) => {
         const key = dateKey(day);
-        const dayEvents = events.filter(
-          (event) => localDateKey(event.startAt) === key,
-        );
-        const dayTasks = tasks.filter((task) => task.date === key);
+        const dayEvents = eventsByDay.get(key) ?? [];
+        const dayTasks = tasksByDay.get(key) ?? [];
         return (
           <article
             className={`${styles.dayCell} ${day.getMonth() !== anchor.getMonth() ? styles.outside : ""} ${key === dateKey(new Date()) ? styles.today : ""}`}
@@ -521,13 +551,25 @@ function AgendaGrid({
   tasks,
   onCreate,
   onEvent,
+  tasksLoading,
 }: {
+  tasksLoading: boolean;
   days: Date[];
   events: CalendarEventDto[];
   tasks: TaskCalendarEntry[];
   onCreate(day: Date): void;
   onEvent(event: CalendarEventDto): void;
 }) {
+  const eventsByDay = useMemo(() => {
+    const grouped = groupByKey(events, (event) => localDateKey(event.startAt));
+    for (const entries of grouped.values())
+      entries.sort((left, right) => left.startAt.localeCompare(right.startAt));
+    return grouped;
+  }, [events]);
+  const tasksByDay = useMemo(
+    () => groupByKey(tasks, (task) => task.date),
+    [tasks],
+  );
   return (
     <div
       className={styles.agendaGrid}
@@ -537,10 +579,8 @@ function AgendaGrid({
     >
       {days.map((day) => {
         const key = dateKey(day);
-        const dayEvents = events.filter(
-          (event) => localDateKey(event.startAt) === key,
-        );
-        const dayTasks = tasks.filter((task) => task.date === key);
+        const dayEvents = eventsByDay.get(key) ?? [];
+        const dayTasks = tasksByDay.get(key) ?? [];
         return (
           <article
             key={key}
@@ -557,9 +597,13 @@ function AgendaGrid({
             >
               <Plus size={14} /> Add
             </button>
-            {[...dayEvents]
-              .sort((a, b) => a.startAt.localeCompare(b.startAt))
-              .map((event) => (
+            <WindowedCollection
+              items={dayEvents}
+              itemKey={calendarEntryKey}
+              label={`Events on ${key}`}
+              estimateHeight={105}
+            >
+              {(event) => (
                 <button
                   type="button"
                   className={styles.agendaEvent}
@@ -578,18 +622,28 @@ function AgendaGrid({
                     </span>
                   ) : null}
                 </button>
-              ))}
-            {dayTasks.map((task) => (
-              <div className={styles.agendaTask} key={task.id}>
-                <ListTodo size={14} />
-                <span>
-                  <small>Due task · {capitalize(task.priority)}</small>
-                  <strong>{task.title}</strong>
-                </span>
-              </div>
-            ))}
+              )}
+            </WindowedCollection>
+            <WindowedCollection
+              items={dayTasks}
+              itemKey={calendarEntryKey}
+              label={`Task deadlines on ${key}`}
+              estimateHeight={80}
+            >
+              {(task) => (
+                <div className={styles.agendaTask} key={task.id}>
+                  <ListTodo size={14} />
+                  <span>
+                    <small>Due task · {capitalize(task.priority)}</small>
+                    <strong>{task.title}</strong>
+                  </span>
+                </div>
+              )}
+            </WindowedCollection>
             {!dayEvents.length && !dayTasks.length ? (
-              <p className={styles.emptyDay}>Open day</p>
+              <p className={styles.emptyDay}>
+                {tasksLoading ? "Loading task deadlines…" : "Open day"}
+              </p>
             ) : null}
           </article>
         );
@@ -1041,46 +1095,6 @@ function EventDetails({
   );
 }
 
-function calendarRange(anchor: Date, view: CalendarView) {
-  if (view === "month") {
-    const from = startOfWeek(
-      new Date(anchor.getFullYear(), anchor.getMonth(), 1),
-    );
-    const to = addDays(from, 42);
-    return { from, to };
-  }
-  const from = view === "week" ? startOfWeek(anchor) : startOfLocalDay(anchor);
-  return { from, to: addDays(from, view === "week" ? 7 : 1) };
-}
-
-function calendarDays(anchor: Date, view: CalendarView) {
-  const { from, to } = calendarRange(anchor, view);
-  const days: Date[] = [];
-  for (let day = new Date(from); day < to; day = addDays(day, 1))
-    days.push(day);
-  return days;
-}
-
-function startOfWeek(value: Date) {
-  const day = startOfLocalDay(value);
-  day.setDate(day.getDate() - ((day.getDay() + 6) % 7));
-  return day;
-}
-
-function startOfLocalDay(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
-function addDays(value: Date, amount: number) {
-  const next = new Date(value);
-  next.setDate(next.getDate() + amount);
-  return next;
-}
-function dateKey(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-}
-function localDateKey(value: string) {
-  return dateKey(new Date(value));
-}
 function localInputToIso(date: string, time: string, addDay = 0) {
   const value = new Date(`${date}T${time}:00`);
   if (addDay) value.setDate(value.getDate() + addDay);

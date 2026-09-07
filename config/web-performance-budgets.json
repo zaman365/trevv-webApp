@@ -35,7 +35,8 @@
     "/app/workspaces/:workspace/work": {
       "manifest": "server/app/app/workspaces/[workspaceSlug]/[view]/page_client-reference-manifest.js",
       "selectedDynamicImports": [
-        "components/workspace-module-loader.tsx -> ./live-work-views"
+        "components/workspace-module-loader.tsx -> ./live-work-views",
+        "components/live-work-views.tsx -> ./live-work-my-work"
       ],
       "maximumInitialJavaScriptGzipBytes": 300000,
       "maximumInitialCssGzipBytes": 75000
@@ -59,7 +60,9 @@
     "/app/workspaces/:workspace/settings": {
       "manifest": "server/app/app/workspaces/[workspaceSlug]/[view]/page_client-reference-manifest.js",
       "selectedDynamicImports": [
-        "components/workspace-module-loader.tsx -> ./settings-experience"
+        "components/workspace-module-loader.tsx -> ./settings-experience",
+        "components/workspace-module-loader.tsx -> ./live-work-views",
+        "components/live-work-views.tsx -> ./live-work-settings"
       ],
       "maximumInitialJavaScriptGzipBytes": 300000,
       "maximumInitialCssGzipBytes": 75000

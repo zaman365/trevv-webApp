@@ -25,13 +25,11 @@ import {
   type PlatformUser,
 } from "@founderhq/api-contract";
 import { AppLink as Link } from "@/components/navigation-link";
+import { useMemo, useState, type ReactNode } from "react";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+  accountResourceError,
+  useAccountResource,
+} from "@/lib/use-account-resource";
 import { useAppSession } from "@/lib/app-session-context";
 
 type PlatformPanel =
@@ -50,45 +48,38 @@ const panels: Array<{
 
 export function PlatformAdmin() {
   const session = useAppSession();
-  const [dashboard, setDashboard] = useState<PlatformDashboard | null>(null);
   const [panel, setPanel] = useState<PlatformPanel>("overview");
-  const [loading, setLoading] = useState(true);
   const [workingUserId, setWorkingUserId] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
+  const [actionMessage, setMessage] = useState("");
   const [query, setQuery] = useState("");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMessage("");
-    try {
+  const resource = useAccountResource<PlatformDashboard | null>(
+    "platform",
+    async (signal) => {
       const response = await fetch("/api/v1/platform", {
         credentials: "same-origin",
         cache: "no-store",
+        signal,
       });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok)
-        throw new Error(
+        throw accountResourceError(
           platformError(body, "Platform control could not be loaded."),
+          response.status,
         );
       const parsed = platformDashboardSchema.safeParse(body);
       if (!parsed.success)
         throw new Error("Platform control returned an invalid response.");
-      setDashboard(parsed.data);
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Platform control could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const task = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(task);
-  }, [load]);
+      return parsed.data;
+    },
+    null,
+  );
+  const { value: dashboard, loading } = resource;
+  const message =
+    actionMessage ||
+    (resource.error instanceof Error ? resource.error.message : "");
+  const load = async () => {
+    await resource.refresh();
+  };
 
   const filteredUsers = useMemo(
     () => filterPlatformUsers(dashboard?.users ?? [], query),
@@ -107,6 +98,7 @@ export function PlatformAdmin() {
         : `Revoke all active sessions for ${user.email}? They will need to sign in again.`,
     );
     if (!confirmed) return;
+    await resource.cancel();
 
     setWorkingUserId(user.authUserId);
     setMessage("");

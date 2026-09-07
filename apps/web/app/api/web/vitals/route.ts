@@ -58,6 +58,8 @@ export async function POST(request: Request) {
     event: "web_vital_observed",
     requestId: webRequestId(request.headers.get("x-request-id")),
     ...report,
+    releaseId: process.env.RELEASE_ID ?? "local",
+    gitSha: process.env.RELEASE_GIT_SHA ?? "unknown",
   });
   return new Response(null, { status: 204, headers: noStoreHeaders });
 }

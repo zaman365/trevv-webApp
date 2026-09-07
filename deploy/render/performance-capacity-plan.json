@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "preparedAt": "2026-09-05",
+  "status": "awaiting-budget-approval",
+  "region": "frankfurt",
+  "pricingSource": "https://render.com/pricing",
+  "monthlyComputeUsd": 33,
+  "additionalCharges": "Applicable tax and metered storage/bandwidth. No workspace subscription change is proposed.",
+  "services": [
+    {
+      "id": "srv-daa75k4s728c73fj8ah0",
+      "role": "api",
+      "currentPlan": "free",
+      "proposedPlan": "0.5c-512mb",
+      "monthlyComputeUsd": 7
+    },
+    {
+      "id": "srv-daa76h9srm7s73e5ka4g",
+      "role": "worker",
+      "currentPlan": "free",
+      "proposedPlan": "0.5c-512mb",
+      "monthlyComputeUsd": 7
+    }
+  ],
+  "postgres": {
+    "id": "dpg-daa6n1cs728c73fhu6vg-a",
+    "currentPlan": "free",
+    "currentExpiresAt": "2026-09-29T17:42:29Z",
+    "proposedPlan": "0.5c-1g",
+    "monthlyComputeUsd": 19
+  },
+  "operations": [
+    "Confirm a current recoverable database backup before resizing; retain the existing data, region, networking and credentials.",
+    "Upgrade PostgreSQL in place; verify readiness and absence of expiration.",
+    "Upgrade API and worker compute in place; retain service types, images, environment and existing features.",
+    "Verify all health endpoints, a compatible application release and worker backlog drain.",
+    "Measure CPU, memory, database and queue headroom before considering any further paid increase."
+  ]
+}

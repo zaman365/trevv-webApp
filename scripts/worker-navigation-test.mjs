@@ -17,7 +17,9 @@ const environment = {
   WRANGLER_LOG_PATH: "/tmp/trevv-worker-navigation-build.log",
 };
 for (const args of [
+  ["performance:public-styles"],
   ["--filter", "@founderhq/web", "build:cloudflare"],
+  ["performance:worker-budget"],
   ["exec", "playwright", "test", "--config=playwright.worker.config.ts"],
 ]) {
   const result = spawnSync("pnpm", args, {

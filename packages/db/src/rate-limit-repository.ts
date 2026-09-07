@@ -18,6 +18,7 @@ export interface RateLimitWindowProjection {
 export interface RateLimitRepository {
   consume(input: RateLimitConsumeInput): Promise<RateLimitWindowProjection>;
   pruneExpired(now: Date): Promise<number>;
+  pruneExpiredBatch?(now: Date, limit?: number): Promise<number>;
 }
 
 export function createRateLimitRepository(
@@ -62,6 +63,29 @@ export function createRateLimitRepository(
         .returning({ requestCount: apiRateLimitWindows.requestCount });
       if (!row) throw new Error("Rate-limit persistence returned no row.");
       return { count: row.requestCount, resetAt };
+    },
+    async pruneExpiredBatch(now, limit = 1000) {
+      if (
+        !Number.isFinite(now.getTime()) ||
+        !Number.isSafeInteger(limit) ||
+        limit < 1 ||
+        limit > 10000
+      )
+        throw new Error(
+          "Rate-limit cleanup requires a valid time and bounded limit.",
+        );
+      const removed = await database
+        .delete(apiRateLimitWindows)
+        .where(
+          sql`ctid in (
+        select ctid from ${apiRateLimitWindows}
+        where ${apiRateLimitWindows.expiresAt} <= ${now.toISOString()}::timestamptz
+        order by ${apiRateLimitWindows.expiresAt}
+        limit ${limit} for update skip locked
+      )`,
+        )
+        .returning({ bucket: apiRateLimitWindows.bucket });
+      return removed.length;
     },
     async pruneExpired(now) {
       if (!Number.isFinite(now.getTime()))

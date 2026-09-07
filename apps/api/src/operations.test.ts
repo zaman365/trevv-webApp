@@ -177,6 +177,7 @@ describe("API operational controls", () => {
         now: new Date("2026-08-29T12:00:00.000Z"),
       }),
     ).resolves.toMatchObject({ allowed: true });
+    await store.drain?.();
     expect(cleanupErrors).toBe(1);
   });
 
@@ -247,4 +248,46 @@ describe("API operational controls", () => {
       ),
     ).toBe(true);
   });
+});
+
+it("returns rate-limit decisions while one bounded cleanup runs and drains it on shutdown", async () => {
+  let finish: ((count: number) => void) | undefined;
+  let cleanups = 0;
+  const store = createPostgresRateLimitStore({
+    consume: async (input) => ({
+      count: 1,
+      resetAt: new Date(input.now.getTime() + input.windowMs),
+    }),
+    pruneExpired: async () => {
+      throw new Error("Full cleanup must not run in the request path");
+    },
+    pruneExpiredBatch: async (_now, limit) => {
+      cleanups++;
+      expect(limit).toBe(1000);
+      return new Promise<number>((resolve) => {
+        finish = resolve;
+      });
+    },
+  });
+  const input = {
+    bucket: "test",
+    key: "client",
+    limit: 10,
+    windowMs: 60000,
+    now: new Date(),
+  };
+  await expect(store.consume(input)).resolves.toMatchObject({ allowed: true });
+  await expect(
+    store.consume({ ...input, now: new Date(input.now.getTime() + 600000) }),
+  ).resolves.toMatchObject({ allowed: true });
+  expect(cleanups).toBe(1);
+  let drained = false;
+  const drain = store.drain!().then(() => {
+    drained = true;
+  });
+  await Promise.resolve();
+  expect(drained).toBe(false);
+  finish!(0);
+  await drain;
+  expect(drained).toBe(true);
 });

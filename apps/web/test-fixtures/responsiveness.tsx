@@ -14,7 +14,10 @@ import {
 import { useCustomPortfolios } from "../lib/custom-portfolios";
 import { useCapturedWork } from "../lib/captured-work";
 
-import { useLiveConversation } from "../lib/live-collaboration";
+import {
+  LiveCollaborationEventBridge,
+  useLiveConversation,
+} from "../lib/live-collaboration";
 
 const initialData: LiveAppDataSnapshot = {
   portfolios: [
@@ -138,12 +141,19 @@ function Harness() {
       >
         Change identity
       </button>
-      <LiveAppDataProvider key={identity} {...(seeded ? { initialData } : {})}>
+      <LiveAppDataProvider
+        key={identity}
+        allowShell={seeded}
+        {...(seeded ? { initialData } : {})}
+      >
         <Workspace>
           <Records />
           <WorkspaceRecords />
           <Clock />
           <StorageRecords />
+          {location.hash === "#events" ? (
+            <LiveCollaborationEventBridge workspaceId="workspace-one" />
+          ) : null}
           {location.hash === "#conversation" ? <ConversationReader /> : null}
         </Workspace>
       </LiveAppDataProvider>

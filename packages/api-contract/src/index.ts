@@ -1967,3 +1967,37 @@ export const eventSchema = z.discriminatedUnion("type", [
     occurredAt: z.iso.datetime(),
   }),
 ]);
+
+/** A revision certifies all app snapshot data and access for this identity. */
+export const appSyncStatusSchema = z.object({
+  protocol: z.literal(1),
+  revision: z.string().min(1).nullable(),
+  session: sessionSchema,
+  portfolios: portfolioSchema.array(),
+  workspaces: workspaceSchema.array(),
+});
+export type AppSyncStatus = z.infer<typeof appSyncStatusSchema>;
+
+/** Authorized aggregates preserve full counts without transporting item history. */
+export const appSyncSummarySchema = z.object({
+  protocol: z.literal(1),
+  revision: z.string().min(1).nullable(),
+  workspaces: z.array(
+    z.object({
+      workspaceId: idSchema,
+      open: z.number().int().nonnegative(),
+      blocked: z.number().int().nonnegative(),
+      pendingDecisions: z.number().int().nonnegative(),
+      attention: z.number().int().nonnegative(),
+      attentionEntities: z.number().int().nonnegative(),
+    }),
+  ),
+  portfolios: z.array(
+    z.object({
+      portfolioId: idSchema,
+      attention: z.number().int().nonnegative(),
+      attentionEntities: z.number().int().nonnegative(),
+    }),
+  ),
+});
+export type AppSyncSummary = z.infer<typeof appSyncSummarySchema>;

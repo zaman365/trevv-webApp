@@ -17,6 +17,8 @@ import {
   authUserMappings,
   authUsers,
   boards,
+  collaborationEvents,
+  conversationMessages,
   createDatabase,
   createPostgresRepositories,
   hashInvitationToken,
@@ -94,6 +96,21 @@ describe("PostgreSQL-backed API", () => {
         fixture.first.ownerId,
         fixture.first.organizationId,
       );
+      const summaryResponse = await live.app.request("/api/v1/sync/summary", {
+        headers: authorization(fixture.first.memberId),
+      });
+      expect(summaryResponse.status).toBe(200);
+      expect(await summaryResponse.json()).toMatchObject({
+        protocol: 1,
+        workspaces: [
+          {
+            workspaceId: fixture.first.visibleWorkspaceId,
+            open: 101,
+            blocked: 0,
+            pendingDecisions: 0,
+          },
+        ],
+      });
       const workspace = await client.workspace("visible");
       expect(workspace.items).toHaveLength(101);
       expect(workspace.rollup.open).toBe(101);
@@ -476,6 +493,33 @@ describe("PostgreSQL-backed API", () => {
         direct: directRoom.data.id,
         external: externalRoom.data.id,
       } as const;
+      // Event expiry uses wall-clock time; these authorization fixtures must not
+      // inherit the historical mutation clock used by the broader API suite.
+      await seedConnection.db.insert(collaborationEvents).values(
+        Object.values(roomIds).map((conversationId) => ({
+          id: crypto.randomUUID(),
+          organizationId: fixture.first.organizationId,
+          workspaceId: fixture.first.visibleWorkspaceId,
+          conversationId,
+          actorId: identities.owner,
+          eventType: "conversation.created",
+          aggregateType: "conversation",
+          aggregateId: conversationId,
+          expiresAt: new Date(Date.now() + 60_000),
+        })),
+      );
+      await seedConnection.db.insert(conversationMessages).values(
+        Object.values(roomIds).map((conversationId) => ({
+          id: crypto.randomUUID(),
+          organizationId: fixture.first.organizationId,
+          workspaceId: fixture.first.visibleWorkspaceId,
+          conversationId,
+          senderId: identities.owner,
+          clientMessageId: crypto.randomUUID(),
+          body: "Unread authorization fixture",
+          expiresAt: new Date(Date.now() + 86_400_000),
+        })),
+      );
       const readMatrix = {
         owner: ["workspace", "team", "private", "direct", "external"],
         admin: ["workspace"],
@@ -503,7 +547,49 @@ describe("PostgreSQL-backed API", () => {
             await expect(errorCode(response)).resolves.toBe(
               "resource_not_found",
             );
+          const messages = await live.app.request(
+            `/api/v1/conversations/${conversationId}/messages`,
+            { headers: authorization(userId) },
+          );
+          expect(messages.status, `${role} message list for ${roomKind}`).toBe(
+            expectedStatus,
+          );
         }
+        const unreadResponse = await live.app.request(
+          `/api/v1/workspaces/${fixture.first.visibleWorkspaceId}/conversation-unread`,
+          { headers: authorization(userId) },
+        );
+        expect(unreadResponse.status).toBe(200);
+        const conversationsResponse = await live.app.request(
+          `/api/v1/workspaces/${fixture.first.visibleWorkspaceId}/conversations?limit=100`,
+          { headers: authorization(userId) },
+        );
+        const conversationPage = (await conversationsResponse.json()) as {
+          data: Array<{ unreadCount: number }>;
+          nextCursor: string | null;
+        };
+        expect(conversationPage.nextCursor).toBeNull();
+        expect(await unreadResponse.json()).toEqual({
+          unreadCount: conversationPage.data.reduce(
+            (sum, row) => sum + row.unreadCount,
+            0,
+          ),
+        });
+        const eventsResponse = await live.app.request(
+          `/api/v1/events?workspaceId=${fixture.first.visibleWorkspaceId}&format=json`,
+          { headers: authorization(userId) },
+        );
+        expect(eventsResponse.status).toBe(200);
+        const eventBatch = (await eventsResponse.json()) as {
+          events: Array<{ conversationId?: string }>;
+        };
+        for (const [roomKind, conversationId] of Object.entries(roomIds))
+          expect(
+            eventBatch.events.some(
+              (event) => event.conversationId === conversationId,
+            ),
+            `${role} event visibility for ${roomKind}`,
+          ).toBe(allowed.has(roomKind));
       }
 
       const internalTeamForAdmin = await live.app.request(
@@ -1156,6 +1242,14 @@ describe("PostgreSQL-backed API", () => {
           version: 0,
         },
       });
+      expect(
+        await ownerClient.waiting({ workspaceId: workspace.id }),
+      ).toContainEqual(waiting.data);
+      expect(
+        await ownerClient.waiting({
+          workspaceId: fixture.first.hiddenWorkspaceId,
+        }),
+      ).not.toContainEqual(waiting.data);
       const afterWaiting = await ownerClient.item(blocked.data.item.id);
       expect(afterWaiting.version).toBeGreaterThan(
         recordedEvidence.data.itemVersion,

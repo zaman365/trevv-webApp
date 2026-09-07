@@ -652,3 +652,36 @@ describe("Phase 4 collaboration API client", () => {
     expect(url.searchParams.get("parentMessageId")).toBe("message-root");
   });
 });
+
+describe("request-scoped read cancellation", () => {
+  it("cancels a derived read client without changing its parent or mutation delivery", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.signal?.aborted) throw init.signal.reason;
+        return Response.json(init?.method === "POST" ? portfolio : [portfolio]);
+      },
+    );
+    const client = createApiClient({ baseUrl: "/api/v1", fetchImpl });
+    const scoped = client.withSignal(controller.signal);
+    await expect(scoped.portfolios()).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    await expect(client.portfolios()).resolves.toEqual([portfolio]);
+    await expect(
+      scoped.createPortfolio(
+        {
+          name: portfolio.name,
+          slug: portfolio.slug,
+          description: portfolio.description,
+          isDefault: false,
+        },
+        idempotencyKey,
+      ),
+    ).resolves.toMatchObject({ data: portfolio });
+    expect(fetchImpl.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+    expect(fetchImpl.mock.calls[1]?.[1]?.signal).toBeUndefined();
+    expect(fetchImpl.mock.calls[2]?.[1]?.signal).toBeUndefined();
+  });
+});

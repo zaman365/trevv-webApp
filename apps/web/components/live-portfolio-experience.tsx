@@ -13,14 +13,12 @@ import {
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useState, type FormEvent } from "react";
+import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
-import {
-  openWorkspaceItems,
-  workspaceSlugFromName,
-} from "@/lib/live-workflow-ui";
+import { workspaceSlugFromName } from "@/lib/live-workflow-ui";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
@@ -32,6 +30,7 @@ export function LivePortfolioExperience() {
   const session = useAppSession();
   const liveData = useLiveAppData();
   const { portfolioId } = useWorkspace();
+  useReportRouteReady(liveData.recordsReady);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<WorkspaceType>("project");
@@ -49,45 +48,42 @@ export function LivePortfolioExperience() {
   const canCreateWorkspace = ["owner", "admin"].includes(
     session.organization.role,
   );
-  const workspaces = portfolio
-    ? liveData.workspaces.filter(
-        (workspace) => workspace.portfolioId === portfolio.id,
-      )
-    : liveData.workspaces;
-  const portfolioWorkspaceIds = new Set(workspaces.map((item) => item.id));
-  const open = liveData.items.filter(
-    (item) =>
-      portfolioWorkspaceIds.has(item.workspaceId) && item.status !== "done",
-  );
-  const signals = liveData.attention.filter(
-    (signal) =>
-      !signal.resolvedAt &&
-      !signal.dismissedAt &&
-      (!signal.workspaceId || portfolioWorkspaceIds.has(signal.workspaceId)),
+  const workspaces = useMemo(
+    () =>
+      portfolio
+        ? liveData.workspaces.filter(
+            (workspace) => workspace.portfolioId === portfolio.id,
+          )
+        : liveData.workspaces,
+    [liveData.workspaces, portfolio],
   );
   const rollups = useMemo(
     () =>
       new Map(
-        workspaces.map((workspace) => {
-          const items = openWorkspaceItems(liveData.items, workspace.id);
-          return [
-            workspace.id,
-            {
-              open: items.length,
-              blocked: items.filter((item) => item.status === "blocked").length,
-              decisions: items.filter((item) => item.type === "decision")
-                .length,
-              approvals: items.filter((item) => item.type === "approval")
-                .length,
-              attention: signals.filter(
-                (signal) => signal.workspaceId === workspace.id,
-              ).length,
-            },
-          ];
-        }),
+        liveData.summary?.workspaces.map((row) => [row.workspaceId, row]) ?? [],
       ),
-    [liveData.items, signals, workspaces],
+    [liveData.summary],
   );
+  const openCount = useMemo(
+    () =>
+      workspaces.reduce(
+        (sum, workspace) => sum + (rollups.get(workspace.id)?.open ?? 0),
+        0,
+      ),
+    [workspaces, rollups],
+  );
+  const blockedCount = useMemo(
+    () =>
+      workspaces.reduce(
+        (sum, workspace) => sum + (rollups.get(workspace.id)?.blocked ?? 0),
+        0,
+      ),
+    [workspaces, rollups],
+  );
+  const attentionCount =
+    liveData.summary?.portfolios.find(
+      (row) => row.portfolioId === portfolio?.id,
+    )?.attention ?? 0;
 
   function editForm() {
     if (error) {
@@ -193,19 +189,17 @@ export function LivePortfolioExperience() {
           </article>
           <article>
             <Grid2X2 size={18} />
-            <strong>{open.length}</strong>
+            <strong>{openCount}</strong>
             <span>Open work</span>
           </article>
           <article>
             <Blocks size={18} />
-            <strong>
-              {open.filter((item) => item.status === "blocked").length}
-            </strong>
+            <strong>{blockedCount}</strong>
             <span>Blocked</span>
           </article>
           <article>
             <Sparkles size={18} />
-            <strong>{signals.length}</strong>
+            <strong>{attentionCount}</strong>
             <span>Need attention</span>
           </article>
         </section>
@@ -248,7 +242,11 @@ export function LivePortfolioExperience() {
           ) : (
             <div className={styles.cardGrid}>
               {workspaces.map((workspace) => {
-                const rollup = rollups.get(workspace.id)!;
+                const rollup = rollups.get(workspace.id) ?? {
+                  open: 0,
+                  blocked: 0,
+                  attention: 0,
+                };
                 return (
                   <Link
                     className={styles.workspaceCard}

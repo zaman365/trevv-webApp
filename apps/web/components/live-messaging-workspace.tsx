@@ -38,6 +38,8 @@ import {
 import { AppLink as Link } from "@/components/navigation-link";
 import {
   Fragment,
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -48,6 +50,18 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
+import { useLatestCallback } from "@/lib/use-latest-callback";
+import { useBufferedPersistence } from "@/lib/use-buffered-persistence";
+import { MessageComposerInput } from "./message-composer-input";
+import {
+  captureMessageScrollAnchor,
+  restoreMessageScrollAnchor,
+} from "@/lib/collection-scroll-anchor";
+import {
+  WindowedCollection,
+  type WindowedCollectionHandle,
+} from "./windowed-collection";
+import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import {
   collaborationKeys,
@@ -93,6 +107,8 @@ interface OptimisticDelivery {
   parentMessageId: string;
   status: "sending" | "failed";
 }
+
+const messageKey = (message: ConversationMessageDto) => message.id;
 
 const conversationGroups: Array<{
   key: ConversationGroup;
@@ -216,12 +232,17 @@ export function LiveMessagingWorkspace({
   const [pendingAction, setPendingAction] = useState("");
   const [delivery, setDelivery] = useState<OptimisticDelivery | null>(null);
   const [draft, setDraft] = useState<MessageDraft>(() => emptyDraft());
+  const draftBody = useRef("");
+  const [hasDraftBody, setHasDraftBody] = useState(false);
+  const [composerRevision, setComposerRevision] = useState(0);
+  const resizingRail = useRef(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID(),
   );
   const [hydratedDraftKey, setHydratedDraftKey] = useState("");
   const markedReadRef = useRef("");
   const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineCollectionRef = useRef<WindowedCollectionHandle>(null);
   const contextToggleRef = useRef<HTMLButtonElement>(null);
   const loadingHistoryRef = useRef(false);
   const followTimelineRef = useRef(true);
@@ -267,25 +288,36 @@ export function LiveMessagingWorkspace({
     return () => window.clearTimeout(timer);
   }, [layoutStorageKey]);
 
+  const writeLayout = useCallback(
+    (value: {
+      conversationRailCollapsed: boolean;
+      conversationRailWidth: number;
+    }) => {
+      if (!layoutStorageKey) return;
+      try {
+        window.localStorage.setItem(
+          layoutStorageKey,
+          JSON.stringify({ version: 1, ...value }),
+        );
+      } catch {
+        /* Layout preferences are optional. */
+      }
+    },
+    [layoutStorageKey],
+  );
+  const layoutPersistence = useBufferedPersistence(writeLayout);
   useEffect(() => {
-    if (!layoutStorageKey || layoutHydratedKey !== layoutStorageKey) return;
-    try {
-      window.localStorage.setItem(
-        layoutStorageKey,
-        JSON.stringify({
-          version: 1,
-          conversationRailCollapsed,
-          conversationRailWidth: conversationRailWidthValue,
-        }),
-      );
-    } catch {
-      // Layout preferences are optional and never business state.
-    }
+    if (layoutHydratedKey !== layoutStorageKey || resizingRail.current) return;
+    layoutPersistence.schedule({
+      conversationRailCollapsed,
+      conversationRailWidth: conversationRailWidthValue,
+    });
   }, [
     conversationRailCollapsed,
     conversationRailWidthValue,
     layoutHydratedKey,
     layoutStorageKey,
+    layoutPersistence,
   ]);
 
   useEffect(
@@ -311,17 +343,30 @@ export function LiveMessagingWorkspace({
     const next = recovered?.payload ?? emptyDraft();
     const timer = window.setTimeout(() => {
       setDelivery(null);
+      draftBody.current = next.body;
+      setHasDraftBody(Boolean(next.body.trim()));
       setDraft(next);
+      setComposerRevision((revision) => revision + 1);
       setIdempotencyKey(recovered?.idempotencyKey ?? crypto.randomUUID());
       setHydratedDraftKey(draftStorageKey);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [draftStorageKey]);
 
+  const writeDraft = useCallback(
+    (value: { draft: MessageDraft; idempotencyKey: string }) => {
+      persistMessageDraft(draftStorageKey, value.draft, value.idempotencyKey);
+    },
+    [draftStorageKey],
+  );
+  const draftPersistence = useBufferedPersistence(writeDraft);
   useEffect(() => {
     if (!draftHydrated || !draftStorageKey) return;
-    persistMessageDraft(draftStorageKey, draft, idempotencyKey);
-  }, [draft, draftHydrated, draftStorageKey, idempotencyKey]);
+    draftPersistence.schedule({
+      draft: { ...draft, body: draftBody.current },
+      idempotencyKey,
+    });
+  }, [draft, draftHydrated, draftStorageKey, idempotencyKey, draftPersistence]);
 
   useEffect(() => {
     if (!delivery) return;
@@ -334,9 +379,13 @@ export function LiveMessagingWorkspace({
         (message) => message.clientMessageId === delivery.clientMessageId,
       )
     ) {
+      draftPersistence.flush();
       clearMessageDraft(draftStorageKey);
       const timer = window.setTimeout(() => {
         setDelivery(null);
+        draftBody.current = "";
+        setHasDraftBody(false);
+        setComposerRevision((revision) => revision + 1);
         setDraft(emptyDraft());
         setIdempotencyKey(crypto.randomUUID());
         setNotice({
@@ -351,6 +400,7 @@ export function LiveMessagingWorkspace({
   }, [
     delivery,
     draftStorageKey,
+    draftPersistence,
     messages,
     selectedConversation?.id,
     threadMessages,
@@ -416,14 +466,28 @@ export function LiveMessagingWorkspace({
   async function loadEarlierMessages() {
     const timeline = timelineRef.current;
     if (!timeline || messageQuery.isFetchingNextPage) return;
+    const anchor = captureMessageScrollAnchor(
+      timeline,
+      new Set(messages.map(messageKey)),
+    );
     const previousHeight = timeline.scrollHeight;
     const previousTop = timeline.scrollTop;
     loadingHistoryRef.current = true;
     try {
       await messageQuery.fetchNextPage();
       window.requestAnimationFrame(() => {
-        timeline.scrollTop =
-          previousTop + Math.max(0, timeline.scrollHeight - previousHeight);
+        if (anchor)
+          restoreMessageScrollAnchor(
+            timeline,
+            anchor,
+            timelineCollectionRef.current,
+          );
+        else
+          timeline.scrollTo({
+            top:
+              previousTop + Math.max(0, timeline.scrollHeight - previousHeight),
+            behavior: "instant",
+          });
         loadingHistoryRef.current = false;
       });
     } catch {
@@ -453,29 +517,30 @@ export function LiveMessagingWorkspace({
   }
 
   function updateDraft(body: string) {
-    const nextFingerprint = messageFingerprint({ ...draft, body });
+    draftBody.current = body;
+    setHasDraftBody(Boolean(body.trim()));
     const changedAfterAttempt =
       Boolean(draft.attemptedFingerprint) &&
-      nextFingerprint !== draft.attemptedFingerprint;
-    setDraft((current) => ({
-      ...current,
+      messageFingerprint({ ...draft, body }) !== draft.attemptedFingerprint;
+    const next = {
+      ...draft,
       body,
       ...(changedAfterAttempt
-        ? {
-            clientMessageId: crypto.randomUUID(),
-            attemptedFingerprint: "",
-          }
+        ? { clientMessageId: crypto.randomUUID(), attemptedFingerprint: "" }
         : {}),
-    }));
+    };
+    const key = changedAfterAttempt ? crypto.randomUUID() : idempotencyKey;
+    draftPersistence.schedule({ draft: next, idempotencyKey: key });
     if (changedAfterAttempt) {
-      setIdempotencyKey(crypto.randomUUID());
+      setDraft(next);
+      setIdempotencyKey(key);
       setDelivery(null);
       setNotice(null);
     }
   }
 
   function setReplyTarget(parentMessageId: string) {
-    const next = { ...draft, parentMessageId };
+    const next = { ...draft, body: draftBody.current, parentMessageId };
     const changedAfterAttempt =
       Boolean(draft.attemptedFingerprint) &&
       messageFingerprint(next) !== draft.attemptedFingerprint;
@@ -516,6 +581,7 @@ export function LiveMessagingWorkspace({
     if (event.button !== 0) return;
     event.preventDefault();
     resizeCleanupRef.current?.();
+    resizingRail.current = true;
     const startX = event.clientX;
     const startWidth = conversationRailWidthValue;
     const previousCursor = document.body.style.cursor;
@@ -540,6 +606,12 @@ export function LiveMessagingWorkspace({
         window.cancelAnimationFrame(frame);
         commitWidth();
       }
+      resizingRail.current = false;
+      layoutPersistence.schedule({
+        conversationRailCollapsed,
+        conversationRailWidth: nextWidth,
+      });
+      layoutPersistence.flush();
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
@@ -555,18 +627,20 @@ export function LiveMessagingWorkspace({
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const currentDraft = { ...draft, body: draftBody.current };
+    draftPersistence.flush();
     if (
       !selectedConversation ||
       !workspace ||
       !draftHydrated ||
-      !draft.body.trim() ||
+      !currentDraft.body.trim() ||
       pendingAction === "send"
     )
       return;
     const attempted = {
-      ...draft,
-      body: draft.body.trim(),
-      attemptedFingerprint: messageFingerprint(draft),
+      ...currentDraft,
+      body: currentDraft.body.trim(),
+      attemptedFingerprint: messageFingerprint(currentDraft),
     };
     setDraft(attempted);
     persistMessageDraft(draftStorageKey, attempted, idempotencyKey);
@@ -606,7 +680,11 @@ export function LiveMessagingWorkspace({
         result.data,
       );
       setDelivery(null);
+      draftPersistence.flush();
       clearMessageDraft(draftStorageKey);
+      draftBody.current = "";
+      setHasDraftBody(false);
+      setComposerRevision((revision) => revision + 1);
       setDraft(emptyDraft());
       setIdempotencyKey(crypto.randomUUID());
       setNotice({
@@ -629,7 +707,11 @@ export function LiveMessagingWorkspace({
       );
       if (confirmed) {
         setDelivery(null);
+        draftPersistence.flush();
         clearMessageDraft(draftStorageKey);
+        draftBody.current = "";
+        setHasDraftBody(false);
+        setComposerRevision((revision) => revision + 1);
         setDraft(emptyDraft());
         setIdempotencyKey(crypto.randomUUID());
         setNotice({
@@ -866,6 +948,24 @@ export function LiveMessagingWorkspace({
     }
   }
 
+  useReportRouteReady(
+    conversationsQuery.isSuccess &&
+      directoryQuery.isSuccess &&
+      (!effectiveSelectedId ||
+        (conversationQuery.isSuccess && messageQuery.isSuccess)),
+  );
+  const reactToMessage = useLatestCallback(toggleReaction);
+  const toggleMessageResponse = useLatestCallback(toggleResponse);
+  const replyToMessage = useLatestCallback(openThread);
+
+  const grouped = useMemo(
+    () => groupConversations(conversations),
+    [conversations],
+  );
+  const replyWithinThread = useLatestCallback(() => {
+    if (activeThreadId) setReplyTarget(activeThreadId);
+  });
+
   if (!workspace) {
     return (
       <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
@@ -886,7 +986,7 @@ export function LiveMessagingWorkspace({
     conversationQuery.error ??
     messageQuery.error;
   const presentedQueryError = queryError ? presentLiveError(queryError) : null;
-  const grouped = groupConversations(conversations);
+
   const emptyPromptGroup = conversationGroups.find(
     ({ key }) => grouped[key].length === 0,
   )?.key;
@@ -1253,76 +1353,85 @@ export function LiveMessagingWorkspace({
                       </p>
                     </div>
                   ) : null}
-                  {messages.map((message) => (
-                    <Fragment key={message.id}>
-                      <MessageRow
-                        canInteract={canSendMessage}
-                        canToggleResponse={canToggleMessageResponse(
-                          selectedConversation,
-                          message,
-                          session.user.id,
-                          session.managedWorkspaceIds,
-                          canSendMessage,
-                        )}
-                        currentUserId={session.user.id}
-                        message={message}
-                        pendingAction={pendingAction}
-                        timezone={timezone}
-                        onReact={toggleReaction}
-                        onReply={() => openThread(message.id)}
-                        onToggleResponse={toggleResponse}
-                      />
-                      {activeThreadRoot?.id === message.id ? (
-                        <ThreadReplyPanel
+                  <WindowedCollection
+                    apiRef={timelineCollectionRef}
+                    items={messages}
+                    itemKey={messageKey}
+                    label="Conversation messages"
+                    estimateHeight={150}
+                    scrollRef={timelineRef}
+                  >
+                    {(message) => (
+                      <Fragment key={message.id}>
+                        <MessageRow
                           canInteract={canSendMessage}
-                          canToggleResponse={(message) =>
-                            canToggleMessageResponse(
-                              selectedConversation,
-                              message,
-                              session.user.id,
-                              session.managedWorkspaceIds,
-                              canSendMessage,
-                            )
-                          }
-                          closeDisabled={
-                            pendingAction === "send" ||
-                            (draft.parentMessageId === message.id &&
-                              Boolean(draft.body.trim()))
-                          }
+                          canToggleResponse={canToggleMessageResponse(
+                            selectedConversation,
+                            message,
+                            session.user.id,
+                            session.managedWorkspaceIds,
+                            canSendMessage,
+                          )}
                           currentUserId={session.user.id}
-                          currentUserName={session.user.name}
-                          delivery={
-                            delivery?.parentMessageId === message.id
-                              ? delivery
-                              : null
-                          }
-                          error={threadQuery.error}
-                          hasMore={Boolean(threadQuery.hasNextPage)}
-                          isFetchingMore={threadQuery.isFetchingNextPage}
-                          isLoading={threadQuery.isLoading}
-                          messages={threadMessages}
+                          message={message}
                           pendingAction={pendingAction}
-                          rootMessage={message}
                           timezone={timezone}
-                          onClose={() => {
-                            if (
-                              draft.parentMessageId === message.id &&
-                              draft.body.trim()
-                            )
-                              return;
-                            if (draft.parentMessageId === message.id)
-                              setReplyTarget("");
-                            setThreadTarget(null);
-                          }}
-                          onLoadMore={() => threadQuery.fetchNextPage()}
-                          onReact={toggleReaction}
-                          onReply={() => setReplyTarget(message.id)}
-                          onRetry={() => threadQuery.refetch()}
-                          onToggleResponse={toggleResponse}
+                          onReact={reactToMessage}
+                          onReply={replyToMessage}
+                          onToggleResponse={toggleMessageResponse}
                         />
-                      ) : null}
-                    </Fragment>
-                  ))}
+                        {activeThreadRoot?.id === message.id ? (
+                          <ThreadReplyPanel
+                            canInteract={canSendMessage}
+                            canToggleResponse={(message) =>
+                              canToggleMessageResponse(
+                                selectedConversation,
+                                message,
+                                session.user.id,
+                                session.managedWorkspaceIds,
+                                canSendMessage,
+                              )
+                            }
+                            closeDisabled={
+                              pendingAction === "send" ||
+                              (draft.parentMessageId === message.id &&
+                                hasDraftBody)
+                            }
+                            currentUserId={session.user.id}
+                            currentUserName={session.user.name}
+                            delivery={
+                              delivery?.parentMessageId === message.id
+                                ? delivery
+                                : null
+                            }
+                            error={threadQuery.error}
+                            hasMore={Boolean(threadQuery.hasNextPage)}
+                            isFetchingMore={threadQuery.isFetchingNextPage}
+                            isLoading={threadQuery.isLoading}
+                            messages={threadMessages}
+                            pendingAction={pendingAction}
+                            rootMessage={message}
+                            timezone={timezone}
+                            onClose={() => {
+                              if (
+                                draft.parentMessageId === message.id &&
+                                hasDraftBody
+                              )
+                                return;
+                              if (draft.parentMessageId === message.id)
+                                setReplyTarget("");
+                              setThreadTarget(null);
+                            }}
+                            onLoadMore={() => threadQuery.fetchNextPage()}
+                            onReact={reactToMessage}
+                            onReply={replyWithinThread}
+                            onRetry={() => threadQuery.refetch()}
+                            onToggleResponse={toggleMessageResponse}
+                          />
+                        ) : null}
+                      </Fragment>
+                    )}
+                  </WindowedCollection>
                   {delivery &&
                   delivery.conversationId === selectedConversation.id &&
                   !delivery.parentMessageId &&
@@ -1356,13 +1465,13 @@ export function LiveMessagingWorkspace({
                     <label className="sr-only" htmlFor="live-message-composer">
                       Message
                     </label>
-                    <textarea
-                      disabled={pendingAction === "send"}
-                      id="live-message-composer"
-                      onChange={(event) => updateDraft(event.target.value)}
-                      placeholder={`Message ${selectedConversation.title}`}
-                      rows={2}
-                      value={draft.body}
+                    <MessageComposerInput
+                      key={`${draftStorageKey}:${composerRevision}`}
+                      disabled={!draftHydrated || pendingAction === "send"}
+                      initialBody={draftHydrated ? draft.body : ""}
+                      title={selectedConversation.title}
+                      onChange={updateDraft}
+                      onBlur={draftPersistence.flush}
                     />
                     <div>
                       <small>
@@ -1373,7 +1482,7 @@ export function LiveMessagingWorkspace({
                         className="primary-button"
                         disabled={
                           !draftHydrated ||
-                          !draft.body.trim() ||
+                          !hasDraftBody ||
                           pendingAction === "send"
                         }
                         type="submit"
@@ -1574,20 +1683,27 @@ function ThreadReplyPanel({
           it.
         </p>
       ) : null}
-      {messages.map((message) => (
-        <MessageRow
-          canInteract={canInteract}
-          canToggleResponse={canToggleResponse(message)}
-          currentUserId={currentUserId}
-          key={message.id}
-          message={message}
-          pendingAction={pendingAction}
-          timezone={timezone}
-          onReact={onReact}
-          onReply={onReply}
-          onToggleResponse={onToggleResponse}
-        />
-      ))}
+      <WindowedCollection
+        items={messages}
+        itemKey={messageKey}
+        label="Thread replies"
+        estimateHeight={150}
+      >
+        {(message) => (
+          <MessageRow
+            canInteract={canInteract}
+            canToggleResponse={canToggleResponse(message)}
+            currentUserId={currentUserId}
+            key={message.id}
+            message={message}
+            pendingAction={pendingAction}
+            timezone={timezone}
+            onReact={onReact}
+            onReply={onReply}
+            onToggleResponse={onToggleResponse}
+          />
+        )}
+      </WindowedCollection>
       {delivery &&
       !messages.some(
         (message) => message.clientMessageId === delivery.clientMessageId,
@@ -1629,7 +1745,7 @@ function OptimisticMessageRow({
   );
 }
 
-function MessageRow({
+const MessageRow = memo(function MessageRow({
   canInteract,
   canToggleResponse,
   currentUserId,
@@ -1647,7 +1763,7 @@ function MessageRow({
   pendingAction: string;
   timezone: string;
   onReact: (message: ConversationMessageDto, emoji: string) => Promise<void>;
-  onReply: () => void;
+  onReply: (messageId: string) => void;
   onToggleResponse: (message: ConversationMessageDto) => Promise<void>;
 }) {
   const own = message.senderId === currentUserId;
@@ -1725,7 +1841,7 @@ function MessageRow({
           <button
             aria-label={`Reply to ${message.sender.name}`}
             disabled={!canInteract || Boolean(pendingAction)}
-            onClick={onReply}
+            onClick={() => onReply(message.id)}
             type="button"
           >
             <Reply size={13} /> Reply
@@ -1734,7 +1850,7 @@ function MessageRow({
       </div>
     </article>
   );
-}
+});
 
 function ConversationContext({
   canManageParticipants,

@@ -52,7 +52,7 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { WorkspaceFrame } from "./workspace-frame";
 import { BarChart, DonutChart, type Bar, type Slice } from "./charts";
 import { HealthBar, PageHero, StatTile } from "./ui-kit";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 
 type ScopeFilter = "all" | "open";
 type DashboardLensKind =

@@ -1,3 +1,5 @@
+import { workspaceViews } from "./workspace-routes";
+
 export const webVitalNames = [
   "CLS",
   "FCP",
@@ -5,6 +7,8 @@ export const webVitalNames = [
   "INP",
   "LCP",
   "TTFB",
+  "ROUTE_COMMIT",
+  "ROUTE_READY",
 ] as const;
 export const webVitalRatings = ["good", "needs-improvement", "poor"] as const;
 export const webVitalNavigationTypes = [
@@ -14,6 +18,7 @@ export const webVitalNavigationTypes = [
   "back-forward-cache",
   "prerender",
   "restore",
+  "soft-navigate",
 ] as const;
 
 export interface WebVitalReport {
@@ -23,6 +28,7 @@ export interface WebVitalReport {
   rating: (typeof webVitalRatings)[number];
   navigationType: (typeof webVitalNavigationTypes)[number];
   surface: string;
+  device?: "mobile" | "desktop";
 }
 
 export function parseRumSampleRate(value: string | undefined): number {
@@ -45,20 +51,28 @@ export function shouldSampleWebVitals(
   );
 }
 
-const safeSurface =
-  /^\/(?:|app\/(?:account|portfolio|workspaces\/:workspace(?:\/:view)?)|(?:forgot-password|invite|onboarding|privacy|reset-password|select-organization|sign-in|sign-up|terms|verify-email)|:unmatched)$/u;
-
 export function normalizedWebVitalSurface(pathname: string): string {
   const parts = pathname.split("/").filter(Boolean);
-  if (parts[0] === "app" && parts[1] === "workspaces")
-    return parts.length > 3
-      ? "/app/workspaces/:workspace/:view"
-      : "/app/workspaces/:workspace";
-  if (
-    parts[0] === "app" &&
-    new Set(["account", "portfolio"]).has(parts[1] ?? "")
-  )
+  if (parts[0] === "app" && parts[1] === "workspaces") {
+    const base = "/app/workspaces/:workspace";
+    if (parts.length <= 3) return base;
+    if (parts[3] === "boards") return `${base}/boards/:board`;
+    if (parts[3] === "settings" && parts[4] === "import")
+      return `${base}/settings/import`;
+    if (parts[3] === "stakeholder") return `${base}/stakeholder`;
+    return (workspaceViews as readonly string[]).includes(parts[3] ?? "")
+      ? `${base}/${parts[3]}`
+      : `${base}/:view`;
+  }
+  if (parts[0] === "app" && parts[1] === "account") {
+    return ["sessions", "privacy", "invitations"].includes(parts[2] ?? "")
+      ? `/app/account/${parts[2]}`
+      : "/app/account";
+  }
+  if (parts[0] === "app" && ["portfolio", "mail"].includes(parts[1] ?? ""))
     return `/app/${parts[1]}`;
+  if (parts[0] === "app" && parts[1] === "system" && parts[2] === "admin")
+    return "/app/system/admin";
   const publicSurface = new Set([
     "forgot-password",
     "invite",
@@ -97,7 +111,10 @@ export function parseWebVitalReport(value: unknown): WebVitalReport | null {
     input.delta < 0
   )
     return null;
-  if (typeof input.surface !== "string" || !safeSurface.test(input.surface))
+  if (
+    typeof input.surface !== "string" ||
+    normalizedWebVitalSurface(input.surface) !== input.surface
+  )
     return null;
   return {
     name: input.name as WebVitalReport["name"],
@@ -106,5 +123,8 @@ export function parseWebVitalReport(value: unknown): WebVitalReport | null {
     rating: input.rating as WebVitalReport["rating"],
     navigationType: input.navigationType as WebVitalReport["navigationType"],
     surface: input.surface,
+    ...(input.device === "mobile" || input.device === "desktop"
+      ? { device: input.device }
+      : {}),
   };
 }

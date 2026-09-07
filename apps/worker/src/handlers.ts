@@ -9,6 +9,8 @@ import {
 export interface WorkerHandler {
   name: string;
   eventTypes: readonly string[];
+  /** A committed full-organization recompute covers all events in the same claimed batch. */
+  coalesceByOrganization?: boolean;
   process: (
     repositories: WorkerTransactionRepositories,
     now: Date,
@@ -28,6 +30,7 @@ export interface WorkerHandlerRegistry {
 export const attentionWorkerHandler: WorkerHandler = {
   name: "attention",
   eventTypes: internalWorkerEventTypes,
+  coalesceByOrganization: true,
   process: (repositories, now) => repositories.processInternalEvent(now),
 };
 

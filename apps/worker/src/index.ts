@@ -106,9 +106,45 @@ export async function runOutboxSweep(
     limit: claimLimit,
     eventTypes: dependencies.handlerRegistry.activeEventTypes,
   });
-  const results = await Promise.all(
-    leases.map((lease) => processLease(context, dependencies, lease, clock)),
-  );
+  const groups = new Map<string, WorkerLease[]>();
+  for (const lease of leases) {
+    const handler = dependencies.handlerRegistry.resolve(lease.eventType);
+    const key = handler?.coalesceByOrganization
+      ? JSON.stringify(["organization", handler.name, lease.organizationId])
+      : JSON.stringify(["event", lease.eventId]);
+    const group = groups.get(key) ?? [];
+    group.push(lease);
+    groups.set(key, group);
+  }
+  const results = (
+    await Promise.all(
+      [...groups.values()].map(async (group) => {
+        const first = await processLease(
+          context,
+          dependencies,
+          group[0]!,
+          clock,
+        );
+        // Every source write in this lease batch committed before the claim query.
+        // Only a committed full recompute permits later acknowledgements to skip it;
+        // each acknowledgement still checks its own lease token, expiry and attempt.
+        const remaining = await Promise.all(
+          group
+            .slice(1)
+            .map((lease) =>
+              processLease(
+                context,
+                dependencies,
+                lease,
+                clock,
+                first.processed === 1,
+              ),
+            ),
+        );
+        return [first, ...remaining];
+      }),
+    )
+  ).flat();
   const totals = results.reduce<LeaseResult>(
     (total, result) => ({
       processed: total.processed + result.processed,
@@ -132,6 +168,7 @@ async function processLease(
   dependencies: WorkerDependencies,
   lease: WorkerLease,
   clock: () => Date,
+  coveredByCommittedRecompute = false,
 ): Promise<LeaseResult> {
   const result = emptyLeaseResult();
   try {
@@ -139,7 +176,10 @@ async function processLease(
     if (!handler) throw workerError("handler_unavailable");
     const processed = await dependencies.repositories.outbox.process(
       lease,
-      (transaction) => handler.process(transaction, context.now),
+      (transaction) =>
+        coveredByCommittedRecompute && handler.coalesceByOrganization
+          ? Promise.resolve({ recomputed: false })
+          : handler.process(transaction, context.now),
     );
     if (processed.status === "lease_lost") {
       result.leaseLost = 1;
@@ -212,6 +252,8 @@ export async function runWorkerLoop(
     pollIntervalMs: number;
     attentionSweepIntervalMs?: number;
     telemetryIntervalMs?: number;
+    maxConsecutiveBatches?: number;
+    maxDrainMs?: number;
     signal: AbortSignal;
     observer?: WorkerLoopObserver;
   },
@@ -234,6 +276,24 @@ export async function runWorkerLoop(
     3_600_000,
     "WORKER_TELEMETRY_INTERVAL_MS",
   );
+  const maxConsecutiveBatches = boundedInteger(
+    input.maxConsecutiveBatches ?? 10,
+    1,
+    100,
+    "worker consecutive batch limit",
+  );
+  const maxDrainMs = boundedInteger(
+    input.maxDrainMs ?? 1000,
+    1,
+    60_000,
+    "worker drain time budget",
+  );
+  const fullBatchSize = Math.min(
+    dependencies.batchSize,
+    dependencies.concurrency,
+  );
+  let consecutiveFullBatches = 0;
+  let drainStartedAt = performance.now();
   const clock = dependencies.clock ?? (() => new Date());
   const log = dependencies.log ?? writeLog;
   const operational =
@@ -246,6 +306,7 @@ export async function runWorkerLoop(
 
   while (!input.signal.aborted) {
     const context = { now: clock(), requestId: crypto.randomUUID() };
+    let drainMore = false;
     try {
       const outbox = await runOutboxSweep(context, dependencies);
       if (input.signal.aborted) return;
@@ -255,6 +316,16 @@ export async function runWorkerLoop(
         : emptyJobResult("attention-sweep");
       if (attentionDue)
         nextAttentionSweepAt = context.now.getTime() + attentionSweepIntervalMs;
+      consecutiveFullBatches =
+        outbox.processed === fullBatchSize &&
+        outbox.failed === 0 &&
+        outbox.leaseLost === 0
+          ? consecutiveFullBatches + 1
+          : 0;
+      drainMore =
+        consecutiveFullBatches > 0 &&
+        consecutiveFullBatches < maxConsecutiveBatches &&
+        performance.now() - drainStartedAt < maxDrainMs;
       const result = { requestId: context.requestId, outbox, attention };
       const telemetryDue = context.now.getTime() >= nextTelemetryAt;
       if (telemetryDue) {
@@ -323,7 +394,11 @@ export async function runWorkerLoop(
         retryInMs: pollIntervalMs,
       });
     }
-    await waitForNextPoll(pollIntervalMs, input.signal);
+    await waitForNextPoll(drainMore ? 0 : pollIntervalMs, input.signal);
+    if (!drainMore) {
+      consecutiveFullBatches = 0;
+      drainStartedAt = performance.now();
+    }
   }
 }
 
@@ -372,7 +447,18 @@ async function main(): Promise<void> {
     });
     await runWorkerLoop(
       {
-        repositories: createWorkerRepositories(connection.db),
+        repositories: createWorkerRepositories(connection.db, {
+          onTiming(timing) {
+            if (timing.durationMs >= 500 || timing.outcome === "failure")
+              writeLog({
+                level: timing.outcome === "failure" ? "error" : "warn",
+                service: "trevv-worker",
+                event: "database_operation",
+                ...timing,
+                release: configuration.releaseMetadata,
+              });
+          },
+        }),
         handlerRegistry,
         workerId: configuration.workerId,
         enabled: configuration.enabled,

@@ -1,0 +1,138 @@
+{
+  "auditDate": "2026-09-05",
+  "reviewedSourceCommit": "841c6f86ecbf60165c1ab48eae4ca69a128658f6",
+  "runtime": {
+    "node": "v22.19.0",
+    "operatingSystem": "macOS",
+    "architecture": "arm64",
+    "hardwareFamily": "Apple Silicon",
+    "vinext": "1.0.0-beta.8"
+  },
+  "artifact": {
+    "source": "Existing local production Vinext build; not rebuilt during this audit",
+    "identityCaveat": "Reviewed source identity is not an immutable attestation of these artifacts or a production HAR. Deployment-time release-variable overrides are not inferred from local build metadata.",
+    "manifestPath": "apps/web/dist/server/__vite_rsc_assets_manifest.js",
+    "manifestSha256": "61f4c244dd619b354faa67dcfa63c7b809dd48e322c795dd417620a5cf14800c",
+    "browserEntry": "/_next/static/chunks/index-C9-tI9z1.js",
+    "browserEntrySha256": "5371f88748aad0c57f7806a8b990a4f613db249257d15441984c886db369a832"
+  },
+  "bytes": {
+    "method": "Sum raw file sizes and each file gzip-compressed independently at level 9. App shell uses Vinext client-entry and client-reference manifest dependencies. Route estimates recursively follow literal static JavaScript imports from browser entry, app-shell provider, named loader and selected live experience. Dynamic imports are not traversed automatically.",
+    "caveats": [
+      "Static dependency closure estimates, not measured network transfers or loading timings.",
+      "Route closures exclude some root telemetry and runtime extras; global CSS is reported separately.",
+      "Counts do not imply all generated demo and live assets are loaded on every route."
+    ],
+    "appShellAndBrowserEntry": {
+      "files": 26,
+      "rawBytes": 722164,
+      "gzipBytes": 215161
+    },
+    "routeJavaScriptClosures": [
+      {
+        "name": "portfolio",
+        "loader": "portfolio-loader",
+        "experience": "live-portfolio-experience",
+        "files": 40,
+        "rawBytes": 815118,
+        "gzipBytes": 245520
+      },
+      {
+        "name": "workspaceOverview",
+        "loader": "workspace-overview-loader",
+        "experience": "live-workspace-overview",
+        "files": 40,
+        "rawBytes": 816708,
+        "gzipBytes": 245750
+      },
+      {
+        "name": "workspaceDashboard",
+        "loader": "workspace-module-loader",
+        "experience": "live-workspace-overview",
+        "files": 40,
+        "rawBytes": 824106,
+        "gzipBytes": 246982
+      },
+      {
+        "name": "calendar",
+        "loader": "workspace-module-loader",
+        "experience": "calendar-experience",
+        "files": 43,
+        "rawBytes": 834595,
+        "gzipBytes": 250509
+      },
+      {
+        "name": "liveWorkViewsIncludingSettings",
+        "loader": "workspace-module-loader",
+        "experience": "live-work-views",
+        "files": 48,
+        "rawBytes": 910624,
+        "gzipBytes": 270737
+      },
+      {
+        "name": "messages",
+        "loader": "workspace-module-loader",
+        "experience": "live-messaging-workspace",
+        "files": 42,
+        "rawBytes": 850340,
+        "gzipBytes": 254592
+      },
+      {
+        "name": "board",
+        "loader": "board-loader",
+        "experience": "live-board-experience",
+        "files": 43,
+        "rawBytes": 825890,
+        "gzipBytes": 248764
+      }
+    ],
+    "globalStylesheet": {
+      "path": "apps/web/dist/client/_next/static/css/layout.DdNAWe2o.css",
+      "files": 1,
+      "rawBytes": 379052,
+      "gzipBytes": 55667
+    },
+    "selectedChunks": [
+      {
+        "name": "learning-center",
+        "files": 1,
+        "rawBytes": 43752,
+        "gzipBytes": 15377
+      },
+      {
+        "name": "email-inbox-workflow",
+        "files": 1,
+        "rawBytes": 50789,
+        "gzipBytes": 13697
+      }
+    ]
+  },
+  "calendarDedupe": {
+    "source": "apps/web/components/calendar-experience.tsx:150",
+    "method": "Synthetic local Node process with unique entries Array.from({length:n}, (_, i) => ({id: `item-${i}`, date: \"2026-09-05\"})); one untimed warmup then five timed iterations per algorithm, reported median using performance.now(). Fixture creation is outside the timed region. Captured values are from the audit run.",
+    "currentAlgorithm": "entries.filter((entry, index, entries) => entries.findIndex(candidate => candidate.id === entry.id) === index)",
+    "equivalentAlgorithm": "Use a Set of seen ids inside one entries.filter pass; retain the first occurrence and source order.",
+    "caveats": [
+      "Measures deduplication only; not the full calendar preparation/render path.",
+      "Synthetic CPU evidence, not production latency, browser INP, or low-end mobile timings.",
+      "The alternative is benchmarked, not implemented by this audit."
+    ],
+    "samples": [
+      {
+        "uniqueTaskEntries": 1000,
+        "currentMedianMilliseconds": 1.816542,
+        "setMedianMilliseconds": 0.069417
+      },
+      {
+        "uniqueTaskEntries": 10000,
+        "currentMedianMilliseconds": 101.567375,
+        "setMedianMilliseconds": 0.437083
+      },
+      {
+        "uniqueTaskEntries": 20000,
+        "currentMedianMilliseconds": 307.712083,
+        "setMedianMilliseconds": 0.935416
+      }
+    ]
+  }
+}

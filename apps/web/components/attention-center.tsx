@@ -44,7 +44,7 @@ import { useEffect, useMemo, useState } from "react";
 import { type GroupedSignal } from "@/lib/attention";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 
 const attentionTabs = [
   "Needs You",

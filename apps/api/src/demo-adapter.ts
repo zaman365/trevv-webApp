@@ -285,11 +285,19 @@ export function createDemoAdapter(): DemoAdapter {
       });
     },
 
-    async listWaiting(context) {
+    async listWaiting(context, filters) {
+      if (filters?.workspaceId)
+        requireAccess(context.access, "read", "workspace", {
+          organizationId: "org-demo",
+          workspaceId: filters.workspaceId,
+          explicitlyShared: true,
+        });
       return [...waitingStore.values()].filter(
         (waiting) =>
           waiting.organizationId === context.access.organizationId &&
           !waiting.resolvedAt &&
+          (!filters?.workspaceId ||
+            waiting.workspaceId === filters.workspaceId) &&
           context.access.accessibleWorkspaceIds.has(waiting.workspaceId),
       );
     },

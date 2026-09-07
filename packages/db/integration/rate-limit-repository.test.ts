@@ -69,3 +69,27 @@ describe("shared PostgreSQL rate-limit windows", () => {
     ).resolves.toBe(2);
   });
 });
+
+it("bounds background cleanup and preserves live shared windows", async () => {
+  const now = new Date("2026-09-05T12:00:00Z");
+  await first.db.insert(apiRateLimitWindows).values(
+    Array.from({ length: 1002 }, (_, index) => ({
+      bucket: "bounded-cleanup",
+      clientKeyHash: index.toString(16).padStart(64, "0"),
+      windowStartedAt: new Date(now.getTime() - 3_600_000),
+      windowMs: 60000,
+      requestCount: 1,
+      expiresAt: new Date(now.getTime() + (index === 1001 ? 60000 : -1)),
+    })),
+  );
+  const repository = createRateLimitRepository(
+    first.db,
+    "integration-rate-limit-key-material-01",
+  );
+  expect(await repository.pruneExpiredBatch!(now, 1000)).toBe(1000);
+  expect(await repository.pruneExpiredBatch!(now, 1000)).toBe(1);
+  expect(await repository.pruneExpiredBatch!(now, 1000)).toBe(0);
+  const rows = await first.db.select().from(apiRateLimitWindows);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.expiresAt.getTime()).toBeGreaterThan(now.getTime());
+});

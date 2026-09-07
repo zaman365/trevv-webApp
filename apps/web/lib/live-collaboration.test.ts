@@ -43,6 +43,7 @@ describe("live collaboration query organization", () => {
     };
 
     expect(collaborationQueryKeysForEvent(event)).toEqual([
+      collaborationKeys.unread("workspace-alpha"),
       collaborationKeys.teams("workspace-alpha"),
       collaborationKeys.conversations("workspace-alpha"),
       collaborationKeys.conversation(
@@ -65,6 +66,7 @@ describe("live collaboration query organization", () => {
     };
 
     expect(collaborationQueryKeysForEvent(event)).toEqual([
+      collaborationKeys.unread("workspace-alpha"),
       collaborationKeys.conversation("workspace-alpha", "conversation-ops"),
       collaborationKeys.messages("workspace-alpha", "conversation-ops"),
       collaborationKeys.conversations("workspace-alpha"),

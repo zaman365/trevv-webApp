@@ -1,0 +1,190 @@
+{
+  "sampledAtUtc": "2026-09-05T13:18:05.614730+00:00",
+  "method": "Three sequential unauthenticated GETs per endpoint; no deliberate cold-start induction; host-to-endpoint HTTP timing only",
+  "endpoints": [
+    {
+      "name": "web_liveness",
+      "samples": [
+        {
+          "http": 200,
+          "ttfb_ms": 91.2,
+          "total_ms": 91.3,
+          "body_bytes": 37
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 99.2,
+          "total_ms": 99.3,
+          "body_bytes": 37
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 92.9,
+          "total_ms": 93.2,
+          "body_bytes": 37
+        }
+      ]
+    },
+    {
+      "name": "web_readiness",
+      "samples": [
+        {
+          "http": 200,
+          "ttfb_ms": 126.7,
+          "total_ms": 127.1,
+          "body_bytes": 483
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 131.7,
+          "total_ms": 132.1,
+          "body_bytes": 483
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 129.8,
+          "total_ms": 130.5,
+          "body_bytes": 483
+        }
+      ]
+    },
+    {
+      "name": "api_liveness",
+      "samples": [
+        {
+          "http": 200,
+          "ttfb_ms": 155.0,
+          "total_ms": 155.2,
+          "body_bytes": 100
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 109.3,
+          "total_ms": 109.5,
+          "body_bytes": 100
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 120.8,
+          "total_ms": 121.0,
+          "body_bytes": 100
+        }
+      ]
+    },
+    {
+      "name": "api_readiness",
+      "samples": [
+        {
+          "http": 200,
+          "ttfb_ms": 139.1,
+          "total_ms": 139.4,
+          "body_bytes": 351
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 108.3,
+          "total_ms": 108.4,
+          "body_bytes": 351
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 105.0,
+          "total_ms": 105.1,
+          "body_bytes": 351
+        }
+      ]
+    },
+    {
+      "name": "anonymous_session",
+      "samples": [
+        {
+          "http": 401,
+          "ttfb_ms": 212.8,
+          "total_ms": 212.9,
+          "body_bytes": 120
+        },
+        {
+          "http": 401,
+          "ttfb_ms": 99.8,
+          "total_ms": 100.1,
+          "body_bytes": 120
+        },
+        {
+          "http": 401,
+          "ttfb_ms": 111.9,
+          "total_ms": 111.9,
+          "body_bytes": 120
+        }
+      ]
+    },
+    {
+      "name": "sign_in",
+      "samples": [
+        {
+          "http": 200,
+          "ttfb_ms": 211.8,
+          "total_ms": 212.0,
+          "body_bytes": 19365
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 124.5,
+          "total_ms": 125.0,
+          "body_bytes": 19365
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 110.2,
+          "total_ms": 110.5,
+          "body_bytes": 19365
+        }
+      ]
+    },
+    {
+      "name": "worker_liveness",
+      "samples": [
+        {
+          "http": 0,
+          "ttfb_ms": 0.0,
+          "total_ms": 15011.3,
+          "body_bytes": 0
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 7202.3,
+          "total_ms": 7202.8,
+          "body_bytes": 236
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 139.9,
+          "total_ms": 140.2,
+          "body_bytes": 236
+        }
+      ]
+    },
+    {
+      "name": "worker_readiness",
+      "samples": [
+        {
+          "http": 200,
+          "ttfb_ms": 119.5,
+          "total_ms": 119.9,
+          "body_bytes": 827
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 102.8,
+          "total_ms": 103.1,
+          "body_bytes": 827
+        },
+        {
+          "http": 200,
+          "ttfb_ms": 164.1,
+          "total_ms": 164.4,
+          "body_bytes": 827
+        }
+      ]
+    }
+  ]
+}

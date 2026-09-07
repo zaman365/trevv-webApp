@@ -1,0 +1,48 @@
+{
+  "source": "841c6f86ecbf60165c1ab48eae4ca69a128658f6",
+  "scope": "local isolated PostgreSQL; dataPlane calls; excludes HTTP/auth/rate-limit; owner organization-visible conversations, no read checkpoint",
+  "results": [
+    {
+      "operation": "conversations",
+      "records": 1,
+      "sqlStatements": 9,
+      "elapsedMs": 39,
+      "bytes": 630
+    },
+    {
+      "operation": "messages",
+      "records": 1,
+      "sqlStatements": 16,
+      "elapsedMs": 17,
+      "bytes": 471
+    },
+    {
+      "operation": "events_same_conversation",
+      "records": 1,
+      "sqlStatements": 14,
+      "elapsedMs": 15,
+      "bytes": 244
+    },
+    {
+      "operation": "conversations",
+      "records": 10,
+      "sqlStatements": 54,
+      "elapsedMs": 58,
+      "bytes": 6108
+    },
+    {
+      "operation": "messages",
+      "records": 10,
+      "sqlStatements": 34,
+      "elapsedMs": 23,
+      "bytes": 4530
+    },
+    {
+      "operation": "events_same_conversation",
+      "records": 10,
+      "sqlStatements": 95,
+      "elapsedMs": 84,
+      "bytes": 2240
+    }
+  ]
+}

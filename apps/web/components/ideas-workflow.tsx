@@ -29,7 +29,7 @@ import { useCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { scoreOpportunity } from "@/lib/workflow-rules";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 
 type IdeaStage = "captured" | "evaluating" | "promoted" | "archived";
 

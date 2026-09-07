@@ -1,6 +1,6 @@
 "use client";
 
-import type { BoardDto, OperationsStatusDto } from "@founderhq/api-contract";
+import type { BoardDto } from "@founderhq/api-contract";
 import {
   Blocks,
   CheckCircle2,
@@ -15,7 +15,11 @@ import {
   X,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
+import { countByKey, workspaceRollups } from "@/lib/collection-index";
+import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
@@ -41,11 +45,30 @@ export function LiveWorkspaceOverview({
   const workspace = liveData.workspaces.find(
     (record) => record.slug === workspaceSlug,
   );
-  const [boards, setBoards] = useState<BoardDto[]>([]);
-  const [loadingBoards, setLoadingBoards] = useState(true);
-  const [operationStatus, setOperationStatus] =
-    useState<OperationsStatusDto | null>(null);
-  const [loadError, setLoadError] = useState<unknown>(null);
+  const queryClient = useQueryClient();
+  const boardsKey = workspaceResourceKeys.boards(
+    session.organization.id,
+    workspace?.id ?? "",
+  );
+  const boardsQuery = useQuery({
+    queryKey: boardsKey,
+    queryFn: ({ signal }) =>
+      liveData.client.withSignal(signal).boards(workspace!.id),
+    enabled: Boolean(workspace),
+    staleTime: 30_000,
+  });
+  const operationsQuery = useQuery({
+    queryKey: workspaceResourceKeys.operations(session.organization.id),
+    queryFn: ({ signal }) =>
+      liveData.client.withSignal(signal).operationStatus(),
+    enabled: Boolean(workspace),
+    staleTime: 30_000,
+  });
+  useReportRouteReady(boardsQuery.isSuccess && liveData.recordsReady);
+  const boards = boardsQuery.data ?? [];
+  const loadingBoards = boardsQuery.isPending;
+  const operationStatus = operationsQuery.data;
+  const loadError = boardsQuery.error ?? operationsQuery.error;
   const [createOpen, setCreateOpen] = useState(false);
   const [boardName, setBoardName] = useState("");
   const [boardDescription, setBoardDescription] = useState("");
@@ -58,30 +81,23 @@ export function LiveWorkspaceOverview({
   );
   const [confirmedBoard, setConfirmedBoard] = useState<BoardDto | null>(null);
 
-  useEffect(() => {
-    if (!workspace) return;
-    let active = true;
-    Promise.all([
-      liveData.client.boards(workspace.id),
-      liveData.client.operationStatus(),
-    ])
-      .then(([nextBoards, status]) => {
-        if (!active) return;
-        setBoards(nextBoards);
-        setOperationStatus(status);
-        setLoadError(null);
-      })
-      .catch((reason: unknown) => {
-        if (active) setLoadError(reason);
-      })
-      .finally(() => {
-        if (active) setLoadingBoards(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [liveData.client, workspace]);
-
+  const items = useMemo(
+    () => workspaceItems(liveData.items, workspace?.id ?? ""),
+    [liveData.items, workspace?.id],
+  );
+  const boardItemCounts = useMemo(
+    () => countByKey(items, (item) => item.boardId),
+    [items],
+  );
+  const itemTotals = useMemo(
+    () => workspaceRollups(items, []).get(workspace?.id ?? ""),
+    [items, workspace?.id],
+  );
+  const workspaceSummary = liveData.summary?.workspaces.find(
+    (summary) => summary.workspaceId === workspace?.id,
+  );
+  const countLabel = (value: number) =>
+    liveData.recordsComplete ? value : `${value} loaded`;
   if (!workspace) {
     return (
       <WorkspaceFrame active={dashboard ? "dashboard" : "workspace"}>
@@ -98,8 +114,6 @@ export function LiveWorkspaceOverview({
   }
 
   const workspaceId = workspace.id;
-  const items = workspaceItems(liveData.items, workspaceId);
-  const openItems = items.filter((item) => item.status !== "done");
   const attention = liveData.attention.filter(
     (signal) =>
       signal.workspaceId === workspaceId &&
@@ -129,7 +143,10 @@ export function LiveWorkspaceOverview({
         },
         idempotencyKey,
       );
-      setBoards((current) => [...current, result.data]);
+      queryClient.setQueryData<BoardDto[]>(boardsKey, (current) => [
+        ...(current ?? []),
+        result.data,
+      ]);
       setConfirmedBoard(result.data);
       setCreateOpen(false);
       setBoardName("");
@@ -196,7 +213,13 @@ export function LiveWorkspaceOverview({
         {presentedLoadError ? (
           <LiveStateNotice
             actions={
-              <button onClick={() => window.location.reload()} type="button">
+              <button
+                onClick={() => {
+                  void boardsQuery.refetch();
+                  void operationsQuery.refetch();
+                }}
+                type="button"
+              >
                 Retry loading
               </button>
             }
@@ -223,24 +246,27 @@ export function LiveWorkspaceOverview({
         <section className={styles.statGrid} aria-label="Workspace totals">
           <article>
             <LayoutList size={18} />
-            <strong>{openItems.length}</strong>
+            <strong>
+              {workspaceSummary?.open ?? countLabel(itemTotals?.open ?? 0)}
+            </strong>
             <span>Open work</span>
           </article>
           <article>
             <Blocks size={18} />
             <strong>
-              {openItems.filter((item) => item.status === "blocked").length}
+              {workspaceSummary?.blocked ??
+                countLabel(itemTotals?.blocked ?? 0)}
             </strong>
             <span>Blocked</span>
           </article>
           <article>
             <Sparkles size={18} />
-            <strong>{attention.length}</strong>
+            <strong>{countLabel(attention.length)}</strong>
             <span>Need attention</span>
           </article>
           <article>
             <Clock3 size={18} />
-            <strong>{waiting.length}</strong>
+            <strong>{countLabel(waiting.length)}</strong>
             <span>Waiting</span>
           </article>
         </section>
@@ -276,9 +302,7 @@ export function LiveWorkspaceOverview({
             ) : (
               <div className={styles.list}>
                 {boards.map((board) => {
-                  const boardItems = items.filter(
-                    (item) => item.boardId === board.id,
-                  );
+                  const itemCount = boardItemCounts.get(board.id) ?? 0;
                   return (
                     <Link
                       className={styles.listRow}
@@ -292,9 +316,8 @@ export function LiveWorkspaceOverview({
                       <span>
                         <strong>{board.name}</strong>
                         <small>
-                          {boardItems.length} item
-                          {boardItems.length === 1 ? "" : "s"} ·{" "}
-                          {board.visibility}
+                          {countLabel(itemCount)} item
+                          {itemCount === 1 ? "" : "s"} · {board.visibility}
                         </small>
                       </span>
                       <small>
@@ -322,40 +345,30 @@ export function LiveWorkspaceOverview({
                 <Sparkles size={16} />
                 <span>
                   <strong>Attention</strong>
-                  <small>{attention.length} deterministic signals</small>
+                  <small>
+                    {countLabel(attention.length)} deterministic signals
+                  </small>
                 </span>
               </Link>
               <Link href={workspaceHref(workspace.slug, "decisions")}>
                 <FileQuestion size={16} />
                 <span>
                   <strong>Decisions</strong>
-                  <small>
-                    {
-                      openItems.filter((item) => item.type === "decision")
-                        .length
-                    }{" "}
-                    open
-                  </small>
+                  <small>{countLabel(itemTotals?.decisions ?? 0)} open</small>
                 </span>
               </Link>
               <Link href={workspaceHref(workspace.slug, "approvals")}>
                 <ClipboardCheck size={16} />
                 <span>
                   <strong>Approvals</strong>
-                  <small>
-                    {
-                      openItems.filter((item) => item.type === "approval")
-                        .length
-                    }{" "}
-                    open
-                  </small>
+                  <small>{countLabel(itemTotals?.approvals ?? 0)} open</small>
                 </span>
               </Link>
               <Link href={workspaceHref(workspace.slug, "waiting")}>
                 <Clock3 size={16} />
                 <span>
                   <strong>Waiting</strong>
-                  <small>{waiting.length} active follow-ups</small>
+                  <small>{countLabel(waiting.length)} active follow-ups</small>
                 </span>
               </Link>
             </nav>

@@ -32,7 +32,9 @@
     "db:generate": "pnpm --filter @founderhq/db generate",
     "db:migrate": "pnpm --filter @founderhq/db migrate",
     "db:seed": "pnpm --filter @founderhq/db seed",
-    "contracts:generate": "pnpm --filter @founderhq/api-contract generate"
+    "contracts:generate": "pnpm --filter @founderhq/api-contract generate",
+    "performance:worker-budget": "node scripts/worker-performance-budget.mjs",
+    "performance:public-styles": "node scripts/public-style-budget.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.11.0",

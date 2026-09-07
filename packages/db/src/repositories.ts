@@ -556,6 +556,22 @@ export interface CreateWorkspaceSnapshotInput {
   source: WorkspaceSnapshot["source"];
 }
 
+export interface OrganizationSummaryProjection {
+  workspaces: Array<{
+    workspaceId: string;
+    open: number;
+    blocked: number;
+    pendingDecisions: number;
+    attention: number;
+    attentionEntities: number;
+  }>;
+  portfolios: Array<{
+    portfolioId: string;
+    attention: number;
+    attentionEntities: number;
+  }>;
+}
+
 export interface OrganizationScopedRepositories {
   collaboration: CollaborationRepositories;
   privacy: PrivacyRepositories;
@@ -627,6 +643,13 @@ export interface OrganizationScopedRepositories {
       context: MutationContext,
       originatingContext?: MutationContext,
     ) => Promise<MutationResult<InvitationProjection>>;
+  };
+  summaries: {
+    list: (filters: {
+      workspaceIds: string[];
+      portfolioIds: string[];
+      now: Date;
+    }) => Promise<OrganizationSummaryProjection>;
   };
   session: {
     resolve: () => Promise<{
@@ -732,6 +755,13 @@ export interface OrganizationScopedRepositories {
       limit?: number;
       offset?: number;
     }) => Promise<WorkItemProjection[]>;
+    listPage: (filters?: {
+      workspaceId?: string;
+      boardId?: string;
+      assigneeId?: string;
+      limit?: number;
+      offset?: number;
+    }) => Promise<{ items: WorkItemProjection[]; hasMore: boolean }>;
     get: (id: string) => Promise<WorkItemProjection>;
     history: (id: string) => Promise<WorkItemHistoryProjection[]>;
     create: (
@@ -1186,13 +1216,13 @@ function createScopedRepositories(
     return event;
   };
 
-  const listWorkItemRecords = async (filters?: {
+  const listWorkItemPage = async (filters?: {
     workspaceId?: string;
     boardId?: string;
     assigneeId?: string;
     limit?: number;
     offset?: number;
-  }): Promise<WorkItemProjection[]> => {
+  }): Promise<{ items: WorkItemProjection[]; hasMore: boolean }> => {
     const limit = Math.max(1, Math.min(filters?.limit ?? 100, 100));
     const offset = Math.max(0, filters?.offset ?? 0);
     const rows = filters?.assigneeId
@@ -1215,7 +1245,7 @@ function createScopedRepositories(
             ),
           )
           .orderBy(asc(workItems.ordering), asc(workItems.id))
-          .limit(limit)
+          .limit(limit + 1)
           .offset(offset)
       : await database
           .select({ item: workItems })
@@ -1228,14 +1258,21 @@ function createScopedRepositories(
             ),
           )
           .orderBy(asc(workItems.ordering), asc(workItems.id))
-          .limit(limit)
+          .limit(limit + 1)
           .offset(offset);
-    return hydrateWorkItems(
-      database,
-      scope.organizationId,
-      rows.map(({ item }) => item),
-    );
+    return {
+      items: await hydrateWorkItems(
+        database,
+        scope.organizationId,
+        rows.slice(0, limit).map(({ item }) => item),
+      ),
+      hasMore: rows.length > limit,
+    };
   };
+
+  const listWorkItemRecords = async (
+    filters?: Parameters<typeof listWorkItemPage>[0],
+  ): Promise<WorkItemProjection[]> => (await listWorkItemPage(filters)).items;
 
   const getWorkItem = async (id: string): Promise<WorkItemProjection> => {
     const item = await findScopedWorkItemRow(
@@ -1329,6 +1366,9 @@ function createScopedRepositories(
             originatingContext,
           ),
         ),
+    },
+    summaries: {
+      list: (filters) => listOrganizationSummary(database, scope, filters),
     },
     session: {
       resolve: () => resolveSession(database, scope),
@@ -1441,6 +1481,7 @@ function createScopedRepositories(
     },
     workItems: {
       list: listWorkItemRecords,
+      listPage: listWorkItemPage,
       get: getWorkItem,
       history: (id) => listWorkItemHistory(database, scope, id),
       create: (input, context) =>
@@ -5656,6 +5697,39 @@ async function resolveSession(
   };
 }
 
+/** Fetch one update per Workspace using the existing organization/workspace/date index. */
+export async function findLatestWorkspaceUpdates(
+  database: TrevvDatabase,
+  organizationId: string,
+  workspaceIds?: string[],
+): Promise<Array<typeof workspaceUpdates.$inferSelect>> {
+  if (workspaceIds && !workspaceIds.length) return [];
+  const latest = database
+    .select()
+    .from(workspaceUpdates)
+    .where(
+      and(
+        eq(workspaceUpdates.organizationId, organizationId),
+        eq(workspaceUpdates.workspaceId, workspaces.id),
+        isNull(workspaceUpdates.deletedAt),
+      ),
+    )
+    .orderBy(desc(workspaceUpdates.publishedAt), desc(workspaceUpdates.id))
+    .limit(1)
+    .as("latest_update");
+  const rows = await database
+    .select()
+    .from(workspaces)
+    .innerJoinLateral(latest, sql`true`)
+    .where(
+      and(
+        eq(workspaces.organizationId, organizationId),
+        workspaceIds ? inArray(workspaces.id, workspaceIds) : undefined,
+      ),
+    );
+  return rows.map(({ latest_update }) => latest_update);
+}
+
 async function hydrateWorkspaces(
   database: TrevvDatabase,
   organizationId: string,
@@ -5699,17 +5773,7 @@ async function hydrateWorkspaces(
         asc(databaseSchema.workspaceMetrics.workspaceId),
         asc(databaseSchema.workspaceMetrics.name),
       ),
-    database
-      .select()
-      .from(workspaceUpdates)
-      .where(
-        and(
-          eq(workspaceUpdates.organizationId, organizationId),
-          inArray(workspaceUpdates.workspaceId, workspaceIds),
-          isNull(workspaceUpdates.deletedAt),
-        ),
-      )
-      .orderBy(desc(workspaceUpdates.publishedAt), desc(workspaceUpdates.id)),
+    findLatestWorkspaceUpdates(database, organizationId, workspaceIds),
   ]);
   const leads = new Map(leadRows.map((lead) => [lead.id, lead]));
   const metricsByWorkspace = new Map<
@@ -6748,6 +6812,111 @@ function restoreWorkItemTransition(value: unknown): {
   return {
     item: restoreWorkItemSnapshot(value.item),
     evidence: evidence as unknown as WorkItemHistoryProjection,
+  };
+}
+
+async function listOrganizationSummary(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  filters: { workspaceIds: string[]; portfolioIds: string[]; now: Date },
+): Promise<OrganizationSummaryProjection> {
+  const workspaceIds = [...new Set(filters.workspaceIds)];
+  const portfolioIds = [...new Set(filters.portfolioIds)];
+  const [itemCounts, attentionCounts] = await Promise.all([
+    workspaceIds.length
+      ? database
+          .select({
+            workspaceId: workItems.workspaceId,
+            open: sql<number>`count(*)::int`,
+            blocked: sql<number>`count(*) filter (where ${workItems.status} = 'blocked')::int`,
+            pendingDecisions: sql<number>`count(*) filter (where ${workItems.itemType} = 'decision' and coalesce(${workItems.typeData}->>'decisionState', 'needed') <> 'decided')::int`,
+          })
+          .from(workItems)
+          .where(
+            and(
+              workItemPredicate(scope.organizationId),
+              inArray(workItems.workspaceId, workspaceIds),
+              ne(workItems.status, "done"),
+            ),
+          )
+          .groupBy(workItems.workspaceId)
+      : Promise.resolve([]),
+    workspaceIds.length || portfolioIds.length
+      ? database
+          .select({
+            workspaceId: attentionSignals.workspaceId,
+            portfolioId: attentionSignals.portfolioId,
+            attention: sql<number>`count(*)::int`,
+            attentionEntities: sql<number>`count(distinct ${attentionSignals.entityId})::int`,
+            portfolioTotal: sql<boolean>`grouping(${attentionSignals.workspaceId}) = 1`,
+          })
+          .from(attentionSignals)
+          .where(
+            and(
+              eq(attentionSignals.organizationId, scope.organizationId),
+              isNull(attentionSignals.resolvedAt),
+              isNull(attentionSignals.dismissedAt),
+              or(
+                isNull(attentionSignals.snoozedUntil),
+                lte(attentionSignals.snoozedUntil, filters.now),
+              ),
+              or(
+                workspaceIds.length
+                  ? inArray(attentionSignals.workspaceId, workspaceIds)
+                  : undefined,
+                portfolioIds.length
+                  ? and(
+                      isNull(attentionSignals.workspaceId),
+                      inArray(attentionSignals.portfolioId, portfolioIds),
+                    )
+                  : undefined,
+              ),
+            ),
+          )
+          .groupBy(
+            sql`grouping sets ((${attentionSignals.workspaceId}, ${attentionSignals.portfolioId}), (${attentionSignals.portfolioId}))`,
+          )
+      : Promise.resolve([]),
+  ]);
+  const workspaces = new Map(
+    workspaceIds.map((workspaceId) => [
+      workspaceId,
+      {
+        workspaceId,
+        open: 0,
+        blocked: 0,
+        pendingDecisions: 0,
+        attention: 0,
+        attentionEntities: 0,
+      },
+    ]),
+  );
+  const portfolios = new Map(
+    portfolioIds.map((portfolioId) => [
+      portfolioId,
+      { portfolioId, attention: 0, attentionEntities: 0 },
+    ]),
+  );
+  for (const row of itemCounts)
+    Object.assign(workspaces.get(row.workspaceId)!, row);
+  for (const row of attentionCounts) {
+    if (row.portfolioTotal) {
+      const portfolio = portfolios.get(row.portfolioId);
+      if (portfolio) {
+        portfolio.attention = row.attention;
+        portfolio.attentionEntities = row.attentionEntities;
+      }
+    } else if (row.workspaceId) {
+      const workspace = workspaces.get(row.workspaceId);
+      if (workspace) {
+        workspace.attention = row.attention;
+        workspace.attentionEntities = row.attentionEntities;
+      }
+    }
+  }
+  return {
+    workspaces: [...workspaces.values()],
+    portfolios: [...portfolios.values()],
   };
 }
 

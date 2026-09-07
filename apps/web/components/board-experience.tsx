@@ -75,7 +75,7 @@ import {
 import { WorkspaceFrame } from "./workspace-frame";
 import { CapabilityNotice } from "./capability-status";
 import { productCopy } from "@/lib/product-copy";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { workspaceHref } from "@/lib/workspace-routes";
 

@@ -21,11 +21,17 @@ import {
 } from "@/lib/app-session-context";
 import {
   LiveAppDataProvider,
+  LiveAppRecordsBoundary,
+  useLiveAppAccess,
   useOptionalLiveAppRecords as useOptionalLiveAppData,
   type LiveAppDataSnapshot,
   type LiveAppRecords,
 } from "@/lib/live-app-data";
-import { LearningCenterProvider } from "./learning-center";
+import { AppQueryProvider } from "@/lib/app-query-provider";
+import { LearningCenterProvider } from "./learning-center-context";
+import { WorkspaceShell } from "./workspace-frame";
+import { workspaceShellRoute } from "@/lib/workspace-shell-route";
+import type { LiveAppAccessSnapshot } from "@/lib/live-app-sync";
 import { LiveStateNotice } from "./live-state";
 
 const workspaceSlugFrom = (pathname: string) => {
@@ -45,13 +51,17 @@ export function AppShellProviders({
   storedSelection,
   initialTheme,
   liveData,
+  liveAccess,
 }: {
   children: ReactNode;
   session: AppSessionView;
   storedSelection?: StoredWorkspaceSelection;
   initialTheme?: Theme;
   liveData?: LiveAppDataSnapshot;
+  liveAccess?: LiveAppAccessSnapshot;
 }) {
+  const pathname = usePathname() ?? "";
+  const route = workspaceShellRoute(pathname);
   const content = (
     <AppShellProviderContent
       session={session}
@@ -62,11 +72,23 @@ export function AppShellProviders({
     </AppShellProviderContent>
   );
   return session.demo ? (
-    content
+    <AppQueryProvider>{content}</AppQueryProvider>
   ) : (
     <LiveAppDataProvider
       key={`${session.user.id}:${session.organization.id}`}
       {...(liveData ? { initialData: liveData } : {})}
+      {...(liveAccess ? { initialAccess: liveAccess } : {})}
+      identity={{
+        userId: session.user.id,
+        organizationId: session.organization.id,
+      }}
+      loadRecords={route?.requiresRecords ?? false}
+      recordScope={
+        route?.workspaceSlug
+          ? { workspaceSlug: route.workspaceSlug }
+          : "summary"
+      }
+      allowShell
     >
       {content}
     </LiveAppDataProvider>
@@ -85,6 +107,34 @@ function AppShellProviderContent({
   initialTheme?: Theme;
 }) {
   const pathname = usePathname() ?? "";
+  const access = useLiveAppAccess();
+  const effectiveSession: AppSessionView = access
+    ? {
+        demo: session.demo,
+        ...(access.session.platformRole
+          ? { platformRole: access.session.platformRole }
+          : {}),
+        organization: {
+          id: access.session.organization.id,
+          name: access.session.organization.name,
+          role: access.session.organization.role,
+          ...(access.session.organization.timezone
+            ? { timezone: access.session.organization.timezone }
+            : {}),
+        },
+        availableOrganizations: access.session.availableOrganizations.map(
+          ({ id, name, role, slug }) => ({ id, name, role, slug }),
+        ),
+        managedWorkspaceIds: access.session.managedWorkspaceIds,
+        user: access.session.user,
+      }
+    : session;
+  const route = workspaceShellRoute(pathname);
+  const routeDenied =
+    (pathname === "/app/system/admin" &&
+      effectiveSession.platformRole !== "owner") ||
+    (pathname === "/app/account/invitations" &&
+      !["owner", "admin"].includes(effectiveSession.organization.role));
   const customWorkspaceRecords = useCustomWorkspaces();
   const availableLiveData = useOptionalLiveAppData();
   const liveData = session.demo ? null : availableLiveData;
@@ -103,9 +153,9 @@ function AppShellProviderContent({
     ).find((workspace) => workspace.slug === slug);
   }, [customWorkspaceRecords, liveSource, pathname]);
 
-  if (liveData?.accessLost) {
+  if (liveData?.accessLost || routeDenied) {
     return (
-      <AppSessionProvider session={session}>
+      <AppSessionProvider session={effectiveSession}>
         <main className="route-state-shell">
           <LiveStateNotice
             kind="permission-loss"
@@ -119,7 +169,7 @@ function AppShellProviderContent({
   }
 
   return (
-    <AppSessionProvider session={session}>
+    <AppSessionProvider session={effectiveSession}>
       <WorkspaceProvider
         portfolioScoped={pathname === "/app/portfolio"}
         {...(storedSelection ? { storedSelection } : {})}
@@ -132,7 +182,32 @@ function AppShellProviderContent({
           : {})}
         {...(liveSource ? { liveSource } : {})}
       >
-        <LearningCenterProvider>{children}</LearningCenterProvider>
+        <LearningCenterProvider>
+          {route ? (
+            <WorkspaceShell
+              active={route.active}
+              {...(route.workspaceSlug
+                ? { workspaceSlug: route.workspaceSlug }
+                : {})}
+            >
+              <LiveAppRecordsBoundary
+                required={
+                  route.requiresRecords &&
+                  (!route.workspaceSlug ||
+                    !access ||
+                    !liveData ||
+                    liveData.workspaces.some(
+                      (workspace) => workspace.slug === route.workspaceSlug,
+                    ))
+                }
+              >
+                {children}
+              </LiveAppRecordsBoundary>
+            </WorkspaceShell>
+          ) : (
+            children
+          )}
+        </LearningCenterProvider>
       </WorkspaceProvider>
     </AppSessionProvider>
   );

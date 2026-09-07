@@ -15,7 +15,7 @@ export default defineConfig({
       // Use the production bundle with HTTP transport to a loopback-only fake
       // upstream; NODE_ENV=test only relaxes local runtime URL validation.
       command:
-        "pnpm --filter @founderhq/web exec wrangler dev --local --port 3218 --var NODE_ENV:test --var API_ORIGIN:http://127.0.0.1:3219 --var NEXT_PUBLIC_APP_URL:https://trevv.test --var AUTH_COOKIE_PREFIX:trevv_alpha",
+        "pnpm --filter @founderhq/web exec wrangler dev --local --port 3218 --var NODE_ENV:test --var API_ORIGIN:http://127.0.0.1:3219 --var NEXT_PUBLIC_APP_URL:https://trevv.test --var AUTH_COOKIE_PREFIX:trevv_alpha --var NEXT_PUBLIC_RUM_ENABLED:true --var NEXT_PUBLIC_RUM_SAMPLE_RATE:1 --var WEB_VITALS_INGEST_ENABLED:true",
       url: "http://127.0.0.1:3218/api/web/livez",
       timeout: 60_000,
       env: { WRANGLER_LOG_PATH: "/tmp/trevv-worker-navigation.log" },

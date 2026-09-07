@@ -1,5 +1,11 @@
 # Performance evidence
 
+The [system-wide audit and improvement plan from 5 September 2026](/Library/Projects/trevv-webApp/docs/performance-audit-2026-09-05.md)
+adds measured SQL amplification, live service observations, production Worker
+asset evidence, and prioritized work beyond the targeted repairs recorded below.
+Its lab measurements, source findings, and remaining production profiling gaps
+are explicitly distinguished; earlier evidence remains preserved here.
+
 Web build evidence was refreshed on 2026-08-30 from a production-mode local
 build of the current working tree on Apple Silicon (`RELEASE_ID=local-phase6-build`,
 base Git SHA `6db98e24361d6ae078ecd735a0abf9a1abe51cee`). The dirty working tree and

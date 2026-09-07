@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "measurement": "Static dependency closures of the shipped live Worker and explicitly selected modules; lazy UI is tested separately.",
+  "routes": {
+    "/sign-in": {
+      "javascriptGzipBytes": 200000,
+      "cssGzipBytes": 65000
+    },
+    "/app/portfolio": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/dashboard": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/calendar": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/attention": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/my-work": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/inbox": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/messages": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/decisions": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/approvals": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/ideas": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/reviews": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/waiting": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/teams": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/blueprints": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/notifications": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/search": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/settings": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/boards/:board": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/settings/import": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/workspaces/:workspace/stakeholder": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/account/sessions": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/account/privacy": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/account/invitations": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/system/admin": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    },
+    "/app/mail": {
+      "javascriptGzipBytes": 300000,
+      "cssGzipBytes": 65000
+    }
+  }
+}

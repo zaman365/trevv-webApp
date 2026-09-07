@@ -44,7 +44,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { WorkspaceFrame } from "./workspace-frame";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { type GroupedSignal } from "@/lib/attention";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 import { IdeasWorkflow } from "./ideas-workflow";
 import { TeamWorkflow } from "./team-workflow";
 import { AttentionCenter } from "./attention-center";
@@ -1844,9 +1844,9 @@ function PanelHeading({
         <p>{subtitle}</p>
       </div>
       {href && (
-        <a href={href}>
+        <Link href={href}>
           View all <ArrowRight size={12} />
-        </a>
+        </Link>
       )}
     </header>
   );

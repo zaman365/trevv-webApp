@@ -1,0 +1,396 @@
+{
+  "timeframe": {
+    "from": 1788614040000,
+    "to": 1788614400000
+  },
+  "success": true,
+  "calculations": [
+    {
+      "alias": "requests",
+      "aggregates": [
+        {
+          "path": "/api/web/livez",
+          "value": 3,
+          "count": 3
+        },
+        {
+          "path": "/favicon.ico",
+          "value": 1,
+          "count": 1
+        },
+        {
+          "path": "/sign-in",
+          "value": 3,
+          "count": 3
+        },
+        {
+          "path": "/api/v1/portfolios",
+          "value": 1,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/workspaces",
+          "value": 1,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/attention",
+          "value": 1,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/items",
+          "value": 1,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/events",
+          "value": 237,
+          "count": 237
+        },
+        {
+          "path": "/api/web/readyz",
+          "value": 4,
+          "count": 4
+        },
+        {
+          "path": "/api/v1/waiting",
+          "value": 1,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "alias": "median_wall_ms",
+      "aggregates": [
+        {
+          "path": "/api/web/livez",
+          "value": 4,
+          "count": 3
+        },
+        {
+          "path": "/favicon.ico",
+          "value": 9,
+          "count": 1
+        },
+        {
+          "path": "/sign-in",
+          "value": 19,
+          "count": 3
+        },
+        {
+          "path": "/api/v1/portfolios",
+          "value": 221,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/workspaces",
+          "value": 305,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/attention",
+          "value": 229,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/items",
+          "value": 322,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/events",
+          "value": 143,
+          "count": 237
+        },
+        {
+          "path": "/api/web/readyz",
+          "value": 37,
+          "count": 4
+        },
+        {
+          "path": "/api/v1/waiting",
+          "value": 312,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "alias": "median_cpu_ms",
+      "aggregates": [
+        {
+          "path": "/api/web/livez",
+          "value": 3,
+          "count": 3
+        },
+        {
+          "path": "/favicon.ico",
+          "value": 8,
+          "count": 1
+        },
+        {
+          "path": "/sign-in",
+          "value": 11,
+          "count": 3
+        },
+        {
+          "path": "/api/v1/portfolios",
+          "value": 3,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/workspaces",
+          "value": 4,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/attention",
+          "value": 4,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/items",
+          "value": 3,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/events",
+          "value": 3,
+          "count": 237
+        },
+        {
+          "path": "/api/web/readyz",
+          "value": 2,
+          "count": 4
+        },
+        {
+          "path": "/api/v1/waiting",
+          "value": 7,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "alias": "p95_wall_ms",
+      "aggregates": [
+        {
+          "path": "/api/web/livez",
+          "value": 5,
+          "count": 3
+        },
+        {
+          "path": "/favicon.ico",
+          "value": 9,
+          "count": 1
+        },
+        {
+          "path": "/sign-in",
+          "value": 124,
+          "count": 3
+        },
+        {
+          "path": "/api/v1/portfolios",
+          "value": 221,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/workspaces",
+          "value": 305,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/attention",
+          "value": 229,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/items",
+          "value": 322,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/events",
+          "value": 309,
+          "count": 237
+        },
+        {
+          "path": "/api/web/readyz",
+          "value": 45,
+          "count": 4
+        },
+        {
+          "path": "/api/v1/waiting",
+          "value": 312,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "alias": "p95_cpu_ms",
+      "aggregates": [
+        {
+          "path": "/api/web/livez",
+          "value": 4,
+          "count": 3
+        },
+        {
+          "path": "/favicon.ico",
+          "value": 8,
+          "count": 1
+        },
+        {
+          "path": "/sign-in",
+          "value": 44,
+          "count": 3
+        },
+        {
+          "path": "/api/v1/portfolios",
+          "value": 3,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/workspaces",
+          "value": 4,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/attention",
+          "value": 4,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/items",
+          "value": 3,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/events",
+          "value": 6,
+          "count": 237
+        },
+        {
+          "path": "/api/web/readyz",
+          "value": 3,
+          "count": 4
+        },
+        {
+          "path": "/api/v1/waiting",
+          "value": 7,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "alias": "max_wall_ms",
+      "aggregates": [
+        {
+          "path": "/api/web/livez",
+          "value": 5,
+          "count": 3
+        },
+        {
+          "path": "/favicon.ico",
+          "value": 9,
+          "count": 1
+        },
+        {
+          "path": "/sign-in",
+          "value": 124,
+          "count": 3
+        },
+        {
+          "path": "/api/v1/portfolios",
+          "value": 221,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/workspaces",
+          "value": 305,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/attention",
+          "value": 229,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/items",
+          "value": 322,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/events",
+          "value": 957,
+          "count": 237
+        },
+        {
+          "path": "/api/web/readyz",
+          "value": 45,
+          "count": 4
+        },
+        {
+          "path": "/api/v1/waiting",
+          "value": 312,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "alias": "max_cpu_ms",
+      "aggregates": [
+        {
+          "path": "/api/web/livez",
+          "value": 4,
+          "count": 3
+        },
+        {
+          "path": "/favicon.ico",
+          "value": 8,
+          "count": 1
+        },
+        {
+          "path": "/sign-in",
+          "value": 44,
+          "count": 3
+        },
+        {
+          "path": "/api/v1/portfolios",
+          "value": 3,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/workspaces",
+          "value": 4,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/attention",
+          "value": 4,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/items",
+          "value": 3,
+          "count": 1
+        },
+        {
+          "path": "/api/v1/events",
+          "value": 9,
+          "count": 237
+        },
+        {
+          "path": "/api/web/readyz",
+          "value": 3,
+          "count": 4
+        },
+        {
+          "path": "/api/v1/waiting",
+          "value": 7,
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "method": "Cloudflare telemetry dry aggregate query; service trevv-webapp; invocation records with wallTimeMs; grouped by path; no user identifiers or request headers retained; includes audit traffic and is not browser performance evidence"
+}

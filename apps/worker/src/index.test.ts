@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   AttentionRecomputeResult,
   WorkerLease,
@@ -216,9 +216,10 @@ describe("PostgreSQL worker orchestration", () => {
     let claimLimit = 0;
     let active = 0;
     let maximumActive = 0;
-    const leases = Array.from({ length: 5 }, (_, index) =>
-      lease(1, `event-${index}`),
-    );
+    const leases = Array.from({ length: 5 }, (_, index) => ({
+      ...lease(1, `event-${index}`),
+      organizationId: `org-${index}`,
+    }));
     const repositories = fakeRepositories();
     repositories.outbox.lease = async (input) => {
       claimLimit = input.limit;
@@ -391,5 +392,114 @@ describe("PostgreSQL worker orchestration", () => {
     await expect(loop).resolves.toBeUndefined();
     expect(leaseCalls).toBe(1);
     expect(attentionSweeps).toBe(0);
+  });
+});
+
+describe("bounded backlog draining and attention coalescing", () => {
+  it("coalesces a claimed organization's attention only after its first transaction commits", async () => {
+    const repositories = fakeRepositories();
+    const order: string[] = [];
+    repositories.outbox.lease = async () => [
+      lease(1, "first"),
+      lease(1, "second"),
+    ];
+    repositories.outbox.process = async (event, handler) => {
+      order.push(`begin:${event.eventId}`);
+      const value = await handler({
+        event,
+        processInternalEvent: async () => {
+          order.push(`recompute:${event.eventId}`);
+          return { recomputed: true, effects: 1 };
+        },
+        attention: repositories.attention,
+      });
+      order.push(`commit:${event.eventId}`);
+      return { status: "processed", value };
+    };
+    const result = await runOutboxSweep(
+      { now, requestId: "coalesced" },
+      dependencies(repositories),
+    );
+    expect(result).toMatchObject({ processed: 2, effects: 1, failed: 0 });
+    expect(order).toEqual([
+      "begin:first",
+      "recompute:first",
+      "commit:first",
+      "begin:second",
+      "commit:second",
+    ]);
+  });
+
+  it("recomputes later events when the first lease is lost", async () => {
+    const repositories = fakeRepositories();
+    let recomputes = 0;
+    repositories.outbox.lease = async () => [
+      lease(1, "lost"),
+      lease(1, "valid"),
+    ];
+    repositories.outbox.process = async (event, handler) => {
+      if (event.eventId === "lost") return { status: "lease_lost" };
+      const value = await handler({
+        event,
+        processInternalEvent: async () => {
+          recomputes++;
+          return { recomputed: true };
+        },
+        attention: repositories.attention,
+      });
+      return { status: "processed", value };
+    };
+    expect(
+      await runOutboxSweep(
+        { now, requestId: "fallback" },
+        dependencies(repositories),
+      ),
+    ).toMatchObject({ processed: 1, leaseLost: 1 });
+    expect(recomputes).toBe(1);
+  });
+
+  it("yields after a bounded burst while checking reconciliation and shutdown between batches", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(now);
+      const controller = new AbortController();
+      const repositories = fakeRepositories();
+      let claims = 0,
+        attentionSweeps = 0;
+      repositories.outbox.lease = async () => {
+        claims++;
+        return [lease(1, `event-${claims}`)];
+      };
+      repositories.attention.recomputeAll = async () => {
+        attentionSweeps++;
+        return [];
+      };
+      const loop = runWorkerLoop(
+        dependencies(repositories, {
+          batchSize: 1,
+          concurrency: 1,
+          log: () => {},
+        }),
+        {
+          pollIntervalMs: 100,
+          maxConsecutiveBatches: 2,
+          maxDrainMs: 1000,
+          signal: controller.signal,
+          observer: {
+            onSweepSucceeded() {
+              if (claims === 3) controller.abort();
+            },
+          },
+        },
+      );
+      await vi.advanceTimersByTimeAsync(1);
+      expect(claims).toBe(2);
+      expect(attentionSweeps).toBe(1);
+      await vi.advanceTimersByTimeAsync(100);
+      await loop;
+      expect(claims).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

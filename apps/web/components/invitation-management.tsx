@@ -4,13 +4,11 @@ import { dateTimeFormatter } from "@/lib/date-format";
 
 import { MailPlus, RefreshCw, RotateCw, UserPlus, XCircle } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
+import { useRef, useState, type FormEvent } from "react";
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+  accountResourceError,
+  useAccountResource,
+} from "@/lib/use-account-resource";
 import { useAppSession } from "@/lib/app-session-context";
 import { useOptionalLiveAppRecords as useOptionalLiveAppData } from "@/lib/live-app-data";
 
@@ -35,47 +33,41 @@ interface InvitationView {
 export function InvitationManagement() {
   const session = useAppSession();
   const liveData = useOptionalLiveAppData();
-  const [invitations, setInvitations] = useState<InvitationView[]>([]);
-  const [loading, setLoading] = useState(!session.demo);
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [loadError, setLoadError] = useState("");
   const mutationKeys = useRef(new Map<string, string>());
   const dataRevision = useRef(0);
-
-  const load = useCallback(async () => {
-    if (session.demo) return;
-    const requestedRevision = dataRevision.current;
-    setLoading(true);
-    setLoadError("");
-    try {
+  const resource = useAccountResource<InvitationView[]>(
+    "invitations",
+    async (signal) => {
+      const requestedRevision = dataRevision.current;
       const response = await fetch("/api/v1/invitations", {
         credentials: "same-origin",
         cache: "no-store",
+        signal,
       });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok || !Array.isArray(body))
-        throw new Error(
+        throw accountResourceError(
           invitationError(body, "Invitations could not be loaded."),
+          response.status,
         );
-      if (requestedRevision !== dataRevision.current) return;
-      setInvitations(body as InvitationView[]);
-    } catch (error) {
-      if (requestedRevision === dataRevision.current)
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : "Invitations could not be loaded.",
+      signal.throwIfAborted();
+      if (requestedRevision !== dataRevision.current)
+        throw new DOMException(
+          "A newer invitation action completed",
+          "AbortError",
         );
-    } finally {
-      if (requestedRevision === dataRevision.current) setLoading(false);
-    }
-  }, [session.demo]);
-
-  useEffect(() => {
-    const task = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(task);
-  }, [load]);
+      return body as InvitationView[];
+    },
+    [],
+  );
+  const { value: invitations, setValue: setInvitations, loading } = resource;
+  const loadError =
+    resource.error instanceof Error ? resource.error.message : "";
+  const load = async () => {
+    await resource.refresh();
+  };
 
   async function createInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,7 +83,7 @@ export function InvitationManagement() {
       return;
     }
     dataRevision.current += 1;
-    setLoading(false);
+    await resource.cancel();
     setWorking("create");
     setMessage("");
     const fingerprint = `create:${email}:${role}:${workspaceId}`;
@@ -138,7 +130,7 @@ export function InvitationManagement() {
     action: "resend" | "revoke",
   ) {
     dataRevision.current += 1;
-    setLoading(false);
+    await resource.cancel();
     setWorking(invitation.id);
     setMessage("");
     const fingerprint = `${action}:${invitation.id}:${invitation.version}`;

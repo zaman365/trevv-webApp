@@ -141,6 +141,13 @@
       "when": 1788288298041,
       "tag": "0019_steady_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788637671658,
+      "tag": "0020_organization_snapshot_revisions",
+      "breakpoints": true
     }
   ]
 }

@@ -41,7 +41,7 @@ import {
   type TeamCapabilityId,
   type WorkspaceTeam,
 } from "@/lib/teams";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 import { CapabilityNotice } from "./capability-status";
 
 type MemberStatus = "active" | "away" | "draft";

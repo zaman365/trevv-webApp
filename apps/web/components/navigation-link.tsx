@@ -10,7 +10,7 @@ import styles from "./navigation-link.module.css";
 export const AppLink = forwardRef<
   HTMLAnchorElement,
   ComponentProps<typeof NextLink>
->(function AppLink({ onMouseEnter, onFocus, ...props }, ref) {
+>(function AppLink({ onMouseEnter, onFocus, onPointerDown, ...props }, ref) {
   const session = useOptionalAppSession();
   const pathname =
     typeof props.href === "string" ? props.href : (props.href.pathname ?? "");
@@ -26,6 +26,10 @@ export const AppLink = forwardRef<
       // Warming every visible link creates an API stampede with no cache hit.
       // Keep per-navigation authorization fresh and warm static code on intent.
       {...(protectedPage ? { prefetch: false } : {})}
+      onPointerDown={(event) => {
+        onPointerDown?.(event);
+        if (!event.defaultPrevented) warmCode();
+      }}
       onMouseEnter={(event) => {
         onMouseEnter?.(event);
         if (!event.defaultPrevented) warmCode();

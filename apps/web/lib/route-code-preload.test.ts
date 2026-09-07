@@ -22,7 +22,7 @@ describe("static route warming", () => {
       for (const view of workspaceViews)
         expect(
           routeCodeModules(`/app/workspaces/one/${view}?query=yes#item`, mode),
-        ).toHaveLength(2);
+        ).toEqual(expect.arrayContaining(["moduleLoader"]));
     expect(routeCodeModules("/app/workspaces/one/settings", "live")).toContain(
       "liveWork",
     );
@@ -38,6 +38,29 @@ describe("static route warming", () => {
     expect(
       routeCodeModules("/app/workspaces/one/settings/import", "demo"),
     ).toEqual(["management"]);
+  });
+  it("warms only the selected live feature alongside its wrapper", () => {
+    const features = {
+      "my-work": "liveWorkMyWork",
+      attention: "liveWorkAttention",
+      waiting: "liveWorkWaiting",
+      decisions: "liveWorkTransitions",
+      approvals: "liveWorkTransitions",
+      reviews: "liveWorkReviews",
+      search: "liveWorkSearch",
+      inbox: "liveWorkInbox",
+      settings: "liveWorkSettings",
+    };
+    for (const [view, feature] of Object.entries(features)) {
+      expect(routeCodeModules(`/app/workspaces/one/${view}`, "live")).toEqual([
+        "moduleLoader",
+        "liveWork",
+        feature,
+      ]);
+      expect(
+        routeCodeModules(`/app/workspaces/one/${view}`, "demo"),
+      ).toHaveLength(2);
+    }
   });
   it("does not guess an unknown, external, or public route", () => {
     for (const path of [

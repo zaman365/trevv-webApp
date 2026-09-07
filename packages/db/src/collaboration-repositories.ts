@@ -14,6 +14,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type {
   MutationContext,
   MutationResult,
@@ -94,6 +95,19 @@ export interface ConversationProjection {
   }>;
   unreadCount: number;
   needsResponseCount: number;
+}
+
+/** Authorization-only projection; avoids loading unrelated participants and message counts. */
+export interface ConversationAccessProjection {
+  conversation: typeof conversations.$inferSelect;
+  teamId?: string;
+  participants: Array<{
+    user: { id: string };
+    participant: Pick<
+      typeof conversationParticipants.$inferSelect,
+      "source" | "participantRole"
+    >;
+  }>;
 }
 
 export interface MessageReactionProjection {
@@ -199,6 +213,10 @@ export interface CollaborationRepositories {
     options?: { cursor?: string; limit?: number },
   ) => Promise<CollaborationPage<ConversationProjection>>;
   getConversation: (conversationId: string) => Promise<ConversationProjection>;
+  getConversationUnread: (workspaceId: string) => Promise<number>;
+  listConversationAccess: (
+    conversationIds: string[],
+  ) => Promise<ConversationAccessProjection[]>;
   createConversation: (
     input: CreateConversationRepositoryInput,
     context: MutationContext,
@@ -341,6 +359,10 @@ export function createCollaborationRepositories(
       listConversations(database, scope, workspaceId, options),
     getConversation: (conversationId) =>
       getConversation(database, scope, conversationId),
+    getConversationUnread: (workspaceId) =>
+      getConversationUnread(database, scope, workspaceId),
+    listConversationAccess: (conversationIds) =>
+      listConversationAccess(database, scope, conversationIds),
     createConversation: (input, context) =>
       runInTransaction((transaction) =>
         idempotentMutation(
@@ -1198,10 +1220,10 @@ async function listConversations(
     .orderBy(desc(conversations.lastMessageAt), desc(conversations.id))
     .limit(limit + 1);
   const page = rows.slice(0, limit);
-  const data = await Promise.all(
-    page.map(({ conversation }) =>
-      hydrateConversation(database, scope, conversation),
-    ),
+  const data = await hydrateConversations(
+    database,
+    scope,
+    page.map(({ conversation }) => conversation),
   );
   const last = page.at(-1)?.conversation;
   return {
@@ -1211,6 +1233,248 @@ async function listConversations(
         ? encodeCursor(last.lastMessageAt, last.id)
         : null,
   };
+}
+
+async function getConversationUnread(
+  database: TrevvDatabase,
+  scope: TenantScope,
+  workspaceId: string,
+): Promise<number> {
+  await assertWorkspaceAccess(database, scope, workspaceId);
+  const actor = await assertActorMembership(database, scope);
+  const lastRead = alias(conversationMessages, "unread_last_read_message");
+  const [row] = await database
+    .select({ unreadCount: sql<number>`count(*)::int` })
+    .from(conversationMessages)
+    .innerJoin(
+      conversations,
+      and(
+        eq(conversations.organizationId, conversationMessages.organizationId),
+        eq(conversations.id, conversationMessages.conversationId),
+      ),
+    )
+    .leftJoin(
+      conversationParticipants,
+      and(
+        eq(
+          conversationParticipants.organizationId,
+          conversations.organizationId,
+        ),
+        eq(conversationParticipants.conversationId, conversations.id),
+        eq(conversationParticipants.userId, scope.userId),
+        isNull(conversationParticipants.removedAt),
+      ),
+    )
+    .leftJoin(
+      users,
+      and(
+        eq(users.id, conversationParticipants.userId),
+        isNull(users.deletedAt),
+      ),
+    )
+    .leftJoin(
+      teamRooms,
+      and(
+        eq(teamRooms.organizationId, conversations.organizationId),
+        eq(teamRooms.conversationId, conversations.id),
+      ),
+    )
+    .leftJoin(
+      teamMembers,
+      and(
+        eq(teamMembers.organizationId, conversations.organizationId),
+        eq(teamMembers.teamId, teamRooms.teamId),
+        eq(teamMembers.userId, scope.userId),
+        isNull(teamMembers.removedAt),
+      ),
+    )
+    .leftJoin(
+      conversationReadCheckpoints,
+      and(
+        eq(
+          conversationReadCheckpoints.organizationId,
+          conversations.organizationId,
+        ),
+        eq(conversationReadCheckpoints.conversationId, conversations.id),
+        eq(conversationReadCheckpoints.userId, scope.userId),
+      ),
+    )
+    .leftJoin(
+      lastRead,
+      and(
+        eq(lastRead.organizationId, conversationReadCheckpoints.organizationId),
+        eq(lastRead.id, conversationReadCheckpoints.lastReadMessageId),
+      ),
+    )
+    .where(
+      and(
+        eq(conversationMessages.organizationId, scope.organizationId),
+        eq(conversations.workspaceId, workspaceId),
+        isNull(conversations.archivedAt),
+        isNull(conversations.deletedAt),
+        isNull(conversationMessages.deletedAt),
+        ne(conversationMessages.senderId, scope.userId),
+        or(
+          isNull(conversationReadCheckpoints.userId),
+          gt(
+            conversationMessages.sequence,
+            sql`coalesce(${lastRead.sequence}, 0)`,
+          ),
+        ),
+        // Compose the same list visibility and per-conversation permission rules.
+        or(
+          and(
+            eq(conversations.kind, "workspace"),
+            eq(conversations.visibility, "organization"),
+          ),
+          isNotNull(users.id),
+        ),
+        actor.role === "guest"
+          ? and(
+              eq(conversations.kind, "external"),
+              eq(conversations.visibility, "guest_scoped"),
+              isNotNull(users.id),
+            )
+          : undefined,
+        or(
+          ne(conversations.kind, "team"),
+          and(
+            isNotNull(teamMembers.userId),
+            eq(conversationParticipants.source, "team"),
+            isNotNull(users.id),
+          ),
+        ),
+      ),
+    );
+  return row?.unreadCount ?? 0;
+}
+
+async function listConversationAccess(
+  database: TrevvDatabase,
+  scope: TenantScope,
+  conversationIds: string[],
+): Promise<ConversationAccessProjection[]> {
+  if (!conversationIds.length) return [];
+  // All joins remain tenant-scoped and active membership is checked afresh for this request.
+  const rows = await database
+    .select({
+      conversation: conversations,
+      teamId: teamRooms.teamId,
+      participant: conversationParticipants,
+      participantUserId: users.id,
+    })
+    .from(conversations)
+    .innerJoin(
+      memberships,
+      and(
+        eq(memberships.organizationId, conversations.organizationId),
+        eq(memberships.userId, scope.userId),
+        isNull(memberships.archivedAt),
+        isNull(memberships.deletedAt),
+      ),
+    )
+    .innerJoin(
+      workspaces,
+      and(
+        eq(workspaces.organizationId, conversations.organizationId),
+        eq(workspaces.id, conversations.workspaceId),
+        isNull(workspaces.archivedAt),
+        isNull(workspaces.deletedAt),
+      ),
+    )
+    .leftJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.organizationId, conversations.organizationId),
+        eq(workspaceMembers.workspaceId, conversations.workspaceId),
+        eq(workspaceMembers.userId, scope.userId),
+        isNull(workspaceMembers.archivedAt),
+        isNull(workspaceMembers.deletedAt),
+      ),
+    )
+    .leftJoin(
+      portfolioMembers,
+      and(
+        eq(portfolioMembers.organizationId, conversations.organizationId),
+        eq(portfolioMembers.portfolioId, workspaces.portfolioId),
+        eq(portfolioMembers.userId, scope.userId),
+        isNull(portfolioMembers.archivedAt),
+        isNull(portfolioMembers.deletedAt),
+      ),
+    )
+    .leftJoin(
+      conversationParticipants,
+      and(
+        eq(
+          conversationParticipants.organizationId,
+          conversations.organizationId,
+        ),
+        eq(conversationParticipants.conversationId, conversations.id),
+        eq(conversationParticipants.userId, scope.userId),
+        isNull(conversationParticipants.removedAt),
+      ),
+    )
+    .leftJoin(
+      users,
+      and(
+        eq(users.id, conversationParticipants.userId),
+        isNull(users.deletedAt),
+      ),
+    )
+    .leftJoin(
+      teamRooms,
+      and(
+        eq(teamRooms.organizationId, conversations.organizationId),
+        eq(teamRooms.conversationId, conversations.id),
+      ),
+    )
+    .leftJoin(
+      teamMembers,
+      and(
+        eq(teamMembers.organizationId, conversations.organizationId),
+        eq(teamMembers.teamId, teamRooms.teamId),
+        eq(teamMembers.userId, scope.userId),
+        isNull(teamMembers.removedAt),
+      ),
+    )
+    .where(
+      and(
+        eq(conversations.organizationId, scope.organizationId),
+        inArray(conversations.id, [...new Set(conversationIds)]),
+        isNull(conversations.archivedAt),
+        isNull(conversations.deletedAt),
+        or(
+          inArray(memberships.role, ["owner", "admin"]),
+          eq(workspaces.leadUserId, scope.userId),
+          isNotNull(workspaceMembers.userId),
+          isNotNull(portfolioMembers.userId),
+        ),
+        or(ne(memberships.role, "guest"), eq(conversations.kind, "external")),
+        or(
+          eq(conversations.visibility, "organization"),
+          isNotNull(conversationParticipants.userId),
+        ),
+        or(ne(conversations.kind, "team"), isNotNull(teamMembers.userId)),
+      ),
+    );
+  return rows.map(
+    ({ conversation, teamId, participant, participantUserId }) => ({
+      conversation,
+      ...(teamId ? { teamId } : {}),
+      participants:
+        participant && participantUserId
+          ? [
+              {
+                user: { id: participantUserId },
+                participant: {
+                  source: participant.source,
+                  participantRole: participant.participantRole,
+                },
+              },
+            ]
+          : [],
+    }),
+  );
 }
 
 async function getConversation(
@@ -1624,9 +1888,7 @@ async function listMessages(
     .limit(limit + 1);
   const page = rows.slice(0, limit);
   return {
-    data: await Promise.all(
-      page.map((message) => hydrateMessage(database, scope, message)),
-    ),
+    data: await hydrateMessages(database, scope, page),
     nextCursor:
       rows.length > limit && page.length
         ? encodeSequenceCursor(page.at(-1)!.sequence)
@@ -2418,12 +2680,14 @@ async function hydrateTeam(
   };
 }
 
-async function hydrateConversation(
+async function hydrateConversations(
   database: TrevvDatabase,
   scope: TenantScope,
-  conversation: typeof conversations.$inferSelect,
-): Promise<ConversationProjection> {
-  const [participants, room, checkpoint] = await Promise.all([
+  records: Array<typeof conversations.$inferSelect>,
+): Promise<ConversationProjection[]> {
+  if (!records.length) return [];
+  const ids = records.map(({ id }) => id);
+  const [participants, rooms, checkpoints] = await Promise.all([
     database
       .select({
         participant: conversationParticipants,
@@ -2465,65 +2729,95 @@ async function hydrateConversation(
       .where(
         and(
           eq(conversationParticipants.organizationId, scope.organizationId),
-          eq(conversationParticipants.conversationId, conversation.id),
+          inArray(conversationParticipants.conversationId, ids),
           isNull(conversationParticipants.removedAt),
           isNull(users.deletedAt),
         ),
       ),
     database
-      .select({ teamId: teamRooms.teamId })
+      .select({
+        conversationId: teamRooms.conversationId,
+        teamId: teamRooms.teamId,
+      })
       .from(teamRooms)
       .where(
         and(
           eq(teamRooms.organizationId, scope.organizationId),
-          eq(teamRooms.conversationId, conversation.id),
+          inArray(teamRooms.conversationId, ids),
+        ),
+      ),
+    database
+      .select({
+        checkpoint: conversationReadCheckpoints,
+        sequence: conversationMessages.sequence,
+      })
+      .from(conversationReadCheckpoints)
+      .leftJoin(
+        conversationMessages,
+        and(
+          eq(
+            conversationMessages.organizationId,
+            conversationReadCheckpoints.organizationId,
+          ),
+          eq(
+            conversationMessages.id,
+            conversationReadCheckpoints.lastReadMessageId,
+          ),
         ),
       )
-      .limit(1)
-      .then((rows) => rows[0]),
-    database
-      .select()
-      .from(conversationReadCheckpoints)
       .where(
         and(
           eq(conversationReadCheckpoints.organizationId, scope.organizationId),
-          eq(conversationReadCheckpoints.conversationId, conversation.id),
+          inArray(conversationReadCheckpoints.conversationId, ids),
           eq(conversationReadCheckpoints.userId, scope.userId),
         ),
-      )
-      .limit(1)
-      .then((rows) => rows[0]),
+      ),
   ]);
+  const checkpointByConversation = new Map(
+    checkpoints.map(({ checkpoint, sequence }) => [
+      checkpoint.conversationId,
+      sequence ?? 0,
+    ]),
+  );
   const [unread, needsResponse] = await Promise.all([
     database
-      .select({ count: sql<number>`count(*)::int` })
+      .select({
+        conversationId: conversationMessages.conversationId,
+        count: sql<number>`count(*)::int`,
+      })
       .from(conversationMessages)
       .where(
         and(
           eq(conversationMessages.organizationId, scope.organizationId),
-          eq(conversationMessages.conversationId, conversation.id),
-          checkpoint
-            ? gt(
-                conversationMessages.sequence,
-                await messageSequence(
-                  database,
-                  scope,
-                  checkpoint.lastReadMessageId,
-                ),
-              )
-            : undefined,
+          inArray(conversationMessages.conversationId, ids),
+          or(
+            ...ids.map((id) =>
+              and(
+                eq(conversationMessages.conversationId, id),
+                checkpointByConversation.has(id)
+                  ? gt(
+                      conversationMessages.sequence,
+                      checkpointByConversation.get(id)!,
+                    )
+                  : undefined,
+              ),
+            ),
+          ),
           ne(conversationMessages.senderId, scope.userId),
           isNull(conversationMessages.deletedAt),
         ),
       )
-      .then((rows) => rows[0]),
+      .groupBy(conversationMessages.conversationId),
     database
-      .select({ count: sql<number>`count(*)::int` })
+      .select({
+        conversationId: conversationMessages.conversationId,
+        count: sql<number>`count(*)::int`,
+      })
       .from(conversationMessages)
       .where(
         and(
           eq(conversationMessages.organizationId, scope.organizationId),
-          eq(conversationMessages.conversationId, conversation.id),
+          inArray(conversationMessages.conversationId, ids),
           eq(conversationMessages.responseOwnerId, scope.userId),
           eq(conversationMessages.responseState, "open"),
           gt(conversationMessages.expiresAt, new Date()),
@@ -2531,34 +2825,62 @@ async function hydrateConversation(
           isNull(conversationMessages.deletedAt),
         ),
       )
-      .then((rows) => rows[0]),
+      .groupBy(conversationMessages.conversationId),
   ]);
-  return {
+  const participantsByConversation = new Map<
+    string,
+    ConversationProjection["participants"]
+  >();
+  for (const { participant, user, role, checkpoint } of participants) {
+    const group =
+      participantsByConversation.get(participant.conversationId) ?? [];
+    group.push({
+      participant,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organizationRole: role,
+      },
+      checkpoint,
+    });
+    participantsByConversation.set(participant.conversationId, group);
+  }
+  const roomByConversation = new Map(
+    rooms.map((room) => [room.conversationId, room.teamId]),
+  );
+  const unreadByConversation = new Map(
+    unread.map((row) => [row.conversationId, row.count]),
+  );
+  const needsResponseByConversation = new Map(
+    needsResponse.map((row) => [row.conversationId, row.count]),
+  );
+  return records.map((conversation) => ({
     conversation,
-    ...(room ? { teamId: room.teamId } : {}),
-    participants: participants.map(
-      ({ participant, user, role, checkpoint }) => ({
-        participant,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          organizationRole: role,
-        },
-        checkpoint,
-      }),
-    ),
-    unreadCount: unread?.count ?? 0,
-    needsResponseCount: needsResponse?.count ?? 0,
-  };
+    ...(roomByConversation.has(conversation.id)
+      ? { teamId: roomByConversation.get(conversation.id)! }
+      : {}),
+    participants: participantsByConversation.get(conversation.id) ?? [],
+    unreadCount: unreadByConversation.get(conversation.id) ?? 0,
+    needsResponseCount: needsResponseByConversation.get(conversation.id) ?? 0,
+  }));
 }
 
-async function hydrateMessage(
+async function hydrateConversation(
   database: TrevvDatabase,
   scope: TenantScope,
-  message: typeof conversationMessages.$inferSelect,
-): Promise<MessageProjection> {
-  const [senderRow, reactionRows] = await Promise.all([
+  conversation: typeof conversations.$inferSelect,
+): Promise<ConversationProjection> {
+  return (await hydrateConversations(database, scope, [conversation]))[0]!;
+}
+
+async function hydrateMessages(
+  database: TrevvDatabase,
+  scope: TenantScope,
+  messages: Array<typeof conversationMessages.$inferSelect>,
+): Promise<MessageProjection[]> {
+  if (!messages.length) return [];
+  const [senderRows, reactionRows] = await Promise.all([
     database
       .select({ user: users, role: memberships.role })
       .from(users)
@@ -2569,11 +2891,14 @@ async function hydrateMessage(
           eq(memberships.userId, users.id),
         ),
       )
-      .where(eq(users.id, message.senderId))
-      .limit(1)
-      .then((rows) => rows[0]),
+      .where(
+        inArray(users.id, [
+          ...new Set(messages.map(({ senderId }) => senderId)),
+        ]),
+      ),
     database
       .select({
+        messageId: conversationReactions.messageId,
         emoji: conversationReactions.emoji,
         userId: conversationReactions.userId,
       })
@@ -2596,40 +2921,62 @@ async function hydrateMessage(
       .where(
         and(
           eq(conversationReactions.organizationId, scope.organizationId),
-          eq(conversationReactions.conversationId, message.conversationId),
-          eq(conversationReactions.messageId, message.id),
+          inArray(conversationReactions.conversationId, [
+            ...new Set(messages.map(({ conversationId }) => conversationId)),
+          ]),
+          inArray(
+            conversationReactions.messageId,
+            messages.map(({ id }) => id),
+          ),
         ),
       ),
   ]);
-  if (!senderRow) throw notFound();
-  const grouped = new Map<string, string[]>();
-  for (const reaction of reactionRows)
-    grouped.set(reaction.emoji, [
-      ...(grouped.get(reaction.emoji) ?? []),
-      reaction.userId,
-    ]);
-  if (grouped.size > MAX_REACTION_KINDS_PER_MESSAGE)
-    throw unavailable(
-      "Stored reactions exceed the supported message reaction bound.",
-    );
-  const visibleMessage =
-    message.redactedAt !== null || message.expiresAt <= new Date()
-      ? { ...message, body: "[Message expired]", metadata: {} }
-      : message;
-  return {
-    message: visibleMessage,
-    sender: {
-      id: senderRow.user.id,
-      email: senderRow.user.email,
-      name: senderRow.user.name,
-      organizationRole: senderRow.role,
-    },
-    reactions: [...grouped].map(([emoji, userIds]) => ({
-      emoji,
-      userIds,
-      reactedByCurrentUser: userIds.includes(scope.userId),
-    })),
-  };
+  const senders = new Map(senderRows.map((row) => [row.user.id, row]));
+  const reactions = new Map<string, Map<string, string[]>>();
+  for (const reaction of reactionRows) {
+    const group =
+      reactions.get(reaction.messageId) ?? new Map<string, string[]>();
+    const userIds = group.get(reaction.emoji) ?? [];
+    userIds.push(reaction.userId);
+    group.set(reaction.emoji, userIds);
+    reactions.set(reaction.messageId, group);
+  }
+  const now = new Date();
+  return messages.map((message) => {
+    const senderRow = senders.get(message.senderId);
+    if (!senderRow) throw notFound();
+    const grouped = reactions.get(message.id) ?? new Map<string, string[]>();
+    if (grouped.size > MAX_REACTION_KINDS_PER_MESSAGE)
+      throw unavailable(
+        "Stored reactions exceed the supported message reaction bound.",
+      );
+    const visibleMessage =
+      message.redactedAt !== null || message.expiresAt <= now
+        ? { ...message, body: "[Message expired]", metadata: {} }
+        : message;
+    return {
+      message: visibleMessage,
+      sender: {
+        id: senderRow.user.id,
+        email: senderRow.user.email,
+        name: senderRow.user.name,
+        organizationRole: senderRow.role,
+      },
+      reactions: [...grouped].map(([emoji, userIds]) => ({
+        emoji,
+        userIds,
+        reactedByCurrentUser: userIds.includes(scope.userId),
+      })),
+    };
+  });
+}
+
+async function hydrateMessage(
+  database: TrevvDatabase,
+  scope: TenantScope,
+  message: typeof conversationMessages.$inferSelect,
+): Promise<MessageProjection> {
+  return (await hydrateMessages(database, scope, [message]))[0]!;
 }
 
 async function getTeamRow(

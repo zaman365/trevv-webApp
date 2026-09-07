@@ -1,4 +1,6 @@
 import {
+  appSyncStatusSchema,
+  appSyncSummarySchema,
   approvalTransitionSchema,
   apiErrorSchema,
   acceptInvitationSchema,
@@ -191,7 +193,7 @@ interface RawResponse {
   response: Response;
 }
 
-export function createApiClient({
+function createApiMethods({
   baseUrl,
   getAccessToken,
   fetchImpl = fetch,
@@ -383,6 +385,12 @@ export function createApiClient({
         ).body,
       ),
 
+    syncStatus: async () =>
+      appSyncStatusSchema.parse((await request("/sync/status")).body),
+
+    syncSummary: async () =>
+      appSyncSummarySchema.parse((await request("/sync/summary")).body),
+
     portfolios: async () =>
       portfolioSchema.array().parse((await request("/portfolios")).body),
 
@@ -438,8 +446,16 @@ export function createApiClient({
       return parseVersionedMutation(response, attentionSignalSchema);
     },
 
-    waiting: async () =>
-      waitingStateSchema.array().parse((await request("/waiting")).body),
+    waiting: async (filters: { workspaceId?: string } = {}) =>
+      waitingStateSchema
+        .array()
+        .parse(
+          (
+            await request(
+              `/waiting${filters.workspaceId ? `?workspaceId=${encodeURIComponent(filters.workspaceId)}` : ""}`,
+            )
+          ).body,
+        ),
 
     actOnWaiting: async (
       id: string,
@@ -589,6 +605,25 @@ export function createApiClient({
         },
       );
       return parseVersionedMutation(response, teamSchema);
+    },
+
+    conversationUnread: async (
+      workspaceId: string,
+    ): Promise<{ unreadCount: number }> => {
+      const body = (
+        await request(
+          `/workspaces/${encodeURIComponent(workspaceId)}/conversation-unread`,
+        )
+      ).body as { unreadCount?: unknown };
+      if (
+        !body ||
+        typeof body.unreadCount !== "number" ||
+        !Number.isSafeInteger(body.unreadCount) ||
+        body.unreadCount < 0
+      ) {
+        throw new Error("The unread count response was invalid.");
+      }
+      return { unreadCount: body.unreadCount };
     },
 
     conversations: async (filters: {
@@ -1303,7 +1338,33 @@ function responseEntityTag(response: Response): string | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-export type TrevvApiClient = ReturnType<typeof createApiClient>;
+export type TrevvApiClient = ReturnType<typeof createApiMethods> & {
+  /** Cancel obsolete reads without changing mutation delivery semantics. */
+  withSignal(signal: AbortSignal): TrevvApiClient;
+};
+
+export function createApiClient(options: ApiClientOptions): TrevvApiClient {
+  return {
+    ...createApiMethods(options),
+    withSignal(signal) {
+      const fetchImpl = options.fetchImpl ?? fetch;
+      return createApiClient({
+        ...options,
+        fetchImpl: (input, init) => {
+          const method = (
+            init?.method ?? (input instanceof Request ? input.method : "GET")
+          ).toUpperCase();
+          return fetchImpl(input, {
+            ...init,
+            ...(["GET", "HEAD"].includes(method)
+              ? { signal: init?.signal ?? signal }
+              : {}),
+          });
+        },
+      });
+    },
+  };
+}
 /** @deprecated Use TrevvApiError. */
 export { TrevvApiError as FounderHqApiError };
 /** @deprecated Use TrevvApiClient. */

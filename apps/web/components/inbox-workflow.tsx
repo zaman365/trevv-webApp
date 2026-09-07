@@ -33,7 +33,7 @@ import {
 } from "@/lib/captured-work";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 
 type InboxCategory = "decision" | "mention" | "approval" | "follow-up";
 type InboxDisposition = "open" | "snoozed" | "done";

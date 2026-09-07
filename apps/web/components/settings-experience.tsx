@@ -37,7 +37,7 @@ import {
 } from "react";
 import { safeCsvCell } from "@founderhq/core";
 import { WorkspaceFrame } from "./workspace-frame";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 import { CapabilityNotice } from "./capability-status";
 import { useAppSession } from "@/lib/app-session-context";
 

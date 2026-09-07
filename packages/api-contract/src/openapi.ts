@@ -96,6 +96,91 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/v1/sync/status": {
+      get: {
+        tags: ["System"],
+        operationId: "syncStatus",
+        description:
+          "Current authorized session and navigation metadata. A null revision means concurrent changes prevented a stable snapshot stamp; clients reconcile their data. Authentication is revalidated on every call.",
+        responses: {
+          "200": {
+            description: "Authorized navigation state",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AppSyncStatus" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "501": {
+            description:
+              "The configured adapter does not support synchronization; clients retain legacy refresh behavior.",
+          },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/sync/summary": {
+      get: {
+        tags: ["System"],
+        operationId: "syncSummary",
+        description:
+          "Complete authorized Workspace and Portfolio counts without item history. Pending decisions are open decision items whose state is not decided; absent decision state remains pending. Active attention excludes resolved, dismissed and currently snoozed signals. Entity counts deduplicate entityId across all included signals.",
+        responses: {
+          "200": {
+            description: "Authorized aggregate counts",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AppSyncSummary" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "501": {
+            description:
+              "The configured adapter does not support summaries; clients retain complete legacy queries.",
+          },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/workspaces/{workspaceId}/conversation-unread": {
+      get: {
+        tags: ["Messages"],
+        operationId: "conversationUnread",
+        description:
+          "The sum of unread messages across all currently visible Workspace conversations, preserving participant, Team, guest, and read-checkpoint rules.",
+        parameters: [
+          {
+            name: "workspaceId",
+            in: "path",
+            required: true,
+            schema: { type: "string", minLength: 1 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Complete authorized unread count",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["unreadCount"],
+                  properties: { unreadCount: { type: "integer", minimum: 0 } },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "501": {
+            description:
+              "The configured adapter does not support unread summaries; clients retain complete conversation queries.",
+          },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
     "/api/v1/session": {
       get: {
         tags: ["System"],
@@ -734,6 +819,16 @@ export const openApiDocument = {
       get: {
         tags: ["Waiting"],
         operationId: "listWaitingStates",
+        parameters: [
+          {
+            name: "workspaceId",
+            in: "query",
+            required: false,
+            description:
+              "Restrict to one authorized Workspace. Omission preserves all accessible active Waiting states.",
+            schema: { type: "string", minLength: 1 },
+          },
+        ],
         responses: {
           "200": {
             description: "Accessible active waiting states",
@@ -2968,6 +3063,71 @@ export const openApiDocument = {
       },
     },
     schemas: {
+      AppSyncStatus: {
+        type: "object",
+        required: [
+          "protocol",
+          "revision",
+          "session",
+          "portfolios",
+          "workspaces",
+        ],
+        properties: {
+          protocol: { type: "integer", const: 1 },
+          revision: { type: ["string", "null"] },
+          session: { $ref: "#/components/schemas/Session" },
+          portfolios: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Portfolio" },
+          },
+          workspaces: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Workspace" },
+          },
+        },
+      },
+      AppSyncSummary: {
+        type: "object",
+        required: ["protocol", "revision", "workspaces", "portfolios"],
+        properties: {
+          protocol: { type: "integer", const: 1 },
+          revision: { type: ["string", "null"] },
+          workspaces: {
+            type: "array",
+            items: {
+              type: "object",
+              required: [
+                "workspaceId",
+                "open",
+                "blocked",
+                "pendingDecisions",
+                "attention",
+                "attentionEntities",
+              ],
+              properties: {
+                workspaceId: { type: "string" },
+                open: { type: "integer", minimum: 0 },
+                blocked: { type: "integer", minimum: 0 },
+                pendingDecisions: { type: "integer", minimum: 0 },
+                attention: { type: "integer", minimum: 0 },
+                attentionEntities: { type: "integer", minimum: 0 },
+              },
+            },
+          },
+          portfolios: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["portfolioId", "attention", "attentionEntities"],
+              properties: {
+                portfolioId: { type: "string" },
+                attention: { type: "integer", minimum: 0 },
+                attentionEntities: { type: "integer", minimum: 0 },
+              },
+            },
+          },
+        },
+      },
       Health: {
         type: "object",
         required: ["status", "service", "version", "mode", "time"],

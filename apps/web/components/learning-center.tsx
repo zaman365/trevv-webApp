@@ -19,16 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import {
-  createContext,
-  useContext,
-  useId,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type FocusEvent,
-  type ReactNode,
-} from "react";
+import { useId, useMemo, useState, useSyncExternalStore } from "react";
 import {
   getLearningResource,
   learningCategories,
@@ -39,12 +30,10 @@ import {
 } from "@/lib/learning-resources";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { resolveLearningRoute } from "@/lib/learning-routes";
-
-interface LearningCenterContextValue {
-  openLearningCenter: (resourceId?: string) => void;
-  closeLearningCenter: () => void;
-  isOpen: boolean;
-}
+export {
+  LearningCenterProvider,
+  useLearningCenter,
+} from "./learning-center-context";
 
 interface LearningProgress {
   saved: string[];
@@ -54,10 +43,6 @@ interface LearningProgress {
 const LEARNING_PROGRESS_KEY = "trevv.learning-progress.v1";
 const LEARNING_PROGRESS_EVENT = "trevv-learning-progress-change";
 const emptyProgress: LearningProgress = { saved: [], completed: [] };
-
-const LearningCenterContext = createContext<LearningCenterContextValue | null>(
-  null,
-);
 
 const categoryIcons: Record<LearningCategory, LucideIcon> = {
   "Getting started": Sparkles,
@@ -99,102 +84,9 @@ function writeLearningProgress(progress: LearningProgress) {
   window.dispatchEvent(new Event(LEARNING_PROGRESS_EVENT));
 }
 
-export function LearningCenterProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export { Hint } from "./learning-hint";
 
-  const openLearningCenter = (resourceId?: string) => {
-    setSelectedId(
-      resourceId && getLearningResource(resourceId) ? resourceId : null,
-    );
-    setOpen(true);
-  };
-
-  const closeLearningCenter = () => setOpen(false);
-
-  return (
-    <LearningCenterContext.Provider
-      value={{ openLearningCenter, closeLearningCenter, isOpen: open }}
-    >
-      {children}
-      {open && (
-        <LearningCenterDrawer
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onClose={closeLearningCenter}
-        />
-      )}
-    </LearningCenterContext.Provider>
-  );
-}
-
-export function useLearningCenter(): LearningCenterContextValue {
-  const context = useContext(LearningCenterContext);
-  if (!context) {
-    throw new Error(
-      "useLearningCenter must be used inside LearningCenterProvider.",
-    );
-  }
-  return context;
-}
-
-export function Hint({
-  resourceId,
-  label,
-}: {
-  resourceId: string;
-  label?: string;
-}) {
-  const { openLearningCenter } = useLearningCenter();
-  const [open, setOpen] = useState(false);
-  const tooltipId = useId();
-  const resource = getLearningResource(resourceId);
-
-  if (!resource) return null;
-
-  const closeWhenFocusLeaves = (event: FocusEvent<HTMLSpanElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-  };
-
-  return (
-    <span className="trevv-hint" onBlur={closeWhenFocusLeaves}>
-      <button
-        type="button"
-        className="trevv-hint-trigger"
-        aria-label={label ?? `Hint: ${resource.title}`}
-        aria-expanded={open}
-        aria-describedby={open ? tooltipId : undefined}
-        title={`Hint: ${resource.title}`}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
-        }}
-      >
-        <Lightbulb size={12} />
-      </button>
-      {open && (
-        <span className="trevv-hint-popover" id={tooltipId} role="tooltip">
-          <span className="hint-popover-label">
-            <Lightbulb size={12} /> Helpful hint
-          </span>
-          <strong>{resource.title}</strong>
-          <span>{resource.summary}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              openLearningCenter(resource.id);
-            }}
-          >
-            Open full guide <ArrowRight size={12} />
-          </button>
-        </span>
-      )}
-    </span>
-  );
-}
-
-function LearningCenterDrawer({
+export function LearningCenterDrawer({
   selectedId,
   onSelect,
   onClose,

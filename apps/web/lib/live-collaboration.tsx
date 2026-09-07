@@ -1,4 +1,5 @@
 "use client";
+import { readAllPages } from "./read-all-pages";
 
 import {
   collaborationEventSchema,
@@ -20,10 +21,12 @@ import { useLiveAppRecords as useLiveAppData } from "./live-app-data";
 import { liveDraftStorageKey } from "./live-workflow-ui";
 
 const collaborationRoot = "live-collaboration";
-const eventCursors = new Map<string, number>();
+const cursorsByClient = new WeakMap<QueryClient, Map<string, number>>();
 
 export const collaborationKeys = {
   workspace: (workspaceId: string) => [collaborationRoot, workspaceId] as const,
+  unread: (workspaceId: string) =>
+    [collaborationRoot, workspaceId, "unread"] as const,
   teams: (workspaceId: string) =>
     [collaborationRoot, workspaceId, "teams"] as const,
   conversations: (workspaceId: string) =>
@@ -157,7 +160,7 @@ export function parseLiveConversationLayoutPreference(
 export function collaborationQueryKeysForEvent(
   event: CollaborationEventDto,
 ): QueryKey[] {
-  const keys: QueryKey[] = [];
+  const keys: QueryKey[] = [collaborationKeys.unread(event.workspaceId)];
   if (event.type.startsWith("team.")) {
     keys.push(
       collaborationKeys.teams(event.workspaceId),
@@ -209,6 +212,7 @@ export function createCollaborationInvalidationBatch(queryClient: QueryClient) {
     flush,
     dispose() {
       if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
       pending.clear();
     },
   };
@@ -263,7 +267,8 @@ export function useLiveTeamDirectory(
   const { client } = useLiveAppData();
   return useQuery({
     queryKey: collaborationKeys.teams(workspaceId ?? "unavailable"),
-    queryFn: () => client.teamDirectory(workspaceId!),
+    queryFn: ({ signal }) =>
+      client.withSignal(signal).teamDirectory(workspaceId!),
     enabled: enabled && Boolean(workspaceId),
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
@@ -278,7 +283,8 @@ export function useLiveConversations(
   const { client } = useLiveAppData();
   return useQuery({
     queryKey: collaborationKeys.conversations(workspaceId ?? "unavailable"),
-    queryFn: () => fetchEveryConversation(client, workspaceId!),
+    queryFn: ({ signal }) =>
+      fetchEveryConversation(client.withSignal(signal), workspaceId!),
     enabled: enabled && Boolean(workspaceId),
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
@@ -296,7 +302,8 @@ export function useLiveConversation(
       workspaceId ?? "unavailable",
       conversationId ?? "unavailable",
     ),
-    queryFn: () => client.conversation(conversationId!),
+    queryFn: ({ signal }) =>
+      client.withSignal(signal).conversation(conversationId!),
     enabled: Boolean(workspaceId && conversationId),
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
@@ -315,11 +322,13 @@ export function useLiveConversationMessages(
       conversationId ?? "unavailable",
       options.parentMessageId,
     ),
-    queryFn: ({ pageParam }) =>
-      client.conversationMessages(
-        conversationId!,
-        liveConversationMessageFilters(pageParam, options.parentMessageId),
-      ),
+    queryFn: ({ pageParam, signal }) =>
+      client
+        .withSignal(signal)
+        .conversationMessages(
+          conversationId!,
+          liveConversationMessageFilters(pageParam, options.parentMessageId),
+        ),
     initialPageParam: "",
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled:
@@ -343,13 +352,19 @@ export function LiveCollaborationEventBridge({
 
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
+    let eventCursors = cursorsByClient.get(queryClient);
+    if (!eventCursors) {
+      eventCursors = new Map();
+      cursorsByClient.set(queryClient, eventCursors);
+    }
+    const cursors = eventCursors;
     let source: EventSource | null = null;
     let reconnectTimer: number | undefined;
     let disposed = false;
     const invalidations = createCollaborationInvalidationBatch(queryClient);
 
     const scheduleReconnect = (delay = 2_500) => {
-      if (disposed || reconnectTimer !== undefined) return;
+      if (disposed || document.hidden || reconnectTimer !== undefined) return;
       reconnectTimer = window.setTimeout(() => {
         reconnectTimer = undefined;
         connect();
@@ -357,10 +372,10 @@ export function LiveCollaborationEventBridge({
     };
 
     const connect = () => {
-      if (disposed) return;
+      if (disposed || document.hidden) return;
       const url = new URL("/api/v1/events", window.location.origin);
       url.searchParams.set("workspaceId", workspaceId);
-      url.searchParams.set("after", String(eventCursors.get(workspaceId) ?? 0));
+      url.searchParams.set("after", String(cursors.get(workspaceId) ?? 0));
       source = new EventSource(url);
 
       const receive = (rawEvent: MessageEvent<string>) => {
@@ -371,13 +386,18 @@ export function LiveCollaborationEventBridge({
           }
           return;
         }
-        eventCursors.set(workspaceId, parsed.cursor);
+        if (parsed.cursor <= (cursors.get(workspaceId) ?? 0)) return;
+        cursors.set(workspaceId, parsed.cursor);
         invalidations.add(collaborationQueryKeysForEvent(parsed));
       };
       const checkpoint = (rawEvent: MessageEvent<string>) => {
         invalidations.flush();
         const cursor = parseCheckpointCursor(rawEvent.data);
-        if (cursor !== null) eventCursors.set(workspaceId, cursor);
+        if (cursor !== null)
+          cursors.set(
+            workspaceId,
+            Math.max(cursor, cursors.get(workspaceId) ?? 0),
+          );
         source?.close();
         source = null;
         scheduleReconnect(2_000);
@@ -397,9 +417,31 @@ export function LiveCollaborationEventBridge({
       source.addEventListener("reset", receive as EventListener);
     };
 
+    const visibilityChanged = () => {
+      if (document.hidden) {
+        source?.close();
+        source = null;
+        if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+        invalidations.dispose();
+        return;
+      }
+      // HTTP remains authoritative after a hidden interval; the stream is only
+      // a freshness hint and never grants access from an old event cursor.
+      void Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ["live-app-access"] }),
+        queryClient.invalidateQueries({
+          queryKey: collaborationKeys.workspace(workspaceId),
+        }),
+      ]).then(() => {
+        if (!disposed && !document.hidden && !source) connect();
+      });
+    };
+    document.addEventListener("visibilitychange", visibilityChanged);
     connect();
     return () => {
       disposed = true;
+      document.removeEventListener("visibilitychange", visibilityChanged);
       invalidations.dispose();
       source?.close();
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
@@ -409,17 +451,51 @@ export function LiveCollaborationEventBridge({
   return null;
 }
 
+export function useLiveConversationUnread(workspaceId: string) {
+  const { client } = useLiveAppData();
+  const unsupported = useRef(false);
+  return useQuery({
+    queryKey: collaborationKeys.unread(workspaceId),
+    queryFn: async ({ signal }) => {
+      const reader = client.withSignal(signal);
+      if (!unsupported.current) {
+        try {
+          return (await reader.conversationUnread(workspaceId)).unreadCount;
+        } catch (error) {
+          if (
+            !(error instanceof TrevvApiError) ||
+            ![404, 405, 501].includes(error.status)
+          )
+            throw error;
+          unsupported.current = true;
+        }
+      }
+      const conversations = await readAllPages((cursor) =>
+        reader.conversations({
+          workspaceId,
+          ...(cursor ? { cursor } : {}),
+          limit: 100,
+        }),
+      );
+      return conversations.reduce(
+        (total, conversation) => total + conversation.unreadCount,
+        0,
+      );
+    },
+    enabled: Boolean(workspaceId),
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+  });
+}
+
 export function LiveUnreadBadge({ workspaceId }: { workspaceId: string }) {
-  const conversations = useLiveConversations(workspaceId);
+  const query = useLiveConversationUnread(workspaceId);
   if (
-    conversations.error instanceof TrevvApiError &&
-    [401, 403, 404].includes(conversations.error.status)
+    query.error instanceof TrevvApiError &&
+    [401, 403, 404].includes(query.error.status)
   )
     return null;
-  const unread = (conversations.data ?? []).reduce(
-    (total, conversation) => total + conversation.unreadCount,
-    0,
-  );
+  const unread = query.data ?? 0;
   if (unread < 1) return null;
   return (
     <span className="nav-badge" aria-label={`${unread} unread messages`}>
@@ -511,19 +587,13 @@ async function fetchEveryConversation(
   client: ReturnType<typeof useLiveAppData>["client"],
   workspaceId: string,
 ) {
-  const conversations: ConversationDto[] = [];
-  let cursor: string | undefined;
-  for (let page = 0; page < 100; page += 1) {
-    const response = await client.conversations({
+  return readAllPages((cursor) =>
+    client.conversations({
       workspaceId,
       ...(cursor ? { cursor } : {}),
       limit: 100,
-    });
-    conversations.push(...response.data);
-    if (!response.nextCursor) return conversations;
-    cursor = response.nextCursor;
-  }
-  throw new Error("The conversation pagination limit was exceeded.");
+    }),
+  );
 }
 
 function uniqueQueryKeys(keys: readonly QueryKey[]) {

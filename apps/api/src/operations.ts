@@ -19,6 +19,7 @@ export interface RateLimitDecision {
 export interface ApiRateLimitStore {
   readonly scope: "process" | "shared";
   consume(input: RateLimitInput): Promise<RateLimitDecision>;
+  drain?(): Promise<void>;
 }
 
 export interface ApiLogger {
@@ -100,6 +101,7 @@ const apiV1RouteFamilies = new Set([
   "readyz",
   "reviews",
   "search",
+  "sync",
   "session",
   "team-pressure",
   "teams",
@@ -318,8 +320,13 @@ export function createPostgresRateLimitStore(
   options: { onCleanupError?: () => void } = {},
 ): ApiRateLimitStore {
   let nextCleanupAtMs = Number.NEGATIVE_INFINITY;
+  let cleanup: Promise<void> | undefined;
+  const cleanupBatchSize = 1000;
   return {
     scope: "shared",
+    async drain() {
+      await cleanup;
+    },
     async consume(input) {
       const window = await repository.consume({
         bucket: input.bucket,
@@ -327,14 +334,30 @@ export function createPostgresRateLimitStore(
         windowMs: input.windowMs,
         now: input.now,
       });
-      if (input.now.getTime() >= nextCleanupAtMs) {
+      if (!cleanup && input.now.getTime() >= nextCleanupAtMs) {
         nextCleanupAtMs = input.now.getTime() + 5 * 60_000;
-        try {
-          await repository.pruneExpired(input.now);
-        } catch {
-          nextCleanupAtMs = input.now.getTime() + 60_000;
-          options.onCleanupError?.();
-        }
+        cleanup = Promise.resolve()
+          .then(async () => {
+            const removed = repository.pruneExpiredBatch
+              ? await repository.pruneExpiredBatch(input.now, cleanupBatchSize)
+              : await repository.pruneExpired(input.now);
+            if (removed >= cleanupBatchSize)
+              nextCleanupAtMs = Math.min(
+                nextCleanupAtMs,
+                input.now.getTime() + 1000,
+              );
+          })
+          .catch(() => {
+            nextCleanupAtMs = input.now.getTime() + 60_000;
+            try {
+              options.onCleanupError?.();
+            } catch {
+              /* Metrics cannot deny an already-counted request. */
+            }
+          })
+          .finally(() => {
+            cleanup = undefined;
+          });
       }
       return {
         allowed: window.count <= input.limit,

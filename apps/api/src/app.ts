@@ -39,6 +39,8 @@ import {
   waitingActionSchema,
   weeklyReviewInputSchema,
   workItemEvidenceInputSchema,
+  type AppSyncStatus,
+  type AppSyncSummary,
   type Invitation,
   type Membership,
   type OnboardingState,
@@ -63,6 +65,7 @@ import {
   createPostgresRepositories,
   createRateLimitRepository,
   hashInvitationToken,
+  readOrganizationSnapshotRevision,
   type IdentityResolution,
   type InvitationProjection,
   type OnboardingDraft as RepositoryOnboardingDraft,
@@ -110,6 +113,7 @@ import {
   type ApiRateLimitStore,
 } from "./operations.js";
 import { createPostgresAdapter } from "./postgres-adapter.js";
+import { requestLocalIdentityResolver } from "./request-identity.js";
 import { readRuntimeConfiguration } from "./runtime-config.js";
 
 type Variables = {
@@ -858,6 +862,58 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     return context.json(membershipDto(updated.value, user));
   });
 
+  api.get("/api/v1/sync/summary", async (context) => {
+    const readRevision = dependencies.dataPlane.getSnapshotRevision;
+    const readSummary = dependencies.dataPlane.getSummary;
+    if (!readRevision || !readSummary)
+      return failure(
+        context,
+        501,
+        "data_plane_unavailable",
+        "Snapshot summaries are unavailable.",
+      );
+    const current = requestContext(context, clock, idGenerator);
+    const before = await readRevision(current);
+    const summary = await readSummary(current);
+    const after = await readRevision(
+      requestContext(context, clock, idGenerator),
+    );
+    const response: AppSyncSummary = {
+      protocol: 1,
+      revision: before === after ? after : null,
+      ...summary,
+    };
+    return context.json(response);
+  });
+
+  api.get("/api/v1/sync/status", async (context) => {
+    const readRevision = dependencies.dataPlane.getSnapshotRevision;
+    if (!readRevision)
+      return failure(
+        context,
+        501,
+        "data_plane_unavailable",
+        "Snapshot synchronization is unavailable.",
+      );
+    const current = requestContext(context, clock, idGenerator);
+    const before = await readRevision(current);
+    const [portfolios, workspaces] = await Promise.all([
+      dependencies.dataPlane.listPortfolios(current),
+      dependencies.dataPlane.listWorkspaces(current),
+    ]);
+    const after = await readRevision(
+      requestContext(context, clock, idGenerator),
+    );
+    const status: AppSyncStatus = {
+      protocol: 1,
+      revision: before === after ? after : null,
+      session: context.get("session"),
+      portfolios,
+      workspaces,
+    };
+    return context.json(status);
+  });
+
   api.get("/api/v1/portfolios", async (context) =>
     context.json(
       await dependencies.dataPlane.listPortfolios(
@@ -962,6 +1018,11 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     context.json(
       await dependencies.dataPlane.listWaiting(
         requestContext(context, clock, idGenerator),
+        {
+          ...(context.req.query("workspaceId")
+            ? { workspaceId: context.req.query("workspaceId")! }
+            : {}),
+        },
       ),
     ),
   );
@@ -1461,6 +1522,30 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     );
     return context.json(result.value);
   });
+
+  api.get(
+    "/api/v1/workspaces/:workspaceId/conversation-unread",
+    async (context) => {
+      const reader = dependencies.dataPlane.getConversationUnread;
+      if (!reader)
+        return failure(
+          context,
+          501,
+          "data_plane_unavailable",
+          "Unread summaries are unavailable.",
+        );
+      const parsed = idSchema.safeParse(context.req.param("workspaceId"));
+      if (!parsed.success)
+        return validationFailure(
+          context,
+          "Review the Workspace identifier.",
+          parsed.error.flatten(),
+        );
+      return context.json(
+        await reader(requestContext(context, clock, idGenerator), parsed.data),
+      );
+    },
+  );
 
   api.get("/api/v1/workspaces/:workspaceId/conversations", async (context) => {
     const parsed = z
@@ -2837,10 +2922,15 @@ export function createRuntimeApi(
       ? { cookieDomain: configuration.cookieDomain }
       : {}),
   });
+  const identityResolver = requestLocalIdentityResolver(
+    authRuntime.identityResolver,
+  );
   const live = createPostgresAdapter({
     repositories,
+    readSnapshotRevision: (organizationId, now) =>
+      readOrganizationSnapshotRevision(database.db, organizationId, now),
     async resolveIdentity(request) {
-      const identity = await authRuntime.identityResolver.resolve(request);
+      const identity = await identityResolver.resolve(request);
       if (!identity) return null;
       return {
         authUserId: identity.authUserId,
@@ -2855,7 +2945,7 @@ export function createRuntimeApi(
       authHandler: authRuntime.handler,
       registrationMode: configuration.registrationMode,
       releaseMetadata: configuration.releaseMetadata,
-      authIdentityResolver: authRuntime.identityResolver,
+      authIdentityResolver: identityResolver,
       preMembershipPaths: [
         "/api/v1/session/organizations",
         "/api/v1/session/organization",
@@ -2884,6 +2974,7 @@ export function createRuntimeApi(
     }),
     releaseMetadata: configuration.releaseMetadata,
     async close() {
+      await rateLimitStore?.drain?.();
       await Promise.all([database.close(), authRuntime.close()]);
     },
   };

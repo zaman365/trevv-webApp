@@ -1,4 +1,5 @@
 import type {
+  AppSyncSummary,
   ApprovalTransitionInput,
   AssignWorkItemInput,
   AttentionSignalDto,
@@ -118,6 +119,14 @@ export interface ImportPreviewInput {
 
 export interface DataPlane {
   readonly mode: ApiMode;
+  getSnapshotRevision?(context: ApiRequestContext): Promise<string | null>;
+  getConversationUnread?(
+    context: ApiRequestContext,
+    workspaceId: string,
+  ): Promise<{ unreadCount: number }>;
+  getSummary?(
+    context: ApiRequestContext,
+  ): Promise<Pick<AppSyncSummary, "workspaces" | "portfolios">>;
   readiness(): Promise<Pick<Readiness, "database">>;
   listPortfolios(context: ApiRequestContext): Promise<PortfolioDto[]>;
   createPortfolio(
@@ -141,7 +150,10 @@ export interface DataPlane {
     expectedVersion: number,
     input: AttentionAction,
   ): Promise<MutationResult<AttentionSignalDto>>;
-  listWaiting(context: ApiRequestContext): Promise<WaitingStateDto[]>;
+  listWaiting(
+    context: ApiRequestContext,
+    filters?: { workspaceId?: string },
+  ): Promise<WaitingStateDto[]>;
   actOnWaiting(
     context: ApiMutationContext,
     id: string,

@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "trevv-webapp",
-  "main": "vinext/server/app-router-entry",
+  "main": "worker.ts",
   "compatibility_date": "2026-08-24",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
@@ -17,6 +17,9 @@
     "NEXT_PUBLIC_APP_URL": "https://trevv.de",
     "API_ORIGIN": "https://trevv-free-preview-api-zaman365.onrender.com",
     "CSP_MODE": "report-only",
+    "NEXT_PUBLIC_RUM_ENABLED": "true",
+    "NEXT_PUBLIC_RUM_SAMPLE_RATE": "0.1",
+    "WEB_VITALS_INGEST_ENABLED": "true",
     "HSTS_ENABLED": "false",
     // Must equal the cookie prefix the API issues, or sessions silently fail.
     "AUTH_COOKIE_PREFIX": "trevv_alpha",

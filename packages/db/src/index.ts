@@ -18,3 +18,4 @@ export * from "./database-runtime.js";
 export * from "./rate-limit-repository.js";
 export * from "./staging-bootstrap.js";
 export * from "./staging-migration.js";
+export * from "./snapshot-revision.js";

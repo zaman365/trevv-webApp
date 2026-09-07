@@ -1,6 +1,9 @@
 import "server-only";
+import { readAllPages } from "./read-all-pages";
 
 import { createApiClient } from "@founderhq/api-client";
+import { createLiveAccessReader } from "./live-app-sync";
+import type { WebAppSession } from "./server-auth";
 import type { LiveAppDataSnapshot } from "./live-app-data";
 import {
   forwardedRequestHeaders,
@@ -8,9 +11,9 @@ import {
 } from "./server-auth";
 import { webApiOrigin } from "./web-runtime-config";
 
-export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
+async function serverDataClient() {
   const forwarded = await forwardedRequestHeaders();
-  const client = createApiClient({
+  return createApiClient({
     baseUrl: new URL("/api/v1", webApiOrigin()).toString(),
     fetchImpl: async (input, init) => {
       const outgoing = new Headers(init?.headers);
@@ -34,6 +37,19 @@ export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
       });
     },
   });
+}
+
+/** First entry needs authorized navigation, not every work item's history. */
+export async function loadLiveAppAccess(session: WebAppSession) {
+  return createLiveAccessReader(await serverDataClient(), {
+    userId: session.user.id,
+    organizationId: session.organization.id,
+  })();
+}
+
+/** Complete snapshot compatibility for established server consumers. */
+export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
+  const client = await serverDataClient();
   const [portfolios, workspaces, attention, waiting, items] = await Promise.all(
     [
       client.portfolios(),
@@ -54,16 +70,7 @@ export async function loadLiveAppData(): Promise<LiveAppDataSnapshot> {
 }
 
 async function fetchEveryWorkItem(client: ReturnType<typeof createApiClient>) {
-  const items: Awaited<ReturnType<typeof client.items>>["data"] = [];
-  let cursor: string | undefined;
-  for (let page = 0; page < 100; page += 1) {
-    const response = await client.items({
-      ...(cursor ? { cursor } : {}),
-      limit: 100,
-    });
-    items.push(...response.data);
-    if (!response.nextCursor) return items;
-    cursor = response.nextCursor;
-  }
-  throw new Error("The work-item pagination limit was exceeded.");
+  return readAllPages((cursor) =>
+    client.items({ ...(cursor ? { cursor } : {}), limit: 100 }),
+  );
 }

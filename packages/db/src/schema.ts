@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -166,6 +167,19 @@ export const organizations = pgTable(
     ...timestamps,
   },
   (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)],
+);
+
+/** Transactional invalidation for the complete organization snapshot. */
+export const organizationSnapshotRevisions = pgTable(
+  "organization_snapshot_revisions",
+  {
+    organizationId: text("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    revision: bigint("revision", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
+  },
 );
 
 export const users = pgTable(
@@ -1725,6 +1739,9 @@ export const attentionSignals = pgTable(
       table.resolvedAt,
       table.dismissedAt,
     ),
+    index("attention_org_snooze_boundary_idx")
+      .on(table.organizationId, table.snoozedUntil)
+      .where(sql`${table.snoozedUntil} is not null`),
     index("attention_entity_idx").on(
       table.organizationId,
       table.entityType,

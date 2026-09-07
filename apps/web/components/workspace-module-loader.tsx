@@ -1,6 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect } from "react";
+import { preloadRouteCode } from "@/lib/route-code-preload";
+import { workspaceHref } from "@/lib/workspace-routes";
 import { RouteLoadingState } from "./live-state";
 import type { WebRuntimeMode } from "@/lib/web-runtime-config";
 import type { WorkspaceView } from "@/lib/workspace-routes";
@@ -113,6 +116,11 @@ export function WorkspaceModuleLoader({
   view: WorkspaceView;
   workspaceSlug: string;
 }) {
+  useEffect(() => {
+    // Start the selected feature import alongside its wrapper on a cold direct visit.
+    if (runtimeMode === "live")
+      void preloadRouteCode(workspaceHref(workspaceSlug, view), runtimeMode);
+  }, [runtimeMode, view, workspaceSlug]);
   if (view === "calendar") {
     return <CalendarExperience workspaceSlug={workspaceSlug} />;
   }

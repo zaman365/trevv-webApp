@@ -1,5 +1,7 @@
 "use client";
 
+import { AppLink as Link } from "@/components/navigation-link";
+
 import { dateTimeFormatter } from "@/lib/date-format";
 
 import {
@@ -38,7 +40,8 @@ import { useMemo, useState } from "react";
 import { useCapturedWork } from "@/lib/captured-work";
 import { useWorkspaceState as useWorkspace } from "@/lib/workspace-context";
 import { workspaceHref } from "@/lib/workspace-routes";
-import { Hint, useLearningCenter } from "./learning-center";
+import { Hint } from "./learning-hint";
+import { useLearningCenter } from "./learning-center-context";
 
 const currentUser = "Mohammed Zaman";
 const today = "2026-08-27";
@@ -895,13 +898,13 @@ function WorkRow({
       >
         <Star size={14} fill={focused ? "currentColor" : "none"} />
       </button>
-      <a
+      <Link
         aria-label={`Open ${item.title} on its board`}
         href={boardHref(item)}
         title="Open board"
       >
         <ExternalLink size={13} />
-      </a>
+      </Link>
     </article>
   );
 }
@@ -1072,9 +1075,9 @@ function WorkDetailDialog({
             </p>
           </div>
           <footer className="workflow-dialog-actions my-work-dialog-actions">
-            <a href={boardHref(item)}>
+            <Link href={boardHref(item)}>
               Open board <ExternalLink size={12} />
-            </a>
+            </Link>
             <div>
               <button onClick={onToggleDone} type="button">
                 {item.status === "done" ? "Reopen" : "Mark complete"}

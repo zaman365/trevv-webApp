@@ -20,14 +20,11 @@ import {
   X,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWorkItemDetails } from "@/lib/use-work-item-details";
+import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
+import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
@@ -40,6 +37,8 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
+import { WindowedCollection } from "./windowed-collection";
+const recordKey = (record: { id: string }) => record.id;
 
 type ItemPatch = Parameters<
   ReturnType<typeof useLiveAppData>["client"]["updateItem"]
@@ -63,9 +62,26 @@ export function LiveBoardExperience({
   const workspace = liveData.workspaces.find(
     (record) => record.slug === workspaceSlug,
   );
-  const [board, setBoard] = useState<BoardDto | null>(null);
-  const [boardError, setBoardError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const boardQuery = useQuery({
+    queryKey: workspaceResourceKeys.board(
+      session.organization.id,
+      workspace?.id ?? "",
+      boardId,
+    ),
+    queryFn: async ({ signal }) => {
+      const record = await liveData.client.withSignal(signal).board(boardId);
+      if (record.workspaceId !== workspace?.id)
+        throw new Error("This board is not part of the workspace.");
+      return record;
+    },
+    enabled: Boolean(workspace),
+    staleTime: 30_000,
+  });
+  useReportRouteReady(boardQuery.isSuccess && liveData.recordsReady);
+  const board = boardQuery.data;
+  const boardError = boardQuery.error;
+  const loading = boardQuery.isPending;
   const sourceItems = useMemo(
     () =>
       workspace
@@ -85,36 +101,20 @@ export function LiveBoardExperience({
   } | null>(null);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [history, setHistory] = useState<WorkItemHistoryEntryDto[]>([]);
-  const [evidence, setEvidence] = useState<WorkItemEvidenceDto[]>([]);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const detailsQuery = useWorkItemDetails(
+    liveData.client,
+    session.organization.id,
+    workspace?.id,
+    selectedId,
+  );
+  const history = detailsQuery.error ? [] : (detailsQuery.data?.history ?? []);
+  const evidence = detailsQuery.error
+    ? []
+    : (detailsQuery.data?.evidence ?? []);
+  const detailLoading = detailsQuery.isPending;
   const [createOpen, setCreateOpen] = useState(false);
   const retryKeys = useRef(new Map<string, string>());
   const timezone = session.organization.timezone ?? "UTC";
-
-  useEffect(() => {
-    let active = true;
-    liveData.client
-      .board(boardId)
-      .then((record) => {
-        if (!active) return;
-        if (!workspace || record.workspaceId !== workspace.id) {
-          setBoardError(new Error("This board is not part of the workspace."));
-          return;
-        }
-        setBoard(record);
-        setBoardError(null);
-      })
-      .catch((reason: unknown) => {
-        if (active) setBoardError(reason);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [boardId, liveData.client, workspace]);
 
   useEffect(() => {
     if (pendingIds.size === 0) setItems(sourceItems);
@@ -128,34 +128,15 @@ export function LiveBoardExperience({
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
-  const loadDetails = useCallback(
-    async (itemId: string) => {
-      setDetailLoading(true);
-      try {
-        const [nextHistory, nextEvidence] = await Promise.all([
-          liveData.client.itemHistory(itemId),
-          liveData.client.itemEvidence(itemId),
-        ]);
-        setHistory(nextHistory);
-        setEvidence(nextEvidence);
-      } catch (reason) {
-        const presented = presentLiveError(reason);
-        setNotice({
-          kind: "failed",
-          title: presented.title,
-          description: presented.description,
-        });
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [liveData.client],
-  );
-
-  useEffect(() => {
-    if (!selectedId) return;
-    void loadDetails(selectedId);
-  }, [loadDetails, selectedId]);
+  async function loadDetails(itemId: string) {
+    await queryClient.invalidateQueries({
+      queryKey: workspaceResourceKeys.itemDetails(
+        session.organization.id,
+        workspace?.id ?? "",
+        itemId,
+      ),
+    });
+  }
 
   function replaceItem(next: WorkItemDto) {
     setItems((current) =>
@@ -191,13 +172,14 @@ export function LiveBoardExperience({
         idempotencyKey,
       );
       retryKeys.current.delete(fingerprint);
+      await liveData.applyConfirmedItem(response.data);
       replaceItem(response.data);
       setNotice({
         kind: "saved",
         title: `Server confirmed “${response.data.title}”`,
         description: `Version ${response.data.version} is now canonical.`,
       });
-      await liveData.refresh();
+      await liveData.refresh({ backgroundRecords: true });
     } catch (reason) {
       replaceItem(item);
       const presented = presentLiveError(reason);
@@ -242,6 +224,7 @@ export function LiveBoardExperience({
         latest.version,
         crypto.randomUUID(),
       );
+      await liveData.applyConfirmedItem(response.data);
       replaceItem(response.data);
       setConflict(null);
       setNotice({
@@ -249,7 +232,7 @@ export function LiveBoardExperience({
         title: "Server confirmed the change against the latest version",
         description: `Version ${response.data.version} is now canonical.`,
       });
-      await liveData.refresh();
+      await liveData.refresh({ backgroundRecords: true });
     } catch (reason) {
       setConflict((current) =>
         current ? { ...current, error: reason } : current,
@@ -367,23 +350,39 @@ export function LiveBoardExperience({
             <LiveStateNotice
               actions={
                 <button onClick={() => setCreateOpen(true)} type="button">
-                  Create the first item
+                  {liveData.recordsComplete
+                    ? "Create the first item"
+                    : "Create an item"}
                 </button>
               }
-              description="Capture work here directly, or convert it from Inbox."
-              kind="empty"
-              title="This board is empty"
+              description={
+                liveData.recordsComplete
+                  ? "Capture work here directly, or convert it from Inbox."
+                  : "More workspace records are still arriving. You can create work while they load."
+              }
+              kind={liveData.recordsComplete ? "empty" : "loading"}
+              title={
+                liveData.recordsComplete
+                  ? "This board is empty"
+                  : "Loading board items"
+              }
             />
           ) : (
-            <div className={styles.itemTable} role="list">
-              {items.map((item) => {
+            <WindowedCollection
+              className={styles.itemTable}
+              role="list"
+              items={items}
+              itemKey={recordKey}
+              label="Board work items"
+            >
+              {(item) => {
                 const pending = pendingIds.has(item.id);
                 return (
                   <article
                     className={styles.itemRow}
                     data-testid={`work-item-${item.id}`}
-                    key={item.id}
                     role="listitem"
+                    key={item.id}
                   >
                     <button
                       className={styles.itemTitle}
@@ -437,8 +436,8 @@ export function LiveBoardExperience({
                     </span>
                   </article>
                 );
-              })}
-            </div>
+              }}
+            </WindowedCollection>
           )}
         </section>
 
@@ -447,6 +446,7 @@ export function LiveBoardExperience({
             board={board}
             onClose={() => setCreateOpen(false)}
             onConfirmed={async (item, replayed) => {
+              await liveData.applyConfirmedItem(item);
               replaceItem(item);
               setCreateOpen(false);
               setNotice({
@@ -456,12 +456,22 @@ export function LiveBoardExperience({
                   ? "The original idempotent result was replayed; no duplicate was created."
                   : `Canonical WorkItem ${item.id} was created at version ${item.version}.`,
               });
-              await liveData.refresh();
+              await liveData.refresh({ backgroundRecords: true });
             }}
             workspaceId={workspace.id}
           />
         ) : null}
 
+        {selected && detailsQuery.error ? (
+          <LiveStateNotice
+            {...presentLiveError(detailsQuery.error)}
+            actions={
+              <button type="button" onClick={() => void detailsQuery.refetch()}>
+                Retry item details
+              </button>
+            }
+          />
+        ) : null}
         {selected ? (
           <WorkItemDetail
             evidence={evidence}
@@ -470,6 +480,7 @@ export function LiveBoardExperience({
             loading={detailLoading}
             onClose={() => setSelectedId(null)}
             onConfirmed={async (next, confirmation) => {
+              await liveData.applyConfirmedItem(next);
               replaceItem(next);
               setNotice({
                 kind: "saved",

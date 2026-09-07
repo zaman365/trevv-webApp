@@ -1283,7 +1283,7 @@ describe("worker PostgreSQL repositories", () => {
     );
     expect(second).toMatchObject({
       created: 0,
-      refreshed: 7,
+      refreshed: 0,
       resolved: 0,
       notifications: 0,
     });
@@ -1304,7 +1304,7 @@ describe("worker PostgreSQL repositories", () => {
     );
     expect(nextDay).toMatchObject({
       created: 0,
-      refreshed: 7,
+      refreshed: 3,
       resolved: 0,
       notifications: 0,
     });

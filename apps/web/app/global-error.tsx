@@ -2,14 +2,12 @@
 
 import { useEffect } from "react";
 import { reportClientError } from "@/lib/client-error-reporting";
+import {
+  routeErrorRecovery,
+  type RouteErrorProps,
+} from "@/lib/route-error-recovery";
 
-export default function GlobalError({
-  error,
-  retry,
-}: {
-  error: Error & { digest?: string };
-  retry: () => void;
-}) {
+export default function GlobalError({ error, retry, reset }: RouteErrorProps) {
   useEffect(() => {
     reportClientError("root-render", error);
   }, [error]);
@@ -47,7 +45,7 @@ export default function GlobalError({
           </p>
           <button
             type="button"
-            onClick={retry}
+            onClick={routeErrorRecovery({ retry, reset, error })}
             style={{
               background: "#5148c8",
               border: 0,

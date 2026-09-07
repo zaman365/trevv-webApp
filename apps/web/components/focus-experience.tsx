@@ -30,7 +30,7 @@ import {
   messagingPeople,
   seedConversations,
 } from "@/lib/messaging-data";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 import { DecisionCenter } from "./decision-center";
 import { InboxExperience } from "./email-inbox-workflow";
 import { MyWorkWorkflow } from "./my-work-workflow";

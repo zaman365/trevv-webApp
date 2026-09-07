@@ -15,6 +15,8 @@ describe("Web Vitals collection route", () => {
   });
 
   it("logs only a normalized, content-free metric", async () => {
+    vi.stubEnv("RELEASE_ID", "performance-fixture");
+    vi.stubEnv("RELEASE_GIT_SHA", "1234567890abcdef");
     const write = vi
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
@@ -40,6 +42,8 @@ describe("Web Vitals collection route", () => {
     expect(logged).toContain('"surface":"/app/workspaces/:workspace/:view"');
     expect(logged).not.toContain("browser-tracking-id");
     expect(logged).not.toContain("private customer content");
+    expect(logged).toContain("performance-fixture");
+    expect(logged).toContain("1234567890abcdef");
     write.mockRestore();
   });
 

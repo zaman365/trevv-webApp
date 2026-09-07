@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import type { ReactNode } from "react";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 
 /**
  * The shared vocabulary for Portfolio and Workspace.

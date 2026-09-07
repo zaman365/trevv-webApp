@@ -319,7 +319,7 @@ function WorkspaceWorkspace({
           >
             Work
           </button>
-          <a href={boardHref}>Board</a>
+          <Link href={boardHref}>Board</Link>
           {workspaceTabIds.slice(2).map((tab) => (
             <button
               className={activeTab === tab ? "active" : ""}
@@ -395,10 +395,10 @@ function WorkspaceWorkspace({
                   <h2>Sample signals</h2>
                   <p>Calculated directly from accessible work items.</p>
                 </div>
-                <a href={boardHref}>
+                <Link href={boardHref}>
                   {copy.viewBoard}
                   <ArrowRight size={13} />
-                </a>
+                </Link>
               </div>
               <div className="live-signal-cards">
                 <Signal

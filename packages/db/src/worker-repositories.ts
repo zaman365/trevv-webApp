@@ -13,7 +13,10 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { TrevvDatabase } from "./repositories.js";
+import {
+  findLatestWorkspaceUpdates,
+  type TrevvDatabase,
+} from "./repositories.js";
 import {
   attentionSignals,
   conversationMessageMetadataQuarantine,
@@ -130,8 +133,22 @@ export interface WorkerTransactionRepositories {
   };
 }
 
+export interface WorkerRepositoryTiming {
+  operation:
+    | "outbox.lease"
+    | "outbox.process"
+    | "outbox.fail"
+    | "outbox.telemetry"
+    | "attention.organization"
+    | "attention.sweep";
+  durationMs: number;
+  outcome: "success" | "failure";
+}
+
 export interface WorkerRepositoryOptions {
   clock?: () => Date;
+  /** Whole operation time includes pool wait and SQL; contains no tenant/query data. */
+  onTiming?: (timing: WorkerRepositoryTiming) => void;
 }
 
 export type WorkerEventHandlerName = "attention" | "audit" | "collaboration";
@@ -474,21 +491,52 @@ export function createWorkerRepositories(
   options: WorkerRepositoryOptions = {},
 ): WorkerRepositories {
   const clock = options.clock ?? (() => new Date());
+  async function measure<T>(
+    operation: WorkerRepositoryTiming["operation"],
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const started = performance.now();
+    let outcome: WorkerRepositoryTiming["outcome"] = "failure";
+    try {
+      const result = await run();
+      outcome = "success";
+      return result;
+    } finally {
+      try {
+        options.onTiming?.({
+          operation,
+          durationMs: Math.round(performance.now() - started),
+          outcome,
+        });
+      } catch {
+        /* Observation cannot change a committed effect. */
+      }
+    }
+  }
   return {
     outbox: {
-      lease: (input) => leaseOutbox(database, input),
+      lease: (input) =>
+        measure("outbox.lease", () => leaseOutbox(database, input)),
       process: (lease, handler) =>
-        processLeasedEvent(database, lease, handler, clock),
-      fail: (lease, input) => failLeasedEvent(database, lease, input),
-      telemetry: (input) => readOutboxTelemetry(database, input),
+        measure("outbox.process", () =>
+          processLeasedEvent(database, lease, handler, clock),
+        ),
+      fail: (lease, input) =>
+        measure("outbox.fail", () => failLeasedEvent(database, lease, input)),
+      telemetry: (input) =>
+        measure("outbox.telemetry", () => readOutboxTelemetry(database, input)),
     },
     attention: {
       recomputeOrganization: (organizationId, now) =>
-        database.transaction((transaction) =>
-          recomputeOrganizationAttention(transaction, organizationId, now),
+        measure("attention.organization", () =>
+          database.transaction((transaction) =>
+            recomputeOrganizationAttention(transaction, organizationId, now),
+          ),
         ),
       recomputeAll: (now, limit) =>
-        recomputeAllOrganizations(database, now, limit),
+        measure("attention.sweep", () =>
+          recomputeAllOrganizations(database, now, limit),
+        ),
     },
   };
 }
@@ -1171,16 +1219,7 @@ async function recomputeOrganizationAttention(
           isNull(waitingStates.deletedAt),
         ),
       ),
-    transaction
-      .select()
-      .from(workspaceUpdates)
-      .where(
-        and(
-          eq(workspaceUpdates.organizationId, organizationId),
-          isNull(workspaceUpdates.deletedAt),
-        ),
-      )
-      .orderBy(desc(workspaceUpdates.publishedAt), desc(workspaceUpdates.id)),
+    findLatestWorkspaceUpdates(transaction, organizationId),
   ]);
   const assigneesByItem = new Map<string, string[]>();
   for (const row of assigneeRows) {
@@ -1390,6 +1429,14 @@ async function recomputeOrganizationAttention(
     });
   }
 
+  const preparedDesired = desired.map((target) => {
+    const fingerprint = attentionFingerprint(target);
+    return {
+      target,
+      fingerprint,
+      signalId: `attention-${hashValue({ organizationId, fingerprint }).slice(0, 40)}`,
+    };
+  });
   const existingRows = await transaction
     .select()
     .from(attentionSignals)
@@ -1397,6 +1444,15 @@ async function recomputeOrganizationAttention(
       and(
         eq(attentionSignals.organizationId, organizationId),
         sql`${attentionSignals.reasonCode} is not null`,
+        // Keep all active signals for resolution, plus only the historical IDs
+        // that could suppress recreation. One JSON parameter avoids a bind limit.
+        or(
+          and(
+            isNull(attentionSignals.resolvedAt),
+            isNull(attentionSignals.dismissedAt),
+          ),
+          sql`${attentionSignals.id} in (select jsonb_array_elements_text(${JSON.stringify(preparedDesired.map(({ signalId }) => signalId))}::jsonb))`,
+        ),
       ),
     )
     .orderBy(desc(attentionSignals.createdAt), desc(attentionSignals.id));
@@ -1404,7 +1460,7 @@ async function recomputeOrganizationAttention(
     desired.map((signal) => [attentionKey(signal), signal] as const),
   );
   const activeByKey = new Map<string, typeof attentionSignals.$inferSelect>();
-  const knownIds = new Set(existingRows.map(({ id }) => id));
+  const existingById = new Map(existingRows.map((row) => [row.id, row]));
   for (const row of existingRows) {
     if (row.resolvedAt || row.dismissedAt || !row.reasonCode) continue;
     const key = `${row.entityType}:${row.entityId}:${row.reasonCode}`;
@@ -1414,15 +1470,23 @@ async function recomputeOrganizationAttention(
   let refreshed = 0;
   let resolved = 0;
   let notificationCount = 0;
+  const resolutionIds = {
+    source_changed: [] as string[],
+    source_cleared: [] as string[],
+  };
   for (const [key, row] of activeByKey) {
     const target = desiredByKey.get(key);
     const fingerprint = target ? attentionFingerprint(target) : undefined;
-    if (!target || row.sourceFingerprint !== fingerprint) {
-      await transaction
+    if (!target || row.sourceFingerprint !== fingerprint)
+      resolutionIds[target ? "source_changed" : "source_cleared"].push(row.id);
+  }
+  for (const actionReason of ["source_changed", "source_cleared"] as const) {
+    for (const ids of attentionBatches(resolutionIds[actionReason])) {
+      const changed = await transaction
         .update(attentionSignals)
         .set({
           resolvedAt: now,
-          actionReason: target ? "source_changed" : "source_cleared",
+          actionReason,
           computedAt: now,
           updatedAt: now,
           version: sql`${attentionSignals.version} + 1`,
@@ -1430,12 +1494,13 @@ async function recomputeOrganizationAttention(
         .where(
           and(
             eq(attentionSignals.organizationId, organizationId),
-            eq(attentionSignals.id, row.id),
+            inArray(attentionSignals.id, ids),
             isNull(attentionSignals.resolvedAt),
             isNull(attentionSignals.dismissedAt),
           ),
-        );
-      resolved += 1;
+        )
+        .returning({ id: attentionSignals.id });
+      resolved += changed.length;
     }
   }
   const requestedRecipients = uniqueStrings(
@@ -1458,73 +1523,103 @@ async function recomputeOrganizationAttention(
         ).map(({ userId }) => userId)
       : [],
   );
-  for (const target of desired) {
-    const fingerprint = attentionFingerprint(target);
-    const signalId = `attention-${hashValue({ organizationId, fingerprint }).slice(0, 40)}`;
-    const matching = existingRows.find(({ id }) => id === signalId);
+  const refreshById = new Map<string, DesiredAttentionSignal>();
+  const createById = new Map<string, (typeof preparedDesired)[number]>();
+  for (const prepared of preparedDesired) {
+    const { target, signalId } = prepared;
+    const matching = existingById.get(signalId);
     if (matching) {
-      if (!matching.resolvedAt && !matching.dismissedAt) {
-        await transaction
-          .update(attentionSignals)
-          .set({
-            portfolioId: target.portfolioId,
-            workspaceId: target.workspaceId,
-            signalType: target.signalType,
-            severity: target.severity,
-            impact: target.impact,
-            urgency: target.urgency,
-            reason: target.reason,
-            recommendedAction: target.recommendedAction,
-            evidence: target.evidence,
-            sourceOccurredAt: target.sourceOccurredAt,
-            computedAt: now,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(attentionSignals.organizationId, organizationId),
-              eq(attentionSignals.id, signalId),
-            ),
-          );
-        refreshed += 1;
-      }
+      if (
+        !matching.resolvedAt &&
+        !matching.dismissedAt &&
+        !sameAttentionContent(matching, target)
+      )
+        refreshById.set(signalId, target);
       continue;
     }
-    if (knownIds.has(signalId)) continue;
-    const [inserted] = await transaction
+    // The old insert loop kept the first value on an ID conflict. Preserve that
+    // behavior while ensuring each multi-row insert contains unique IDs.
+    if (!createById.has(signalId)) createById.set(signalId, prepared);
+  }
+  for (const batch of attentionBatches([...refreshById])) {
+    const values = batch.map(([id, target]) => ({
+      id,
+      portfolio_id: target.portfolioId,
+      workspace_id: target.workspaceId,
+      signal_type: target.signalType,
+      severity: target.severity,
+      impact: target.impact,
+      urgency: target.urgency,
+      reason: target.reason,
+      recommended_action: target.recommendedAction,
+      evidence: target.evidence,
+      source_occurred_at: target.sourceOccurredAt.toISOString(),
+    }));
+    // One typed JSON parameter keeps the update bounded without an expression
+    // or bind parameter per signal field. User actions and versions are untouched.
+    const changed = await transaction.execute(sql`
+      update ${attentionSignals} as signal
+      set portfolio_id = value.portfolio_id,
+          workspace_id = value.workspace_id,
+          signal_type = value.signal_type,
+          severity = value.severity::attention_severity,
+          impact = value.impact,
+          urgency = value.urgency,
+          reason = value.reason,
+          recommended_action = value.recommended_action,
+          evidence = value.evidence,
+          source_occurred_at = value.source_occurred_at,
+          computed_at = ${now.toISOString()}::timestamptz,
+          updated_at = ${now.toISOString()}::timestamptz
+      from jsonb_to_recordset(${JSON.stringify(values)}::jsonb) as value(
+        id text, portfolio_id text, workspace_id text, signal_type text,
+        severity text, impact integer, urgency integer, reason text,
+        recommended_action text, evidence jsonb, source_occurred_at timestamptz
+      )
+      where signal.organization_id = ${organizationId}
+        and signal.id = value.id
+        and signal.resolved_at is null and signal.dismissed_at is null
+      returning signal.id
+    `);
+    refreshed += changed.length;
+  }
+  for (const batch of attentionBatches([...createById.values()])) {
+    const inserted = await transaction
       .insert(attentionSignals)
-      .values({
-        id: signalId,
-        organizationId,
-        portfolioId: target.portfolioId,
-        workspaceId: target.workspaceId,
-        entityType: target.entityType,
-        entityId: target.entityId,
-        signalType: target.signalType,
-        severity: target.severity,
-        impact: target.impact,
-        urgency: target.urgency,
-        reason: target.reason,
-        reasonCode: target.reasonCode,
-        recommendedAction: target.recommendedAction,
-        evidence: target.evidence,
-        sourceFingerprint: fingerprint,
-        sourceOccurredAt: target.sourceOccurredAt,
-        computedAt: now,
-        metadata: { generatedBy: "trevv-worker", schemaVersion: 1 },
-        createdAt: now,
-        updatedAt: now,
-      })
+      .values(
+        batch.map(({ target, fingerprint, signalId }) => ({
+          id: signalId,
+          organizationId,
+          portfolioId: target.portfolioId,
+          workspaceId: target.workspaceId,
+          entityType: target.entityType,
+          entityId: target.entityId,
+          signalType: target.signalType,
+          severity: target.severity,
+          impact: target.impact,
+          urgency: target.urgency,
+          reason: target.reason,
+          reasonCode: target.reasonCode,
+          recommendedAction: target.recommendedAction,
+          evidence: target.evidence,
+          sourceFingerprint: fingerprint,
+          sourceOccurredAt: target.sourceOccurredAt,
+          computedAt: now,
+          metadata: { generatedBy: "trevv-worker", schemaVersion: 1 },
+          createdAt: now,
+          updatedAt: now,
+        })),
+      )
       .onConflictDoNothing()
       .returning({ id: attentionSignals.id });
-    if (!inserted) continue;
-    created += 1;
-    for (const userId of uniqueStrings(target.recipientIds)) {
-      if (!activeRecipientIds.has(userId)) continue;
-      const dedupKey = hashValue({ signalId, userId });
-      const [notification] = await transaction
-        .insert(notifications)
-        .values({
+    created += inserted.length;
+    const notificationValues: Array<typeof notifications.$inferInsert> = [];
+    for (const { id: signalId } of inserted) {
+      const { target } = createById.get(signalId)!;
+      for (const userId of uniqueStrings(target.recipientIds)) {
+        if (!activeRecipientIds.has(userId)) continue;
+        const dedupKey = hashValue({ signalId, userId });
+        notificationValues.push({
           id: `notification-${dedupKey.slice(0, 40)}`,
           organizationId,
           userId,
@@ -1541,10 +1636,16 @@ async function recomputeOrganizationAttention(
           },
           dedupKey,
           createdAt: now,
-        })
+        });
+      }
+    }
+    for (const values of attentionBatches(notificationValues)) {
+      const insertedNotifications = await transaction
+        .insert(notifications)
+        .values(values)
         .onConflictDoNothing()
         .returning({ id: notifications.id });
-      if (notification) notificationCount += 1;
+      notificationCount += insertedNotifications.length;
     }
   }
   await transaction
@@ -1558,6 +1659,31 @@ async function recomputeOrganizationAttention(
     resolved,
     notifications: notificationCount,
   };
+}
+
+// Bound statement size and parameter count for cold creation, daily refresh,
+// and bulk resolution, while retaining the surrounding advisory transaction.
+function* attentionBatches<T>(values: readonly T[]): Generator<T[]> {
+  for (let offset = 0; offset < values.length; offset += 250)
+    yield values.slice(offset, offset + 250);
+}
+
+function sameAttentionContent(
+  row: typeof attentionSignals.$inferSelect,
+  target: DesiredAttentionSignal,
+): boolean {
+  return (
+    row.portfolioId === target.portfolioId &&
+    row.workspaceId === target.workspaceId &&
+    row.signalType === target.signalType &&
+    row.severity === target.severity &&
+    row.impact === target.impact &&
+    row.urgency === target.urgency &&
+    row.reason === target.reason &&
+    row.recommendedAction === target.recommendedAction &&
+    row.sourceOccurredAt?.getTime() === target.sourceOccurredAt.getTime() &&
+    stableJson(row.evidence) === stableJson(target.evidence)
+  );
 }
 
 function attentionKey(signal: DesiredAttentionSignal): string {

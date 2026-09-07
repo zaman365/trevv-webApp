@@ -1452,3 +1452,110 @@ async function errorCode(response: Response): Promise<string | undefined> {
   const body = (await response.json()) as { error?: { code?: string } };
   return body.error?.code;
 }
+
+describe("snapshot synchronization status", () => {
+  it("returns authenticated navigation state and a stable revision", async () => {
+    const live = createUnavailableLiveDependencies();
+    const getSnapshotRevision = vi.fn().mockResolvedValue("revision-1");
+    const listPortfolios = vi.fn().mockResolvedValue([]);
+    const listWorkspaces = vi.fn().mockResolvedValue([]);
+    const app = createApiApp({
+      mode: "live",
+      ...live,
+      accessResolver: liveAccessResolver,
+      dataPlane: {
+        ...live.dataPlane,
+        getSnapshotRevision,
+        listPortfolios,
+        listWorkspaces,
+      },
+    });
+    const response = await app.request("/api/v1/sync/status");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      protocol: 1,
+      revision: "revision-1",
+      session: { organizationId: "org-live" },
+      portfolios: [],
+      workspaces: [],
+    });
+    expect(getSnapshotRevision).toHaveBeenCalledTimes(2);
+    expect(listPortfolios.mock.calls[0]?.[0].access.organizationId).toBe(
+      "org-live",
+    );
+    expect(listWorkspaces.mock.calls[0]?.[0].access.organizationId).toBe(
+      "org-live",
+    );
+  });
+
+  it("returns an unstable revision marker when a write races navigation reads", async () => {
+    const live = createUnavailableLiveDependencies();
+    const app = createApiApp({
+      mode: "live",
+      ...live,
+      accessResolver: liveAccessResolver,
+      dataPlane: {
+        ...live.dataPlane,
+        getSnapshotRevision: vi
+          .fn()
+          .mockResolvedValueOnce("before")
+          .mockResolvedValueOnce("after"),
+        listPortfolios: async () => [],
+        listWorkspaces: async () => [],
+      },
+    });
+    expect(
+      await (await app.request("/api/v1/sync/status")).json(),
+    ).toMatchObject({ protocol: 1, revision: null });
+  });
+
+  it("requires authentication and supports fallback when the adapter has no revision protocol", async () => {
+    const live = createUnavailableLiveDependencies();
+    const unsupported = createApiApp({
+      mode: "live",
+      ...live,
+      accessResolver: liveAccessResolver,
+    });
+    expect((await unsupported.request("/api/v1/sync/status")).status).toBe(501);
+    const read = vi.fn().mockResolvedValue("secret-revision");
+    const anonymous = createApiApp({
+      mode: "live",
+      ...live,
+      accessResolver: { mode: "live", resolve: async () => null },
+      dataPlane: { ...live.dataPlane, getSnapshotRevision: read },
+    });
+    expect((await anonymous.request("/api/v1/sync/status")).status).toBe(401);
+    expect(read).not.toHaveBeenCalled();
+  });
+});
+
+it("stamps scoped summaries without requiring full item hydration", async () => {
+  const live = createUnavailableLiveDependencies();
+  const getSummary = vi
+    .fn()
+    .mockResolvedValue({ workspaces: [], portfolios: [] });
+  const listItems = vi
+    .fn()
+    .mockRejectedValue(new Error("Full item hydration must not run"));
+  const app = createApiApp({
+    mode: "live",
+    ...live,
+    accessResolver: liveAccessResolver,
+    dataPlane: {
+      ...live.dataPlane,
+      getSummary,
+      listItems,
+      getSnapshotRevision: async () => "revision-1",
+    },
+  });
+  const response = await app.request("/api/v1/sync/summary");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    protocol: 1,
+    revision: "revision-1",
+    workspaces: [],
+    portfolios: [],
+  });
+  expect(getSummary.mock.calls[0]?.[0].access.organizationId).toBe("org-live");
+  expect(listItems).not.toHaveBeenCalled();
+});

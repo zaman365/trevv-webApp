@@ -22,6 +22,14 @@ const modules = {
   liveMessages: () => import("../components/live-messaging-workspace"),
   liveTeams: () => import("../components/live-team-workflow"),
   liveWork: () => import("../components/live-work-views"),
+  liveWorkMyWork: () => import("../components/live-work-my-work"),
+  liveWorkAttention: () => import("../components/live-work-attention"),
+  liveWorkWaiting: () => import("../components/live-work-waiting"),
+  liveWorkTransitions: () => import("../components/live-work-transitions"),
+  liveWorkReviews: () => import("../components/live-work-reviews"),
+  liveWorkSearch: () => import("../components/live-work-search"),
+  liveWorkInbox: () => import("../components/live-work-inbox"),
+  liveWorkSettings: () => import("../components/live-work-settings"),
   stakeholder: () => import("../components/stakeholder-experience"),
   mail: () => import("../components/email-inbox-workflow"),
   sessions: () => import("../components/session-management"),
@@ -81,7 +89,21 @@ export function routeCodeModules(
   )
     component = "focus";
   else component = "management";
-  return ["moduleLoader", component];
+  const liveFeature: Partial<Record<string, ModuleKey>> = {
+    "my-work": "liveWorkMyWork",
+    attention: "liveWorkAttention",
+    waiting: "liveWorkWaiting",
+    decisions: "liveWorkTransitions",
+    approvals: "liveWorkTransitions",
+    reviews: "liveWorkReviews",
+    search: "liveWorkSearch",
+    inbox: "liveWorkInbox",
+    settings: "liveWorkSettings",
+  };
+  const feature = live ? liveFeature[view] : undefined;
+  return feature
+    ? ["moduleLoader", component, feature]
+    : ["moduleLoader", component];
 }
 
 export function preloadRouteCode(href: string, mode: WebRuntimeMode) {

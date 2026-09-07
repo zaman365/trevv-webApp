@@ -20,7 +20,7 @@ import { demoBoards, demoWorkspaces, type WorkItemType } from "@founderhq/core";
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { storeCapturedWork, type CapturedWorkItem } from "@/lib/captured-work";
 import { validateCapture } from "@/lib/workflow-rules";
-import { Hint } from "./learning-center";
+import { Hint } from "./learning-hint";
 
 const createTypes = [
   {

@@ -11,7 +11,7 @@ vi.mock("next/headers", () => ({
   headers: async () => state.headers,
 }));
 vi.mock("./server-auth", () => ({ requireAppSession: state.session }));
-vi.mock("./server-live-data", () => ({ loadLiveAppData: state.snapshot }));
+vi.mock("./server-live-data", () => ({ loadLiveAppAccess: state.snapshot }));
 vi.mock("../components/app-shell-providers", () => ({
   AppShellProviders: () => null,
 }));
@@ -38,11 +38,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("authorized layout navigation", () => {
-  it("seeds complete document loads from the server", async () => {
+  it("seeds lightweight authorized navigation on document loads", async () => {
     const layout = await AppLayout({ children: "page" });
     expect(state.session).toHaveBeenCalledOnce();
     expect(state.snapshot).toHaveBeenCalledOnce();
-    expect(layout.props.liveData).toEqual(
+    expect(layout.props.liveAccess).toEqual(
       await state.snapshot.mock.results[0]!.value,
     );
   });
@@ -53,7 +53,7 @@ describe("authorized layout navigation", () => {
     const layout = await AppLayout({ children: "page" });
     expect(state.session).toHaveBeenCalledOnce();
     expect(state.snapshot).not.toHaveBeenCalled();
-    expect(layout.props.liveData).toBeUndefined();
+    expect(layout.props.liveAccess).toBeUndefined();
     expect(layout.props.session.organization.id).toBe("org-one");
   });
 

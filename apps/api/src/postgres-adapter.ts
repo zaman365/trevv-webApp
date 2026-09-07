@@ -26,6 +26,7 @@ import { teamFeatureCapabilitiesForPreset } from "@founderhq/api-contract";
 import type {
   CollaborationUserProjection,
   ConversationProjection,
+  ConversationAccessProjection,
   InboxItemProjection,
   MessageProjection,
   OrganizationScopedRepositories,
@@ -69,6 +70,7 @@ export interface LiveIdentity {
 export interface PostgresAdapterOptions {
   repositories: PostgresRepositories;
   resolveIdentity(request: Request): Promise<LiveIdentity | null>;
+  readSnapshotRevision?(organizationId: string, now: Date): Promise<string>;
 }
 
 export function createPostgresAdapter(options: PostgresAdapterOptions): {
@@ -132,6 +134,21 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
 
   const dataPlane: DataPlane = {
     mode: "live",
+    async getSnapshotRevision(context) {
+      return (
+        options.readSnapshotRevision?.(
+          context.access.organizationId,
+          context.now,
+        ) ?? null
+      );
+    },
+    async getSummary(context) {
+      return scoped(options.repositories, context).summaries.list({
+        workspaceIds: [...context.access.accessibleWorkspaceIds],
+        portfolioIds: [...context.access.accessiblePortfolioIds],
+        now: context.now,
+      });
+    },
     async readiness() {
       await options.repositories.readiness();
       return { database: "ready" };
@@ -243,8 +260,14 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       return { value: toAttentionDto(result.value), replayed: result.replayed };
     },
 
-    async listWaiting(context) {
-      return (await scoped(options.repositories, context).waiting.listActive())
+    async listWaiting(context, filters) {
+      if (filters?.workspaceId)
+        requireWorkspaceAccess(context.access, "read", filters.workspaceId);
+      return (
+        await scoped(options.repositories, context).waiting.listActive(
+          filters?.workspaceId,
+        )
+      )
         .filter((waiting) =>
           canSeeWorkspace(context.access, waiting.workspaceId),
         )
@@ -772,6 +795,17 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       return { value: toTeamDto(result.value), replayed: result.replayed };
     },
 
+    async getConversationUnread(context, workspaceId) {
+      requireWorkspaceAccess(context.access, "read", workspaceId);
+      if (!canSeeWorkspace(context.access, workspaceId)) throw notFound();
+      return {
+        unreadCount: await scoped(
+          options.repositories,
+          context,
+        ).collaboration.getConversationUnread(workspaceId),
+      };
+    },
+
     async listConversations(context, filters) {
       requireWorkspaceAccess(context.access, "read", filters.workspaceId);
       const page = await scoped(
@@ -868,8 +902,11 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
 
     async listConversationMessages(context, conversationId, filters) {
       const repositories = scoped(options.repositories, context);
-      const conversation =
-        await repositories.collaboration.getConversation(conversationId);
+      const [conversation] =
+        await repositories.collaboration.listConversationAccess([
+          conversationId,
+        ]);
+      if (!conversation) throw notFound();
       requireCollaborationAccess(
         context.access,
         "read",
@@ -1016,25 +1053,34 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         afterCursor: after,
         limit: 500,
       });
+      const conversationAccess =
+        await repositories.collaboration.listConversationAccess([
+          ...new Set(
+            batch.events.flatMap((event) =>
+              event.conversationId ? [event.conversationId] : [],
+            ),
+          ),
+        ]);
+      const conversationsById = new Map<string, ConversationAccessProjection>();
+      for (const conversation of conversationAccess) {
+        try {
+          requireCollaborationAccess(
+            context.access,
+            "read",
+            "conversation",
+            conversationCollaborationScope(context.access, conversation),
+          );
+          conversationsById.set(conversation.conversation.id, conversation);
+        } catch (error) {
+          if (!isNotFound(error)) throw error;
+        }
+      }
       const events: CollaborationEventBatch["events"] = [];
       for (const event of batch.events) {
-        let conversation: ConversationProjection | undefined;
-        if (event.conversationId) {
-          try {
-            conversation = await repositories.collaboration.getConversation(
-              event.conversationId,
-            );
-            requireCollaborationAccess(
-              context.access,
-              "read",
-              "conversation",
-              conversationCollaborationScope(context.access, conversation),
-            );
-          } catch (error) {
-            if (isNotFound(error)) continue;
-            throw error;
-          }
-        }
+        const conversation = event.conversationId
+          ? conversationsById.get(event.conversationId)
+          : undefined;
+        if (event.conversationId && !conversation) continue;
         events.push({
           cursor: event.cursor,
           organizationId: event.organizationId,
@@ -1864,7 +1910,7 @@ function teamCollaborationScope(
 
 function conversationCollaborationScope(
   access: AccessContext,
-  projection: ConversationProjection,
+  projection: ConversationAccessProjection,
   message?: MessageProjection,
 ): CollaborationScope {
   const participant = projection.participants.find(
@@ -2112,6 +2158,12 @@ function buildPortfolioResponse(
   items: WorkItemProjection[],
   now: Date,
 ): PortfolioResponse {
+  const itemsByWorkspace = new Map<string, WorkItemProjection[]>();
+  for (const item of items) {
+    const group = itemsByWorkspace.get(item.workspaceId) ?? [];
+    group.push(item);
+    itemsByWorkspace.set(item.workspaceId, group);
+  }
   return {
     asOf: now.toISOString(),
     portfolio: toPortfolioDto(portfolio),
@@ -2119,7 +2171,11 @@ function buildPortfolioResponse(
     workspaces: workspaces
       .map((workspace) => ({
         workspace: toWorkspaceDto(workspace),
-        rollup: rollupWorkspace(workspace, items, now),
+        rollup: rollupWorkspace(
+          workspace,
+          itemsByWorkspace.get(workspace.id) ?? [],
+          now,
+        ),
       }))
       .sort((left, right) => right.rollup.score - left.rollup.score),
   };
@@ -2809,23 +2865,27 @@ async function paginateWorkItems(
   let workspaceIndex = initial.workspaceIndex;
   let offset = initial.offset;
   const items: WorkItemProjection[] = [];
-  while (workspaceIndex < workspaceIds.length && items.length < limit) {
+  while (workspaceIndex < workspaceIds.length) {
     const workspaceId = workspaceIds[workspaceIndex];
     if (!workspaceId) break;
     const remaining = limit - items.length;
-    const batch = await repositories.workItems.list({
+    const page = await repositories.workItems.listPage({
       workspaceId,
       ...(assigneeId ? { assigneeId } : {}),
-      limit: remaining,
+      limit: Math.max(1, remaining),
       offset,
     });
-    items.push(...batch);
-    if (batch.length === remaining)
+    // A full page may end exactly at a Workspace boundary. Probe subsequent
+    // Workspaces without consuming their first item before emitting a cursor.
+    if (remaining === 0 && page.items.length)
+      return { items, nextCursor: encodeCursor({ workspaceIndex, offset }) };
+    items.push(...page.items);
+    if (page.hasMore)
       return {
         items,
         nextCursor: encodeCursor({
           workspaceIndex,
-          offset: offset + batch.length,
+          offset: offset + page.items.length,
         }),
       };
     workspaceIndex += 1;

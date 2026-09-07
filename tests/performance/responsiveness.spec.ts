@@ -290,3 +290,150 @@ test("switching conversations never presents the old room under the new selectio
   await page.getByLabel("Conversation").selectOption("room-one");
   await expect(page.locator("#conversation")).toHaveText("room-one");
 });
+
+test("persistent collaboration pauses while hidden, reconciles on return, and resets cursor for another identity", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.route("http://trevv.test/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<div id="root"></div>',
+      });
+    return route.fulfill({
+      json: path === "/api/v1/items" ? { data: [], nextCursor: null } : [],
+    });
+  });
+  await page.goto("http://trevv.test/#events");
+  await page.evaluate(() => {
+    const streams: Array<{
+      url: string;
+      closed: boolean;
+      emit(type: string, data: object): void;
+    }> = [];
+    Object.assign(window, { fixtureStreams: streams });
+    class Source {
+      url: string;
+      closed = false;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: (() => void) | null = null;
+      listeners = new Map<string, EventListener>();
+      constructor(url: string) {
+        this.url = String(url);
+        streams.push(this);
+      }
+      close() {
+        this.closed = true;
+      }
+      addEventListener(type: string, listener: EventListener) {
+        this.listeners.set(type, listener);
+      }
+      emit(type: string, data: object) {
+        this.listeners.get(type)?.(
+          new MessageEvent(type, { data: JSON.stringify(data) }),
+        );
+      }
+    }
+    Object.assign(window, { EventSource: Source });
+  });
+  await page.addScriptTag({ content: script });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { fixtureStreams: unknown[] }).fixtureStreams
+            .length,
+      ),
+    )
+    .toBe(1);
+  await page.getByRole("button", { name: "Navigate without seed" }).click();
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as { fixtureStreams: unknown[] }).fixtureStreams
+          .length,
+    ),
+  ).toBe(1);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.fastForward(6_000);
+  expect(
+    await page.evaluate(() =>
+      (
+        window as unknown as { fixtureStreams: { closed: boolean }[] }
+      ).fixtureStreams.map((stream) => stream.closed),
+    ),
+  ).toEqual([true]);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { fixtureStreams: unknown[] }).fixtureStreams
+            .length,
+      ),
+    )
+    .toBe(2);
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        fixtureStreams: Array<{ emit(type: string, data: object): void }>;
+      }
+    ).fixtureStreams[1]!.emit("checkpoint", { nextCursor: 15 }),
+  );
+  await page.clock.fastForward(2_100);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { fixtureStreams: unknown[] }).fixtureStreams
+            .length,
+      ),
+    )
+    .toBe(3);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as { fixtureStreams: Array<{ url: string }> })
+          .fixtureStreams[2]!.url,
+    ),
+  ).toContain("after=15");
+  await page.getByRole("button", { name: "Change identity" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { fixtureStreams: unknown[] }).fixtureStreams
+            .length,
+      ),
+    )
+    .toBe(4);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as { fixtureStreams: Array<{ url: string }> })
+          .fixtureStreams[3]!.url,
+    ),
+  ).toContain("after=0");
+});

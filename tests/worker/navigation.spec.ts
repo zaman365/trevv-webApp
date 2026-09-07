@@ -88,3 +88,42 @@ test("document and RSC requests retain current workspace denial and true 404 sta
     expect(response.status()).toBe(404);
   }
 });
+
+test("a failed initial server render offers working Worker recovery", async ({
+  page,
+  request,
+}) => {
+  await request.get("http://127.0.0.1:3219/test/reset?sessionFailure=1");
+  await page.goto("/app/workspaces/navigation-test/my-work");
+  await expect(
+    page.getByRole("button", { name: "Try again", exact: true }),
+  ).toBeVisible();
+  await request.get("http://127.0.0.1:3219/test/reset");
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "My Work", exact: true }),
+  ).toBeVisible();
+});
+
+test("a failed page switch recovers after the upstream becomes available", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/app/workspaces/navigation-test/my-work");
+  await expect(
+    page.getByRole("heading", { name: "My Work", exact: true }),
+  ).toBeVisible();
+  await request.get("http://127.0.0.1:3219/test/reset?sessionFailure=1");
+  await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "Calendar", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Try again", exact: true }),
+  ).toBeVisible();
+  await request.get("http://127.0.0.1:3219/test/reset");
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Calendar", exact: true }),
+  ).toBeVisible();
+});

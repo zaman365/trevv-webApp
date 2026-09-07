@@ -10,49 +10,48 @@ import {
   Smartphone,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import {
+  accountResourceError,
+  useAccountResource,
+} from "@/lib/use-account-resource";
 import { useAppSession } from "@/lib/app-session-context";
 import { clearLiveDraftStorage } from "@/lib/live-workflow-ui";
 import type { RedactedSession } from "@/lib/session-route";
 
 export function SessionManagement() {
   const appSession = useAppSession();
-  const [sessions, setSessions] = useState<RedactedSession[]>([]);
-  const [loading, setLoading] = useState(!appSession.demo);
-  const [message, setMessage] = useState("");
+  const [actionMessage, setMessage] = useState("");
   const [workingId, setWorkingId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (appSession.demo) return;
-    setLoading(true);
-    setMessage("");
-    try {
+  const resource = useAccountResource<RedactedSession[]>(
+    "sessions",
+    async (signal) => {
       const response = await fetch("/api/web/sessions", {
         credentials: "same-origin",
         cache: "no-store",
+        signal,
       });
       const body: unknown = await response.json();
-      if (!response.ok || !Array.isArray(body)) {
-        throw new Error(errorMessage(body, "Sessions could not be loaded."));
-      }
-      setSessions(body as RedactedSession[]);
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Sessions could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [appSession.demo]);
-
-  useEffect(() => {
-    const task = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(task);
-  }, [load]);
+      if (!response.ok || !Array.isArray(body))
+        throw accountResourceError(
+          errorMessage(body, "Sessions could not be loaded."),
+          response.status,
+        );
+      return body as RedactedSession[];
+    },
+    [],
+  );
+  const { value: sessions, setValue: setSessions, loading } = resource;
+  const message =
+    actionMessage ||
+    (resource.error instanceof Error ? resource.error.message : "");
+  const load = async () => {
+    setMessage("");
+    await resource.refresh();
+  };
 
   async function revoke(session: RedactedSession) {
+    await resource.cancel();
     setWorkingId(session.id);
     setMessage("");
     try {

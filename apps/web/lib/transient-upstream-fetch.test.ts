@@ -4,6 +4,55 @@ import { fetchWithTransientUpstreamRetry } from "./transient-upstream-fetch";
 const noDelay = vi.fn(async () => undefined);
 
 describe("transient upstream fetch", () => {
+  it("bounds a hung upstream even if its fetch implementation ignores cancellation", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>(() => new Promise(() => {}));
+      const pending = fetchWithTransientUpstreamRetry(
+        "https://api.example.test/session",
+        {},
+        {
+          fetchImpl,
+          timeoutMs: 5000,
+          attemptTimeoutMs: 2500,
+        },
+      );
+      const outcome = expect(pending).rejects.toMatchObject({
+        name: "TimeoutError",
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      await outcome;
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(
+        fetchImpl.mock.calls.every(([, init]) => init?.signal?.aborted),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds the entire retry window and leaves successful response bodies streaming", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>(
+        async () => new Response(null, { status: 503 }),
+      );
+      const pending = fetchWithTransientUpstreamRetry(
+        "https://api.example.test/session",
+        {},
+        { fetchImpl },
+      );
+      const outcome = expect(pending).rejects.toMatchObject({
+        name: "TimeoutError",
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      await outcome;
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("honors cancellation supplied on the Request object", async () => {
     const controller = new AbortController();
     const input = new Request("https://api.example.test/session", {
@@ -66,7 +115,8 @@ describe("transient upstream fetch", () => {
       { signal: controller.signal },
       { fetchImpl, retryDelaysMs: [1], sleep: async () => {} },
     );
-    expect(fetchImpl.mock.calls[1]?.[1]?.signal).toBe(controller.signal);
+    controller.abort();
+    expect(fetchImpl.mock.calls[1]?.[1]?.signal?.aborted).toBe(true);
   });
 
   it("recovers a safe read after transient gateway responses", async () => {

@@ -7,7 +7,7 @@ import {
   workspaceSelectionCookie,
 } from "@/lib/workspace-selection";
 import { requireAppSession } from "@/lib/server-auth";
-import { loadLiveAppData } from "@/lib/server-live-data";
+import { loadLiveAppAccess } from "@/lib/server-live-data";
 import { clientNavigationHeader } from "@/lib/navigation-request";
 import { webRuntimeMode } from "@/lib/web-runtime-config";
 import {
@@ -28,16 +28,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     requireAppSession(),
     headers(),
   ]);
-  // Resolve identity and onboarding first so an anonymous request redirects
-  // cleanly instead of racing a protected data request into the error boundary.
-  // RSC navigation reuses the mounted query provider. Vinext still executes
-  // dynamic layouts for these requests, so reloading every item here made each
-  // page switch wait for a redundant organization-wide snapshot. This header
-  // only controls the initial seed: session and leaf authorization always run,
-  // and a newly mounted provider without a seed fetches its own authorized data.
-  const liveData =
+  // Resolve identity first. A document seeds lightweight navigation/access;
+  // individual pages request their records below the persistent interactive shell.
+  // RSC navigation reuses that provider, but session/leaf guards still run.
+  const liveAccess =
     mode === "live" && requestHeaders.get(clientNavigationHeader) !== "1"
-      ? await loadLiveAppData()
+      ? await loadLiveAppAccess(session)
       : undefined;
   const storedSelection = parseWorkspaceSelection(
     store.get(workspaceSelectionCookie)?.value,
@@ -78,9 +74,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       }}
       {...(storedSelection ? { storedSelection } : {})}
       {...(initialTheme ? { initialTheme } : {})}
-      {...(liveData ? { liveData } : {})}
+      {...(liveAccess ? { liveAccess } : {})}
     >
       {children}
     </AppShellProviders>
   );
 }
+import "../workspace.css";
+import "../design-system.css";

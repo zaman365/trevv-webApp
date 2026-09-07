@@ -1,14 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { parseRumSampleRate } from "@/lib/web-vitals";
 import "@founderhq/design-tokens/css";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { trevvBrand } from "@/lib/branding";
 import { themePreferenceBootstrap } from "@/lib/display-preferences";
 import "./globals.css";
-import "./workspace.css";
-import "./design-system.css";
+import "./public-product.css";
 
 const appName = trevvBrand.name;
 
@@ -68,7 +68,14 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
         {children}
-        <WebVitalsReporter />
+        <Suspense fallback={null}>
+          <WebVitalsReporter
+            enabled={process.env.NEXT_PUBLIC_RUM_ENABLED === "true"}
+            sampleRate={parseRumSampleRate(
+              process.env.NEXT_PUBLIC_RUM_SAMPLE_RATE,
+            )}
+          />
+        </Suspense>
         <ServiceWorkerRegistration />
       </body>
     </html>
