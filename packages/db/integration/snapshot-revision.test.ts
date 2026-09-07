@@ -59,8 +59,8 @@ describe("transactional snapshot revisions", () => {
     expect(await token("revision-two")).toBe(other);
   });
 
-  // The 10,000-row fixture and cascading cleanup share a CI database server
-  // with the other integration suites and can exceed Vitest's default 5s.
+  // Include the 10,000-row fixture and cascading cleanup in the explicit
+  // database integration budget instead of Vitest's default 5s.
   it("coalesces a bulk statement and rolls invalidation back with its data", async () => {
     const [before] = await database.db.execute<{ revision: string }>(
       sql`select revision::text from organization_snapshot_revisions where organization_id='revision-one'`,
