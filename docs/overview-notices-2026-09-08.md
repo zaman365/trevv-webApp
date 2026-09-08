@@ -30,3 +30,6 @@ This follow-up is a source change, not a live deployment. The previously
 published `db8c379` image cohort does not contain it and must be superseded before
 shipping this fix. The existing deployment permissions and hosting blockers
 remain unresolved.
+
+The [September 9 follow-up](recurring-refresh-notices-2026-09-09.md) addresses
+the separate, recurring shared-refresh warnings and duplicate page/shell notices.

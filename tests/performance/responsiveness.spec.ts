@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 let script = "";
+let connectionStyles = "";
 let outputDirectory = "";
 test.beforeAll(async () => {
   const webRequire = createRequire(resolve("apps/web/package.json"));
@@ -28,6 +29,16 @@ test.beforeAll(async () => {
     },
   });
   script = await readFile(resolve(outputDirectory, "harness.js"), "utf8");
+  connectionStyles =
+    (await readFile("packages/design-tokens/src/tokens.css", "utf8")) +
+    (
+      await Promise.all(
+        (await readdir(outputDirectory))
+          .filter((name) => name.endsWith(".css"))
+          .map((name) => readFile(resolve(outputDirectory, name), "utf8")),
+      )
+    ).join("\n") +
+    "\n*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}";
 });
 
 const organization = {
@@ -653,4 +664,255 @@ test("persistent collaboration pauses while hidden, reconciles on return, and re
           .fixtureStreams[3]!.url,
     ),
   ).toContain("after=0");
+});
+
+async function connectionHarness(
+  page: import("@playwright/test").Page,
+  options: { status?: number; clock?: boolean } = {},
+) {
+  if (options.clock !== false)
+    await page.clock.install({ time: new Date("2026-09-09T09:00:00Z") });
+  const state = { status: options.status ?? 200, checks: 0 };
+  await page.route("http://trevv.test/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<div id="root"></div>',
+      });
+    if (path !== "/api/v1/sync/status")
+      throw new Error(`Unexpected read: ${path}`);
+    state.checks++;
+    return route.fulfill({
+      status: state.status,
+      json:
+        state.status === 200
+          ? scopedAccess()
+          : {
+              error: {
+                code: "test_refresh_failure",
+                message: "The background read could not complete.",
+              },
+            },
+    });
+  });
+  await page.goto("http://trevv.test/#account");
+  await page.addScriptTag({ content: script });
+  await page.addStyleTag({ content: connectionStyles });
+  await expect.poll(() => state.checks).toBeGreaterThan(0);
+  if (state.status === 200)
+    await expect(page.locator("[data-sync-status]")).toHaveAttribute(
+      "data-sync-status",
+      "connected",
+    );
+  return state;
+}
+
+test("intermittent background failures keep one stable connection indicator and preserve drafts", async ({
+  page,
+}) => {
+  const state = await connectionHarness(page);
+  const connection = page.getByRole("group", { name: "Workspace connection" });
+  await expect(connection).toHaveCount(1);
+  const draft = page.getByRole("textbox", { name: "Draft" });
+  await draft.fill("Keep while background reads retry");
+  const initial = await draft.boundingBox();
+  for (let cycle = 0; cycle < 3; cycle++) {
+    state.status = 503;
+    await page.clock.fastForward(5_000);
+    await expect(page.locator("#stale")).toHaveText("true");
+    await expect(connection).toHaveAttribute("data-sync-status", "checking");
+    await expect(connection.getByRole("status")).toHaveText("");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    expect((await draft.boundingBox())?.y).toBe(initial?.y);
+    state.status = 200;
+    await page.clock.fastForward(5_000);
+    await expect(connection).toHaveAttribute("data-sync-status", "connected");
+    await expect(connection.getByRole("status")).toHaveText("");
+  }
+  await expect(draft).toHaveValue("Keep while background reads retry");
+  expect((await draft.boundingBox())?.y).toBe(initial?.y);
+});
+
+test("a sustained outage remains visible with read-error details and manual recovery without layout shifts", async ({
+  page,
+}) => {
+  const state = await connectionHarness(page);
+  const connection = page.getByRole("group", { name: "Workspace connection" });
+  const draft = page.getByRole("textbox", { name: "Draft" });
+  const initial = await draft.boundingBox();
+  state.status = 503;
+  await page.clock.fastForward(5_000);
+  await expect(connection).toHaveAttribute("data-sync-status", "checking");
+  await connection.getByText("Connection details", { exact: true }).click();
+  await expect(connection).toContainText(
+    "Your last loaded records and drafts are kept.",
+  );
+  await expect(connection).not.toContainText(
+    "no business change has been saved",
+  );
+  expect((await draft.boundingBox())?.y).toBe(initial?.y);
+  await page.clock.runFor(10_100);
+  await expect(connection).toHaveAttribute("data-sync-status", "interrupted");
+  await expect(connection.getByRole("status")).toHaveText("Updates delayed");
+  expect((await draft.boundingBox())?.y).toBe(initial?.y);
+  state.status = 200;
+  await connection.getByRole("button", { name: "Refresh connection" }).click();
+  await expect(connection).toHaveAttribute("data-sync-status", "connected");
+  await expect(connection.locator("details")).toHaveAttribute("open", "");
+  expect((await draft.boundingBox())?.y).toBe(initial?.y);
+});
+
+test("access revocation bypasses the background warning grace period immediately", async ({
+  page,
+}) => {
+  const state = await connectionHarness(page);
+  state.status = 503;
+  await page.clock.fastForward(5_000);
+  await expect(page.locator("[data-sync-status]")).toHaveAttribute(
+    "data-sync-status",
+    "checking",
+  );
+  state.status = 403;
+  await page.getByRole("button", { name: "Refresh connection" }).click();
+  await expect(
+    page.getByText("Your access has changed", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Draft" })).toHaveCount(0);
+  await expect(page.locator("[data-sync-status]")).toHaveAttribute(
+    "data-sync-status",
+    "access-lost",
+  );
+});
+
+test("hidden-tab expiry does not raise a warning on return while its access check recovers", async ({
+  page,
+}) => {
+  await connectionHarness(page);
+  const connection = page.getByRole("group", { name: "Workspace connection" });
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+  });
+  await page.clock.fastForward(30_000);
+  await expect(connection.getByRole("status")).toHaveText("");
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+  });
+  await page.clock.runFor(50);
+  await expect(connection.getByRole("status")).toHaveText("");
+  await expect(connection).toHaveAttribute("data-sync-status", "connected");
+});
+
+test("an initial connection failure is reported without the background grace period", async ({
+  page,
+}) => {
+  await connectionHarness(page, { status: 503 });
+  await expect(page.locator("[data-sync-status]")).toHaveAttribute(
+    "data-sync-status",
+    "interrupted",
+  );
+  await expect(
+    page
+      .getByRole("group", { name: "Workspace connection" })
+      .getByRole("status"),
+  ).toHaveText("Updates delayed");
+});
+
+test("connection details are accessible in both themes and stay within a narrow viewport", async ({
+  page,
+}, testInfo) => {
+  const { default: AxeBuilder } = await import("@axe-core/playwright");
+  await connectionHarness(page, { clock: false });
+  await page.setViewportSize({ width: 320, height: 740 });
+  const connection = page.getByRole("group", { name: "Workspace connection" });
+  await connection.getByText("Connection details", { exact: true }).click();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(
+      (value) => (document.documentElement.dataset.theme = value),
+      theme,
+    );
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(320);
+    await page.screenshot({
+      path: testInfo.outputPath(`connection-${theme}.png`),
+    });
+    const result = await new AxeBuilder({ page })
+      .include("[data-sync-status]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    expect(result.violations).toEqual([]);
+    // Axe compares all underlying element stacks across wrapped lines, even
+    // beneath an opaque floating panel. Independently verify that paragraph's
+    // actual foreground/background and painted text instead of ignoring it.
+    for (const issue of result.incomplete) {
+      expect(issue.id).toBe("color-contrast");
+      expect(issue.nodes.map((node) => node.target)).toEqual([["p"]]);
+      expect(issue.nodes[0].any[0].data.messageKey).toBe(
+        "elmPartiallyObscuring",
+      );
+    }
+    const paragraph = await connection
+      .locator("details p")
+      .evaluate((element) => {
+        const style = getComputedStyle(element);
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return {
+          foreground: style.color,
+          background: style.backgroundColor,
+          opacity: style.opacity,
+          unobscured: [...range.getClientRects()].every((rect) => {
+            const top = document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            );
+            return top === element || (top && element.contains(top));
+          }),
+        };
+      });
+    const luminance = (color: string) => {
+      const channels = color.match(/[\d.]+/g)!.map(Number);
+      expect(channels.length === 3 || channels[3] === 1).toBe(true);
+      const [r, g, b] = channels.slice(0, 3).map((value) => {
+        const normalized = value / 255;
+        return normalized <= 0.04045
+          ? normalized / 12.92
+          : ((normalized + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const foreground = luminance(paragraph.foreground),
+      background = luminance(paragraph.background);
+    expect(
+      (Math.max(foreground, background) + 0.05) /
+        (Math.min(foreground, background) + 0.05),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(paragraph.opacity).toBe("1");
+    expect(paragraph.unobscured).toBe(true);
+  }
+  await page.context().setOffline(true);
+  await expect(connection).toHaveAttribute("data-sync-status", "offline");
+  await expect(
+    connection.getByRole("button", { name: "Refresh connection" }),
+  ).toBeDisabled();
+  await page.context().setOffline(false);
+  await connection.getByText("Connection details", { exact: true }).click();
+  await expect(connection.locator("details")).not.toHaveAttribute("open");
 });

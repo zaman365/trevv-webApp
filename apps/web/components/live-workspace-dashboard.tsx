@@ -1,5 +1,7 @@
 "use client";
 
+import { LiveRefreshStatus } from "./live-refresh-status";
+
 import type { BoardDto } from "@founderhq/api-contract";
 import {
   CheckCircle2,
@@ -275,19 +277,7 @@ export function LiveWorkspaceDashboard({
           </Link>
         </nav>
 
-        {liveData.stale ? (
-          <LiveStateNotice
-            actions={
-              <button onClick={() => void liveData.refresh()} type="button">
-                Refresh
-              </button>
-            }
-            description="Last-known workspace data remains timestamped while TREVV reconnects."
-            kind="stale"
-            synced
-            title="Workspace data may be stale"
-          />
-        ) : null}
+        <LiveRefreshStatus />
         {presentedLoadError ? (
           <LiveStateNotice
             actions={

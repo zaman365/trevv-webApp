@@ -1,4 +1,6 @@
 "use client";
+
+import { LiveRefreshStatus } from "./live-refresh-status";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords } from "@/lib/live-app-data";
@@ -25,19 +27,7 @@ export function LivePersonalWork() {
           </div>
           <LiveCreateTask workspaces={data.workspaces} />
         </header>
-        {data.stale ? (
-          <LiveStateNotice
-            kind="stale"
-            synced
-            title="Reconnecting"
-            description="Your last saved tasks remain visible."
-            actions={
-              <button type="button" onClick={() => void data.refresh()}>
-                Refresh
-              </button>
-            }
-          />
-        ) : null}
+        <LiveRefreshStatus />
         {!data.workspaces.length ? (
           <LiveStateNotice
             kind="empty"

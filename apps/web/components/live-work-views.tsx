@@ -1,5 +1,7 @@
 "use client";
 
+import { LiveRefreshStatus } from "./live-refresh-status";
+
 import { AppLink as Link } from "@/components/navigation-link";
 import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
@@ -216,19 +218,7 @@ export function LiveWorkView({
             </small>
           </header>
         )}
-        {liveData.stale ? (
-          <LiveStateNotice
-            actions={
-              <button onClick={() => void liveData.refresh()} type="button">
-                Refresh
-              </button>
-            }
-            description="Last-known data remains visible with its sync timestamp."
-            kind="stale"
-            synced
-            title="This view may be stale"
-          />
-        ) : null}
+        <LiveRefreshStatus />
         {view === "settings" ? (
           <LiveSettingsFeature workspace={workspace} />
         ) : !supportedViews.has(view) ? (

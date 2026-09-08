@@ -14,6 +14,10 @@ import {
 } from "../lib/custom-workspaces";
 import { useCustomPortfolios } from "../lib/custom-portfolios";
 import { useCapturedWork } from "../lib/captured-work";
+import {
+  LiveRefreshStatus,
+  LiveRefreshStatusBoundary,
+} from "../components/live-refresh-status";
 
 import {
   LiveCollaborationEventBridge,
@@ -175,10 +179,13 @@ function ScopedHarness() {
       recordScope="summary"
       loadRecords={!account}
     >
-      <LiveAppRecordsBoundary required={!account}>
-        <Records />
-        <Clock />
-      </LiveAppRecordsBoundary>
+      <LiveRefreshStatusBoundary>
+        <LiveAppRecordsBoundary required={!account}>
+          <LiveRefreshStatus />
+          <Records />
+          <Clock />
+        </LiveAppRecordsBoundary>
+      </LiveRefreshStatusBoundary>
     </LiveAppDataProvider>
   );
 }

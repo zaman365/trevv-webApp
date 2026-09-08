@@ -69,12 +69,11 @@ import {
   LiveCollaborationEventBridge,
   LiveUnreadBadge,
 } from "@/lib/live-collaboration";
-import { presentLiveReadError } from "@/lib/live-errors";
 import {
   clearLiveDraftStorage,
   formatCompactWorkspaceDate,
 } from "@/lib/live-workflow-ui";
-import { LiveStateNotice } from "./live-state";
+import { LiveRefreshStatusBoundary } from "./live-refresh-status";
 import type { LiveCaptureSuccess } from "./live-quick-capture";
 import {
   portfolioVisualFor,
@@ -1275,28 +1274,11 @@ function WorkspaceChrome({
             </div>
           </nav>
         </header>
-        {!appSession.demo && liveData?.stale ? (
-          <div className="live-data-banner">
-            <LiveStateNotice
-              compact
-              {...(liveData.error
-                ? presentLiveReadError(liveData.error)
-                : {
-                    kind: "stale" as const,
-                    title: "Showing last-known data",
-                    description:
-                      "TREVV has not completed a recent refresh. New writes remain unavailable until acknowledged.",
-                  })}
-              synced
-              actions={
-                <button type="button" onClick={() => void liveData.refresh()}>
-                  Retry now
-                </button>
-              }
-            />
-          </div>
-        ) : null}
-        {children}
+        {appSession.demo ? (
+          children
+        ) : (
+          <LiveRefreshStatusBoundary>{children}</LiveRefreshStatusBoundary>
+        )}
       </div>
 
       <nav

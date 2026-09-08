@@ -1,5 +1,7 @@
 "use client";
 
+import { LiveRefreshStatus } from "./live-refresh-status";
+
 import type { WorkspaceDto } from "@founderhq/api-contract";
 import {
   AlertTriangle,
@@ -173,19 +175,7 @@ export function LivePortfolioExperience() {
           <LiveCreateTask workspaces={workspaces} />
         </section>
 
-        {liveData.stale ? (
-          <LiveStateNotice
-            actions={
-              <button onClick={() => void liveData.refresh()} type="button">
-                Refresh
-              </button>
-            }
-            description="The last-known portfolio remains visible while TREVV reconnects."
-            kind="stale"
-            synced
-            title="Portfolio data may be stale"
-          />
-        ) : null}
+        <LiveRefreshStatus />
         {confirmed ? (
           <LiveStateNotice
             actions={

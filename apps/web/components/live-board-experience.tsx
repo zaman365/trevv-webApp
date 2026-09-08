@@ -1,5 +1,7 @@
 "use client";
 
+import { LiveRefreshStatus } from "./live-refresh-status";
+
 import { dateTimeFormatter } from "@/lib/date-format";
 
 import type {
@@ -392,19 +394,7 @@ export function LiveBoardExperience({
             }
           />
         ) : null}
-        {liveData.stale ? (
-          <LiveStateNotice
-            actions={
-              <button onClick={() => void liveData.refresh()} type="button">
-                Refresh
-              </button>
-            }
-            description="Last-known board data is still visible and timestamped."
-            kind="stale"
-            synced
-            title="Board data may be stale"
-          />
-        ) : null}
+        <LiveRefreshStatus />
         {notice ? (
           <LiveStateNotice
             description={notice.description}
