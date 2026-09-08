@@ -100,6 +100,24 @@ three-node light set unchanged in dark Chromium. Both repeated identically on
 the initial attempt and two retries; the policy records those exact reduced
 sets and no longer accepts the larger Attention sets.
 
+The 9 September Dashboard consolidation remeasured both workspace home and
+`/dashboard` in Chromium, WebKit and mobile Chromium, in light and dark themes.
+All twelve measured combinations returned zero Axe A/AA violations. Integrating
+the collapsed workspace-details content changed Axe's generated selectors for
+the existing Dashboard nodes. An isolated browser comparison without that
+disclosure recovered the exact previously reviewed 38-node desktop fingerprint
+(`18035241…`), with identical node HTML in both themes; the combined page's
+38-node fingerprint is `dbe66ace…`. Local mobile returned `b5555274…` (38 nodes),
+and Ubuntu CI returned `1d5435c7…` (39 nodes) identically across three attempts.
+Only these exact Dashboard route records were refreshed. The zero-violation
+rule, owner and 15 September expiry remain unchanged.
+
+The new disclosure label was also inspected visually in both themes. Its
+computed text/background pairs are RGB(23,32,51) on RGB(255,255,255), or 16.27:1,
+and RGB(244,246,251) on RGB(25,30,45), or 15.35:1. It introduces no contrast
+incomplete. These measurements cover that label only; the existing layered
+Dashboard surfaces remain under the bounded deferral described above.
+
 This register does not satisfy the required keyboard, VoiceOver/NVDA, 200%
 zoom, reduced-motion, high-contrast, or touch-target evidence. Those remain
 separate release gates.
