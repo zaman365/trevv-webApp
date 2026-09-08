@@ -16,7 +16,7 @@ import {
   type QueryKey,
   type QueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { useLiveAppRecords as useLiveAppData } from "./live-app-data";
 import { liveDraftStorageKey } from "./live-workflow-ui";
 
@@ -516,7 +516,9 @@ export function useAccessibleDialog<T extends HTMLElement = HTMLDivElement>(
     closeRef.current = onClose;
   }, [onClose]);
 
-  useEffect(() => {
+  // Install keyboard handling and move focus before the open dialog paints.
+  // A fast Escape in WebKit can otherwise arrive before the passive effect.
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;

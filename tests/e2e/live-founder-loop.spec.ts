@@ -1044,6 +1044,7 @@ test.describe.serial("live founder operating loop", () => {
     await personalTask.click();
     await expect(page.getByTestId("work-item-detail")).toContainText(taskName);
     await page.keyboard.press("Escape");
+    await expect(page.getByTestId("work-item-detail")).toHaveCount(0);
     await page
       .getByTestId("live-board")
       .getByRole("button", { name: "Board", exact: true })
