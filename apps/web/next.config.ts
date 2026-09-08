@@ -21,6 +21,9 @@ const sensitiveAuthHeaders = [
 const nextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // Preserve stylesheet import order instead of merging unrelated feature
+  // styles into shared route chunks as the component graph grows.
+  experimental: { cssChunking: false },
   // The development badge is a fixed overlay. In browser CI it can cover the
   // sidebar or mobile navigation and make Axe report nondeterministic
   // `color-contrast` incomplete results for otherwise unchanged app content.

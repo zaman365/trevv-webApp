@@ -90,7 +90,7 @@ import {
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice, type LiveStateKind } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
-import styles from "./live-collaboration.module.css";
+import styles from "./live-messaging-workspace.module.css";
 
 interface MessageDraft {
   body: string;
