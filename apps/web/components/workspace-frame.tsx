@@ -430,6 +430,7 @@ function WorkspaceChrome({
           ] as const,
         ]
       : []),
+    ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
     ...(!appSession.demo
       ? [
           [
@@ -441,14 +442,6 @@ function WorkspaceChrome({
           ] as const,
         ]
       : []),
-    [
-      "guide",
-      "Getting started",
-      contextProject ? scopedHref("guide") : "/app/guide",
-      ClipboardCheck,
-      undefined,
-    ],
-    ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
     ["calendar", "Calendar", scopedHref("calendar"), CalendarDays, undefined],
     [
       "attention",
@@ -471,6 +464,13 @@ function WorkspaceChrome({
       scopedHref("messages"),
       MessageCircleMore,
       appSession.demo ? 4 : undefined,
+    ],
+    [
+      "guide",
+      "Getting started",
+      contextProject ? scopedHref("guide") : "/app/guide",
+      ClipboardCheck,
+      undefined,
     ],
   ] as const;
 

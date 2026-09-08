@@ -117,6 +117,13 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   expect(primaryNavLabels.indexOf("Dashboard")).toBe(
     primaryNavLabels.indexOf("Overview") + 1,
   );
+  // The new setup guide stays discoverable without displacing the existing
+  // Overview → Dashboard sequence, including in the mobile navigation drawer.
+  await expect(
+    page.locator(
+      `nav[aria-label="Primary navigation"] a[href="${workspaceRoute("guide")}"]`,
+    ),
+  ).toHaveText("Getting started");
   // Inside a workspace the reporting hierarchy is Workspace/Team/Personal;
   // the portfolio-wide levels belong to the Portfolio surface.
   await expect(page.getByRole("tab", { name: /^Workspace\b/ })).toHaveAttribute(
