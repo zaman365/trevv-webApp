@@ -7,8 +7,9 @@ import { useAppSession } from "@/lib/app-session-context";
 import { workspaceHref } from "@/lib/workspace-routes";
 import {
   LiveQuickCaptureDialog,
-  type LiveCaptureSuccess,
-} from "./live-quick-capture";
+  warmCreateDialog,
+} from "./lazy-create-dialogs";
+import type { LiveCaptureSuccess } from "./live-quick-capture";
 import styles from "./live-operating-loop.module.css";
 
 export function LiveCreateTask({ workspaces }: { workspaces: WorkspaceDto[] }) {
@@ -41,6 +42,8 @@ export function LiveCreateTask({ workspaces }: { workspaces: WorkspaceDto[] }) {
         type="button"
         disabled={!workspace}
         onClick={() => setOpen(true)}
+        onPointerEnter={() => warmCreateDialog("live-capture")}
+        onFocus={() => warmCreateDialog("live-capture")}
       >
         <Plus size={15} /> New task
       </button>

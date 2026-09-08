@@ -5,6 +5,7 @@ import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
 import { WorkspaceFrame } from "./workspace-frame";
 import { teamPlaybooks } from "@/lib/team-playbooks";
 import styles from "./live-operating-loop.module.css";
+import guideStyles from "./trevv-guide.module.css";
 
 export const trevvGuideSteps: {
   title: string;
@@ -115,7 +116,7 @@ export function TrevvGuide({ workspaceSlug }: { workspaceSlug?: string }) {
             </span>
           </div>
         </header>
-        <nav aria-label="Guide steps" className={styles.guideNav}>
+        <nav aria-label="Guide steps" className={guideStyles.guideNav}>
           <ol>
             {trevvGuideSteps.map((step, index) => (
               <li key={step.title}>
@@ -124,7 +125,7 @@ export function TrevvGuide({ workspaceSlug }: { workspaceSlug?: string }) {
             ))}
           </ol>
         </nav>
-        <div className={styles.guideSteps}>
+        <div className={guideStyles.guideSteps}>
           {trevvGuideSteps.map((step, index) => (
             <article key={step.title} id={`guide-step-${index + 1}`}>
               <h2>
