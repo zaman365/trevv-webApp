@@ -2058,6 +2058,37 @@ export const openApiDocument = {
       },
     },
     "/api/v1/boards/{id}": {
+      patch: {
+        tags: ["Boards"],
+        operationId: "updateBoard",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatchVersionTag" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateBoard" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Saved project or delivery cycle",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Board" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+        },
+      },
       get: {
         tags: ["Boards"],
         operationId: "getBoard",
@@ -4650,6 +4681,59 @@ export const openApiDocument = {
           },
         },
       },
+      BoardPlanning: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "state"],
+        properties: {
+          kind: {
+            type: "string",
+            enum: [
+              "project",
+              "sprint",
+              "campaign",
+              "content",
+              "backlog",
+              "operations",
+              "goals",
+            ],
+          },
+          state: { type: "string", enum: ["planned", "active", "completed"] },
+          teamId: { type: "string", minLength: 3, maxLength: 128 },
+          parentBoardId: { type: "string", minLength: 3, maxLength: 128 },
+        },
+      },
+      WorkItemPlanning: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          cycleId: { type: "string", minLength: 3, maxLength: 128 },
+          milestoneId: { type: "string", minLength: 3, maxLength: 128 },
+          teamId: { type: "string", minLength: 3, maxLength: 128 },
+          topic: { type: "string", maxLength: 160 },
+          workKind: { type: "string", maxLength: 80 },
+          estimate: { type: "number", minimum: 0, maximum: 10000 },
+          acceptanceCriteria: { type: "string", maxLength: 5000 },
+          details: {
+            type: "object",
+            maxProperties: 12,
+            propertyNames: { maxLength: 64 },
+            additionalProperties: { type: "string", maxLength: 2000 },
+          },
+        },
+      },
+      UpdateBoard: {
+        type: "object",
+        additionalProperties: false,
+        minProperties: 1,
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 160 },
+          description: { type: "string", maxLength: 5000 },
+          planning: { $ref: "#/components/schemas/BoardPlanning" },
+          startDate: { type: ["string", "null"], format: "date" },
+          endDate: { type: ["string", "null"], format: "date" },
+        },
+      },
       Board: {
         type: "object",
         required: [
@@ -4666,6 +4750,7 @@ export const openApiDocument = {
         ],
         additionalProperties: false,
         properties: {
+          planning: { $ref: "#/components/schemas/BoardPlanning" },
           id: { type: "string", minLength: 3, maxLength: 128 },
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           name: { type: "string", minLength: 1, maxLength: 160 },
@@ -4698,6 +4783,7 @@ export const openApiDocument = {
         required: ["workspaceId", "name"],
         additionalProperties: false,
         properties: {
+          planning: { $ref: "#/components/schemas/BoardPlanning" },
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           name: { type: "string", minLength: 1, maxLength: 160 },
           description: { type: "string", maxLength: 5000, default: "" },
@@ -5677,7 +5763,10 @@ export const openApiDocument = {
         allOf: [
           {
             if: {
-              properties: { type: { const: "approval" } },
+              properties: {
+                planning: { $ref: "#/components/schemas/WorkItemPlanning" },
+                type: { const: "approval" },
+              },
               required: ["type"],
             },
             then: {
@@ -5912,7 +6001,10 @@ export const openApiDocument = {
         allOf: [
           {
             if: {
-              properties: { type: { const: "approval" } },
+              properties: {
+                planning: { $ref: "#/components/schemas/WorkItemPlanning" },
+                type: { const: "approval" },
+              },
               required: ["type"],
             },
             then: {
@@ -5978,6 +6070,7 @@ export const openApiDocument = {
         minProperties: 1,
         additionalProperties: false,
         properties: {
+          planning: { $ref: "#/components/schemas/WorkItemPlanning" },
           title: { type: "string", minLength: 1, maxLength: 500 },
           description: { type: "string", maxLength: 20000 },
           priority: {
@@ -6053,6 +6146,7 @@ export const openApiDocument = {
         required: ["workspaceId", "boardId"],
         additionalProperties: false,
         properties: {
+          planning: { $ref: "#/components/schemas/WorkItemPlanning" },
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           boardId: { type: "string", minLength: 3, maxLength: 128 },
           title: { type: "string", minLength: 1, maxLength: 500 },

@@ -5,6 +5,8 @@ import { dateTimeFormatter } from "@/lib/date-format";
 import { MailPlus, RefreshCw, RotateCw, UserPlus, XCircle } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useRef, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { collaborationKeys } from "@/lib/live-collaboration";
 import {
   accountResourceError,
   useAccountResource,
@@ -32,11 +34,21 @@ interface InvitationView {
 
 export function InvitationManagement({
   initialWorkspaceId = "",
+  initialTeamId = "",
 }: {
   initialWorkspaceId?: string;
+  initialTeamId?: string;
 }) {
   const session = useAppSession();
   const liveData = useOptionalLiveAppData();
+  const [workspaceId, setWorkspaceId] = useState(initialWorkspaceId);
+  const [teamId, setTeamId] = useState(initialTeamId);
+  const directory = useQuery({
+    queryKey: collaborationKeys.teams(workspaceId),
+    queryFn: ({ signal }) =>
+      liveData!.client.withSignal(signal).teamDirectory(workspaceId),
+    enabled: Boolean(liveData && workspaceId && !session.demo),
+  });
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const mutationKeys = useRef(new Map<string, string>());
@@ -82,6 +94,7 @@ export function InvitationManagement({
       .toLowerCase();
     const role = String(data.get("role") ?? "member");
     const workspaceId = String(data.get("workspaceId") ?? "").trim();
+    const selectedTeamId = String(data.get("teamId") ?? "").trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setMessage("Enter a valid email address.");
       return;
@@ -90,7 +103,7 @@ export function InvitationManagement({
     await resource.cancel();
     setWorking("create");
     setMessage("");
-    const fingerprint = `create:${email}:${role}:${workspaceId}`;
+    const fingerprint = `create:${email}:${role}:${workspaceId}:${selectedTeamId}`;
     const idempotencyKey = mutationKey(mutationKeys.current, fingerprint);
     try {
       const response = await fetch("/api/v1/invitations", {
@@ -104,6 +117,7 @@ export function InvitationManagement({
           email,
           role,
           ...(workspaceId ? { workspaceId } : {}),
+          ...(selectedTeamId ? { teamId: selectedTeamId } : {}),
         }),
       });
       const body: unknown = await response.json().catch(() => null);
@@ -249,13 +263,11 @@ export function InvitationManagement({
             <label>
               <span>Workspace access</span>
               <select
-                defaultValue={
-                  liveData?.workspaces.find(
-                    (workspace) => workspace.id === initialWorkspaceId,
-                  )?.id ??
-                  liveData?.workspaces[0]?.id ??
-                  ""
-                }
+                value={workspaceId}
+                onChange={(event) => {
+                  setWorkspaceId(event.target.value);
+                  setTeamId("");
+                }}
                 disabled={working !== null}
                 name="workspaceId"
               >
@@ -267,6 +279,28 @@ export function InvitationManagement({
                 ))}
               </select>
             </label>
+            {workspaceId ? (
+              <label>
+                <span>Team membership</span>
+                <select
+                  name="teamId"
+                  value={teamId}
+                  disabled={working !== null || directory.isPending}
+                  onChange={(event) => setTeamId(event.target.value)}
+                >
+                  <option value="">Workspace only — no team yet</option>
+                  {(directory.data?.teams ?? []).map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  They join the selected team and its conversation when they
+                  accept.
+                </small>
+              </label>
+            ) : null}
             <button
               className="primary-button"
               disabled={working !== null}
@@ -282,8 +316,8 @@ export function InvitationManagement({
               <div>
                 <h2>Invitation history</h2>
                 <p>
-                  Raw tokens, hashes, and provider diagnostics are never shown
-                  here.
+                  Track acceptance and resend an invitation if its email could
+                  not be delivered.
                 </p>
               </div>
               <button

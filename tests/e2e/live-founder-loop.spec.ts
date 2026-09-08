@@ -129,6 +129,10 @@ test.describe.serial("live founder operating loop", () => {
     });
     await page.keyboard.press("q");
     const capture = page.getByTestId("live-quick-capture");
+    await capture
+      .getByText("Optional: save to Inbox for later", { exact: true })
+      .click();
+    await capture.getByLabel("Inbox first").check();
     await capture.getByTestId("live-capture-title").fill(capturedTitle);
     await capture.getByLabel("Priority").selectOption("urgent");
     await capture.getByTestId("live-capture-submit").click();
@@ -215,7 +219,7 @@ test.describe.serial("live founder operating loop", () => {
     const assignItem = detail.getByTestId(`assign-item-${capturedItemId}`);
     await assignItem.click();
     await expect(
-      page.getByText(/Assignment to Founder Loop Owner is durable/),
+      page.getByText("Task assigned to Founder Loop Owner.", { exact: true }),
     ).toBeVisible();
     await expect(assignItem).toBeEnabled({ timeout: 60_000 });
     await expect(reasonField).toHaveValue(assignmentReasonDraft);
@@ -546,7 +550,7 @@ test.describe.serial("live founder operating loop", () => {
       ownerPage.getByText(`Team “${teamName}” and its room were saved.`),
     ).toBeVisible();
     await expect(
-      ownerPage.getByText("Technology preset defaults"),
+      ownerPage.getByText("Technology team", { exact: true }),
     ).toBeVisible();
 
     const collaboratorTeamRoom = collaboratorPage.getByRole("button", {
@@ -1180,6 +1184,306 @@ test.describe.serial("live founder operating loop", () => {
 
     await context.close();
   });
+  test("invites a teammate into a team and collaborates on a planned project, sprint and topic", async ({
+    browser,
+  }) => {
+    test.setTimeout(480_000);
+    const ownerContext = await browser.newContext({
+      extraHTTPHeaders: clientHeaders(116),
+    });
+    const page = await ownerContext.newPage();
+    if (!organizationId) {
+      await signUpAndVerify(
+        page,
+        ownerContext,
+        "Founder Loop Owner",
+        ownerEmail,
+        password,
+        true,
+        true,
+      );
+      await submitSignIn(page, ownerEmail, password);
+      await page.waitForURL("**/onboarding");
+      await completeOnboarding(page);
+      const session = await browserJson(page, "/api/v1/session");
+      organizationId = String(
+        (session.body as { organizationId: string }).organizationId,
+      );
+      await page.getByTestId("create-workspace-open").click();
+      const workspaceForm = page.getByTestId("create-workspace-dialog");
+      await workspaceForm.getByLabel("Name").fill(workspaceName);
+      await workspaceForm
+        .getByRole("button", { name: "Create project / workspace" })
+        .click();
+      await page
+        .getByRole("link", { name: "Open workspace", exact: true })
+        .click();
+      await expect(page).toHaveURL(
+        new RegExp(`/app/workspaces/${workspaceSlug}$`),
+      );
+    } else {
+      await page.goto("/sign-in");
+      await submitSignIn(page, ownerEmail, password);
+      await page.waitForURL("**/app/portfolio");
+    }
+    const teamName = `Marketing Delivery ${suffix}`;
+    const memberName = `Invited Marketer ${suffix}`;
+    const memberEmail = `planning-member-${suffix}@example.test`;
+    const projectName = `Autumn campaign ${suffix}`;
+    const cycleName = `Launch sprint ${suffix}`;
+    const milestoneName = `Campaign ready ${suffix}`;
+    const taskName = `Prepare launch creative ${suffix}`;
+    const topicName = `Creative review ${suffix}`;
+    await page.goto(`/app/workspaces/${workspaceSlug}/teams`);
+    await page.getByTestId("create-team-open").click();
+    const creator = page.getByRole("dialog", {
+      name: "Create Team",
+      exact: true,
+    });
+    await creator.getByLabel("Team name").fill(teamName);
+    await creator.getByLabel("Feature preset").selectOption("marketing");
+    await creator.getByRole("button", { name: "Create Team and room" }).click();
+    const drawer = page.getByRole("dialog", { name: teamName, exact: true });
+    await expect(
+      drawer.getByRole("heading", { name: "Members", exact: true }),
+    ).toBeVisible();
+    await drawer.getByLabel("Email address").fill(memberEmail);
+    await drawer
+      .getByRole("button", { name: "Send invitation", exact: true })
+      .click();
+    await expect(
+      drawer.getByText(`Invitation sent to ${memberEmail}.`, { exact: false }),
+    ).toBeVisible();
+    const invite = await waitForMailAction(
+      memberEmail,
+      "You are invited to TREVV",
+    );
+    const memberContext = await browser.newContext({
+      extraHTTPHeaders: clientHeaders(117),
+    });
+    const memberPage = await memberContext.newPage();
+    await memberPage.goto(await normalizeMailAction(memberContext, invite));
+    await memberPage.waitForURL("**/sign-in?next=**");
+    await memberPage
+      .getByRole("link", { name: "Create invited account" })
+      .click();
+    await signUpAndVerify(
+      memberPage,
+      memberContext,
+      memberName,
+      memberEmail,
+      collaboratorPassword,
+      false,
+    );
+    await memberPage.waitForURL("**/sign-in?next=**");
+    await submitSignIn(memberPage, memberEmail, collaboratorPassword);
+    await memberPage.waitForURL("**/app/portfolio");
+    await drawer
+      .getByRole("button", { name: "Refresh people after acceptance" })
+      .click();
+    await expect(drawer.getByText(memberName, { exact: true })).toBeVisible();
+    await drawer
+      .getByRole("button", {
+        name: `Remove ${memberName} from ${teamName}`,
+        exact: true,
+      })
+      .click();
+    await drawer
+      .getByLabel("Add an existing person")
+      .selectOption({ label: `${memberName} · ${memberEmail}` });
+    await drawer
+      .getByRole("button", { name: "Add member", exact: true })
+      .click();
+    await expect(drawer.getByText(memberName, { exact: true })).toBeVisible();
+    await drawer
+      .getByRole("button", { name: "Topics and discussions" })
+      .click();
+    await drawer.getByLabel("Topic title").fill(topicName);
+    await drawer
+      .getByLabel("Context or question")
+      .fill("Review the launch visuals and keep the feedback together.");
+    await drawer.getByRole("button", { name: "Close Team details" }).click();
+    await page
+      .getByRole("article")
+      .filter({
+        has: page.getByRole("heading", { name: teamName, exact: true }),
+      })
+      .getByRole("button", { name: `Manage ${teamName}`, exact: true })
+      .click();
+    await drawer
+      .getByRole("button", { name: "Topics and discussions" })
+      .click();
+    await expect(drawer.getByLabel("Topic title")).toHaveValue(topicName);
+    await expect(drawer.getByLabel("Context or question")).toHaveValue(
+      "Review the launch visuals and keep the feedback together.",
+    );
+    await drawer
+      .getByRole("button", { name: "Create topic", exact: true })
+      .click();
+    await expect(
+      drawer.getByRole("heading", { name: topicName, exact: true }),
+    ).toBeVisible();
+    await memberPage.goto(`/app/workspaces/${workspaceSlug}/teams`);
+    const memberTeam = memberPage.getByRole("article").filter({
+      has: memberPage.getByRole("heading", { name: teamName, exact: true }),
+    });
+    await memberTeam.getByRole("button", { name: "View details" }).click();
+    const memberDrawer = memberPage.getByRole("dialog", {
+      name: teamName,
+      exact: true,
+    });
+    await memberDrawer
+      .getByRole("button", { name: "Topics and discussions" })
+      .click();
+    await memberDrawer
+      .getByRole("button", { name: new RegExp(topicName) })
+      .click();
+    await memberDrawer
+      .getByLabel("Reply to topic")
+      .fill("I will prepare the creative for review today.");
+    await memberDrawer.getByRole("button", { name: "Send reply" }).click();
+    await expect(
+      drawer.getByText("I will prepare the creative for review today.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await drawer.getByRole("button", { name: "Close Team details" }).click();
+    await page.goto(`/app/workspaces/${workspaceSlug}/planning`);
+    await page.getByRole("button", { name: "New project / plan" }).click();
+    const plan = page.getByRole("dialog", {
+      name: "Create a project or delivery cycle",
+    });
+    await plan
+      .getByLabel("Team", { exact: true })
+      .selectOption({ label: teamName });
+    await plan
+      .getByLabel("Start from a Marketing template")
+      .selectOption("marketing-campaign");
+    await plan.getByLabel("Plan name").fill(projectName);
+    await plan
+      .getByLabel("Goal and success criteria")
+      .fill(
+        "Generate qualified leads with a reviewed campaign and measured results.",
+      );
+    await plan
+      .getByRole("button", { name: "Create plan", exact: true })
+      .click();
+    await page.getByRole("link", { name: projectName, exact: true }).click();
+    await page
+      .getByRole("button", { name: "New milestone", exact: true })
+      .click();
+    let createTask = page.getByTestId("create-item-dialog");
+    await createTask.getByLabel("Title", { exact: true }).fill(milestoneName);
+    await createTask.getByLabel("Due date · Optional").fill("2026-09-22");
+    await createTask
+      .getByRole("button", { name: "Create task / work item" })
+      .click();
+    await page.getByRole("button", { name: "Close work item details" }).click();
+    await page.getByRole("button", { name: "Plan a sprint / cycle" }).click();
+    await plan.getByLabel("Plan name").fill(cycleName);
+    await plan
+      .getByLabel("Goal and success criteria")
+      .fill("Prepare and approve all campaign creative.");
+    await plan.getByLabel("Start date").fill("2026-09-08");
+    await plan.getByLabel("Target date").fill("2026-09-22");
+    await plan.getByLabel("State", { exact: true }).selectOption("active");
+    await plan
+      .getByRole("button", { name: "Create plan", exact: true })
+      .click();
+    await page.getByTestId("create-item-open").click();
+    createTask = page.getByTestId("create-item-dialog");
+    await createTask.getByLabel("Title", { exact: true }).fill(taskName);
+    await createTask
+      .getByLabel("Choose assignee")
+      .selectOption({ label: memberName });
+    await createTask
+      .getByText(`Planning and ${teamName} context`, { exact: true })
+      .click();
+    await createTask
+      .getByLabel("Work category", { exact: true })
+      .selectOption("Creative review");
+    await createTask
+      .getByLabel("Sprint / delivery cycle")
+      .selectOption({ label: `${cycleName} · active` });
+    await createTask
+      .getByLabel("Milestone", { exact: true })
+      .selectOption({ label: milestoneName });
+    await createTask.getByLabel("Topic / workstream").fill("Autumn launch");
+    await createTask.getByLabel("Channel", { exact: true }).fill("LinkedIn");
+    await createTask
+      .getByLabel("Acceptance criteria")
+      .fill(
+        "Approved creative, correct tracking links, and published campaign.",
+      );
+    await createTask
+      .getByRole("button", { name: "Create task / work item" })
+      .click();
+    await expect(page.getByTestId("work-item-detail")).toContainText(
+      memberName,
+    );
+    await page.getByRole("button", { name: "Close work item details" }).click();
+    await page.getByRole("link", { name: cycleName, exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: cycleName, exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("live-board")).toContainText(taskName);
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: cycleName, exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("live-board")).toContainText(taskName);
+    await memberPage.goto("/app/my-work");
+    await memberPage.getByRole("link", { name: new RegExp(taskName) }).click();
+    const detail = memberPage.getByTestId("work-item-detail");
+    await expect(
+      detail.getByRole("region", { name: "Saved planning context" }),
+    ).toContainText("LinkedIn");
+    await memberPage.screenshot({
+      path: test.info().outputPath("assigned-task-context.png"),
+    });
+    await detail.getByRole("button", { name: "Edit details" }).click();
+    await detail
+      .getByText(`Planning and ${teamName} context`, { exact: true })
+      .click();
+    await expect(detail.getByLabel("Channel", { exact: true })).toHaveValue(
+      "LinkedIn",
+    );
+    await expect(detail.getByLabel("Sprint / delivery cycle")).toHaveValue(
+      /.+/,
+    );
+    await detail.getByRole("button", { name: "Cancel editing" }).click();
+    await detail
+      .getByLabel("Post an update")
+      .fill("The creative is ready for your review.");
+    await detail
+      .getByRole("button", { name: "Post update", exact: true })
+      .click();
+    await expect(
+      detail.getByRole("region", { name: "Updates and evidence" }),
+    ).toContainText("The creative is ready for your review.");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoLiveWcagFindings(page, "planned-sprint-mobile");
+    await page.screenshot({
+      path: test.info().outputPath("team-sprint-mobile.png"),
+      fullPage: true,
+    });
+    await page.goto(`/app/workspaces/${workspaceSlug}/guide`);
+    await expect(
+      page.getByRole("heading", { name: "Run your work with TREVV" }),
+    ).toBeVisible();
+    expect(
+      await page
+        .getByRole("main")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
+    await expectNoLiveWcagFindings(page, "getting-started-guide-mobile");
+    await page.screenshot({
+      path: test.info().outputPath("getting-started-guide-mobile.png"),
+      fullPage: true,
+    });
+    await ownerContext.close();
+    await memberContext.close();
+  });
 });
 
 async function completeOnboarding(page: Page) {
@@ -1214,7 +1518,8 @@ async function createDirectCapture(
     }
     await expect(dialog).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 15_000 });
-  await dialog.getByLabel("Direct to board").check();
+  // Direct task creation is now the default; optional Inbox remains tested separately.
+  await expect(dialog.getByLabel("Direct to board")).toBeChecked();
   await dialog.getByTestId("live-capture-title").fill(title);
   await dialog.getByLabel("Work type").selectOption(type);
   await dialog.getByTestId("live-capture-submit").click();
@@ -1259,6 +1564,11 @@ async function assertInjectedCaptureFailure(
   await expect(createWork).toBeVisible();
   await createWork.click();
   const dialog = page.getByTestId("live-quick-capture");
+  if (!(await dialog.getByLabel("Inbox first").isVisible()))
+    await dialog
+      .getByText("Optional: save to Inbox for later", { exact: true })
+      .click();
+  await dialog.getByLabel("Inbox first").check();
   await dialog.getByTestId("live-capture-title").fill(`${title} ${suffix}`);
   await dialog.getByTestId("live-capture-submit").click();
   await expect(
@@ -1286,6 +1596,11 @@ async function assertTimedOutCapture(page: Page, title: string) {
   await expect(createWork).toBeVisible();
   await createWork.click();
   const dialog = page.getByTestId("live-quick-capture");
+  if (!(await dialog.getByLabel("Inbox first").isVisible()))
+    await dialog
+      .getByText("Optional: save to Inbox for later", { exact: true })
+      .click();
+  await dialog.getByLabel("Inbox first").check();
   await dialog.getByTestId("live-capture-title").fill(title);
   await dialog.getByTestId("live-capture-submit").click();
   await expect(dialog.locator('[data-live-state="offline"]')).toBeVisible();

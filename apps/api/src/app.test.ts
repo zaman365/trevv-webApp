@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  BoardDto,
   ConversationDto,
   ConversationMessageDto,
   CreateItemInput,
@@ -1136,6 +1137,53 @@ describe("TREVV API v1 demo contract", () => {
 });
 
 describe("Phase 4 collaboration routes", () => {
+  it("requires a timestamp version and retry key when updating a project plan", async () => {
+    const live = createUnavailableLiveDependencies();
+    const board: BoardDto = {
+      id: "board-live",
+      workspaceId: "workspace-live",
+      name: "Sprint one",
+      description: "Ship the checkout",
+      visibility: "private",
+      progressMode: "task_completion",
+      ordering: 0,
+      versionTag: fixedNow.toISOString(),
+      createdAt: fixedNow.toISOString(),
+      updatedAt: fixedNow.toISOString(),
+      planning: { kind: "sprint", state: "active" },
+    };
+    const updateBoard = vi.fn(async () => ({ value: board, replayed: false }));
+    const app = createApiApp({
+      mode: "live",
+      accessResolver: liveAccessResolver,
+      dataPlane: { ...live.dataPlane, updateBoard },
+      clock: () => new Date(fixedNow),
+    });
+    const request = (headers: Record<string, string>) =>
+      app.request("/api/v1/boards/board-live", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ planning: board.planning }),
+      });
+    expect((await request({})).status).toBe(428);
+    expect((await request({ "if-match": '"1"' })).status).toBe(422);
+    expect(
+      (await request({ "if-match": `"${board.versionTag}"` })).status,
+    ).toBe(422);
+    expect(updateBoard).not.toHaveBeenCalled();
+    const response = await request({
+      "if-match": `"${board.versionTag}"`,
+      "idempotency-key": "51111111-1111-4111-8111-111111111119",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("etag")).toBe(`"${board.versionTag}"`);
+    expect(updateBoard).toHaveBeenCalledWith(
+      expect.anything(),
+      board.id,
+      board.versionTag,
+      { planning: board.planning },
+    );
+  });
   it("creates a Team and returns its synchronized room version", async () => {
     const live = createUnavailableLiveDependencies();
     const createTeam = vi.fn(async () => ({

@@ -22,6 +22,7 @@ import {
   convertedInboxItemSchema,
   createPrivacyRequestSchema,
   createBoardSchema,
+  updateBoardSchema,
   createCalendarEventSchema,
   createConversationMessageSchema,
   createConversationSchema,
@@ -109,6 +110,7 @@ import {
   type CreateTeamInput,
   type CreateItemInput,
   type CreateBoardInput,
+  type UpdateBoardInput,
   type CreateCalendarEventInput,
   type CreateWaitingInput,
   type CreateWorkspaceInput,
@@ -853,6 +855,26 @@ function createApiMethods({
           "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
         },
         body: JSON.stringify(createBoardSchema.parse(input)),
+      });
+      return {
+        data: boardSchema.parse(response.body),
+        ...mutationMetadata(response.response),
+      };
+    },
+
+    updateBoard: async (
+      id: string,
+      input: UpdateBoardInput,
+      versionTag: string,
+      idempotencyKey: string,
+    ): Promise<MutationResponse<BoardDto>> => {
+      const response = await request(`/boards/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: {
+          "if-match": versionTagEntityTagSchema.parse(`"${versionTag}"`),
+          "idempotency-key": idempotencyKeySchema.parse(idempotencyKey),
+        },
+        body: JSON.stringify(updateBoardSchema.parse(input)),
       });
       return {
         data: boardSchema.parse(response.body),

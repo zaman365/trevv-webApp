@@ -190,6 +190,142 @@ function createInput(fixture: TenantFixture, title: string, id?: string) {
 }
 
 describe("PostgreSQL repositories", () => {
+  it("persists sprint and milestone context, isolates references, and rejects stale plan edits", async () => {
+    const fixture = await seedTenant("planning");
+    const other = await seedTenant("planning-other");
+    const repo = createPostgresRepositories(connection.db).forOrganization(
+      fixture.scope,
+    );
+    const cycleInput = {
+      workspaceId: fixture.workspaceA,
+      name: "Sprint one",
+      planning: {
+        kind: "sprint" as const,
+        state: "active" as const,
+        parentBoardId: fixture.boardA,
+      },
+      startDate: "2026-09-08",
+      endDate: "2026-09-22",
+    };
+    const key = crypto.randomUUID();
+    const cycle = await repo.boards.create(
+      cycleInput,
+      mutation(key, "/boards/create"),
+    );
+    const replay = await repo.boards.create(
+      cycleInput,
+      mutation(key, "/boards/create"),
+    );
+    expect(replay.value.id).toBe(cycle.value.id);
+    expect(replay.replayed).toBe(true);
+    await expect(
+      repo.boards.create(
+        {
+          ...cycleInput,
+          planning: { ...cycleInput.planning, parentBoardId: other.boardA },
+        },
+        mutation(undefined, "/boards/create"),
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    const milestone = await repo.workItems.create(
+      { ...createInput(fixture, "Release milestone"), type: "milestone" },
+      mutation(undefined, "/items/create"),
+    );
+    const planning = {
+      cycleId: cycle.value.id,
+      milestoneId: milestone.value.id,
+      topic: "Checkout",
+      workKind: "Bug",
+      estimate: 3,
+      details: { Environment: "Staging" },
+    };
+    const task = await repo.workItems.create(
+      { ...createInput(fixture, "Repair checkout"), planning },
+      mutation(undefined, "/items/create"),
+    );
+    expect((await repo.workItems.get(task.value.id)).planning).toEqual(
+      planning,
+    );
+    const captured = await repo.inbox.capture(
+      {
+        category: "task",
+        title: "Captured planned task",
+        body: "Marketing context",
+        resource: { planning },
+      },
+      mutation(undefined, "/inbox/create"),
+    );
+    const converted = await repo.inbox.convertToWorkItem(
+      captured.value.id,
+      captured.value.version,
+      { ...createInput(fixture, "Converted task"), planning },
+      mutation(undefined, "/inbox/convert"),
+    );
+    expect(converted.value.workItem.planning).toEqual(planning);
+    await expect(
+      repo.boards.update(
+        cycle.value.id,
+        { planning: { ...cycleInput.planning, parentBoardId: fixture.boardB } },
+        mutation(undefined, "/boards/update"),
+        cycle.value.updatedAt,
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+    await expect(
+      repo.workItems.create(
+        {
+          ...createInput(fixture, "Other team's task"),
+          planning: { teamId: "missing-team" },
+        },
+        mutation(undefined, "/items/create"),
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    const closed = await repo.boards.update(
+      cycle.value.id,
+      { planning: { ...cycleInput.planning, state: "completed" } },
+      mutation(undefined, "/boards/update"),
+      cycle.value.updatedAt,
+    );
+    expect(closed.value.planning?.state).toBe("completed");
+    await expect(
+      repo.boards.update(
+        cycle.value.id,
+        { name: "Stale edit" },
+        mutation(undefined, "/boards/update"),
+        cycle.value.updatedAt,
+      ),
+    ).rejects.toMatchObject({ code: "version_conflict" });
+    await expect(
+      repo.workItems.create(
+        { ...createInput(fixture, "New work in closed sprint"), planning },
+        mutation(undefined, "/items/create"),
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+    const edited = await repo.workItems.update(
+      task.value.id,
+      task.value.version,
+      { planning: { ...planning, topic: "Checkout follow-up" } },
+      mutation(undefined, "/items/update"),
+    );
+    expect(edited.value.planning?.topic).toBe("Checkout follow-up");
+    expect(edited.value.boardId).toBe(fixture.boardA);
+    await expect(
+      repo.workItems.update(
+        task.value.id,
+        edited.value.version,
+        { planning: { milestoneId: other.boardA } },
+        mutation(undefined, "/items/update"),
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    const cleared = await repo.workItems.update(
+      task.value.id,
+      edited.value.version,
+      { planning: {} },
+      mutation(undefined, "/items/update"),
+    );
+    expect(cleared.value.planning).toEqual({});
+    expect(cleared.value.assigneeIds).toEqual([fixture.userId]);
+  });
+
   it("keeps permission-filtered search bounded at 100 Workspaces and 10,000 items", async () => {
     const fixture = await seedTenant("reference-volume");
     const additionalWorkspaceIds = Array.from(

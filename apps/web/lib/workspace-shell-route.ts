@@ -4,6 +4,8 @@ export type ActiveWorkspacePage =
   | "home"
   | "portfolio"
   | "dashboard"
+  | "planning"
+  | "guide"
   | "calendar"
   | "attention"
   | "myWork"
@@ -32,6 +34,7 @@ export function workspaceShellRoute(
   pathname: string,
 ): WorkspaceShellRoute | null {
   const path = pathname.split(/[?#]/, 1)[0]?.replace(/\/$/, "") ?? "";
+  if (path === "/app/guide") return { active: "guide", requiresRecords: false };
   if (path === "/app/portfolio")
     return { active: "portfolio", requiresRecords: true };
   if (path === "/app/my-work")

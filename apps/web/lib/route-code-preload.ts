@@ -20,6 +20,8 @@ const modules = {
   settings: () => import("../components/settings-experience"),
   messages: () => import("../components/demo-messaging-experience"),
   liveMessages: () => import("../components/live-messaging-workspace"),
+  planning: () => import("../components/live-project-planning"),
+  guide: () => import("../components/trevv-guide"),
   liveTeams: () => import("../components/live-team-workflow"),
   liveWork: () => import("../components/live-work-views"),
   liveWorkMyWork: () => import("../components/live-work-my-work"),
@@ -54,6 +56,7 @@ export function routeCodeModules(
   if (pathname === "/app/portfolio")
     return ["portfolioLoader", live ? "livePortfolio" : "portfolio"];
   const pages: Record<string, ModuleKey> = {
+    "/app/guide": "guide",
     "/app/mail": "mail",
     "/app/account/sessions": "sessions",
     "/app/account/privacy": "privacy",
@@ -71,7 +74,9 @@ export function routeCodeModules(
   if (view === "stakeholder") return ["stakeholder"];
   if (!isWorkspaceView(view)) return [];
   let component: ModuleKey;
-  if (view === "calendar") component = "calendar";
+  if (view === "guide") component = "guide";
+  else if (view === "planning") component = live ? "planning" : "guide";
+  else if (view === "calendar") component = "calendar";
   else if (live)
     component =
       view === "dashboard"

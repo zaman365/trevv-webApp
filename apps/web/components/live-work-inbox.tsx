@@ -2,7 +2,12 @@
 
 import { InboxExperience } from "./email-inbox-workflow";
 
-import type { InboxItemDto, WorkItemDto } from "@founderhq/api-contract";
+import {
+  workItemPlanningSchema,
+  type InboxItemDto,
+  type WorkItemDto,
+} from "@founderhq/api-contract";
+import { planningForBoard } from "@/lib/task-planning";
 import { CheckCircle2, Inbox, LayoutList } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useMemo, useRef, useState } from "react";
@@ -154,8 +159,20 @@ function LiveInbox({
 
   async function convert(record: InboxItemDto) {
     const boardId = selectedBoardId(record);
-    if (!boardId) return;
-    const fingerprint = `inbox-convert:${record.id}:${record.version}:${boardId}`;
+    const board = boards.find((entry) => entry.id === boardId);
+    if (!board) return;
+    const capturedPlanning = workItemPlanningSchema.safeParse(
+      record.resource.planning,
+    );
+    const planning = planningForBoard(
+      board,
+      capturedPlanning.success ? capturedPlanning.data : {},
+      boards.find(
+        (entry) =>
+          entry.id === resourceString(record.resource, "suggestedBoardId"),
+      ),
+    );
+    const fingerprint = `inbox-convert:${record.id}:${record.version}:${boardId}:${JSON.stringify(planning)}`;
     setPendingId(record.id);
     setError(null);
     setConflict(null);
@@ -165,7 +182,8 @@ function LiveInbox({
         record.id,
         {
           workspaceId,
-          boardId,
+          boardId: board.planning?.parentBoardId ?? board.id,
+          planning,
           title: record.title,
           description: record.body,
           type,

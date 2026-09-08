@@ -8,6 +8,15 @@ import { RouteLoadingState } from "./live-state";
 import type { WebRuntimeMode } from "@/lib/web-runtime-config";
 import type { WorkspaceView } from "@/lib/workspace-routes";
 
+const LiveProjectPlanning = dynamic(() =>
+  import("./live-project-planning").then(
+    (module) => module.LiveProjectPlanning,
+  ),
+);
+const TrevvGuide = dynamic(() =>
+  import("./trevv-guide").then((module) => module.TrevvGuide),
+);
+
 const loading = () => <RouteLoadingState label="Loading workspace view" />;
 
 const DashboardExperience = dynamic(
@@ -121,6 +130,13 @@ export function WorkspaceModuleLoader({
     if (runtimeMode === "live")
       void preloadRouteCode(workspaceHref(workspaceSlug, view), runtimeMode);
   }, [runtimeMode, view, workspaceSlug]);
+  if (view === "guide") return <TrevvGuide workspaceSlug={workspaceSlug} />;
+  if (view === "planning")
+    return runtimeMode === "live" ? (
+      <LiveProjectPlanning workspaceSlug={workspaceSlug} />
+    ) : (
+      <TrevvGuide workspaceSlug={workspaceSlug} />
+    );
   if (view === "calendar") {
     return <CalendarExperience workspaceSlug={workspaceSlug} />;
   }

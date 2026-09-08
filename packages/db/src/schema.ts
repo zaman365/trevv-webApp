@@ -1,3 +1,4 @@
+import type { BoardPlanning } from "@founderhq/core";
 import {
   bigint,
   boolean,
@@ -460,6 +461,7 @@ export const boards = pgTable(
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     templateKey: text("template_key"),
+    planning: jsonb("planning").$type<BoardPlanning>(),
     visibility: visibilityEnum("visibility").notNull().default("private"),
     progressMode: progressModeEnum("progress_mode")
       .notNull()

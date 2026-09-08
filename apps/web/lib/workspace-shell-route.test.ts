@@ -3,6 +3,12 @@ import { workspaceShellRoute } from "./workspace-shell-route";
 import { workspaceViews } from "./workspace-routes";
 
 describe("persistent shell route ownership", () => {
+  it("opens the global guide without waiting for workspace work history", () => {
+    expect(workspaceShellRoute("/app/guide")).toEqual({
+      active: "guide",
+      requiresRecords: false,
+    });
+  });
   it("loads accessible organization records for all My Work while preserving the scoped route", () => {
     expect(workspaceShellRoute("/app/my-work")).toEqual({
       active: "myWork",

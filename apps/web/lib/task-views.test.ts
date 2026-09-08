@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { item } from "../test-fixtures/live-workflow-data";
-import { taskMatchesPeriod, taskToday, sortTasks } from "./task-views";
+import type { TeamDto } from "@founderhq/api-contract";
+import { board, item } from "../test-fixtures/live-workflow-data";
+import {
+  taskMatchesPeriod,
+  taskToday,
+  sortTasks,
+  taskBelongsToTeam,
+} from "./task-views";
 
 describe("daily task views", () => {
   it("uses the organization's day across UTC midnight and daylight saving", () => {
@@ -43,4 +49,35 @@ describe("daily task views", () => {
     expect(sortTasks(tasks, "priority")[0]?.id).toBe("later");
     expect(tasks[0]!.id).toBe("later");
   });
+});
+
+it("uses project and explicit team ownership before a person's other memberships", () => {
+  const team = {
+    id: "team-marketing",
+    workspaceId: item.workspaceId,
+    members: [],
+  } as unknown as TeamDto;
+  const project = {
+    ...board,
+    planning: {
+      kind: "project" as const,
+      state: "active" as const,
+      teamId: team.id,
+    },
+  };
+  expect(taskBelongsToTeam({ ...item, assignees: [] }, team, [project])).toBe(
+    true,
+  );
+  expect(
+    taskBelongsToTeam(
+      { ...item, planning: { teamId: "team-technology" } },
+      team,
+      [project],
+    ),
+  ).toBe(false);
+  expect(
+    taskBelongsToTeam({ ...item, workspaceId: "another-workspace" }, team, [
+      project,
+    ]),
+  ).toBe(false);
 });

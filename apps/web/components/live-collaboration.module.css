@@ -1743,3 +1743,61 @@
   flex-wrap: wrap;
   font-size: 0.75rem;
 }
+.teamTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.75rem 0;
+  background: var(--surface, #fff);
+}
+.teamTabs button {
+  min-height: 44px;
+  padding: 0.6rem 0.8rem;
+}
+.teamTabs button[aria-pressed="true"] {
+  background: var(--accent-soft, #eeedff);
+  color: var(--accent, #5750ca);
+}
+.peopleInvite,
+.topicThread {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 12px;
+  min-width: 0;
+}
+.peopleInvite h4,
+.topicThread h4 {
+  margin: 0;
+}
+.peopleInvite p,
+.topicThread p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.peopleInvite > button {
+  justify-self: start;
+}
+.topicList {
+  display: grid;
+  gap: 0.5rem;
+}
+.topicList button {
+  display: grid;
+  text-align: left;
+  gap: 0.3rem;
+  padding: 0.8rem;
+}
+.topicList button[aria-pressed="true"] {
+  border-color: var(--accent, #5750ca);
+}
+.topicThread article {
+  border-top: 1px solid var(--border, #dfe3ec);
+  padding-top: 0.75rem;
+}

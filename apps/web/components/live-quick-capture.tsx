@@ -1,24 +1,24 @@
 "use client";
 
-import type { BoardDto, WorkItemDto } from "@founderhq/api-contract";
 import {
-  CheckCircle2,
-  ChevronDown,
-  Inbox,
-  LayoutList,
-  Plus,
-  X,
-} from "lucide-react";
+  workItemPlanningSchema,
+  type BoardDto,
+  type WorkItemDto,
+} from "@founderhq/api-contract";
+import { CheckCircle2, Inbox, LayoutList, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
+import { useAccessibleDialog } from "@/lib/live-collaboration";
+import { planningForBoard } from "@/lib/task-planning";
 import {
   isLiveDraftEnvelope,
   liveDraftStorageKey,
   type LiveDraftEnvelope,
 } from "@/lib/live-workflow-ui";
 import { LiveStateNotice } from "./live-state";
+import { LiveTaskPlanningFields } from "./live-task-planning-fields";
 import { LiveAssigneeField } from "./live-assignee-field";
 import { useQueryClient } from "@tanstack/react-query";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
@@ -38,6 +38,7 @@ interface LiveCaptureDraft {
   dueDate: string;
   assigneeId?: string;
   attemptedFingerprint: string;
+  planning?: WorkItemDto["planning"];
 }
 
 export interface LiveCaptureSuccess {
@@ -66,7 +67,7 @@ export function LiveQuickCaptureDialog({
   workspaceSlug,
   onClose,
   onConfirmed,
-  defaultDestination = "inbox",
+  defaultDestination = "board",
   defaultAssigneeId = "",
 }: {
   workspaceId: string;
@@ -84,6 +85,7 @@ export function LiveQuickCaptureDialog({
     userId: session.user.id,
     scope: `quick-capture:${workspaceId}`,
   });
+  const dialogRef = useAccessibleDialog<HTMLFormElement>(onClose);
   const [draft, setDraft] = useState<LiveCaptureDraft>(() => ({
     ...emptyDraft,
     destination: defaultDestination,
@@ -113,7 +115,12 @@ export function LiveQuickCaptureDialog({
       // Draft recovery is best effort; canonical product state remains remote.
     }
     const timer = window.setTimeout(() => {
-      if (recovered) {
+      if (
+        recovered &&
+        (recovered.payload.title.trim() ||
+          recovered.payload.description.trim() ||
+          recovered.payload.attemptedFingerprint)
+      ) {
         setDraft(recovered.payload);
         setIdempotencyKey(recovered.idempotencyKey);
       }
@@ -187,7 +194,11 @@ export function LiveQuickCaptureDialog({
     if (!hydrated || !draft.title.trim() || pending) return;
     if (draft.destination === "board" && !selectedBoard) return;
     const normalizedDraft = selectedBoard
-      ? { ...draft, boardId: selectedBoard.id }
+      ? {
+          ...draft,
+          boardId: selectedBoard.id,
+          planning: draft.planning ?? planningForBoard(selectedBoard),
+        }
       : draft;
     const attemptedFingerprint = captureFingerprint(normalizedDraft);
     const attemptedDraft = { ...normalizedDraft, attemptedFingerprint };
@@ -210,6 +221,7 @@ export function LiveQuickCaptureDialog({
               priority: attemptedDraft.priority,
               dueDate: attemptedDraft.dueDate || undefined,
               assigneeId: attemptedDraft.assigneeId || undefined,
+              planning: attemptedDraft.planning,
             },
           },
           idempotencyKey,
@@ -238,7 +250,8 @@ export function LiveQuickCaptureDialog({
       const result = await liveData.client.createItem(
         {
           workspaceId,
-          boardId: selectedBoard!.id,
+          boardId: selectedBoard!.planning?.parentBoardId ?? selectedBoard!.id,
+          planning: attemptedDraft.planning,
           title: attemptedDraft.title,
           description: attemptedDraft.description,
           type: attemptedDraft.type,
@@ -296,6 +309,7 @@ export function LiveQuickCaptureDialog({
         aria-modal="true"
         className={`capture-dialog ${styles.captureDialog}`}
         data-testid="live-quick-capture"
+        ref={dialogRef}
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={submit}
         role="dialog"
@@ -305,8 +319,12 @@ export function LiveQuickCaptureDialog({
             <Plus size={18} />
           </span>
           <div>
-            <h2 id="live-capture-title">Capture work</h2>
-            <p>Save to Inbox first, or create a canonical board item now.</p>
+            <h2 id="live-capture-title">
+              {draft.destination === "board"
+                ? "Create a task"
+                : "Save for later"}
+            </h2>
+            <p>Choose a project, an owner and a due date.</p>
           </div>
           <button aria-label="Close capture" onClick={onClose} type="button">
             <X size={17} />
@@ -332,39 +350,42 @@ export function LiveQuickCaptureDialog({
             <LiveStateNotice
               kind="pending"
               title="Waiting for server confirmation"
-              description="No success is shown until the canonical record is acknowledged."
+              description="Saving your task and assignment."
             />
           ) : null}
 
-          <fieldset className={styles.choiceGrid}>
-            <legend>Destination</legend>
-            <label>
-              <input
-                checked={draft.destination === "inbox"}
-                name="capture-destination"
-                onChange={() => changeDraft({ destination: "inbox" })}
-                type="radio"
-              />
-              <Inbox size={17} />
-              <span>
-                <strong>Inbox first</strong>
-                <small>Organize it into a board when ready.</small>
-              </span>
-            </label>
-            <label>
-              <input
-                checked={draft.destination === "board"}
-                name="capture-destination"
-                onChange={() => changeDraft({ destination: "board" })}
-                type="radio"
-              />
-              <LayoutList size={17} />
-              <span>
-                <strong>Direct to board</strong>
-                <small>Create the durable WorkItem immediately.</small>
-              </span>
-            </label>
-          </fieldset>
+          <details open={draft.destination === "inbox"}>
+            <summary>Optional: save to Inbox for later</summary>
+            <fieldset className={styles.choiceGrid}>
+              <legend>Destination</legend>
+              <label>
+                <input
+                  checked={draft.destination === "inbox"}
+                  name="capture-destination"
+                  onChange={() => changeDraft({ destination: "inbox" })}
+                  type="radio"
+                />
+                <Inbox size={17} />
+                <span>
+                  <strong>Inbox first</strong>
+                  <small>Organize it into a board when ready.</small>
+                </span>
+              </label>
+              <label>
+                <input
+                  checked={draft.destination === "board"}
+                  name="capture-destination"
+                  onChange={() => changeDraft({ destination: "board" })}
+                  type="radio"
+                />
+                <LayoutList size={17} />
+                <span>
+                  <strong>Direct to board</strong>
+                  <small>Assign and track this work immediately.</small>
+                </span>
+              </label>
+            </fieldset>
+          </details>
 
           <label className={styles.field}>
             <span>Title</span>
@@ -433,9 +454,20 @@ export function LiveQuickCaptureDialog({
                 <select
                   aria-label="Destination board"
                   disabled={boardsLoading || boards.length === 0}
-                  onChange={(event) =>
-                    changeDraft({ boardId: event.target.value })
-                  }
+                  onChange={(event) => {
+                    const nextBoard = boards.find(
+                      (board) => board.id === event.target.value,
+                    );
+                    if (nextBoard)
+                      changeDraft({
+                        boardId: nextBoard.id,
+                        planning: planningForBoard(
+                          nextBoard,
+                          draft.planning,
+                          selectedBoard,
+                        ),
+                      });
+                  }}
                   required={draft.destination === "board"}
                   value={selectedBoard?.id ?? ""}
                 >
@@ -448,7 +480,6 @@ export function LiveQuickCaptureDialog({
                     </option>
                   ))}
                 </select>
-                <ChevronDown size={14} aria-hidden="true" />
               </span>
             </label>
             <label className={styles.field}>
@@ -468,6 +499,23 @@ export function LiveQuickCaptureDialog({
             value={draft.assigneeId ?? ""}
             onChange={(assigneeId) => changeDraft({ assigneeId })}
           />
+          {draft.destination === "board" && selectedBoard ? (
+            <LiveTaskPlanningFields
+              workspaceId={workspaceId}
+              boardId={selectedBoard.id}
+              value={
+                draft.planning ?? {
+                  ...(selectedBoard.planning?.teamId
+                    ? { teamId: selectedBoard.planning.teamId }
+                    : {}),
+                  ...(selectedBoard.planning?.parentBoardId
+                    ? { cycleId: selectedBoard.id }
+                    : {}),
+                }
+              }
+              onChange={(planning) => changeDraft({ planning })}
+            />
+          ) : null}
           {draft.destination === "inbox" && draft.assigneeId ? (
             <small>
               The assignee will be applied when this capture becomes a board
@@ -492,7 +540,7 @@ export function LiveQuickCaptureDialog({
         <footer>
           <span>
             {hydrated
-              ? "This recoverable draft is isolated to your account and organization."
+              ? "Your draft is saved on this device."
               : "Checking for a recoverable draft…"}
           </span>
           <div>
@@ -515,7 +563,11 @@ export function LiveQuickCaptureDialog({
               ) : (
                 <>
                   <CheckCircle2 size={15} />
-                  {error ? "Retry same request" : "Save capture"}
+                  {error
+                    ? "Retry save"
+                    : draft.destination === "board"
+                      ? "Create task"
+                      : "Save to Inbox"}
                 </>
               )}
             </button>
@@ -542,6 +594,8 @@ function isCaptureDraft(value: unknown): value is LiveCaptureDraft {
     ) &&
     typeof draft.dueDate === "string" &&
     (draft.assigneeId === undefined || typeof draft.assigneeId === "string") &&
+    (draft.planning === undefined ||
+      workItemPlanningSchema.safeParse(draft.planning).success) &&
     typeof draft.attemptedFingerprint === "string"
   );
 }
@@ -582,6 +636,7 @@ function captureFingerprint(draft: LiveCaptureDraft) {
     priority: draft.priority,
     dueDate: draft.dueDate,
     ...(draft.assigneeId ? { assigneeId: draft.assigneeId } : {}),
+    ...(draft.planning ? { planning: draft.planning } : {}),
   });
 }
 

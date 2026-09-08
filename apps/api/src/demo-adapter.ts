@@ -515,6 +515,12 @@ export function createDemoAdapter(): DemoAdapter {
       );
     },
 
+    async updateBoard() {
+      throw demoUnavailable(
+        "Project planning is available in the persistent live workspace.",
+      );
+    },
+
     async getWorkspaceCalendar(context, workspaceId, range) {
       requireAccess(context.access, "read", "workspace", {
         organizationId: "org-demo",
@@ -773,6 +779,7 @@ export function createDemoAdapter(): DemoAdapter {
           updatedAt: context.now.toISOString(),
         };
         if (patch.title !== undefined) updated.title = patch.title;
+        if (patch.planning !== undefined) updated.planning = patch.planning;
         if (patch.description !== undefined)
           updated.description = patch.description;
         if (patch.status !== undefined) updated.status = patch.status;

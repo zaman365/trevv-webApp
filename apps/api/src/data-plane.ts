@@ -16,6 +16,7 @@ import type {
   ConvertInboxItemInput,
   ConvertedInboxItem,
   CreateBoardInput,
+  UpdateBoardInput,
   CreateCalendarEventInput,
   CreateConversationInput,
   CreateConversationMessageInput,
@@ -283,6 +284,12 @@ export interface DataPlane {
   createBoard(
     context: ApiMutationContext,
     input: CreateBoardInput,
+  ): Promise<MutationResult<BoardDto>>;
+  updateBoard(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersionTag: string,
+    input: UpdateBoardInput,
   ): Promise<MutationResult<BoardDto>>;
   getWorkspaceCalendar(
     context: ApiRequestContext,

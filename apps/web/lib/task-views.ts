@@ -1,4 +1,4 @@
-import type { WorkItemDto } from "@founderhq/api-contract";
+import type { BoardDto, TeamDto, WorkItemDto } from "@founderhq/api-contract";
 import { dateTimeFormatter } from "./date-format";
 
 export const taskPeriods = [
@@ -71,4 +71,21 @@ export function sortTasks(
       a.id.localeCompare(b.id)
     );
   });
+}
+
+/** Explicit project/team ownership takes precedence over a member's other teams. */
+export function taskBelongsToTeam(
+  item: WorkItemDto,
+  team: TeamDto,
+  boards: readonly BoardDto[],
+) {
+  if (item.workspaceId !== team.workspaceId) return false;
+  const ownerTeam =
+    item.planning?.teamId ??
+    boards.find((board) => board.id === item.boardId)?.planning?.teamId;
+  return ownerTeam
+    ? ownerTeam === team.id
+    : item.assignees.some((person) =>
+        team.members.some((member) => member.user.id === person.id),
+      );
 }

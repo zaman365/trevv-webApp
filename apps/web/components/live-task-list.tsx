@@ -74,6 +74,22 @@ export function LiveTaskList({
   const [assignee, setAssignee] = useState("all");
   const [workspaceId, setWorkspaceId] = useState("all");
   const [priority, setPriority] = useState("all");
+  const [topic, setTopic] = useState("");
+  const [kind, setKind] = useState("");
+  const topics = [
+    ...new Set(
+      items.flatMap((item) =>
+        item.planning?.topic ? [item.planning.topic] : [],
+      ),
+    ),
+  ].sort();
+  const kinds = [
+    ...new Set(
+      items.flatMap((item) =>
+        item.planning?.workKind ? [item.planning.workKind] : [],
+      ),
+    ),
+  ].sort();
   const [view, setView] = useState<"list" | "board">("list");
   const [sort, setSort] = useState<"due" | "priority" | "recent">("due");
   const [today, setToday] = useState(() => taskToday(timezone));
@@ -111,7 +127,7 @@ export function LiveTaskList({
         const query = search.trim().toLocaleLowerCase();
         return (
           (!query ||
-            `${item.title} ${item.description} ${workspaceNames.get(item.workspaceId)?.name ?? ""} ${item.assignees.map((person) => person.name).join(" ")}`
+            `${item.title} ${item.description} ${item.planning?.topic ?? ""} ${item.planning?.workKind ?? ""} ${Object.values(item.planning?.details ?? {}).join(" ")} ${workspaceNames.get(item.workspaceId)?.name ?? ""} ${item.assignees.map((person) => person.name).join(" ")}`
               .toLocaleLowerCase()
               .includes(query)) &&
           (availableWorkspaceId === "all" ||
@@ -124,7 +140,9 @@ export function LiveTaskList({
                     person.id === (assignee === "me" ? userId : assignee),
                 ))) &&
           (priority === "all" || item.priority === priority) &&
-          (status === "all" || item.status === status)
+          (status === "all" || item.status === status) &&
+          (!topic || item.planning?.topic === topic) &&
+          (!kind || item.planning?.workKind === kind)
         );
       }),
     [
@@ -133,6 +151,8 @@ export function LiveTaskList({
       availableWorkspaceId,
       assignee,
       priority,
+      topic,
+      kind,
       status,
       workspaceNames,
       userId,
@@ -156,7 +176,8 @@ export function LiveTaskList({
       <>
         <strong>{item.title}</strong>
         <small>
-          {item.type}
+          {item.planning?.workKind ?? item.type}
+          {item.planning?.topic ? ` · ${item.planning.topic}` : ""}
           {workspace ? ` · ${workspace.name}` : ""}
         </small>
       </>
@@ -284,6 +305,34 @@ export function LiveTaskList({
         ))}
       </div>
       <div className={styles.filters}>
+        {topics.length > 0 ? (
+          <label>
+            Topic
+            <TaskSelect
+              value={topic}
+              onChange={(event) => setTopic(event.target.value)}
+            >
+              <option value="">All topics</option>
+              {topics.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </TaskSelect>
+          </label>
+        ) : null}
+        {kinds.length > 0 ? (
+          <label>
+            Work category
+            <TaskSelect
+              value={kind}
+              onChange={(event) => setKind(event.target.value)}
+            >
+              <option value="">All categories</option>
+              {kinds.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </TaskSelect>
+          </label>
+        ) : null}
         <label>
           Status
           <TaskSelect

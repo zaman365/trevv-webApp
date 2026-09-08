@@ -1,9 +1,11 @@
 .main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 1rem;
   width: min(100%, 92rem);
   min-height: 100%;
+  min-width: 0;
   margin: 0 auto;
   padding: clamp(1rem, 2.5vw, 2rem);
   color: var(--text, #1f2433);
@@ -662,6 +664,7 @@
   display: grid;
   gap: 0.9rem;
   min-width: 0;
+  min-height: 0;
   margin: 0;
   padding: 1rem;
   overflow-y: auto;
@@ -682,6 +685,36 @@
   color: var(--text-secondary, #5f687c);
   font-size: 0.76rem;
   font-weight: 650;
+}
+
+.field > label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.field select,
+.selectShell select {
+  width: 100%;
+  min-width: 0;
+}
+.captureDialog > footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.captureDialog > footer > span {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.captureDialog > footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.captureDialog > header p {
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .selectShell {
@@ -940,6 +973,7 @@
     padding: 0.75rem;
   }
 
+  .main,
   .main.inboxMain {
     padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
@@ -985,4 +1019,104 @@
   .workspaceCard {
     transition: none;
   }
+}
+.planGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+.contextSummary {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+.contextSummary dt {
+  color: var(--text-secondary, #5f687c);
+  font-weight: 600;
+}
+.contextSummary dd {
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.planCard {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 12px;
+  min-width: 0;
+}
+.planCard h3,
+.planCard p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.planCard p {
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+}
+.planCard progress {
+  width: 100%;
+  accent-color: var(--accent, #6258dc);
+}
+.planCard > button {
+  justify-self: start;
+}
+.guideSteps {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 60rem;
+  min-width: 0;
+  width: 100%;
+}
+.guideNav {
+  min-width: 0;
+}
+.guideSteps article {
+  border: 1px solid var(--border, #dfe3ec);
+  padding: 1.25rem;
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  scroll-margin-top: 5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.guideSteps h2 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.guideSteps ol {
+  list-style: decimal;
+  padding-left: 1.2rem;
+}
+.guideSteps article > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--fh-primary, #5b56db);
+  font-weight: 650;
+  text-decoration: underline;
+}
+.guideNav ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.5rem;
+  max-width: 60rem;
+}
+.guideNav a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+}
+.guideSteps li {
+  margin-block: 0.65rem;
+  line-height: 1.6;
 }

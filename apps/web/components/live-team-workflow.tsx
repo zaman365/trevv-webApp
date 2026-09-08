@@ -9,7 +9,7 @@ import {
   type UpdateTeamInput,
 } from "@founderhq/api-contract";
 import { TrevvApiError } from "@founderhq/api-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight,
   MessageCircleMore,
@@ -34,9 +34,14 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-collaboration.module.css";
+import { LiveInvitePerson } from "./live-invite-person";
+import { teamPlaybooks } from "@/lib/team-playbooks";
+import { ProjectPlanningContent } from "./live-project-planning";
+import { LiveTeamTopics } from "./live-team-topics";
 import { LiveMyWork } from "./live-work-my-work";
 import { retainedKey } from "@/lib/live-work-view-helpers";
-import { taskToday } from "@/lib/task-views";
+import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
+import { taskToday, taskBelongsToTeam } from "@/lib/task-views";
 
 const featureLabels: Record<TeamFeatureCapability, string> = {
   work: "Work coordination",
@@ -67,6 +72,16 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
     (record) => record.slug === workspaceSlug,
   );
   const directory = useLiveTeamDirectory(workspace?.id);
+  const boardsQuery = useQuery({
+    queryKey: workspaceResourceKeys.boards(
+      session.organization.id,
+      workspace?.id ?? "",
+    ),
+    queryFn: ({ signal }) =>
+      liveData.client.withSignal(signal).boards(workspace!.id),
+    enabled: Boolean(workspace),
+    staleTime: 30_000,
+  });
   const directoryAccessLost =
     directory.error instanceof TrevvApiError &&
     [401, 403, 404].includes(directory.error.status);
@@ -255,7 +270,7 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
           <header className={styles.surfaceHeader}>
             <div>
               <p>Workspace structure</p>
-              <h2 id="team-list-title">Teams and inherited features</h2>
+              <h2 id="team-list-title">Your teams</h2>
             </div>
             <Link href={workspaceHref(workspaceSlug, "messages")}>
               Open Messages <ChevronRight size={15} />
@@ -267,9 +282,8 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
               <Users size={25} aria-hidden="true" />
               <h3>No Teams yet</h3>
               <p>
-                Create the first Team to assign people and establish its Team
-                room. Feature presets shape the interface; server permissions
-                still control data access.
+                Create a team, add people, and start a conversation. Each team
+                has its own shared room and work view.
               </p>
               {canCreate ? (
                 <button
@@ -290,13 +304,9 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
                 const lead = team.members.find(
                   (member) => member.role === "lead",
                 );
-                const memberIds = new Set(
-                  team.members.map((member) => member.user.id),
-                );
                 const tasks = liveData.items.filter(
                   (item) =>
-                    item.workspaceId === workspace.id &&
-                    item.assignees.some((person) => memberIds.has(person.id)) &&
+                    taskBelongsToTeam(item, team, boardsQuery.data ?? []) &&
                     item.status !== "done",
                 );
                 const today = taskToday(session.organization.timezone ?? "UTC");
@@ -324,7 +334,9 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
                           <Users size={13} /> {team.members.length}
                         </span>
                       </div>
-                      <p>{team.purpose || "No Team purpose added yet."}</p>
+                      <p>
+                        {team.purpose || teamPlaybooks[team.preset].outcome}
+                      </p>
                       <dl className={styles.teamFacts}>
                         <div>
                           <dt>Lead</dt>
@@ -434,13 +446,11 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
               (item) =>
                 item.workspaceId === workspace.id &&
                 (!workTeamId ||
-                  visibleDirectory?.teams
-                    .find((team) => team.id === workTeamId)
-                    ?.members.some((member) =>
-                      item.assignees.some(
-                        (person) => person.id === member.user.id,
-                      ),
-                    )),
+                  visibleDirectory?.teams.some(
+                    (team) =>
+                      team.id === workTeamId &&
+                      taskBelongsToTeam(item, team, boardsQuery.data ?? []),
+                  )),
             )}
           />
         </section>
@@ -458,7 +468,8 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
       ) : null}
       {selectedTeam ? (
         <TeamDetailDrawer
-          key={`${selectedTeam.id}:${selectedTeam.version}`}
+          key={selectedTeam.id}
+          workspaceSlug={workspaceSlug}
           canManage={canManageTeam(
             selectedTeam,
             session.user.id,
@@ -498,13 +509,13 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
               "Team membership and room access were updated.",
             ).then(Boolean)
           }
-          onUpdate={(input) =>
+          onUpdate={(input, expectedVersion) =>
             runTeamMutation(
               () =>
                 liveData.client.updateTeam(
                   selectedTeam.id,
                   input,
-                  selectedTeam.version,
+                  expectedVersion,
                   crypto.randomUUID(),
                 ),
               "Team settings were saved.",
@@ -552,6 +563,10 @@ function CreateTeamDialog({
   onSubmit: (input: CreateTeamInput) => Promise<boolean>;
 }) {
   const dialogRef = useAccessibleDialog(onClose);
+  const session = useAppSession();
+  const creatorId = members.some((person) => person.id === session.user.id)
+    ? session.user.id
+    : "";
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [preset, setPreset] = useState<TeamPreset>("custom");
@@ -560,8 +575,10 @@ function CreateTeamDialog({
     "messages",
   ]);
   const [featuresCustomized, setFeaturesCustomized] = useState(true);
-  const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [leadUserId, setLeadUserId] = useState("");
+  const [memberIds, setMemberIds] = useState<string[]>(
+    creatorId ? [creatorId] : [],
+  );
+  const [leadUserId, setLeadUserId] = useState(creatorId);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -661,31 +678,6 @@ function CreateTeamDialog({
             </select>
           </label>
           <fieldset className={styles.choiceList}>
-            <legend>Interface options available to Team members</legend>
-            <p>
-              {featuresCustomized
-                ? "These are explicit Team options. They shape the interface but never override server data permissions."
-                : `${presetLabels[preset]} defaults are inherited by Team members. Changing a checkbox creates an explicit Team override; data authorization remains server-controlled.`}
-            </p>
-            {featureOptions.map((feature) => (
-              <label key={feature}>
-                <input
-                  checked={features.includes(feature)}
-                  onChange={(event) => {
-                    setFeaturesCustomized(true);
-                    setFeatures((current) =>
-                      event.target.checked
-                        ? [...current, feature]
-                        : current.filter((value) => value !== feature),
-                    );
-                  }}
-                  type="checkbox"
-                />
-                <span>{featureLabels[feature]}</span>
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className={styles.choiceList}>
             <legend>People</legend>
             {members.length === 0 ? (
               <p>Invite organization members before assigning this Team.</p>
@@ -724,6 +716,34 @@ function CreateTeamDialog({
                 ))}
             </select>
           </label>
+          <details>
+            <summary>Customize team tools</summary>
+            <fieldset className={styles.choiceList}>
+              <legend>Interface options available to Team members</legend>
+              <p>
+                {featuresCustomized
+                  ? "Choose the tools this team uses."
+                  : `${presetLabels[preset]} tools are selected for you. You can customize them.`}
+              </p>
+              {featureOptions.map((feature) => (
+                <label key={feature}>
+                  <input
+                    checked={features.includes(feature)}
+                    onChange={(event) => {
+                      setFeaturesCustomized(true);
+                      setFeatures((current) =>
+                        event.target.checked
+                          ? [...current, feature]
+                          : current.filter((value) => value !== feature),
+                      );
+                    }}
+                    type="checkbox"
+                  />
+                  <span>{featureLabels[feature]}</span>
+                </label>
+              ))}
+            </fieldset>
+          </details>
           <footer className={styles.dialogActions}>
             <button onClick={onClose} type="button">
               Cancel
@@ -743,6 +763,7 @@ function CreateTeamDialog({
 }
 
 function TeamDetailDrawer({
+  workspaceSlug,
   availableMembers,
   canManage,
   error,
@@ -754,6 +775,7 @@ function TeamDetailDrawer({
   onSetMember,
   onUpdate,
 }: {
+  workspaceSlug: string;
   availableMembers: Array<{ id: string; name: string; email: string }>;
   canManage: boolean;
   error: unknown;
@@ -763,15 +785,22 @@ function TeamDetailDrawer({
   onRemoveMember: (userId: string) => Promise<boolean>;
   onRefresh: () => void;
   onSetMember: (userId: string, role: "lead" | "member") => Promise<boolean>;
-  onUpdate: (input: UpdateTeamInput) => Promise<boolean>;
+  onUpdate: (
+    input: UpdateTeamInput,
+    expectedVersion: number,
+  ) => Promise<boolean>;
 }) {
   const dialogRef = useAccessibleDialog(onClose);
+  const [baseline, setBaseline] = useState(team);
   const [name, setName] = useState(team.name);
   const [purpose, setPurpose] = useState(team.purpose);
   const [preset, setPreset] = useState(team.preset);
   const [features, setFeatures] = useState(team.featureCapabilities);
   const [featuresCustomized, setFeaturesCustomized] = useState(false);
   const [newMemberId, setNewMemberId] = useState("");
+  const [tab, setTab] = useState<"people" | "work" | "topics" | "settings">(
+    "people",
+  );
   const existingIds = useMemo(
     () => new Set(team.members.map((member) => member.user.id)),
     [team.members],
@@ -779,28 +808,46 @@ function TeamDetailDrawer({
   const addableMembers = availableMembers.filter(
     (member) => !existingIds.has(member.id),
   );
-  const presetChanged = preset !== team.preset;
+  const presetChanged = preset !== baseline.preset;
   const featureOverrideChanged =
     featuresCustomized &&
     (presetChanged ||
-      !sameFeatures(features, team.featureCapabilities) ||
-      team.featurePolicySource !== "override");
+      !sameFeatures(features, baseline.featureCapabilities) ||
+      baseline.featurePolicySource !== "override");
   const profileChanged =
-    name.trim() !== team.name ||
-    purpose.trim() !== team.purpose ||
+    name.trim() !== baseline.name ||
+    purpose.trim() !== baseline.purpose ||
     presetChanged ||
     featureOverrideChanged;
+
+  if (team.version !== baseline.version && !profileChanged) {
+    setBaseline(team);
+    setName(team.name);
+    setPurpose(team.purpose);
+    setPreset(team.preset);
+    setFeatures(team.featureCapabilities);
+    setFeaturesCustomized(false);
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canManage || pending || !name.trim() || !profileChanged) return;
     const input: UpdateTeamInput = {
-      ...(name.trim() !== team.name ? { name } : {}),
-      ...(purpose.trim() !== team.purpose ? { purpose } : {}),
+      ...(name.trim() !== baseline.name ? { name } : {}),
+      ...(purpose.trim() !== baseline.purpose ? { purpose } : {}),
       ...(presetChanged ? { preset } : {}),
       ...(featureOverrideChanged ? { featureCapabilities: features } : {}),
     };
-    await onUpdate(input);
+    if (await onUpdate(input, baseline.version)) {
+      setFeaturesCustomized(false);
+      setBaseline({
+        ...team,
+        name: name.trim(),
+        purpose: purpose.trim(),
+        preset,
+        featureCapabilities: features,
+      });
+    }
   }
 
   const presented = error ? presentLiveError(error) : null;
@@ -817,13 +864,7 @@ function TeamDetailDrawer({
       >
         <header className={styles.dialogHeader}>
           <div>
-            <p>
-              {team.featurePolicySource === "preset"
-                ? `${presetLabels[team.preset]} preset defaults`
-                : team.featurePolicySource === "override"
-                  ? "Explicit Team options"
-                  : "No Team options configured"}
-            </p>
+            <p>{presetLabels[team.preset]} team</p>
             <h2 id="live-team-detail-title">{team.name}</h2>
           </div>
           <button
@@ -846,191 +887,277 @@ function TeamDetailDrawer({
               compact
             />
           ) : null}
+          <nav className={styles.teamTabs} aria-label="Team sections">
+            <button
+              type="button"
+              aria-pressed={tab === "people"}
+              onClick={() => setTab("people")}
+            >
+              People ({team.members.length})
+            </button>
+            <button
+              type="button"
+              aria-pressed={tab === "work"}
+              onClick={() => setTab("work")}
+            >
+              Projects and work
+            </button>
+            <button
+              type="button"
+              aria-pressed={tab === "topics"}
+              onClick={() => setTab("topics")}
+            >
+              Topics and discussions
+            </button>
+            <button
+              type="button"
+              aria-pressed={tab === "settings"}
+              onClick={() => setTab("settings")}
+            >
+              Settings
+            </button>
+          </nav>
           <section className={styles.roomCallout}>
             <MessageCircleMore size={18} aria-hidden="true" />
             <div>
               <strong>{team.room?.title ?? "Private Team room"}</strong>
               <span>
                 {team.room
-                  ? "Membership is synchronized atomically with this Team room."
-                  : "Room identity and activity are visible only to active Team members."}
+                  ? "Team members can read and reply in this shared room."
+                  : "Join this team to take part in its conversations."}
               </span>
             </div>
           </section>
 
-          <form className={styles.drawerSection} onSubmit={save}>
-            <header>
-              <div>
-                <h3>Team profile</h3>
-                <p>Purpose and feature preset</p>
-              </div>
-            </header>
-            <label>
-              Name
-              <input
-                disabled={!canManage}
-                maxLength={160}
-                onChange={(event) => setName(event.target.value)}
-                value={name}
-              />
-            </label>
-            <label>
-              Purpose
-              <textarea
-                disabled={!canManage}
-                maxLength={1_000}
-                onChange={(event) => setPurpose(event.target.value)}
-                rows={3}
-                value={purpose}
-              />
-            </label>
-            <label>
-              Preset
-              <select
-                disabled={!canManage}
-                onChange={(event) => {
-                  const nextPreset = event.target.value as TeamPreset;
-                  setPreset(nextPreset);
-                  if (nextPreset === "custom") {
-                    setFeaturesCustomized(true);
-                  } else {
-                    setFeatures(teamFeatureCapabilitiesForPreset(nextPreset));
-                    setFeaturesCustomized(false);
-                  }
-                }}
-                value={preset}
-              >
-                {presetOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {presetLabels[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <fieldset className={styles.choiceList} disabled={!canManage}>
-              <legend>Available to {team.members.length} Team members</legend>
-              <p>
-                These are interface options, not data authorization. Server
-                membership and roles continue to control access. Saving a
-                changed checkbox records an explicit override; untouched preset
-                defaults retain preset provenance.
-              </p>
-              {featureOptions.map((feature) => (
-                <label key={feature}>
-                  <input
-                    checked={features.includes(feature)}
-                    onChange={(event) => {
-                      setFeaturesCustomized(true);
-                      setFeatures((current) =>
-                        event.target.checked
-                          ? [...current, feature]
-                          : current.filter((value) => value !== feature),
-                      );
-                    }}
-                    type="checkbox"
-                  />
-                  <span>{featureLabels[feature]}</span>
-                </label>
-              ))}
-            </fieldset>
-            {canManage ? (
-              <button
-                className="primary-button"
-                disabled={pending || !name.trim() || !profileChanged}
-                type="submit"
-              >
-                {pending ? "Saving…" : "Save Team profile"}
-              </button>
-            ) : null}
-          </form>
-
-          <section className={styles.drawerSection}>
-            <header>
-              <div>
-                <h3>People and data access</h3>
-                <p>
-                  Server authorization remains authoritative for every person.
-                </p>
-              </div>
-              <span>{team.members.length}</span>
-            </header>
-            <div className={styles.memberList}>
-              {team.members.map((member) => (
-                <article key={member.user.id}>
-                  <span className={styles.avatar} aria-hidden="true">
-                    {initials(member.user.name)}
-                  </span>
+          {tab === "people" ? (
+            <>
+              <section className={styles.drawerSection}>
+                <header>
                   <div>
-                    <strong>{member.user.name}</strong>
-                    <small>
-                      {member.user.organizationRole.replaceAll("_", " ")} ·{" "}
-                      {member.user.email}
-                    </small>
+                    <h3>Members</h3>
+                    <p>
+                      Add people to work and talk together. A lead can manage
+                      this team.
+                    </p>
                   </div>
-                  {canManage ? (
-                    <select
-                      aria-label={`${member.user.name} Team role`}
-                      disabled={pending}
-                      onChange={(event) =>
-                        void onSetMember(
-                          member.user.id,
-                          event.target.value as "lead" | "member",
-                        )
-                      }
-                      value={member.role}
-                    >
-                      <option value="member">Member</option>
-                      <option value="lead">Lead</option>
-                    </select>
-                  ) : (
-                    <span>{member.role}</span>
-                  )}
-                  {canManage ? (
+                  <span>{team.members.length}</span>
+                </header>
+                <div className={styles.memberList}>
+                  {team.members.map((member) => (
+                    <article key={member.user.id}>
+                      <span className={styles.avatar} aria-hidden="true">
+                        {initials(member.user.name)}
+                      </span>
+                      <div>
+                        <strong>{member.user.name}</strong>
+                        <small>
+                          {member.user.organizationRole.replaceAll("_", " ")} ·{" "}
+                          {member.user.email}
+                        </small>
+                      </div>
+                      {canManage ? (
+                        <select
+                          aria-label={`${member.user.name} Team role`}
+                          disabled={pending}
+                          onChange={(event) =>
+                            void onSetMember(
+                              member.user.id,
+                              event.target.value as "lead" | "member",
+                            )
+                          }
+                          value={member.role}
+                        >
+                          <option value="member">Member</option>
+                          <option value="lead">Lead</option>
+                        </select>
+                      ) : (
+                        <span>{member.role}</span>
+                      )}
+                      {canManage ? (
+                        <button
+                          aria-label={`Remove ${member.user.name} from ${team.name}`}
+                          disabled={pending}
+                          onClick={() => void onRemoveMember(member.user.id)}
+                          type="button"
+                        >
+                          <UserMinus size={15} />
+                        </button>
+                      ) : null}
+                    </article>
+                  ))}
+                  {team.members.length === 0 ? (
+                    <p className={styles.inlineEmpty}>
+                      No people assigned yet.
+                    </p>
+                  ) : null}
+                </div>
+                {canManage ? (
+                  <div className={styles.addMemberRow}>
+                    <label>
+                      Add an existing person
+                      <select
+                        onChange={(event) => setNewMemberId(event.target.value)}
+                        value={newMemberId}
+                        disabled={addableMembers.length === 0 || pending}
+                      >
+                        <option value="">Choose person</option>
+                        {addableMembers.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name} · {member.email}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <button
-                      aria-label={`Remove ${member.user.name} from ${team.name}`}
-                      disabled={pending}
-                      onClick={() => void onRemoveMember(member.user.id)}
+                      disabled={!newMemberId || pending}
+                      onClick={async () => {
+                        if (await onSetMember(newMemberId, "member")) {
+                          setNewMemberId("");
+                        }
+                      }}
                       type="button"
                     >
-                      <UserMinus size={15} />
+                      <Plus size={15} /> Add member
                     </button>
-                  ) : null}
-                </article>
-              ))}
-              {team.members.length === 0 ? (
-                <p className={styles.inlineEmpty}>No people assigned yet.</p>
-              ) : null}
-            </div>
-            {canManage && addableMembers.length > 0 ? (
-              <div className={styles.addMemberRow}>
+                  </div>
+                ) : null}
+                {canManage && addableMembers.length === 0 ? (
+                  <p>
+                    Everyone with workspace access is already on this team.
+                    Invite another person below.
+                  </p>
+                ) : null}
+                <LiveInvitePerson
+                  workspaceId={team.workspaceId}
+                  teamId={team.id}
+                  teamName={team.name}
+                  onRefresh={onRefresh}
+                />
+              </section>
+            </>
+          ) : null}
+          {tab === "settings" ? (
+            <>
+              <form className={styles.drawerSection} onSubmit={save}>
+                <header>
+                  <div>
+                    <h3>Team profile</h3>
+                    <p>Purpose and feature preset</p>
+                  </div>
+                </header>
+                {profileChanged && baseline.version !== team.version ? (
+                  <LiveStateNotice
+                    kind="version-conflict"
+                    title="This team changed while you were editing"
+                    description="Your changes are kept. Review the updated team before applying your draft."
+                    actions={
+                      <button type="button" onClick={() => setBaseline(team)}>
+                        Apply my draft to the latest team
+                      </button>
+                    }
+                  />
+                ) : null}
                 <label>
-                  Add organization member
+                  Name
+                  <input
+                    disabled={!canManage}
+                    maxLength={160}
+                    onChange={(event) => setName(event.target.value)}
+                    value={name}
+                  />
+                </label>
+                <label>
+                  Purpose
+                  <textarea
+                    disabled={!canManage}
+                    maxLength={1_000}
+                    onChange={(event) => setPurpose(event.target.value)}
+                    rows={3}
+                    value={purpose}
+                  />
+                </label>
+                <label>
+                  Preset
                   <select
-                    onChange={(event) => setNewMemberId(event.target.value)}
-                    value={newMemberId}
+                    disabled={!canManage}
+                    onChange={(event) => {
+                      const nextPreset = event.target.value as TeamPreset;
+                      setPreset(nextPreset);
+                      if (nextPreset === "custom") {
+                        setFeaturesCustomized(true);
+                      } else {
+                        setFeatures(
+                          teamFeatureCapabilitiesForPreset(nextPreset),
+                        );
+                        setFeaturesCustomized(false);
+                      }
+                    }}
+                    value={preset}
                   >
-                    <option value="">Choose person</option>
-                    {addableMembers.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.name} · {member.email}
+                    {presetOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {presetLabels[option]}
                       </option>
                     ))}
                   </select>
                 </label>
-                <button
-                  disabled={!newMemberId || pending}
-                  onClick={async () => {
-                    if (await onSetMember(newMemberId, "member")) {
-                      setNewMemberId("");
+                <fieldset className={styles.choiceList} disabled={!canManage}>
+                  <legend>
+                    Available to {team.members.length} Team members
+                  </legend>
+                  <p>
+                    Choose which tools your team uses. Access to private work
+                    stays controlled by each person’s role and membership.
+                  </p>
+                  {featureOptions.map((feature) => (
+                    <label key={feature}>
+                      <input
+                        checked={features.includes(feature)}
+                        onChange={(event) => {
+                          setFeaturesCustomized(true);
+                          setFeatures((current) =>
+                            event.target.checked
+                              ? [...current, feature]
+                              : current.filter((value) => value !== feature),
+                          );
+                        }}
+                        type="checkbox"
+                      />
+                      <span>{featureLabels[feature]}</span>
+                    </label>
+                  ))}
+                </fieldset>
+                {canManage ? (
+                  <button
+                    className="primary-button"
+                    disabled={
+                      pending ||
+                      !name.trim() ||
+                      !profileChanged ||
+                      baseline.version !== team.version
                     }
-                  }}
-                  type="button"
-                >
-                  <Plus size={15} /> Add
-                </button>
-              </div>
-            ) : null}
-          </section>
+                    type="submit"
+                  >
+                    {pending ? "Saving…" : "Save Team profile"}
+                  </button>
+                ) : null}
+              </form>
+            </>
+          ) : null}
+          {tab === "work" ? (
+            <ProjectPlanningContent
+              workspaceId={team.workspaceId}
+              workspaceSlug={workspaceSlug}
+              teamId={team.id}
+            />
+          ) : null}
+          <div hidden={tab !== "topics"}>
+            <LiveTeamTopics
+              team={team}
+              workspaceSlug={workspaceSlug}
+              active={tab === "topics"}
+            />
+          </div>
         </div>
       </aside>
     </div>

@@ -9,6 +9,9 @@ import {
   createConversationSchema,
   createCalendarEventSchema,
   createTeamSchema,
+  createBoardSchema,
+  updateBoardSchema,
+  workItemPlanningSchema,
   createWaitingSchema,
   readRuntimeReleaseMetadata,
   readinessSchema,
@@ -638,5 +641,49 @@ describe("task deadline editing", () => {
     expect(
       openApiDocument.components.schemas.WorkItemPatch.properties.dueDate.type,
     ).toEqual(["string", "null"]);
+  });
+});
+
+describe("project and department planning contracts", () => {
+  it("preserves old task patches and validates saved planning context", () => {
+    expect(updateItemSchema.parse({ title: "Existing task" })).toEqual({
+      title: "Existing task",
+    });
+    expect(updateItemSchema.parse({ planning: {} })).toEqual({ planning: {} });
+    expect(
+      workItemPlanningSchema.parse({
+        topic: "  Launch  ",
+        workKind: "Creative review",
+        cycleId: "cycle-one",
+        milestoneId: "milestone-one",
+        details: { Channel: "LinkedIn" },
+      }),
+    ).toMatchObject({ topic: "Launch", details: { Channel: "LinkedIn" } });
+    expect(workItemPlanningSchema.safeParse({ estimate: -1 }).success).toBe(
+      false,
+    );
+    expect(
+      workItemPlanningSchema.safeParse({
+        teamId: "team-one",
+        grantsAdmin: true,
+      }).success,
+    ).toBe(false);
+  });
+  it("validates project dates and publishes the versioned update path", () => {
+    expect(
+      createBoardSchema.safeParse({
+        workspaceId: "workspace-one",
+        name: "Sprint",
+        startDate: "2026-09-22",
+        endDate: "2026-09-08",
+      }).success,
+    ).toBe(false);
+    expect(updateBoardSchema.safeParse({}).success).toBe(false);
+    expect(updateBoardSchema.parse({ startDate: null })).toEqual({
+      startDate: null,
+    });
+    expect(openApiDocument.paths["/api/v1/boards/{id}"].patch.operationId).toBe(
+      "updateBoard",
+    );
   });
 });

@@ -237,6 +237,7 @@ async function setup(
                       : path === "/api/v1/inbox"
                         ? inbox
                         : path === "/api/v1/attention" ||
+                            path === "/api/v1/invitations" ||
                             path === "/api/v1/waiting" ||
                             /\/(history|evidence)$/.test(path)
                           ? []
@@ -391,6 +392,10 @@ test("Inbox capture appears without navigation and keeps its assignee through co
     .click();
   const form = page.getByTestId("live-quick-capture");
   await form
+    .getByText("Optional: save to Inbox for later", { exact: true })
+    .click();
+  await form.getByRole("radio", { name: /Inbox first/ }).check();
+  await form
     .getByLabel("Title", { exact: true })
     .fill("Follow through on launch");
   await form.getByLabel("Choose assignee").selectOption("user-one");
@@ -481,7 +486,7 @@ test("failed direct capture retains the draft, assignee, and safe retry key", as
     .getByRole("button", { name: "Quick capture", exact: true })
     .click();
   const form = page.getByTestId("live-quick-capture");
-  await form.getByRole("radio", { name: /Direct to board/ }).check();
+  await expect(form.getByLabel("Direct to board")).toBeChecked();
   await form.getByLabel("Title", { exact: true }).fill("Keep this assignment");
   await form.getByLabel("Choose assignee").selectOption("user-two");
   await form.getByTestId("live-capture-submit").click();
@@ -505,7 +510,7 @@ test("direct capture confirms immediately and identifies the actual saved board 
     .getByRole("button", { name: "Quick capture", exact: true })
     .click();
   const form = page.getByTestId("live-quick-capture");
-  await form.getByRole("radio", { name: /Direct to board/ }).check();
+  await expect(form.getByLabel("Direct to board")).toBeChecked();
   await form.getByLabel("Title", { exact: true }).fill("Task for teammate");
   await form.getByLabel("Choose assignee").selectOption("user-two");
   state.hold();

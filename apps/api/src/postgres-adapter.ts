@@ -1122,6 +1122,7 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
           workspaceId: input.workspaceId,
           name: input.name,
           description: input.description,
+          ...(input.planning ? { planning: input.planning } : {}),
           visibility: input.visibility,
           progressMode: input.progressMode,
           ...(input.templateKey !== undefined
@@ -1133,6 +1134,29 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
           ...(input.endDate !== undefined ? { endDate: input.endDate } : {}),
         },
         mutation(context),
+      );
+      return { value: toBoardDto(result.value), replayed: result.replayed };
+    },
+
+    async updateBoard(context, id, expectedVersionTag, input) {
+      const repositories = scoped(options.repositories, context);
+      const current = await repositories.boards.get(id);
+      requireWorkspaceAccess(context.access, "update", current.workspaceId);
+      const result = await repositories.boards.update(
+        id,
+        {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.planning !== undefined ? { planning: input.planning } : {}),
+          ...(input.startDate !== undefined
+            ? { startDate: input.startDate }
+            : {}),
+          ...(input.endDate !== undefined ? { endDate: input.endDate } : {}),
+        },
+        mutation(context),
+        new Date(expectedVersionTag),
       );
       return { value: toBoardDto(result.value), replayed: result.replayed };
     },
@@ -1309,6 +1333,7 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         id,
         expectedVersion,
         {
+          ...(input.planning ? { planning: input.planning } : {}),
           workspaceId: input.workspaceId,
           boardId: input.boardId,
           type: input.type,
@@ -1376,6 +1401,7 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
           workspaceId: input.workspaceId,
           boardId: input.boardId,
           title: input.title,
+          ...(input.planning ? { planning: input.planning } : {}),
           description: input.description,
           type: input.type,
           priority: input.priority,
@@ -1402,6 +1428,7 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         id,
         expectedVersion,
         {
+          ...(patch.planning !== undefined ? { planning: patch.planning } : {}),
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.description !== undefined
             ? { description: patch.description }
@@ -2256,6 +2283,7 @@ function toBoardDto(
     name: board.name,
     description: board.description,
     ...(board.templateKey ? { templateKey: board.templateKey } : {}),
+    ...(board.planning ? { planning: board.planning } : {}),
     visibility: board.visibility,
     progressMode: board.progressMode,
     ...(board.manualProgressValue === null
@@ -2400,6 +2428,7 @@ function toWorkItemDto(item: WorkItemProjection): WorkItemDto {
     boardId: item.boardId,
     title: item.title,
     description: item.description,
+    ...(item.planning ? { planning: item.planning } : {}),
     type: item.type,
     priority: item.priority,
     status: item.status,

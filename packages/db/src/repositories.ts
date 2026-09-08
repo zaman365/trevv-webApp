@@ -1,3 +1,4 @@
+import type { BoardPlanning, WorkItemPlanning } from "@founderhq/core";
 import { createHash } from "node:crypto";
 import {
   createIdentityRepositories,
@@ -142,6 +143,7 @@ export interface MutationResult<T> {
 }
 
 export interface WorkItemProjection {
+  planning?: WorkItemPlanning;
   id: string;
   workspaceId: string;
   boardId: string;
@@ -233,6 +235,7 @@ export interface ChangeRadarProjection {
 }
 
 export interface CreateWorkItemInput {
+  planning?: WorkItemPlanning;
   id?: string;
   workspaceId: string;
   boardId: string;
@@ -307,6 +310,7 @@ export type UpdateWorkspaceInput = Partial<
 };
 
 export interface ConvertInboxToWorkItemInput {
+  planning?: WorkItemPlanning;
   workspaceId: string;
   boardId: string;
   title?: string;
@@ -321,6 +325,7 @@ export interface ConvertInboxToWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  planning?: WorkItemPlanning;
   title?: string;
   description?: string;
   priority?: (typeof workItems.$inferInsert)["priority"];
@@ -448,6 +453,7 @@ export type InvitationProjection = Omit<
 > & { workspaceId?: string; teamId?: string };
 
 export interface CreateBoardInput {
+  planning?: BoardPlanning;
   workspaceId: string;
   name: string;
   description?: string;
@@ -490,6 +496,7 @@ export interface UpdateCalendarEventInput {
 }
 
 export interface UpdateBoardInput {
+  planning?: BoardPlanning;
   name?: string;
   description?: string;
   visibility?: (typeof boards.$inferInsert)["visibility"];
@@ -716,6 +723,7 @@ export interface OrganizationScopedRepositories {
       id: string,
       input: UpdateBoardInput,
       context: MutationContext,
+      expectedUpdatedAt?: Date,
     ) => Promise<MutationResult<typeof boards.$inferSelect>>;
   };
   calendars: {
@@ -1447,9 +1455,16 @@ function createScopedRepositories(
         runInTransaction((transaction) =>
           createBoard(transaction, scope, input, context),
         ),
-      update: (id, input, context) =>
+      update: (id, input, context, expectedUpdatedAt) =>
         runInTransaction((transaction) =>
-          updateBoard(transaction, scope, id, input, context),
+          updateBoard(
+            transaction,
+            scope,
+            id,
+            input,
+            context,
+            expectedUpdatedAt,
+          ),
         ),
     },
     calendars: {
@@ -4364,6 +4379,103 @@ async function listBoards(
   return rows.map(({ board }) => board);
 }
 
+async function validatePlanningTeam(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  workspaceId: string,
+  teamId?: string,
+) {
+  if (!teamId) return;
+  const [team] = await database
+    .select({ id: teams.id })
+    .from(teams)
+    .where(
+      and(
+        eq(teams.organizationId, scope.organizationId),
+        eq(teams.workspaceId, workspaceId),
+        eq(teams.id, teamId),
+        isNull(teams.deletedAt),
+      ),
+    );
+  if (!team) throw notFound();
+}
+
+async function validateBoardPlanning(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  workspaceId: string,
+  planning?: BoardPlanning,
+  boardId?: string,
+) {
+  if (!planning) return;
+  await validatePlanningTeam(database, scope, workspaceId, planning.teamId);
+  if (planning.parentBoardId) {
+    if (planning.parentBoardId === boardId)
+      throw new RepositoryError(
+        "constraint_conflict",
+        "A project cannot contain itself.",
+      );
+    const parent = await getActiveBoard(
+      database,
+      scope.organizationId,
+      planning.parentBoardId,
+    );
+    if (parent.workspaceId !== workspaceId || parent.planning?.parentBoardId)
+      throw notFound();
+  }
+}
+
+async function validateItemPlanning(
+  database: TrevvDatabase,
+  scope: OrganizationScope,
+  workspaceId: string,
+  boardId: string,
+  planning?: WorkItemPlanning,
+  itemId?: string,
+  previousCycleId?: string,
+) {
+  if (!planning) return;
+  await validatePlanningTeam(database, scope, workspaceId, planning.teamId);
+  if (planning.cycleId) {
+    const cycle = await getActiveBoard(
+      database,
+      scope.organizationId,
+      planning.cycleId,
+    );
+    if (
+      cycle.workspaceId !== workspaceId ||
+      cycle.planning?.parentBoardId !== boardId
+    )
+      throw notFound();
+    if (
+      cycle.planning.state === "completed" &&
+      previousCycleId !== planning.cycleId
+    )
+      throw new RepositoryError(
+        "constraint_conflict",
+        "Choose an open sprint or cycle.",
+      );
+  }
+  if (planning.milestoneId) {
+    if (planning.milestoneId === itemId)
+      throw new RepositoryError(
+        "constraint_conflict",
+        "A milestone cannot depend on itself.",
+      );
+    const milestone = await requireScopedWorkItem(
+      database,
+      scope.organizationId,
+      planning.milestoneId,
+    );
+    if (
+      milestone.workspaceId !== workspaceId ||
+      milestone.boardId !== boardId ||
+      milestone.itemType !== "milestone"
+    )
+      throw notFound();
+  }
+}
+
 async function createBoard(
   transaction: TrevvDatabase,
   scope: OrganizationScope,
@@ -4382,6 +4494,12 @@ async function createBoard(
         scope.organizationId,
         input.workspaceId,
       );
+      await validateBoardPlanning(
+        transaction,
+        scope,
+        input.workspaceId,
+        input.planning,
+      );
       const now = context.now ?? new Date();
       const [created] = await transaction
         .insert(boards)
@@ -4392,6 +4510,7 @@ async function createBoard(
           name: input.name,
           description: input.description ?? "",
           templateKey: input.templateKey,
+          planning: input.planning,
           visibility: input.visibility,
           progressMode: input.progressMode,
           startDate: input.startDate,
@@ -4425,16 +4544,58 @@ async function updateBoard(
   id: string,
   input: UpdateBoardInput,
   context: MutationContext,
+  expectedUpdatedAt?: Date,
 ) {
   return withIdempotency(
     transaction,
     scope,
     context,
-    { id, ...input },
+    { id, ...input, ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}) },
     async () => {
       await assertActorMembership(transaction, scope);
-      await getActiveBoard(transaction, scope.organizationId, id);
-      const now = context.now ?? new Date();
+      const previous = await getActiveBoard(
+        transaction,
+        scope.organizationId,
+        id,
+      );
+      if (
+        expectedUpdatedAt &&
+        previous.updatedAt.getTime() !== expectedUpdatedAt.getTime()
+      )
+        throw new RepositoryError(
+          "version_conflict",
+          "This project changed. Reload it before saving again.",
+        );
+      if (
+        input.planning &&
+        input.planning.parentBoardId !== previous.planning?.parentBoardId
+      )
+        throw new RepositoryError(
+          "constraint_conflict",
+          "Keep the existing parent project; create a new cycle to reorganize delivery.",
+        );
+      await validateBoardPlanning(
+        transaction,
+        scope,
+        previous.workspaceId,
+        input.planning ?? previous.planning ?? undefined,
+        id,
+      );
+      const startDate =
+        input.startDate === undefined ? previous.startDate : input.startDate;
+      const endDate =
+        input.endDate === undefined ? previous.endDate : input.endDate;
+      if (startDate && endDate && startDate > endDate)
+        throw new RepositoryError(
+          "constraint_conflict",
+          "The end date must be on or after the start date.",
+        );
+      const now = new Date(
+        Math.max(
+          (context.now ?? new Date()).getTime(),
+          previous.updatedAt.getTime() + 1,
+        ),
+      );
       const [updated] = await transaction
         .update(boards)
         .set({ ...input, updatedAt: now })
@@ -4442,12 +4603,19 @@ async function updateBoard(
           and(
             eq(boards.organizationId, scope.organizationId),
             eq(boards.id, id),
+            ...(expectedUpdatedAt
+              ? [eq(boards.updatedAt, expectedUpdatedAt)]
+              : []),
             isNull(boards.archivedAt),
             isNull(boards.deletedAt),
           ),
         )
         .returning();
-      if (!updated) throw notFound();
+      if (!updated)
+        throw new RepositoryError(
+          "version_conflict",
+          "This project changed. Reload it before saving again.",
+        );
       await writeAuditAndOutbox(transaction, scope, {
         action: "board.updated",
         aggregateType: "board",
@@ -5919,6 +6087,9 @@ async function hydrateWorkItems(
       assignees: assigned.map(({ userId, name }) => ({ id: userId, name })),
       ...(approvalState ? { approvalState } : {}),
       ...(decisionState ? { decisionState } : {}),
+      ...(isRecord(typeData.planning)
+        ? { planning: typeData.planning as WorkItemPlanning }
+        : {}),
       version: item.version,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
@@ -6494,9 +6665,17 @@ async function createWorkItem(
       scope.organizationId,
       input.assigneeIds ?? [],
     );
+    await validateItemPlanning(
+      transaction,
+      scope,
+      input.workspaceId,
+      input.boardId,
+      input.planning,
+    );
     const now = context.now ?? new Date();
     const id = input.id ?? crypto.randomUUID();
     const typeData = {
+      ...(input.planning ? { planning: input.planning } : {}),
       ...(input.approvalState ? { approvalState: input.approvalState } : {}),
       ...(input.decisionState ? { decisionState: input.decisionState } : {}),
     };
@@ -6584,6 +6763,21 @@ async function updateWorkItem(
         ? existing.typeData
         : {};
       const typeData = { ...existingTypeData };
+      if (input.planning !== undefined) {
+        await validateItemPlanning(
+          transaction,
+          scope,
+          existing.workspaceId,
+          existing.boardId,
+          input.planning,
+          id,
+          isRecord(existingTypeData.planning) &&
+            typeof existingTypeData.planning.cycleId === "string"
+            ? existingTypeData.planning.cycleId
+            : undefined,
+        );
+        typeData.planning = input.planning;
+      }
       if (input.approvalState !== undefined) {
         if (input.approvalState === null) delete typeData.approvalState;
         else typeData.approvalState = input.approvalState;
@@ -6602,6 +6796,7 @@ async function updateWorkItem(
       if (input.priority !== undefined) update.priority = input.priority;
       if (input.dueDate !== undefined) update.dueDate = input.dueDate ?? null;
       if (
+        input.planning !== undefined ||
         input.approvalState !== undefined ||
         input.decisionState !== undefined
       )
@@ -7605,6 +7800,7 @@ async function convertInboxToWorkItem(
         scope,
         {
           id: captured.id,
+          ...(input.planning ? { planning: input.planning } : {}),
           workspaceId: input.workspaceId,
           boardId: input.boardId,
           title: input.title ?? captured.title,

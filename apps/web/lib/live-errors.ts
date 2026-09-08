@@ -100,3 +100,9 @@ function isOfflineError(error: unknown): boolean {
     /fetch|network|load failed|offline/i.test(error.message)
   );
 }
+
+export function isLiveAccessLoss(error: unknown): boolean {
+  return (
+    error instanceof TrevvApiError && [401, 403, 404].includes(error.status)
+  );
+}

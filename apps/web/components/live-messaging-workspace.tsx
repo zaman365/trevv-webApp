@@ -1804,6 +1804,9 @@ const MessageRow = memo(function MessageRow({
             <Reply size={12} aria-hidden="true" /> Threaded reply
           </small>
         ) : null}
+        {typeof message.metadata.topicTitle === "string" ? (
+          <h3>{message.metadata.topicTitle}</h3>
+        ) : null}
         <p>{message.body}</p>
         {needsResponse ? (
           <div className={styles.responseState}>

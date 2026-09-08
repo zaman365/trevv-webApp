@@ -1,5 +1,7 @@
 export const workspaceViews = [
   "dashboard",
+  "planning",
+  "guide",
   "calendar",
   "attention",
   "my-work",

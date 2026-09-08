@@ -40,6 +40,11 @@ import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
 import { LiveTaskList } from "./live-task-list";
+import { ProjectPlanningContent } from "./live-project-planning";
+import {
+  LiveTaskPlanningFields,
+  LiveTaskPlanningSummary,
+} from "./live-task-planning-fields";
 import { LiveAssigneeField } from "./live-assignee-field";
 
 type ItemPatch = Parameters<
@@ -89,7 +94,8 @@ export function LiveBoardExperience({
       workspace
         ? liveData.items.filter(
             (item) =>
-              item.workspaceId === workspace.id && item.boardId === boardId,
+              item.workspaceId === workspace.id &&
+              (item.boardId === boardId || item.planning?.cycleId === boardId),
           )
         : [],
     [boardId, liveData.items, workspace],
@@ -116,6 +122,7 @@ export function LiveBoardExperience({
   const evidence = detailsAccessLost ? [] : (detailsQuery.data?.evidence ?? []);
   const detailLoading = detailsQuery.isPending;
   const [createOpen, setCreateOpen] = useState(false);
+  const [createType, setCreateType] = useState<WorkItemDto["type"]>("task");
   const retryKeys = useRef(new Map<string, string>());
   const timezone = session.organization.timezone ?? "UTC";
   const [itemHash, setItemHash] = useState("");
@@ -330,13 +337,48 @@ export function LiveBoardExperience({
             className="primary-button"
             data-testid="create-item-open"
             disabled={!board}
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              setCreateType("task");
+              setCreateOpen(true);
+            }}
             type="button"
           >
             <Plus size={15} /> New task / work item
           </button>
         </header>
 
+        <div className={styles.rowActions}>
+          <Link href={workspaceHref(workspaceSlug, "planning")}>
+            All projects and sprints
+          </Link>
+          <button
+            type="button"
+            disabled={!board}
+            onClick={() => {
+              setCreateType("milestone");
+              setCreateOpen(true);
+            }}
+          >
+            New milestone
+          </button>
+          {board?.planning?.parentBoardId ? (
+            <Link
+              href={`${workspaceHref(workspaceSlug)}/boards/${board.planning.parentBoardId}`}
+            >
+              Parent project
+            </Link>
+          ) : null}
+        </div>
+        {board?.description ? (
+          <p style={{ whiteSpace: "pre-wrap" }}>{board.description}</p>
+        ) : null}
+        {board ? (
+          <p>
+            {board.planning?.state ?? "planned"} ·{" "}
+            {board.startDate ?? "No start date"} →{" "}
+            {board.endDate ?? "No target date"}
+          </p>
+        ) : null}
         {loading ? (
           <LiveStateNotice kind="loading" title="Loading canonical board" />
         ) : null}
@@ -436,8 +478,20 @@ export function LiveBoardExperience({
           )}
         </section>
 
+        {board && !board.planning?.parentBoardId ? (
+          <ProjectPlanningContent
+            workspaceId={workspace.id}
+            workspaceSlug={workspaceSlug}
+            parentBoard={board}
+            {...(board.planning?.teamId
+              ? { teamId: board.planning.teamId }
+              : {})}
+          />
+        ) : null}
+
         {createOpen && board ? (
           <CreateWorkItemDialog
+            initialType={createType}
             board={board}
             onClose={() => setCreateOpen(false)}
             onConfirmed={async (item, replayed) => {
@@ -496,6 +550,7 @@ export function LiveBoardExperience({
 }
 
 function CreateWorkItemDialog({
+  initialType,
   workspaceId,
   board,
   onClose,
@@ -503,13 +558,21 @@ function CreateWorkItemDialog({
 }: {
   workspaceId: string;
   board: BoardDto;
+  initialType: WorkItemDto["type"];
   onClose: () => void;
   onConfirmed: (item: WorkItemDto, replayed: boolean) => Promise<void>;
 }) {
   const liveData = useLiveAppData();
+  const dialogRef = useAccessibleDialog<HTMLFormElement>(onClose);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState<WorkItemDto["type"]>("task");
+  const [type, setType] = useState<WorkItemDto["type"]>(initialType);
+  const [planning, setPlanning] = useState<
+    NonNullable<WorkItemDto["planning"]>
+  >({
+    ...(board.planning?.teamId ? { teamId: board.planning.teamId } : {}),
+    ...(board.planning?.parentBoardId ? { cycleId: board.id } : {}),
+  });
   const [priority, setPriority] = useState<WorkItemDto["priority"]>("normal");
   const [dueDate, setDueDate] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
@@ -535,7 +598,8 @@ function CreateWorkItemDialog({
       const result = await liveData.client.createItem(
         {
           workspaceId,
-          boardId: board.id,
+          boardId: board.planning?.parentBoardId ?? board.id,
+          planning,
           title: title.trim(),
           description: description.trim(),
           type,
@@ -558,12 +622,17 @@ function CreateWorkItemDialog({
 
   const presented = error ? presentLiveError(error) : null;
   return (
-    <div className="dialog-layer" onMouseDown={onClose} role="presentation">
+    <div
+      className={`dialog-layer ${styles.dialogLayer}`}
+      onMouseDown={onClose}
+      role="presentation"
+    >
       <form
         aria-labelledby="create-live-item-title"
         aria-modal="true"
-        className={`capture-dialog ${styles.smallDialog}`}
+        className={`capture-dialog ${styles.captureDialog}`}
         data-testid="create-item-dialog"
+        ref={dialogRef}
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={submit}
         role="dialog"
@@ -593,7 +662,7 @@ function CreateWorkItemDialog({
             />
           ) : pending ? (
             <LiveStateNotice
-              description="No success is shown until the server returns the canonical WorkItem."
+              description="Saving the task and its assignment."
               kind="pending"
               title="Waiting for server confirmation"
             />
@@ -675,6 +744,15 @@ function CreateWorkItemDialog({
               setAssigneeId(id);
             }}
           />
+          <LiveTaskPlanningFields
+            workspaceId={workspaceId}
+            boardId={board.id}
+            value={planning}
+            onChange={(value) => {
+              edit();
+              setPlanning(value);
+            }}
+          />
           <label className={styles.field}>
             <span>Description · Optional</span>
             <textarea
@@ -690,7 +768,7 @@ function CreateWorkItemDialog({
         </fieldset>
         <footer>
           <span>
-            The retry key is retained until this exact draft is confirmed.
+            The task, its owner and planning details are saved together.
           </span>
           <div>
             <button onClick={onClose} type="button">
@@ -739,6 +817,7 @@ function WorkItemDetail({
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
   const [editDescription, setEditDescription] = useState(item.description);
+  const [editPlanning, setEditPlanning] = useState(item.planning ?? {});
   const [editPriority, setEditPriority] = useState(item.priority);
   const [editDueDate, setEditDueDate] = useState(item.dueDate ?? "");
   const [editVersion, setEditVersion] = useState(item.version);
@@ -900,6 +979,54 @@ function WorkItemDetail({
             </button>
           ) : null}
           {item.description ? <p>{item.description}</p> : null}
+          <LiveTaskPlanningSummary item={item} />
+          <section className={styles.detailEditor} aria-label="Task owner">
+            <p>
+              Assigned to:{" "}
+              {item.assignees.map((person) => person.name).join(", ") ||
+                "Unassigned"}
+            </p>
+            <LiveAssigneeField
+              workspaceId={item.workspaceId}
+              value={assigneeId}
+              onChange={setAssigneeId}
+              disabled={pending}
+              allowUnassigned={true}
+            />
+            <div className={styles.buttonGrid}>
+              <button
+                data-testid={`assign-item-${item.id}`}
+                disabled={pending}
+                onClick={() =>
+                  void run(async () => {
+                    const response = await liveData.client.assignItem(
+                      item.id,
+                      { assigneeIds: assigneeId ? [assigneeId] : [] },
+                      item.version,
+                      retainedKey(
+                        retryKeys.current,
+                        `assign:${item.id}:${item.version}:${assigneeId}`,
+                      ),
+                    );
+                    const assigneeName =
+                      response.data.item.assignees.find(
+                        (assignee) => assignee.id === assigneeId,
+                      )?.name ?? "the selected member";
+                    return {
+                      item: response.data.item,
+                      confirmation: assigneeId
+                        ? `Task assigned to ${assigneeName}.`
+                        : "Task is now unassigned.",
+                    };
+                  })
+                }
+                type="button"
+              >
+                <UserPlus size={14} />{" "}
+                {assigneeId ? "Assign selected person" : "Remove assignment"}
+              </button>
+            </div>
+          </section>
           <section className={styles.detailEditor} aria-label="Task details">
             <header>
               <h3>Details</h3>
@@ -910,6 +1037,7 @@ function WorkItemDetail({
                     setEditTitle(item.title);
                     setEditDescription(item.description);
                     setEditPriority(item.priority);
+                    setEditPlanning(item.planning ?? {});
                     setEditDueDate(item.dueDate ?? "");
                     setEditVersion(item.version);
                     setEditing(true);
@@ -928,6 +1056,7 @@ function WorkItemDetail({
                     description: editDescription.trim(),
                     priority: editPriority,
                     dueDate: editDueDate || null,
+                    planning: editPlanning,
                   };
                   void run(async () => {
                     const response = await liveData.client.updateItem(
@@ -1011,6 +1140,13 @@ function WorkItemDetail({
                     />
                   </label>
                 </div>
+                <LiveTaskPlanningFields
+                  workspaceId={item.workspaceId}
+                  boardId={item.boardId}
+                  itemId={item.id}
+                  value={editPlanning}
+                  onChange={setEditPlanning}
+                />
                 <div className={styles.buttonGrid}>
                   <button
                     type="submit"
@@ -1107,47 +1243,7 @@ function WorkItemDetail({
               value={waitingDate}
             />
           </label>
-          <p>
-            Assigned to:{" "}
-            {item.assignees.map((person) => person.name).join(", ") ||
-              "Unassigned"}
-          </p>
-          <LiveAssigneeField
-            workspaceId={item.workspaceId}
-            value={assigneeId}
-            onChange={setAssigneeId}
-            disabled={pending}
-            allowUnassigned={false}
-          />
           <div className={styles.buttonGrid}>
-            <button
-              data-testid={`assign-item-${item.id}`}
-              disabled={pending}
-              onClick={() =>
-                void run(async () => {
-                  const response = await liveData.client.assignItem(
-                    item.id,
-                    { assigneeIds: [assigneeId] },
-                    item.version,
-                    retainedKey(
-                      retryKeys.current,
-                      `assign:${item.id}:${item.version}:${assigneeId}`,
-                    ),
-                  );
-                  const assigneeName =
-                    response.data.item.assignees.find(
-                      (assignee) => assignee.id === assigneeId,
-                    )?.name ?? "the selected member";
-                  return {
-                    item: response.data.item,
-                    confirmation: `Assignment to ${assigneeName} is durable at version ${response.data.item.version}.`,
-                  };
-                })
-              }
-              type="button"
-            >
-              <UserPlus size={14} /> Assign selected person
-            </button>
             <button
               data-testid={`block-item-${item.id}`}
               disabled={pending || !reason.trim()}

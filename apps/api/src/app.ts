@@ -35,6 +35,7 @@ import {
   updateMembershipSchema,
   updateRetentionPolicySchema,
   updateTeamSchema,
+  updateBoardSchema,
   updateWorkspaceSchema,
   waitingActionSchema,
   weeklyReviewInputSchema,
@@ -1956,6 +1957,43 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     return context.json(result.value, 201);
   });
 
+  api.patch("/api/v1/boards/:id", async (context) => {
+    const expectedVersionTag = readVersionTagIfMatch(context);
+    if (expectedVersionTag instanceof Response) return expectedVersionTag;
+    const parsed = updateBoardSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the project changes.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.updateBoard(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/boards/:id",
+        { id, expectedVersionTag, patch: parsed.data },
+        idempotency,
+      ),
+      id,
+      expectedVersionTag,
+      parsed.data,
+    );
+    setVersionTagMutationHeaders(
+      context,
+      result.value.versionTag,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
   api.get(
     "/api/v1/workspaces/:workspaceId/calendar",
     zValidator(
@@ -3038,6 +3076,7 @@ export function createUnavailableLiveDependencies(): {
     listBoards: unavailable,
     getBoard: unavailable,
     createBoard: unavailable,
+    updateBoard: unavailable,
     getWorkspaceCalendar: unavailable,
     createCalendarEvent: unavailable,
     updateCalendarEvent: unavailable,

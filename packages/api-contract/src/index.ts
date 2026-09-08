@@ -500,12 +500,46 @@ export const progressModeSchema = z.enum([
   "manual",
 ]);
 
+export const boardPlanningSchema = z
+  .object({
+    kind: z.enum([
+      "project",
+      "sprint",
+      "campaign",
+      "content",
+      "backlog",
+      "operations",
+      "goals",
+    ]),
+    state: z.enum(["planned", "active", "completed"]),
+    teamId: idSchema.optional(),
+    parentBoardId: idSchema.optional(),
+  })
+  .strict();
+
+export const workItemPlanningSchema = z
+  .object({
+    cycleId: idSchema.optional(),
+    milestoneId: idSchema.optional(),
+    teamId: idSchema.optional(),
+    topic: z.string().trim().max(160).optional(),
+    workKind: z.string().trim().max(80).optional(),
+    estimate: z.number().min(0).max(10_000).optional(),
+    acceptanceCriteria: z.string().trim().max(5_000).optional(),
+    details: z
+      .record(z.string().max(64), z.string().max(2_000))
+      .refine((value) => Object.keys(value).length <= 12)
+      .optional(),
+  })
+  .strict();
+
 export const boardSchema = z.object({
   id: idSchema,
   workspaceId: idSchema,
   name: z.string().min(1).max(160),
   description: z.string().max(5_000),
   templateKey: z.string().max(120).optional(),
+  planning: boardPlanningSchema.optional(),
   visibility: boardVisibilitySchema,
   progressMode: progressModeSchema,
   manualProgressValue: z.number().min(0).max(100).optional(),
@@ -524,12 +558,35 @@ export const createBoardSchema = z
     name: z.string().trim().min(1).max(160),
     description: z.string().trim().max(5_000).default(""),
     templateKey: z.string().trim().max(120).optional(),
+    planning: boardPlanningSchema.optional(),
     visibility: boardVisibilitySchema.default("private"),
     progressMode: progressModeSchema.default("task_completion"),
     startDate: z.iso.date().optional(),
     endDate: z.iso.date().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) =>
+      !value.startDate || !value.endDate || value.endDate >= value.startDate,
+    {
+      path: ["endDate"],
+      message: "The end date must be on or after the start date.",
+    },
+  );
+
+export const updateBoardSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160).optional(),
+    description: z.string().trim().max(5_000).optional(),
+    planning: boardPlanningSchema.optional(),
+    startDate: z.iso.date().nullable().optional(),
+    endDate: z.iso.date().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Change at least one project field.",
+  );
 
 export const workspaceCreationSchema = z.object({
   workspace: workspaceSchema,
@@ -658,6 +715,7 @@ const workItemBaseSchema = z.object({
   boardId: idSchema,
   title: z.string().min(1).max(500),
   description: z.string().max(20_000),
+  planning: workItemPlanningSchema.optional(),
   type: itemTypeSchema,
   priority: prioritySchema,
   status: itemStatusSchema,
@@ -1458,6 +1516,7 @@ export const updateInboxItemSchema = z
 
 export const convertInboxItemSchema = z
   .object({
+    planning: workItemPlanningSchema.optional(),
     workspaceId: idSchema,
     boardId: idSchema,
     title: z.string().trim().min(1).max(500).optional(),
@@ -1773,6 +1832,7 @@ export const updateItemSchema = workItemBaseSchema
     status: true,
     priority: true,
     dueDate: true,
+    planning: true,
   })
   .partial()
   .extend({
@@ -1833,6 +1893,7 @@ export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceSchema>;
 export type WorkspaceCreation = z.infer<typeof workspaceCreationSchema>;
 export type BoardDto = z.infer<typeof boardSchema>;
 export type CreateBoardInput = z.infer<typeof createBoardSchema>;
+export type UpdateBoardInput = z.infer<typeof updateBoardSchema>;
 export type CalendarProvider = z.infer<typeof calendarProviderSchema>;
 export type CalendarDto = z.infer<typeof calendarSchema>;
 export type CalendarEventDto = z.infer<typeof calendarEventSchema>;

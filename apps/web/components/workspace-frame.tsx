@@ -430,6 +430,24 @@ function WorkspaceChrome({
           ] as const,
         ]
       : []),
+    ...(!appSession.demo
+      ? [
+          [
+            "planning",
+            "Projects & sprints",
+            scopedHref("planning"),
+            FolderKanban,
+            undefined,
+          ] as const,
+        ]
+      : []),
+    [
+      "guide",
+      "Getting started",
+      contextProject ? scopedHref("guide") : "/app/guide",
+      ClipboardCheck,
+      undefined,
+    ],
     ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
     ["calendar", "Calendar", scopedHref("calendar"), CalendarDays, undefined],
     [
