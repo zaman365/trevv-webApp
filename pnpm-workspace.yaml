@@ -2,6 +2,11 @@ packages:
   - apps/*
   - packages/*
 
+# Security patches for transitive image processing and YAML parsing dependencies.
+overrides:
+  "sharp@<0.35.4": "0.35.4"
+  "js-yaml@>=4.0.0 <4.3.2": "4.3.2"
+
 allowBuilds:
   "@tailwindcss/oxide": true
   esbuild: true
