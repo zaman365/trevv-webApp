@@ -60,7 +60,9 @@ export function workspaceShellRoute(
     return null;
   }
   const view = match[2];
-  if (!view || /^boards\/[^/]+$/.test(view))
+  if (!view)
+    return { active: "dashboard", workspaceSlug, requiresRecords: true };
+  if (/^boards\/[^/]+$/.test(view))
     return { active: "workspace", workspaceSlug, requiresRecords: true };
   if (view === "settings/import")
     return { active: "settings", workspaceSlug, requiresRecords: true };

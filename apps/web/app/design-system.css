@@ -2327,3 +2327,53 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* Workspace context remains available within the single Dashboard surface. */
+.dashboard-workspace-details {
+  margin-top: 24px;
+  border: 1px solid var(--fh-border);
+  border-radius: 14px;
+  background: var(--fh-surface);
+  padding: 20px;
+}
+.dashboard-workspace-details > summary {
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.workspace-details-body {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+}
+.workspace-details-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+}
+.workspace-details-heading h2 {
+  margin: 6px 0;
+  font-size: 22px;
+}
+.workspace-details-heading p {
+  font-size: 12px;
+  color: var(--fh-muted);
+}
+.workspace-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.workspace-details-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 760px) {
+  .workspace-details-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

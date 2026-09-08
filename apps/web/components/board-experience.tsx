@@ -647,7 +647,7 @@ function BoardWorkspace({
                       <Copy size={13} /> Copy board link
                     </button>
                     <Link href={workspaceHref(workspace.slug)} role="menuitem">
-                      Open workspace overview
+                      Open workspace dashboard
                     </Link>
                   </span>
                 )}

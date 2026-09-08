@@ -52,6 +52,7 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { WorkspaceFrame } from "./workspace-frame";
 import { BarChart, DonutChart, type Bar, type Slice } from "./charts";
 import { HealthBar, PageHero, StatTile } from "./ui-kit";
+import { WorkspaceDetails } from "./workspace-details";
 import { Hint } from "./learning-hint";
 
 type ScopeFilter = "all" | "open";
@@ -111,12 +112,16 @@ export function DashboardExperience({
 }) {
   return (
     <WorkspaceFrame active="dashboard" workspaceSlug={workspaceSlug}>
-      <DashboardMain />
+      <DashboardMain workspaceSlug={workspaceSlug} />
     </WorkspaceFrame>
   );
 }
 
-function DashboardMain() {
+function DashboardMain({
+  workspaceSlug,
+}: {
+  workspaceSlug: string | undefined;
+}) {
   const {
     scope,
     portfolioId,
@@ -1149,6 +1154,12 @@ function DashboardMain() {
           </div>
         </Widget>
       </div>
+      {workspaceSlug && (
+        <details className="dashboard-workspace-details">
+          <summary>Workspace details, milestones and updates</summary>
+          <WorkspaceDetails slug={workspaceSlug} />
+        </details>
+      )}
     </main>
   );
 }

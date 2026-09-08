@@ -39,8 +39,8 @@ export const workerRouteEntrypoints = Object.freeze({
   "/sign-in": ["auth-experience"],
   "/app/portfolio": ["portfolio-loader", "live-portfolio-experience"],
   "/app/workspaces/:workspace": [
-    "workspace-overview-loader",
-    "live-workspace-overview",
+    "workspace-module-loader",
+    "live-workspace-dashboard",
   ],
   ...Object.fromEntries(
     workspaceViews.map((view) => [
@@ -50,7 +50,7 @@ export const workerRouteEntrypoints = Object.freeze({
         view === "calendar"
           ? "calendar-experience"
           : view === "dashboard"
-            ? "live-workspace-overview"
+            ? "live-workspace-dashboard"
             : view === "messages"
               ? "live-messaging-workspace"
               : view === "teams"

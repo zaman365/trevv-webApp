@@ -60,11 +60,12 @@ async function setup(
   page: Page,
   hash = "",
   options: {
-    overview?: boolean;
+    dashboard?: boolean;
+    records?: WorkItemDto[];
     operations?: (route: Route) => Promise<void>;
   } = {},
 ) {
-  let records = [structuredClone(item)];
+  let records = options.records ?? [structuredClone(item)];
   let inbox: InboxItemDto[] = [];
   const evidence: WorkItemEvidenceDto[] = [];
   let holdReads = false;
@@ -247,13 +248,13 @@ async function setup(
     return route.fulfill({ json });
   });
   await page.goto(
-    `https://trevv.test/${options.overview ? "?view=overview" : ""}${hash}`,
+    `https://trevv.test/${options.dashboard ? "?view=dashboard" : ""}${hash}`,
   );
-  if (options.overview) {
-    await expect(page.getByTestId("live-workspace-overview")).toBeVisible();
+  if (options.dashboard) {
+    await expect(page.getByTestId("live-dashboard")).toBeVisible();
     await expect(
       page
-        .getByRole("region", { name: "Plans", exact: true })
+        .getByRole("region", { name: "Project progress", exact: true })
         .getByRole("link", {
           name: new RegExp(board.name),
         }),
@@ -287,7 +288,7 @@ async function setup(
   };
 }
 
-test("overview keeps worker status loading when boards finish first", async ({
+test("dashboard keeps worker status loading when boards finish first", async ({
   page,
 }) => {
   let release!: () => void;
@@ -296,19 +297,19 @@ test("overview keeps worker status loading when boards finish first", async ({
   });
   try {
     await setup(page, "", {
-      overview: true,
+      dashboard: true,
       operations: async (route) => {
         await pending;
         await route.fulfill({ json: { pendingOutbox: 3, failedCount: 0 } });
       },
     });
-    const health = page.getByRole("region", { name: "Recomputation health" });
+    const health = page.getByRole("region", { name: "Update delivery" });
     await expect(
       health.getByText("Loading worker status", { exact: true }),
     ).toBeVisible();
     await expect(health.getByRole("alert")).toHaveCount(0);
     release();
-    await expect(health.getByText("Pending outbox records")).toBeVisible();
+    await expect(health.getByText("Updates waiting")).toBeVisible();
     await expect(
       health.getByText("Loading worker status", { exact: true }),
     ).toHaveCount(0);
@@ -318,12 +319,12 @@ test("overview keeps worker status loading when boards finish first", async ({
   }
 });
 
-test("overview shows a real worker status failure and supports retry", async ({
+test("dashboard shows a real worker status failure and supports retry", async ({
   page,
 }) => {
   let failing = true;
   await setup(page, "", {
-    overview: true,
+    dashboard: true,
     operations: (route) =>
       route.fulfill(
         failing
@@ -339,14 +340,128 @@ test("overview shows a real worker status failure and supports retry", async ({
           : { json: { pendingOutbox: 0, failedCount: 0 } },
       ),
   });
-  const health = page.getByRole("region", { name: "Recomputation health" });
+  const health = page.getByRole("region", { name: "Update delivery" });
   await expect(health.getByRole("alert")).toContainText(
     "Worker status is unavailable",
   );
   failing = false;
   await health.getByRole("button", { name: "Retry worker status" }).click();
-  await expect(health.getByText("Pending outbox records")).toBeVisible();
+  await expect(health.getByText("Updates waiting")).toBeVisible();
   await expect(health.getByRole("alert")).toHaveCount(0);
+});
+
+test("dashboard charts drill into saved work and preserve inline status updates", async ({
+  page,
+}) => {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const records: WorkItemDto[] = [
+    { ...item, id: "complete", title: "Completed launch", status: "done" },
+    {
+      ...item,
+      id: "blocked",
+      title: "Blocked launch",
+      status: "blocked",
+      dueDate: "2020-01-01",
+      assignees: [{ id: "user-one", name: "Owner" }],
+    },
+    {
+      ...item,
+      id: "working",
+      title: "Campaign creative",
+      status: "working",
+      dueDate: today,
+      assignees: [{ id: "user-two", name: "Teammate" }],
+    },
+    {
+      ...item,
+      id: "milestone",
+      title: "Launch milestone",
+      type: "milestone",
+      dueDate: "2099-01-01",
+    },
+  ];
+  const state = await setup(page, "", { dashboard: true, records });
+  await page
+    .getByRole("button", { name: "Refresh test records", exact: true })
+    .click();
+  const totals = page.getByRole("region", { name: "Workspace totals" });
+  await expect(totals.getByRole("button", { name: /Open work/ })).toContainText(
+    "3",
+  );
+  await expect(
+    page.getByRole("img", { name: "1 of 4 work items completed", exact: true }),
+  ).toBeVisible();
+  await totals.getByRole("button", { name: /Completed/ }).click();
+  const source = page.locator("#dashboard-source-work");
+  await expect(
+    source.getByRole("link", { name: /Completed launch/ }),
+  ).toBeVisible();
+  await expect(
+    source.getByRole("link", { name: /Blocked launch/ }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Show blocked work: 1", exact: true })
+    .click();
+  await expect(
+    source.getByRole("link", { name: /Blocked launch/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Show in progress work: 1", exact: true })
+    .click();
+  await source
+    .getByRole("combobox", {
+      name: "Status for Campaign creative",
+      exact: true,
+    })
+    .selectOption("review");
+  await expect(
+    page.getByText("Server confirmed “Campaign creative”"),
+  ).toBeVisible();
+  expect(state.transitions).toContainEqual(
+    expect.objectContaining({
+      path: "/api/v1/items/working",
+      body: { status: "review" },
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Clear chart filter", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Dashboard people", exact: true })
+    .selectOption("mine");
+  await expect(totals.getByRole("button", { name: /Open work/ })).toContainText(
+    "1",
+  );
+  await expect(
+    source.getByRole("link", { name: /Campaign creative/ }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("combobox", { name: "Dashboard people", exact: true })
+    .selectOption("all");
+  await page
+    .getByRole("combobox", { name: "Dashboard deadline window", exact: true })
+    .selectOption("30");
+  await expect(
+    page
+      .getByRole("region", { name: "Upcoming deadlines" })
+      .getByRole("combobox", { name: "Work due on" })
+      .locator("option"),
+  ).toHaveCount(31);
+  await page.getByRole("combobox", { name: "Work due on" }).selectOption(today);
+  await expect(
+    source.getByRole("link", { name: /Campaign creative/ }),
+  ).toBeVisible();
+  await expect(
+    source.getByRole("link", { name: /Blocked launch/ }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Milestones", exact: true }),
+  ).toContainText("Launch milestone");
 });
 
 test("creation assigns work, opens its details, and survives a slow post-save refresh", async ({

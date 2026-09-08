@@ -12,7 +12,7 @@ The hierarchy is Organization → Portfolio → Workspace → Board → Work Ite
 
 ## V1 surfaces
 
-- Web/PWA: authentication, archetype-neutral onboarding, personalized Portfolio roll-ups, multi-Portfolio, Attention, Waiting, Change Radar, reviews/snapshots, Workspace overview, Table and Kanban boards, My Work, actionable Inbox, Decisions, Approvals, Ideas/Insights, Blueprints, stakeholder sharing, import/export, and EN/DE foundations.
+- Web/PWA: authentication, archetype-neutral onboarding, personalized Portfolio roll-ups, multi-Portfolio, Attention, Waiting, Change Radar, reviews/snapshots, Workspace Dashboard with visual progress and actionable chart filters, Table and Kanban boards, My Work, actionable Inbox, Decisions, Approvals, Ideas/Insights, Blueprints, stakeholder sharing, import/export, and EN/DE foundations.
 - API/worker: versioned Hono API, shared schemas and client, authorization, domain calculations, persistence repositories, event outbox, and scheduled-job foundations.
 - Mobile: Expo shell that restores a session and reads Portfolio/Workspaces through the shared client.
 - Desktop: Tauri 2/Vite shell that restores a session and reads Portfolio/Workspaces through the shared client.

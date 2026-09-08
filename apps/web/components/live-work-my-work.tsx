@@ -11,6 +11,7 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { retainedKey } from "@/lib/live-work-view-helpers";
 import { LiveStateNotice } from "./live-state";
 import { LiveTaskList } from "./live-task-list";
+import type { TaskPeriod } from "@/lib/task-views";
 import styles from "./live-operating-loop.module.css";
 
 export function LiveMyWork({
@@ -18,11 +19,13 @@ export function LiveMyWork({
   workspaceSlug,
   assignedToMe = true,
   title = "My tasks",
+  initialPeriod = "open",
 }: {
   items: WorkItemDto[];
   workspaceSlug?: string;
   assignedToMe?: boolean;
   title?: string;
+  initialPeriod?: TaskPeriod;
 }) {
   useReportRouteReady(true);
   const session = useAppSession();
@@ -172,7 +175,7 @@ export function LiveMyWork({
           timezone={session.organization.timezone ?? "UTC"}
           pendingIds={pendingIds}
           onStatusChange={(item, status) => void changeStatus(item, status)}
-          initialPeriod="open"
+          initialPeriod={initialPeriod}
           complete={liveData.recordsComplete}
         />
       )}

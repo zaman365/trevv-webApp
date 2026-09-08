@@ -3,6 +3,16 @@ import { workspaceShellRoute } from "./workspace-shell-route";
 import { workspaceViews } from "./workspace-routes";
 
 describe("persistent shell route ownership", () => {
+  it("selects Dashboard for both workspace home and the explicit dashboard route", () => {
+    expect(workspaceShellRoute("/app/workspaces/launch")).toEqual({
+      active: "dashboard",
+      workspaceSlug: "launch",
+      requiresRecords: true,
+    });
+    expect(workspaceShellRoute("/app/workspaces/launch/dashboard")).toEqual(
+      workspaceShellRoute("/app/workspaces/launch"),
+    );
+  });
   it("opens the global guide without waiting for workspace work history", () => {
     expect(workspaceShellRoute("/app/guide")).toEqual({
       active: "guide",

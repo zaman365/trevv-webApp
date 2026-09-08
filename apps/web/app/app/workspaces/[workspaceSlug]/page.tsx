@@ -1,4 +1,4 @@
-import { WorkspaceOverviewLoader } from "@/components/workspace-overview-loader";
+import { WorkspaceModuleLoader } from "@/components/workspace-module-loader";
 import { requireWorkspaceAccess } from "@/lib/server-auth";
 import { webRuntimeMode } from "@/lib/web-runtime-config";
 import { workspaceHref } from "@/lib/workspace-routes";
@@ -13,7 +13,8 @@ export default async function WorkspacePage({
     details: false,
   });
   return (
-    <WorkspaceOverviewLoader
+    <WorkspaceModuleLoader
+      view="dashboard"
       runtimeMode={webRuntimeMode()}
       workspaceSlug={workspaceSlug}
     />

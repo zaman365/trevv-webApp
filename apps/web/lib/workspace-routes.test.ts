@@ -6,7 +6,7 @@ import {
 } from "./workspace-routes";
 
 describe("workspace routes", () => {
-  it("builds canonical overview and module URLs", () => {
+  it("builds workspace home and module URLs", () => {
     expect(workspaceHref("northstar-apparel")).toBe(
       "/app/workspaces/northstar-apparel",
     );

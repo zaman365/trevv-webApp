@@ -27,7 +27,7 @@
     "/app/workspaces/:workspace": {
       "manifest": "server/app/app/workspaces/[workspaceSlug]/page_client-reference-manifest.js",
       "selectedDynamicImports": [
-        "components/workspace-overview-loader.tsx -> ./live-workspace-overview"
+        "components/workspace-module-loader.tsx -> ./live-workspace-dashboard"
       ],
       "maximumInitialJavaScriptGzipBytes": 275000,
       "maximumInitialCssGzipBytes": 75000

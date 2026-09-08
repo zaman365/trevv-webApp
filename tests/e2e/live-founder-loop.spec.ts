@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import { expectNoLiveWcagFindings } from "./live-accessibility";
+import { themePreferenceCookie } from "../../apps/web/lib/display-preferences";
 
 const webOrigin = "http://127.0.0.1:3200";
 const password = "Live-founder-loop-password-1";
@@ -91,7 +92,7 @@ test.describe.serial("live founder operating loop", () => {
     await expect(page).toHaveURL(
       new RegExp(`/app/workspaces/${workspaceSlug}$`),
     );
-    await expect(page.getByTestId("live-workspace-overview")).toBeVisible();
+    await expect(page.getByTestId("live-dashboard")).toBeVisible();
 
     const workspaceRecords = await browserJson(page, "/api/v1/workspaces");
     const workspace = (
@@ -884,9 +885,7 @@ test.describe.serial("live founder operating loop", () => {
     });
     await ownerPage.unroute(accessReadPattern);
     await ownerPage.reload();
-    await expect(
-      ownerPage.getByTestId("live-workspace-overview"),
-    ).toBeVisible();
+    await expect(ownerPage.getByTestId("live-dashboard")).toBeVisible();
 
     const memberships = await browserJson(ownerPage, "/api/v1/memberships");
     const collaboratorMembership = (
@@ -1494,10 +1493,222 @@ test.describe.serial("live founder operating loop", () => {
     await ownerContext.close();
     await memberContext.close();
   });
+  test("workspace home is one visual dashboard with accurate chart drilldowns", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 1050 },
+      extraHTTPHeaders: {
+        ...clientHeaders(117),
+        "x-trevv-test-registration-bootstrap": registrationBootstrapSecret,
+      },
+    });
+    const page = await context.newPage();
+    const email = `dashboard-${suffix}@example.test`;
+    await signUpAndVerify(
+      page,
+      context,
+      "Dashboard Owner",
+      email,
+      password,
+      true,
+      true,
+    );
+    await submitSignIn(page, email, password);
+    await page.waitForURL("**/onboarding");
+    await completeOnboarding(page, `Dashboard ${suffix}`);
+    const session = (await browserJson(page, "/api/v1/session")).body as {
+      user: { id: string };
+    };
+    const workspaces = (await browserJson(page, "/api/v1/workspaces"))
+      .body as Array<{ id: string; slug: string }>;
+    const workspace = workspaces[0]!;
+    const today = new Date().toISOString().slice(0, 10);
+    const dateAt = (offset: number) => {
+      const date = new Date(`${today}T12:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + offset);
+      return date.toISOString().slice(0, 10);
+    };
+    const plans: Array<{ id: string; name: string }> = [];
+    for (const name of [
+      "Autumn campaign",
+      "Product launch",
+      "Customer onboarding",
+    ]) {
+      const result = await browserJson(page, "/api/v1/boards", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          name,
+          description: "A clear goal and shared delivery plan",
+          visibility: "organization",
+          progressMode: "task_completion",
+          startDate: dateAt(-7),
+          endDate: dateAt(21),
+          planning: { kind: "project", state: "active" },
+        }),
+      });
+      expect(result.status).toBe(201);
+      plans.push(result.body as { id: string; name: string });
+    }
+    const statuses = [
+      "not_started",
+      "working",
+      "review",
+      "blocked",
+      "done",
+    ] as const;
+    const titles = [
+      "Prepare launch brief",
+      "Review creative assets",
+      "Publish campaign",
+      "Confirm release scope",
+      "Complete QA checklist",
+      "Launch milestone",
+      "Agree support handoff",
+      "Update customer guide",
+      "Review launch results",
+      "Deliver milestone",
+    ];
+    for (let n = 0; n < 30; n++) {
+      const plan = plans[Math.floor(n / 10)]!;
+      const dueDate = dateAt(-2 + (n % 14));
+      const result = await browserJson(page, "/api/v1/items", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          boardId: plan.id,
+          title: `${plan.name}: ${titles[n % 10]}`,
+          description: "A test commitment for dashboard verification.",
+          type: n % 10 === 5 ? "milestone" : "task",
+          status: statuses[n % 5],
+          priority: n % 4 === 0 ? "high" : "normal",
+          dueDate,
+          assigneeIds: n % 3 === 0 ? [] : [session.user.id],
+        }),
+      });
+      expect(result.status).toBe(201);
+    }
+    await page.goto(`/app/workspaces/${workspace.slug}`);
+    await expect(page.getByTestId("live-dashboard")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Dashboard", level: 1 }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("navigation", { name: "Primary navigation" })
+        .getByRole("link", { name: "Overview", exact: true }),
+    ).toHaveCount(0);
+    const totals = page.getByRole("region", { name: "Workspace totals" });
+    await expect(
+      page
+        .getByRole("navigation", { name: "Primary navigation" })
+        .getByRole("link", { name: "Dashboard", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+      totals.getByRole("button", { name: /Open work/ }),
+    ).toContainText("24");
+    await expect(
+      page.getByRole("img", {
+        name: "6 of 30 work items completed",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expectNoLiveWcagFindings(page, "visual-dashboard-desktop");
+    await page.screenshot({
+      path: test.info().outputPath("dashboard-desktop.png"),
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Show in review work: 6", exact: true })
+      .click();
+    const source = page.locator("#dashboard-source-work");
+    await expect(
+      source.getByRole("link", { name: /Publish campaign/ }),
+    ).toHaveCount(3);
+    await expect(
+      source.getByRole("link", { name: /Prepare launch brief/ }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("combobox", { name: "Dashboard project", exact: true })
+      .selectOption(plans[0]!.id);
+    await expect(
+      page.getByRole("img", {
+        name: "2 of 10 work items completed",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page
+      .getByRole("combobox", { name: "Dashboard project", exact: true })
+      .selectOption("");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expectNoLiveWcagFindings(page, "visual-dashboard-mobile");
+    expect(
+      await page
+        .getByRole("main")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath("dashboard-mobile.png"),
+      fullPage: true,
+    });
+    await page.screenshot({
+      path: test.info().outputPath("dashboard-mobile-viewport.png"),
+    });
+    await page
+      .getByRole("combobox", { name: "Dashboard deadline window", exact: true })
+      .selectOption("30");
+    await expectNoLiveWcagFindings(page, "visual-dashboard-mobile-30-days");
+    expect(
+      await page
+        .getByRole("main")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
+    await page.goto(`/app/workspaces/${workspace.slug}/dashboard`);
+    await expect(
+      page.getByRole("img", {
+        name: "6 of 30 work items completed",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await context.addCookies([
+      { name: themePreferenceCookie, value: "dark", url: webOrigin },
+    ]);
+    await page.setViewportSize({ width: 1440, height: 1050 });
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(
+      page.getByRole("img", {
+        name: "6 of 30 work items completed",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expectNoLiveWcagFindings(page, "visual-dashboard-dark");
+    await page.screenshot({
+      path: test.info().outputPath("dashboard-dark.png"),
+      fullPage: true,
+    });
+    await page
+      .getByRole("group", { name: "Task view" })
+      .getByRole("button", { name: "Board", exact: true })
+      .click();
+    await expectNoLiveWcagFindings(page, "visual-dashboard-dark-task-board");
+    await context.close();
+  });
 });
 
-async function completeOnboarding(page: Page) {
-  await page.getByLabel("Organization name").fill(organizationName);
+async function completeOnboarding(page: Page, name = organizationName) {
+  await page.getByLabel("Organization name").fill(name);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Workspace name").fill(`Initial ${suffix}`);
   await page.getByRole("button", { name: "Continue" }).click();
@@ -1515,7 +1726,7 @@ async function createDirectCapture(
     waitUntil: "domcontentloaded",
   });
   await expect(page).toHaveURL(new RegExp(`/app/workspaces/${workspaceSlug}$`));
-  await expect(page.getByTestId("live-workspace-overview")).toBeVisible();
+  await expect(page.getByTestId("live-dashboard")).toBeVisible();
   const createWork = page.getByRole("button", {
     name: "Create work",
     exact: true,

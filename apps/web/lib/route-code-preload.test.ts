@@ -62,6 +62,17 @@ describe("static route warming", () => {
       ).toHaveLength(2);
     }
   });
+  it("opens Dashboard from both the workspace home and explicit dashboard URL", () => {
+    for (const mode of ["demo", "live"] as const) {
+      expect(routeCodeModules("/app/workspaces/one", mode)).toEqual(
+        routeCodeModules("/app/workspaces/one/dashboard", mode),
+      );
+      expect(routeCodeModules("/app/workspaces/one", mode)).toEqual([
+        "moduleLoader",
+        mode === "live" ? "liveDashboard" : "dashboard",
+      ]);
+    }
+  });
   it("does not guess an unknown, external, or public route", () => {
     for (const path of [
       "/sign-in",

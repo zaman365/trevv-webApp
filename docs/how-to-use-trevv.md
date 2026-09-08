@@ -2,6 +2,10 @@
 
 This guide is also available inside TREVV under **Getting started**. Work is saved to the server in live mode. Use one organization for a shared company membership boundary, workspaces for startups/businesses/clients, and project plans inside each workspace.
 
+## Start on Dashboard
+
+Dashboard is the workspace home. The former separate Overview entry has been removed; existing workspace links still open the same workspace, now on Dashboard. Use the project and people filters to choose a scope, click a status, number or person to inspect the matching work below, and use Clear chart filter to return to all work. Choose **Work due on** beneath the deadline chart to inspect a particular date. Project bars and milestone links open the original boards and items. Deadline windows change the upcoming-deadline chart; they do not hide older or undated work from the workspace totals. Workload shows open assignment counts, not an estimate of people's capacity.
+
 ## 1. Organize your startups and projects
 
 1. Use a workspace for each startup, business or client. Portfolio brings those workspaces together within your organization.

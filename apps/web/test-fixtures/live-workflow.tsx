@@ -11,7 +11,7 @@ import {
 } from "../components/live-quick-capture";
 import { LiveMyWork } from "../components/live-work-my-work";
 import { LiveInboxFeature } from "../components/live-work-inbox";
-import { LiveWorkspaceOverview } from "../components/live-workspace-overview";
+import { LiveWorkspaceDashboard } from "../components/live-workspace-dashboard";
 import { board, session, snapshot } from "./live-workflow-data";
 
 function Workflow() {
@@ -19,8 +19,15 @@ function Workflow() {
   const queryClient = useQueryClient();
   const [capture, setCapture] = useState(false);
   const [confirmed, setConfirmed] = useState<LiveCaptureSuccess | null>(null);
-  if (new URLSearchParams(window.location.search).get("view") === "overview")
-    return <LiveWorkspaceOverview workspaceSlug="launch" />;
+  if (new URLSearchParams(window.location.search).get("view") === "dashboard")
+    return (
+      <>
+        <button onClick={() => void data.refresh()}>
+          Refresh test records
+        </button>
+        <LiveWorkspaceDashboard workspaceSlug="launch" />
+      </>
+    );
   return (
     <>
       <button onClick={() => setCapture(true)}>Quick capture</button>

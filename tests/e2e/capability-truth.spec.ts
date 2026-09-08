@@ -129,6 +129,9 @@ test("follow-ups, updates, and reviews expose only local preview actions", async
   ).toBeVisible();
 
   await gotoCanonical(page, workspaceHome());
+  await page
+    .getByText("Workspace details, milestones and updates", { exact: true })
+    .click();
   await page.getByRole("button", { name: "Draft sample update" }).click();
   const update = page.getByRole("dialog", {
     name: "Draft a sample workspace update",

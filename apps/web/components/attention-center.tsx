@@ -761,7 +761,7 @@ function AttentionDetailPanel({
           >
             {workspace && (
               <Link href={workspaceHref(workspace.slug)}>
-                <Grid2X2 size={13} /> Workspace overview{" "}
+                <Grid2X2 size={13} /> Workspace dashboard{" "}
                 <ExternalLink size={10} />
               </Link>
             )}

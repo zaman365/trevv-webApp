@@ -986,7 +986,7 @@ function CreateWorkspaceDialog({
         </div>
         <footer>
           <span>
-            Creates a workspace overview and an empty operating board.
+            Creates a workspace dashboard and an empty operating board.
           </span>
           <div>
             <button onClick={onClose} type="button">

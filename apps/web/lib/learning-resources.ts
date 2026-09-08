@@ -49,10 +49,10 @@ export const learningResources: LearningResource[] = [
     ...learningHints["navigation"]!,
     category: "Getting started",
     type: "Guide",
-    body: "Portfolio is a single top-level overview. After you choose a Workspace, the left sidebar groups its overview, personal queues, workflows, people, and system tools. On smaller screens, the most-used destinations move to the bottom navigation.",
+    body: "Portfolio is a single top-level overview. After you choose a Workspace, the left sidebar groups its dashboard, personal queues, workflows, people, and system tools. On smaller screens, the most-used destinations move to the bottom navigation.",
     duration: "3 min",
     steps: [
-      "Portfolio returns to the cumulative cross-workspace overview.",
+      "Portfolio returns to the cumulative cross-workspace dashboard.",
       "Workspace contains operational views for the selected Workspace only.",
       "Work groups decisions, approvals, ideas, reviews, and dependencies.",
       "People and System contain team, Blueprints, learning, and settings.",

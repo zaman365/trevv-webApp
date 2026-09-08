@@ -109,16 +109,11 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   const primaryNavLabels = await page
     .locator('nav[aria-label="Primary navigation"] a')
     .allTextContents();
-  // Workspace views start at Overview, so Dashboard follows it rather
-  // than sitting directly under the portfolio escape hatch.
-  expect(primaryNavLabels.indexOf("Overview")).toBe(
+  expect(primaryNavLabels).not.toContain("Overview");
+  expect(primaryNavLabels.indexOf("Dashboard")).toBe(
     primaryNavLabels.indexOf("Portfolio") + 1,
   );
-  expect(primaryNavLabels.indexOf("Dashboard")).toBe(
-    primaryNavLabels.indexOf("Overview") + 1,
-  );
-  // The new setup guide stays discoverable without displacing the existing
-  // Overview → Dashboard sequence, including in the mobile navigation drawer.
+  // The setup guide remains discoverable after Dashboard becomes the workspace home.
   await expect(
     page.locator(
       `nav[aria-label="Primary navigation"] a[href="${workspaceRoute("guide")}"]`,
@@ -206,8 +201,18 @@ test("a new workspace creates a working workspace and board", async ({
 
   // The dialog routes straight into the workspace it just created.
   await expect(page).toHaveURL(/\/app\/workspaces\/customer-onboarding-lab$/);
+  // The previous Dashboard stays mounted during navigation; wait for the new
+  // workspace's details before opening its disclosure.
+  await expect(page.locator(".dashboard-workspace-details")).toContainText(
+    "Customer Onboarding Lab · workspace details",
+  );
+  await page
+    .getByText("Workspace details, milestones and updates", { exact: true })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "Customer Onboarding Lab" }),
+    page.getByRole("heading", {
+      name: "Customer Onboarding Lab · workspace details",
+    }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Add item" }).click();
   await expect(

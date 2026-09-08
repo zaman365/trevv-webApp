@@ -194,7 +194,7 @@ export function CreateWorkspaceDialog({
           <span role={message ? "alert" : undefined}>
             {message ||
               (mode === "demo"
-                ? "Creates a fictional browser-only overview and empty board."
+                ? "Creates a fictional browser-only dashboard and empty board."
                 : "The workspace and its first board are saved to your organization.")}
           </span>
           <div>

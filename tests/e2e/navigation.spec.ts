@@ -36,8 +36,11 @@ test("page switches acknowledge clicks while retaining the current workspace unt
       "Opening page",
     );
     await expect(
-      page.getByRole("heading", { name: "Northstar Apparel", exact: true }),
+      page.getByRole("heading", { name: "Dashboard", exact: true }),
     ).toBeVisible();
+    await expect(page.locator(".workspace-switcher-trigger")).toContainText(
+      "Northstar Apparel",
+    );
     await expect(page.locator(".product-shell:visible")).toHaveCount(1);
   } finally {
     release();

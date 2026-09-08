@@ -38,7 +38,7 @@
 .views button[aria-pressed="true"],
 .periods button[aria-pressed="true"] {
   background: var(--fh-primary, #5b56db);
-  color: white;
+  color: var(--fh-on-primary, white);
   border-color: var(--fh-primary, #5b56db);
 }
 .periods {
@@ -160,7 +160,7 @@
   padding: 0.25rem 0.4rem;
   border-radius: 5px;
   color: var(--text-secondary, #5f687c);
-  background: var(--surface-muted, #f3f4f8);
+  background: var(--fh-canvas, #f3f4f8);
   font-size: 0.68rem;
   text-transform: capitalize;
 }
@@ -180,7 +180,7 @@
   font-size: 0.72rem;
 }
 .due[data-overdue="true"] {
-  color: #bc3646;
+  color: var(--fh-danger, #bc3646);
 }
 .saved {
   position: absolute;
@@ -210,7 +210,7 @@
   min-width: 0;
   border-radius: 10px;
   padding: 0.7rem;
-  background: var(--surface-muted, #f4f5f8);
+  background: var(--fh-canvas, #f4f5f8);
   border-top: 3px solid #9ba3b7;
 }
 .column[data-status="working"] {
@@ -301,7 +301,7 @@
 
 .views button[aria-pressed="true"]:hover:not(:disabled),
 .periods button[aria-pressed="true"]:hover:not(:disabled) {
-  color: white;
+  color: var(--fh-on-primary, white);
   background: var(--fh-primary, #5b56db);
 }
 .periods button span {

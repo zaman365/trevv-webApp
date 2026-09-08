@@ -29,8 +29,8 @@ import {
 } from "@founderhq/core";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useState } from "react";
-import { WorkspaceFrame } from "./workspace-frame";
-import { PageHero, StatTile } from "./ui-kit";
+import { StatTile } from "./ui-kit";
+import { Hint } from "./learning-hint";
 import { productCopy } from "@/lib/product-copy";
 import { labelForType } from "@/lib/terminology";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
@@ -56,19 +56,19 @@ const workspaceTabIds = [
 ] as const;
 type WorkspaceTabId = (typeof workspaceTabIds)[number];
 
-export function WorkspaceOverview({ slug }: { slug: string }) {
+export function WorkspaceDetails({ slug }: { slug: string }) {
   const customRecord = useCustomWorkspaces().find(
     (record) => record.workspace.slug === slug,
   );
   const workspace = workspaceBySlug(slug) ?? customRecord?.workspace;
   if (!workspace)
     return (
-      <WorkspaceFrame active="workspace" workspaceSlug={slug}>
-        <main className="workspace-main board-not-found">
-          <h1>Workspace not found</h1>
+      <>
+        <section className="workspace-main board-not-found">
+          <h2>Workspace not found</h2>
           <Link href="/app/portfolio">Return to Portfolio</Link>
-        </main>
-      </WorkspaceFrame>
+        </section>
+      </>
     );
   return (
     <WorkspaceWorkspace
@@ -109,6 +109,12 @@ function WorkspaceWorkspace({
     const syncHash = () => {
       const hash = window.location.hash.slice(1) as WorkspaceTabId;
       setActiveTab(workspaceTabIds.includes(hash) ? hash : "overview");
+      if (workspaceTabIds.includes(hash)) {
+        const section = document.getElementById(hash);
+        const details = section?.closest("details");
+        if (details) details.open = true;
+        section?.scrollIntoView({ block: "start" });
+      }
     };
     syncHash();
     window.addEventListener("hashchange", syncHash);
@@ -166,9 +172,9 @@ function WorkspaceWorkspace({
   ) as string[];
   const copy = productCopy.en.workspace;
   return (
-    <WorkspaceFrame active="workspace" workspaceSlug={workspace.slug}>
-      <main
-        className="workspace-main"
+    <>
+      <section
+        className="workspace-details-body"
         style={
           { "--workspace-accent": workspace.accent } as React.CSSProperties
         }
@@ -185,30 +191,22 @@ function WorkspaceWorkspace({
             </button>
           </div>
         )}
-        <PageHero
-          eyebrow={
-            <>
+        <header className="workspace-details-heading">
+          <div>
+            <p>
               {labelForType(workspace.type)} · {workspace.stage} · Led by{" "}
               {workspace.lead.name}
-            </>
-          }
-          title={workspace.name}
-          hintId="workspaces"
-          badge={
-            <>
-              <span className="scope-view-badge project-scope-badge">
-                <FolderKanban size={13} />
-                Workspace
-              </span>
-              <span className={`health-badge ${workspace.health}`}>
-                {workspaceHealthCopy[workspace.health]}
-              </span>
-            </>
-          }
-          subtitle={workspace.healthNote}
-          accent={workspace.accent}
-          monogram={workspace.icon}
-          actions={
+            </p>
+            <h2>
+              {workspace.name} · workspace details{" "}
+              <Hint resourceId="workspaces" />
+            </h2>
+            <p>{workspace.healthNote}</p>
+            <span className={`health-badge ${workspace.health}`}>
+              {workspaceHealthCopy[workspace.health]}
+            </span>
+          </div>
+          <div className="workspace-details-actions">
             <>
               <Link className="primary-button" href={boardHref}>
                 <Plus size={16} />
@@ -265,53 +263,51 @@ function WorkspaceWorkspace({
                 )}
               </div>
             </>
-          }
-          stats={
-            <>
-              <StatTile
-                icon={TrendingUp}
-                value={progress === null ? "Manual" : `${progress}%`}
-                label="Scoped progress"
-                note={
-                  progress === null
-                    ? "Set manually"
-                    : `${completedItems} of ${workspaceItems.length} complete · weighted by status`
-                }
-                tone="primary"
-                {...(progress !== null ? { meter: progress } : {})}
-              />
-              <StatTile
-                icon={FolderKanban}
-                value={rollup.open}
-                label="Open work"
-                note={`${datedItems} with a date`}
-              />
-              <StatTile
-                icon={AlertTriangle}
-                value={rollup.overdue + rollup.blocked}
-                label="Overdue or blocked"
-                note={`${rollup.overdue} overdue · ${rollup.blocked} blocked`}
-                tone={rollup.overdue + rollup.blocked ? "danger" : "neutral"}
-              />
-              <StatTile
-                icon={FileQuestion}
-                value={rollup.decisions + rollup.approvals}
-                label="Needs a call"
-                note="Decisions and approvals"
-                tone={
-                  rollup.decisions + rollup.approvals ? "warning" : "neutral"
-                }
-                href={workspaceHref(workspace.slug, "decisions")}
-              />
-            </>
-          }
-        />
+          </div>
+        </header>
+        <div className="workspace-details-stats">
+          <>
+            <StatTile
+              icon={TrendingUp}
+              value={progress === null ? "Manual" : `${progress}%`}
+              label="Scoped progress"
+              note={
+                progress === null
+                  ? "Set manually"
+                  : `${completedItems} of ${workspaceItems.length} complete · weighted by status`
+              }
+              tone="primary"
+              {...(progress !== null ? { meter: progress } : {})}
+            />
+            <StatTile
+              icon={FolderKanban}
+              value={rollup.open}
+              label="Open work"
+              note={`${datedItems} with a date`}
+            />
+            <StatTile
+              icon={AlertTriangle}
+              value={rollup.overdue + rollup.blocked}
+              label="Overdue or blocked"
+              note={`${rollup.overdue} overdue · ${rollup.blocked} blocked`}
+              tone={rollup.overdue + rollup.blocked ? "danger" : "neutral"}
+            />
+            <StatTile
+              icon={FileQuestion}
+              value={rollup.decisions + rollup.approvals}
+              label="Needs a call"
+              note="Decisions and approvals"
+              tone={rollup.decisions + rollup.approvals ? "warning" : "neutral"}
+              href={workspaceHref(workspace.slug, "decisions")}
+            />
+          </>
+        </div>
         <nav className="workspace-tabs">
           <button
             className={activeTab === "overview" ? "active" : ""}
             onClick={() => activateTab("overview")}
           >
-            {copy.overview}
+            Summary
           </button>
           <button
             className={activeTab === "work" ? "active" : ""}
@@ -710,8 +706,8 @@ function WorkspaceWorkspace({
             </form>
           </div>
         )}
-      </main>
-    </WorkspaceFrame>
+      </section>
+    </>
   );
 }
 

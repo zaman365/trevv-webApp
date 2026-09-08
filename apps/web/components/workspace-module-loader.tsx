@@ -35,10 +35,10 @@ const FocusExperience = dynamic(
   () => import("./focus-experience").then((module) => module.FocusExperience),
   { loading },
 );
-const LiveWorkspaceOverview = dynamic(
+const LiveWorkspaceDashboard = dynamic(
   () =>
-    import("./live-workspace-overview").then(
-      (module) => module.LiveWorkspaceOverview,
+    import("./live-workspace-dashboard").then(
+      (module) => module.LiveWorkspaceDashboard,
     ),
   { loading },
 );
@@ -142,7 +142,7 @@ export function WorkspaceModuleLoader({
   }
   if (runtimeMode === "live") {
     if (view === "dashboard") {
-      return <LiveWorkspaceOverview dashboard workspaceSlug={workspaceSlug} />;
+      return <LiveWorkspaceDashboard workspaceSlug={workspaceSlug} />;
     }
     if (view === "messages") {
       return <LiveMessagingWorkspace workspaceSlug={workspaceSlug} />;

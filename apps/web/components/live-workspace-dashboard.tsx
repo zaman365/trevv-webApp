@@ -2,12 +2,10 @@
 
 import type { BoardDto } from "@founderhq/api-contract";
 import {
-  Blocks,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
   FileQuestion,
-  FolderKanban,
   Inbox,
   LayoutList,
   Plus,
@@ -15,10 +13,10 @@ import {
   X,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
-import { countByKey, workspaceRollups } from "@/lib/collection-index";
+import { workspaceRollups } from "@/lib/collection-index";
 import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
@@ -33,16 +31,43 @@ import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import { LiveCreateTask } from "./live-create-task";
 import { LiveMyWork } from "./live-work-my-work";
+import { TrevvApiError } from "@founderhq/api-client";
+import { taskToday } from "@/lib/task-views";
+import {
+  dashboardFocusItems,
+  dashboardPlanItems,
+  type DashboardFocus,
+} from "@/lib/workspace-dashboard";
+import { WorkspaceDashboardWidgets } from "./workspace-dashboard-widgets";
+import dashboardStyles from "./workspace-dashboard.module.css";
 import styles from "./live-operating-loop.module.css";
 
-export function LiveWorkspaceOverview({
+export function LiveWorkspaceDashboard({
   workspaceSlug,
-  dashboard = false,
 }: {
   workspaceSlug: string;
-  dashboard?: boolean;
 }) {
   const session = useAppSession();
+  const timezone = session.organization.timezone ?? "UTC";
+  const [today, setToday] = useState(() => taskToday(timezone));
+  const [selectedPlan, setSelectedPlan] = useState("");
+  const [ownership, setOwnership] = useState("all");
+  const [days, setDays] = useState(14);
+  const [focus, setFocus] = useState<DashboardFocus>({
+    kind: "all",
+    label: "All workspace work",
+  });
+  useEffect(() => {
+    const update = () => setToday(taskToday(timezone));
+    const initial = window.setTimeout(update, 0);
+    const timer = window.setInterval(update, 60_000);
+    window.addEventListener("focus", update);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(timer);
+      window.removeEventListener("focus", update);
+    };
+  }, [timezone]);
   const liveData = useLiveAppData();
   const workspace = liveData.workspaces.find(
     (record) => record.slug === workspaceSlug,
@@ -87,22 +112,41 @@ export function LiveWorkspaceOverview({
     () => workspaceItems(liveData.items, workspace?.id ?? ""),
     [liveData.items, workspace?.id],
   );
-  const boardItemCounts = useMemo(
-    () => countByKey(items, (item) => item.boardId),
-    [items],
-  );
   const itemTotals = useMemo(
     () => workspaceRollups(items, []).get(workspace?.id ?? ""),
     [items, workspace?.id],
   );
-  const workspaceSummary = liveData.summary?.workspaces.find(
-    (summary) => summary.workspaceId === workspace?.id,
+  const plan = boards.find((board) => board.id === selectedPlan);
+  const scopeItems = useMemo(() => {
+    const records = plan ? dashboardPlanItems(items, plan) : items;
+    return ownership === "mine"
+      ? records.filter((item) =>
+          item.assignees.some((person) => person.id === session.user.id),
+        )
+      : records;
+  }, [items, plan, ownership, session.user.id]);
+  const sourceItems = useMemo(
+    () => dashboardFocusItems(scopeItems, focus, today),
+    [scopeItems, focus, today],
   );
+  function focusWork(next: DashboardFocus) {
+    setFocus(next);
+    requestAnimationFrame(() => {
+      const section = document.getElementById("dashboard-source-work");
+      section?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+        block: "start",
+      });
+      section?.focus({ preventScroll: true });
+    });
+  }
   const countLabel = (value: number) =>
     liveData.recordsComplete ? value : `${value} loaded`;
   if (!workspace) {
     return (
-      <WorkspaceFrame active={dashboard ? "dashboard" : "workspace"}>
+      <WorkspaceFrame active="dashboard">
         <main className={styles.main}>
           <LiveStateNotice
             description="Refresh your accessible workspaces or return to Portfolio."
@@ -115,6 +159,27 @@ export function LiveWorkspaceOverview({
     );
   }
 
+  if (
+    loadError instanceof TrevvApiError &&
+    [401, 403, 404].includes(loadError.status)
+  ) {
+    return (
+      <WorkspaceFrame active="dashboard" workspaceSlug={workspaceSlug}>
+        <main className={styles.main}>
+          <LiveStateNotice
+            kind="permission-loss"
+            title="Dashboard access changed"
+            description="Your saved workspace data is hidden until access can be verified."
+            actions={
+              <button type="button" onClick={() => void boardsQuery.refetch()}>
+                Check access again
+              </button>
+            }
+          />
+        </main>
+      </WorkspaceFrame>
+    );
+  }
   const workspaceId = workspace.id;
   const attention = liveData.attention.filter(
     (signal) =>
@@ -125,7 +190,6 @@ export function LiveWorkspaceOverview({
   const waiting = liveData.waiting.filter(
     (record) => record.workspaceId === workspaceId && !record.resolvedAt,
   );
-  const timezone = session.organization.timezone ?? "UTC";
 
   async function createBoard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -170,30 +234,33 @@ export function LiveWorkspaceOverview({
     : null;
 
   return (
-    <WorkspaceFrame
-      active={dashboard ? "dashboard" : "workspace"}
-      workspaceSlug={workspaceSlug}
-    >
+    <WorkspaceFrame active="dashboard" workspaceSlug={workspaceSlug}>
       <main
-        className={styles.main}
-        data-testid={dashboard ? "live-dashboard" : "live-workspace-overview"}
+        className={`${styles.main} ${dashboardStyles.dashboard}`}
+        data-testid="live-dashboard"
       >
-        <header className={styles.hero}>
+        <header className={dashboardStyles.hero}>
           <div>
-            <p>
-              Workspace · {workspace.type.replaceAll("_", " ")} ·{" "}
-              {dashboard ? "Dashboard" : "Overview"}
-            </p>
-            <h1>{workspace.name}</h1>
-            <span>
+            <p>{workspace.name} / Your workspace</p>
+            <h1>Dashboard</h1>
+            <p className={dashboardStyles.heroText}>
               {workspace.priority ||
                 workspace.description ||
-                "No current priority has been recorded."}
-            </span>
+                "A clear view of progress, people and the work that needs your attention."}
+            </p>
           </div>
-          <LiveCreateTask workspaces={[workspace]} />
+          <div className={dashboardStyles.heroActions}>
+            <button
+              className="quiet-button"
+              data-testid="create-board-open"
+              type="button"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus size={15} /> New plan
+            </button>
+            <LiveCreateTask workspaces={[workspace]} />
+          </div>
         </header>
-
         <nav
           className={styles.workspaceShortcuts}
           aria-label="Workspace shortcuts"
@@ -248,150 +315,156 @@ export function LiveWorkspaceOverview({
                 Open plan
               </Link>
             }
-            description="The plan is durable and ready for tasks and other canonical WorkItems."
+            description="Your plan is ready. Add tasks, owners and milestones to start tracking progress."
             kind="saved"
             title={`Server confirmed “${confirmedBoard.name}”`}
           />
         ) : null}
 
-        <section className={styles.statGrid} aria-label="Workspace totals">
-          <article>
-            <LayoutList size={18} />
-            <strong>
-              {workspaceSummary?.open ?? countLabel(itemTotals?.open ?? 0)}
-            </strong>
-            <span>Open work</span>
-          </article>
-          <article>
-            <Blocks size={18} />
-            <strong>
-              {workspaceSummary?.blocked ??
-                countLabel(itemTotals?.blocked ?? 0)}
-            </strong>
-            <span>Blocked</span>
-          </article>
-          <article>
-            <Sparkles size={18} />
-            <strong>{countLabel(attention.length)}</strong>
-            <span>Need attention</span>
-          </article>
-          <article>
-            <Clock3 size={18} />
-            <strong>{countLabel(waiting.length)}</strong>
-            <span>Waiting</span>
-          </article>
+        <div
+          className={dashboardStyles.toolbar}
+          role="group"
+          aria-label="Dashboard filters"
+        >
+          <label>
+            Project or cycle
+            <select
+              aria-label="Dashboard project"
+              value={plan?.id ?? ""}
+              onChange={(event) => {
+                setSelectedPlan(event.target.value);
+                setFocus({ kind: "all", label: "All work in this scope" });
+              }}
+            >
+              <option value="">All projects</option>
+              {boards.map((board) => (
+                <option key={board.id} value={board.id}>
+                  {board.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            People
+            <select
+              aria-label="Dashboard people"
+              value={ownership}
+              onChange={(event) => {
+                setOwnership(event.target.value);
+                setFocus({ kind: "all", label: "All work in this scope" });
+              }}
+            >
+              <option value="all">Everyone</option>
+              <option value="mine">Assigned to me</option>
+            </select>
+          </label>
+          <label>
+            Deadline window
+            <select
+              aria-label="Dashboard deadline window"
+              value={days}
+              onChange={(event) => setDays(Number(event.target.value))}
+            >
+              <option value={7}>Next 7 days</option>
+              <option value={14}>Next 14 days</option>
+              <option value={30}>Next 30 days</option>
+            </select>
+          </label>
+          <span data-stale={liveData.stale}>
+            {liveData.stale
+              ? "Showing saved data"
+              : "Connected to your workspace"}
+          </span>
+        </div>
+        {loadingBoards && (
+          <LiveStateNotice kind="loading" title="Loading project plans" />
+        )}
+        {liveData.recordsReady ? (
+          <WorkspaceDashboardWidgets
+            items={scopeItems}
+            boards={plan ? [plan] : boards}
+            workspaceSlug={workspaceSlug}
+            timezone={timezone}
+            today={today}
+            days={days}
+            complete={liveData.recordsComplete && boardsQuery.isSuccess}
+            plansLoaded={boardsQuery.data !== undefined}
+            onFocus={focusWork}
+          />
+        ) : (
+          <LiveStateNotice kind="loading" title="Loading dashboard work" />
+        )}
+        <section className={styles.panel} aria-labelledby="live-loop-title">
+          <header>
+            <div>
+              <p>Keep work moving</p>
+              <h2 id="live-loop-title">What needs movement</h2>
+            </div>
+          </header>
+          <nav className={styles.actionList} aria-label="Operating loop views">
+            <Link href={workspaceHref(workspace.slug, "attention")}>
+              <Sparkles size={16} />
+              <span>
+                <strong>Attention</strong>
+                <small>
+                  {countLabel(attention.length)} items need attention
+                </small>
+              </span>
+            </Link>
+            <Link href={workspaceHref(workspace.slug, "decisions")}>
+              <FileQuestion size={16} />
+              <span>
+                <strong>Decisions</strong>
+                <small>{countLabel(itemTotals?.decisions ?? 0)} open</small>
+              </span>
+            </Link>
+            <Link href={workspaceHref(workspace.slug, "approvals")}>
+              <ClipboardCheck size={16} />
+              <span>
+                <strong>Approvals</strong>
+                <small>{countLabel(itemTotals?.approvals ?? 0)} open</small>
+              </span>
+            </Link>
+            <Link href={workspaceHref(workspace.slug, "waiting")}>
+              <Clock3 size={16} />
+              <span>
+                <strong>Waiting</strong>
+                <small>{countLabel(waiting.length)} active follow-ups</small>
+              </span>
+            </Link>
+          </nav>
         </section>
 
-        <div className={styles.twoColumns}>
-          <section className={styles.panel} aria-labelledby="live-boards-title">
-            <header>
-              <div>
-                <p>Projects and plans</p>
-                <h2 id="live-boards-title">Plans</h2>
-              </div>
+        <div
+          id="dashboard-source-work"
+          tabIndex={-1}
+          className={dashboardStyles.source}
+        >
+          <div className={dashboardStyles.sourceHeader}>
+            <p>
+              <strong>{focus.label}</strong> · {sourceItems.length} items
+              {!liveData.recordsComplete ? " loaded" : ""}
+            </p>
+            {focus.kind !== "all" && (
               <button
-                data-testid="create-board-open"
-                onClick={() => setCreateOpen(true)}
                 type="button"
-              >
-                <Plus size={14} /> New plan
-              </button>
-            </header>
-            {loadingBoards ? (
-              <LiveStateNotice kind="loading" title="Loading boards" />
-            ) : boards.length === 0 ? (
-              <LiveStateNotice
-                actions={
-                  <button onClick={() => setCreateOpen(true)} type="button">
-                    Create plan
-                  </button>
+                onClick={() =>
+                  setFocus({ kind: "all", label: "All work in this scope" })
                 }
-                description="A plan is stored as a durable board so tasks, decisions, and approvals share one canonical work container."
-                kind="empty"
-                title="No plans yet"
-              />
-            ) : (
-              <div className={styles.list}>
-                {boards.map((board) => {
-                  const itemCount = boardItemCounts.get(board.id) ?? 0;
-                  return (
-                    <Link
-                      className={styles.listRow}
-                      data-testid={`board-link-${board.id}`}
-                      href={`${workspaceHref(workspace.slug)}/boards/${encodeURIComponent(board.id)}`}
-                      key={board.id}
-                    >
-                      <span className={styles.rowIcon}>
-                        <FolderKanban size={16} />
-                      </span>
-                      <span>
-                        <strong>{board.name}</strong>
-                        <small>
-                          {countLabel(itemCount)} item
-                          {itemCount === 1 ? "" : "s"} · {board.visibility}
-                        </small>
-                      </span>
-                      <small>
-                        Updated {formatLiveDate(board.updatedAt, timezone)}
-                      </small>
-                    </Link>
-                  );
-                })}
-              </div>
+              >
+                Clear chart filter
+              </button>
             )}
-          </section>
-
-          <section className={styles.panel} aria-labelledby="live-loop-title">
-            <header>
-              <div>
-                <p>Founder operating loop</p>
-                <h2 id="live-loop-title">What needs movement</h2>
-              </div>
-            </header>
-            <nav
-              className={styles.actionList}
-              aria-label="Operating loop views"
-            >
-              <Link href={workspaceHref(workspace.slug, "attention")}>
-                <Sparkles size={16} />
-                <span>
-                  <strong>Attention</strong>
-                  <small>
-                    {countLabel(attention.length)} deterministic signals
-                  </small>
-                </span>
-              </Link>
-              <Link href={workspaceHref(workspace.slug, "decisions")}>
-                <FileQuestion size={16} />
-                <span>
-                  <strong>Decisions</strong>
-                  <small>{countLabel(itemTotals?.decisions ?? 0)} open</small>
-                </span>
-              </Link>
-              <Link href={workspaceHref(workspace.slug, "approvals")}>
-                <ClipboardCheck size={16} />
-                <span>
-                  <strong>Approvals</strong>
-                  <small>{countLabel(itemTotals?.approvals ?? 0)} open</small>
-                </span>
-              </Link>
-              <Link href={workspaceHref(workspace.slug, "waiting")}>
-                <Clock3 size={16} />
-                <span>
-                  <strong>Waiting</strong>
-                  <small>{countLabel(waiting.length)} active follow-ups</small>
-                </span>
-              </Link>
-            </nav>
-          </section>
+          </div>
+          <LiveMyWork
+            key={`${plan?.id ?? "all"}:${ownership}:${focus.kind}:${"key" in focus ? focus.key : ""}`}
+            items={sourceItems}
+            workspaceSlug={workspaceSlug}
+            assignedToMe={false}
+            title="Workspace tasks"
+            initialPeriod="all"
+          />
         </div>
-
-        <LiveMyWork
-          items={items}
-          workspaceSlug={workspaceSlug}
-          assignedToMe={false}
-          title="Workspace tasks"
-        />
 
         <section
           className={styles.panel}
@@ -399,15 +472,15 @@ export function LiveWorkspaceOverview({
         >
           <header>
             <div>
-              <p>Internal worker visibility</p>
-              <h2 id="live-operations-title">Recomputation health</h2>
+              <p>Background updates</p>
+              <h2 id="live-operations-title">Update delivery</h2>
             </div>
           </header>
           {operationStatus ? (
             <div className={styles.operationsRow}>
               <span>
                 <strong>{operationStatus.pendingOutbox}</strong>
-                Pending outbox records
+                Updates waiting
               </span>
               <span>
                 <strong>{operationStatus.failedCount}</strong>
@@ -477,7 +550,7 @@ export function LiveWorkspaceOverview({
                 </span>
                 <div>
                   <h2 id="live-board-create-title">Create a plan</h2>
-                  <p>Plans are durable boards owned by {workspace.name}.</p>
+                  <p>Organize tasks and milestones for {workspace.name}.</p>
                 </div>
                 <button
                   aria-label="Close plan creation"

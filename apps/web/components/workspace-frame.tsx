@@ -419,17 +419,6 @@ function WorkspaceChrome({
     workspaceScopeHref(contextProject?.slug, view);
 
   const nav = [
-    ...(contextProject
-      ? [
-          [
-            "workspace",
-            "Overview",
-            scopedHref(),
-            FolderKanban,
-            undefined,
-          ] as const,
-        ]
-      : []),
     ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
     ...(!appSession.demo
       ? [

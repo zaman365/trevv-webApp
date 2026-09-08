@@ -6,9 +6,7 @@ const modules = {
   portfolioLoader: () => import("../components/portfolio-loader"),
   portfolio: () => import("../components/portfolio-experience"),
   livePortfolio: () => import("../components/live-portfolio-experience"),
-  overviewLoader: () => import("../components/workspace-overview-loader"),
-  overview: () => import("../components/workspace-overview"),
-  liveOverview: () => import("../components/live-workspace-overview"),
+  liveDashboard: () => import("../components/live-workspace-dashboard"),
   moduleLoader: () => import("../components/workspace-module-loader"),
   boardLoader: () => import("../components/board-loader"),
   board: () => import("../components/board-experience"),
@@ -67,7 +65,7 @@ export function routeCodeModules(
   const match = /^\/app\/workspaces\/[^/]+(?:\/(.+))?$/.exec(pathname ?? "");
   if (!match) return [];
   const view = match[1];
-  if (!view) return ["overviewLoader", live ? "liveOverview" : "overview"];
+  if (!view) return ["moduleLoader", live ? "liveDashboard" : "dashboard"];
   if (/^boards\/[^/]+$/.test(view))
     return ["boardLoader", live ? "liveBoard" : "board"];
   if (view === "settings/import") return ["management"];
@@ -80,7 +78,7 @@ export function routeCodeModules(
   else if (live)
     component =
       view === "dashboard"
-        ? "liveOverview"
+        ? "liveDashboard"
         : view === "messages"
           ? "liveMessages"
           : view === "teams"
