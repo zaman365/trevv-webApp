@@ -424,11 +424,27 @@ export function LiveWorkspaceOverview({
             </div>
           ) : (
             <LiveStateNotice
-              kind={loadingBoards ? "loading" : "failed"}
+              kind={operationsQuery.isPending ? "loading" : "failed"}
               title={
-                loadingBoards
+                operationsQuery.isPending
                   ? "Loading worker status"
                   : "Worker status is unavailable"
+              }
+              {...(operationsQuery.isError
+                ? {
+                    description:
+                      "TREVV could not load the background processing status. Try again to check it.",
+                  }
+                : {})}
+              actions={
+                operationsQuery.isError ? (
+                  <button
+                    type="button"
+                    onClick={() => void operationsQuery.refetch()}
+                  >
+                    Retry worker status
+                  </button>
+                ) : undefined
               }
             />
           )}

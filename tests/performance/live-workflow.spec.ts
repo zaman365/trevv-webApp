@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import { createRequire } from "node:module";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,7 +56,14 @@ test.afterAll(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-async function setup(page: Page, hash = "") {
+async function setup(
+  page: Page,
+  hash = "",
+  options: {
+    overview?: boolean;
+    operations?: (route: Route) => Promise<void>;
+  } = {},
+) {
   let records = [structuredClone(item)];
   let inbox: InboxItemDto[] = [];
   const evidence: WorkItemEvidenceDto[] = [];
@@ -86,6 +93,10 @@ async function setup(page: Page, hash = "") {
         contentType: extname(path) === ".css" ? "text/css" : "text/javascript",
         body: assets.get(path)!,
       });
+    if (path === "/api/v1/operations/status")
+      return options.operations
+        ? options.operations(route)
+        : route.fulfill({ json: { pendingOutbox: 0, failedCount: 0 } });
     const existing = records.find(
       (record) =>
         path === `/api/v1/items/${record.id}` ||
@@ -234,11 +245,24 @@ async function setup(page: Page, hash = "") {
       throw new Error(`Unexpected request: ${request.method()} ${path}`);
     return route.fulfill({ json });
   });
-  await page.goto(`https://trevv.test/${hash}`);
-  await expect(page.getByTestId("live-board")).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: board.name, exact: true }),
-  ).toBeVisible();
+  await page.goto(
+    `https://trevv.test/${options.overview ? "?view=overview" : ""}${hash}`,
+  );
+  if (options.overview) {
+    await expect(page.getByTestId("live-workspace-overview")).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "Plans", exact: true })
+        .getByRole("link", {
+          name: new RegExp(board.name),
+        }),
+    ).toBeVisible();
+  } else {
+    await expect(page.getByTestId("live-board")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: board.name, exact: true }),
+    ).toBeVisible();
+  }
   return {
     setRecords: (next: WorkItemDto[]) => {
       records = next;
@@ -261,6 +285,68 @@ async function setup(page: Page, hash = "") {
     },
   };
 }
+
+test("overview keeps worker status loading when boards finish first", async ({
+  page,
+}) => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    await setup(page, "", {
+      overview: true,
+      operations: async (route) => {
+        await pending;
+        await route.fulfill({ json: { pendingOutbox: 3, failedCount: 0 } });
+      },
+    });
+    const health = page.getByRole("region", { name: "Recomputation health" });
+    await expect(
+      health.getByText("Loading worker status", { exact: true }),
+    ).toBeVisible();
+    await expect(health.getByRole("alert")).toHaveCount(0);
+    release();
+    await expect(health.getByText("Pending outbox records")).toBeVisible();
+    await expect(
+      health.getByText("Loading worker status", { exact: true }),
+    ).toHaveCount(0);
+    await expect(health.getByRole("alert")).toHaveCount(0);
+  } finally {
+    release();
+  }
+});
+
+test("overview shows a real worker status failure and supports retry", async ({
+  page,
+}) => {
+  let failing = true;
+  await setup(page, "", {
+    overview: true,
+    operations: (route) =>
+      route.fulfill(
+        failing
+          ? {
+              status: 503,
+              json: {
+                error: {
+                  code: "temporarily_unavailable",
+                  message: "Temporary test outage",
+                },
+              },
+            }
+          : { json: { pendingOutbox: 0, failedCount: 0 } },
+      ),
+  });
+  const health = page.getByRole("region", { name: "Recomputation health" });
+  await expect(health.getByRole("alert")).toContainText(
+    "Worker status is unavailable",
+  );
+  failing = false;
+  await health.getByRole("button", { name: "Retry worker status" }).click();
+  await expect(health.getByText("Pending outbox records")).toBeVisible();
+  await expect(health.getByRole("alert")).toHaveCount(0);
+});
 
 test("creation assigns work, opens its details, and survives a slow post-save refresh", async ({
   page,
