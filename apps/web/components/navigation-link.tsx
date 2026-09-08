@@ -2,6 +2,7 @@
 
 import NextLink, { useLinkStatus } from "next/link";
 import { forwardRef, type ComponentProps } from "react";
+import { createPortal } from "react-dom";
 import { useOptionalAppSession } from "@/lib/app-session-context";
 import { isAppPath, preloadRouteCode } from "@/lib/route-code-preload";
 import styles from "./navigation-link.module.css";
@@ -63,10 +64,23 @@ export const NavigationLink = forwardRef<
 function PendingHint() {
   const { pending } = useLinkStatus();
   return (
-    <span
-      aria-hidden="true"
-      className={styles.pending}
-      data-navigation-pending={pending || undefined}
-    />
+    <>
+      <span
+        aria-hidden="true"
+        className={styles.pending}
+        data-navigation-pending={pending || undefined}
+      />
+      {pending &&
+        createPortal(
+          <span
+            className={styles.progress}
+            data-navigation-progress
+            role="status"
+          >
+            <span className="sr-only">Opening page</span>
+          </span>,
+          document.body,
+        )}
+    </>
   );
 }

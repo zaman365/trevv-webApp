@@ -17,11 +17,24 @@ test("page switches acknowledge clicks while retaining the current workspace unt
   if ((page.viewportSize()?.width ?? 0) < 768)
     await page.getByRole("button", { name: "Open navigation" }).click();
   const calendar = page
-    .getByRole("navigation", { name: "Primary navigation" })
-    .getByRole("link", { name: "Calendar", exact: true });
+    .getByRole("navigation", {
+      name: "Primary navigation",
+      includeHidden: true,
+    })
+    .getByRole("link", { name: "Calendar", exact: true, includeHidden: true });
   try {
     await calendar.click();
     await expect(calendar.locator("[data-navigation-pending]")).toHaveCount(1);
+    // The drawer closes on mobile. Feedback must remain visible outside it,
+    // while its hidden links stay out of keyboard/accessibility navigation.
+    await expect(page.locator("[data-navigation-progress]")).toBeVisible();
+    await expect(page.locator("[data-navigation-progress]")).not.toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+    await expect(page.locator("[data-navigation-progress]")).toHaveText(
+      "Opening page",
+    );
     await expect(
       page.getByRole("heading", { name: "Northstar Apparel", exact: true }),
     ).toBeVisible();
@@ -34,4 +47,5 @@ test("page switches acknowledge clicks while retaining the current workspace unt
     page.getByRole("heading", { name: "Calendar", exact: true }),
   ).toBeVisible();
   await expect(page.locator("[data-navigation-pending]")).toHaveCount(0);
+  await expect(page.locator("[data-navigation-progress]")).toHaveCount(0);
 });

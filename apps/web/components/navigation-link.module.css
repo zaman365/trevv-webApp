@@ -16,3 +16,12 @@
 .pending[data-navigation-pending] {
   opacity: 0.75;
 }
+
+.progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 200;
+  height: 3px;
+  background: var(--fh-primary);
+  pointer-events: none;
+}
