@@ -111,7 +111,7 @@ export function LiveStateNotice({
 /** Only the timestamp subscribes to successful unchanged background polls. */
 export function LiveSyncedAt({ timezone }: { timezone?: string }) {
   const refreshedAt = useLiveAppRefreshedAt();
-  return refreshedAt
+  return refreshedAt && Date.parse(refreshedAt) > 0
     ? formatLiveDate(
         refreshedAt,
         timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,

@@ -5988,7 +5988,11 @@ export const openApiDocument = {
             type: "string",
             enum: ["not_started", "working", "blocked", "review", "done"],
           },
-          dueDate: { type: "string", format: "date" },
+          dueDate: {
+            type: ["string", "null"],
+            format: "date",
+            description: "Set null to remove the due date.",
+          },
           assigneeIds: {
             type: "array",
             maxItems: 100,

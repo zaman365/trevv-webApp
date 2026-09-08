@@ -777,7 +777,8 @@ export function createDemoAdapter(): DemoAdapter {
           updated.description = patch.description;
         if (patch.status !== undefined) updated.status = patch.status;
         if (patch.priority !== undefined) updated.priority = patch.priority;
-        if (patch.dueDate !== undefined) updated.dueDate = patch.dueDate;
+        if (patch.dueDate === null) delete updated.dueDate;
+        else if (patch.dueDate !== undefined) updated.dueDate = patch.dueDate;
         itemStore.set(existing.id, updated);
         return updated;
       });

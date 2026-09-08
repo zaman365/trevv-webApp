@@ -34,6 +34,8 @@ export function workspaceShellRoute(
   const path = pathname.split(/[?#]/, 1)[0]?.replace(/\/$/, "") ?? "";
   if (path === "/app/portfolio")
     return { active: "portfolio", requiresRecords: true };
+  if (path === "/app/my-work")
+    return { active: "myWork", requiresRecords: true };
   if (path === "/app/mail") return { active: "mail", requiresRecords: false };
   if (path === "/app/system/admin")
     return { active: "platform", requiresRecords: false };

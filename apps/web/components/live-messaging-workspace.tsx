@@ -150,6 +150,19 @@ export function LiveMessagingWorkspace({
     [conversationListAccessLost, conversationsQuery.data],
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  useEffect(() => {
+    const readRoom = () => {
+      try {
+        const id = decodeURIComponent(window.location.hash.slice(1));
+        if (id) setSelectedId(id);
+      } catch {
+        /* Ignore malformed room links. */
+      }
+    };
+    readRoom();
+    window.addEventListener("hashchange", readRoom);
+    return () => window.removeEventListener("hashchange", readRoom);
+  }, [workspaceSlug]);
   const effectiveSelectedId =
     selectedId && conversations.some((item) => item.id === selectedId)
       ? selectedId

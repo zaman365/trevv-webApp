@@ -86,7 +86,9 @@ export function AppShellProviders({
       recordScope={
         route?.workspaceSlug
           ? { workspaceSlug: route.workspaceSlug }
-          : "summary"
+          : pathname === "/app/my-work"
+            ? "organization"
+            : "summary"
       }
       allowShell
     >

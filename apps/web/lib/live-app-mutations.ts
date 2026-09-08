@@ -1,7 +1,35 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { WorkItemDto } from "@founderhq/api-contract";
+import type { InboxItemDto, WorkItemDto } from "@founderhq/api-contract";
+import { workspaceResourceKeys } from "./workspace-resource-keys";
 import type { LiveAppAccessSnapshot } from "./live-app-sync";
 import type { LiveAppDataSnapshot } from "./live-app-data";
+
+/** Publish acknowledged capture immediately without creating an incomplete Inbox cache. */
+export async function applyConfirmedInboxItem(
+  client: QueryClient,
+  organizationId: string,
+  item: InboxItemDto,
+) {
+  const queryKey = workspaceResourceKeys.inbox(organizationId);
+  await client.cancelQueries({ queryKey });
+  const access = client.getQueryData<LiveAppAccessSnapshot>([
+    "live-app-access",
+  ]);
+  if (
+    access &&
+    (access.session.organization.id !== organizationId ||
+      access.session.user.id !== item.userId)
+  )
+    return;
+  client.setQueryData<InboxItemDto[]>(queryKey, (records) => {
+    if (!records) return records;
+    const previous = records.find((record) => record.id === item.id);
+    if (previous && previous.version > item.version) return records;
+    return previous
+      ? records.map((record) => (record.id === item.id ? item : record))
+      : [...records, item];
+  });
+}
 
 /** Cancel obsolete snapshots before publishing an authoritative mutation response. */
 export async function applyConfirmedWorkItem(

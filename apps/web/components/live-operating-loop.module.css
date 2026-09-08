@@ -9,6 +9,79 @@
   color: var(--text, #1f2433);
 }
 
+.createTaskActions {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem !important;
+}
+.createTaskActions select {
+  max-width: 14rem;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 8px;
+  background: var(--surface, white);
+  color: var(--text, #1f2433);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.savedTaskLink {
+  flex-basis: 100%;
+  text-align: right;
+  font-size: 0.75rem;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+}
+.detailEditor {
+  display: grid;
+  gap: 0.9rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 10px;
+  padding: 1rem;
+}
+.detailEditor > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.detailEditor h3,
+.detailEditor p {
+  margin: 0;
+}
+.detailEditor form {
+  display: grid;
+  gap: 0.8rem;
+}
+.detailEditor small {
+  color: var(--text-secondary, #5f687c);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.workspaceShortcuts {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.workspaceShortcuts a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 9px;
+  background: var(--surface, white);
+  color: var(--text, #1f2433);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.workspaceShortcuts a:hover {
+  color: var(--fh-primary, #5b56db);
+  border-color: currentColor;
+}
+
 .main.inboxMain {
   width: 100%;
   margin: 0;
@@ -23,13 +96,7 @@
   padding: clamp(1.1rem, 2.4vw, 2rem);
   border: 1px solid var(--border, #dfe3ec);
   border-radius: 18px;
-  background:
-    radial-gradient(
-      circle at 90% 10%,
-      color-mix(in srgb, var(--fh-primary, #5b56db) 11%, transparent),
-      transparent 34%
-    ),
-    var(--surface, #fff);
+  background: var(--surface, #fff);
 }
 
 .hero > div {

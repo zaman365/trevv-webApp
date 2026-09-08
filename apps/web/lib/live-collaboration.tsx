@@ -505,11 +505,11 @@ export function LiveUnreadBadge({ workspaceId }: { workspaceId: string }) {
 }
 
 /** Focus trap shared by live collaboration dialogs and responsive drawers. */
-export function useAccessibleDialog(
+export function useAccessibleDialog<T extends HTMLElement = HTMLDivElement>(
   onClose: () => void,
   returnFocusRef?: RefObject<HTMLElement | null>,
-): RefObject<HTMLDivElement | null> {
-  const dialogRef = useRef<HTMLDivElement>(null);
+): RefObject<T | null> {
+  const dialogRef = useRef<T>(null);
   const closeRef = useRef(onClose);
 
   useEffect(() => {

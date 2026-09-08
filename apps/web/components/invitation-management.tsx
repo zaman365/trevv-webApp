@@ -30,7 +30,11 @@ interface InvitationView {
   teamId?: string;
 }
 
-export function InvitationManagement() {
+export function InvitationManagement({
+  initialWorkspaceId = "",
+}: {
+  initialWorkspaceId?: string;
+}) {
   const session = useAppSession();
   const liveData = useOptionalLiveAppData();
   const [working, setWorking] = useState<string | null>(null);
@@ -214,9 +218,8 @@ export function InvitationManagement() {
             <div>
               <h2>Invite a person</h2>
               <p>
-                The database stores only a hash of the expiring, one-time token
-                sent by email. Assign Workspace access now so the person can
-                start collaborating immediately after acceptance.
+                Choose a role and workspace. They’ll receive an email invitation
+                and can start collaborating after accepting it.
               </p>
             </div>
             <label>
@@ -246,7 +249,13 @@ export function InvitationManagement() {
             <label>
               <span>Workspace access</span>
               <select
-                defaultValue={liveData?.workspaces[0]?.id ?? ""}
+                defaultValue={
+                  liveData?.workspaces.find(
+                    (workspace) => workspace.id === initialWorkspaceId,
+                  )?.id ??
+                  liveData?.workspaces[0]?.id ??
+                  ""
+                }
                 disabled={working !== null}
                 name="workspaceId"
               >

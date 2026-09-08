@@ -31,6 +31,8 @@ import {
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
+import { LiveCreateTask } from "./live-create-task";
+import { LiveMyWork } from "./live-work-my-work";
 import styles from "./live-operating-loop.module.css";
 
 export function LiveWorkspaceOverview({
@@ -68,7 +70,7 @@ export function LiveWorkspaceOverview({
   const boards = boardsQuery.data ?? [];
   const loadingBoards = boardsQuery.isPending;
   const operationStatus = operationsQuery.data;
-  const loadError = boardsQuery.error ?? operationsQuery.error;
+  const loadError = boardsQuery.error;
   const [createOpen, setCreateOpen] = useState(false);
   const [boardName, setBoardName] = useState("");
   const [boardDescription, setBoardDescription] = useState("");
@@ -154,7 +156,7 @@ export function LiveWorkspaceOverview({
       setBoardStartDate("");
       setBoardEndDate("");
       setIdempotencyKey(crypto.randomUUID());
-      await liveData.refresh();
+      void liveData.refresh();
     } catch (reason) {
       setMutationError(reason);
     } finally {
@@ -189,13 +191,22 @@ export function LiveWorkspaceOverview({
                 "No current priority has been recorded."}
             </span>
           </div>
-          <Link
-            className="primary-button"
-            href={workspaceHref(workspace.slug, "inbox")}
-          >
-            <Inbox size={15} /> Open Inbox
-          </Link>
+          <LiveCreateTask workspaces={[workspace]} />
         </header>
+
+        <nav
+          className={styles.workspaceShortcuts}
+          aria-label="Workspace shortcuts"
+        >
+          <Link href={workspaceHref(workspace.slug, "my-work")}>My Work</Link>
+          <Link href={workspaceHref(workspace.slug, "teams")}>
+            Teams and people
+          </Link>
+          <Link href={workspaceHref(workspace.slug, "messages")}>Messages</Link>
+          <Link href={workspaceHref(workspace.slug, "inbox")}>
+            <Inbox size={14} /> Open Inbox
+          </Link>
+        </nav>
 
         {liveData.stale ? (
           <LiveStateNotice
@@ -275,7 +286,7 @@ export function LiveWorkspaceOverview({
           <section className={styles.panel} aria-labelledby="live-boards-title">
             <header>
               <div>
-                <p>Durable plan boards</p>
+                <p>Projects and plans</p>
                 <h2 id="live-boards-title">Plans</h2>
               </div>
               <button
@@ -374,6 +385,13 @@ export function LiveWorkspaceOverview({
             </nav>
           </section>
         </div>
+
+        <LiveMyWork
+          items={items}
+          workspaceSlug={workspaceSlug}
+          assignedToMe={false}
+          title="Workspace tasks"
+        />
 
         <section
           className={styles.panel}

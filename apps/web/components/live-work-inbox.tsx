@@ -2,14 +2,13 @@
 
 import { InboxExperience } from "./email-inbox-workflow";
 
-import type {
-  BoardDto,
-  InboxItemDto,
-  WorkItemDto,
-} from "@founderhq/api-contract";
+import type { InboxItemDto, WorkItemDto } from "@founderhq/api-contract";
 import { CheckCircle2, Inbox, LayoutList } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
+import { applyConfirmedInboxItem } from "@/lib/live-app-mutations";
 import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
@@ -30,9 +29,30 @@ function LiveInbox({
 }) {
   const session = useAppSession();
   const liveData = useLiveAppData();
-  const [records, setRecords] = useState<InboxItemDto[]>([]);
-  const [boards, setBoards] = useState<BoardDto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const inboxKey = workspaceResourceKeys.inbox(session.organization.id);
+  const inboxQuery = useQuery({
+    queryKey: inboxKey,
+    queryFn: ({ signal }) => liveData.client.withSignal(signal).inbox(),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const boardQuery = useQuery({
+    queryKey: workspaceResourceKeys.boards(
+      session.organization.id,
+      workspaceId,
+    ),
+    queryFn: ({ signal }) =>
+      liveData.client.withSignal(signal).boards(workspaceId),
+    staleTime: 30_000,
+  });
+  const records = inboxQuery.data ?? [];
+  const boards = boardQuery.data ?? [];
+  const itemBoardIds = useMemo(
+    () => new Map(liveData.items.map((item) => [item.id, item.boardId])),
+    [liveData.items],
+  );
+  const loading = inboxQuery.isPending || boardQuery.isPending;
   useReportRouteReady(!loading);
   const [error, setError] = useState<unknown>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -51,44 +71,22 @@ function LiveInbox({
   } | null>(null);
   const retryKeys = useRef(new Map<string, string>());
 
-  useEffect(() => {
-    let active = true;
-    Promise.all([liveData.client.inbox(), liveData.client.boards(workspaceId)])
-      .then(([nextRecords, nextBoards]) => {
-        if (!active) return;
-        setRecords(nextRecords);
-        setBoards(nextBoards);
-        setSelectedBoards(
-          Object.fromEntries(
-            nextRecords.map((record) => [
-              record.id,
-              resourceString(record.resource, "suggestedBoardId") ??
-                nextBoards[0]?.id ??
-                "",
-            ]),
-          ),
-        );
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(reason);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [liveData.client, workspaceId]);
+  function selectedBoardId(record: InboxItemDto) {
+    const preferred =
+      selectedBoards[record.id] ??
+      resourceString(record.resource, "suggestedBoardId");
+    return (
+      boards.find((board) => board.id === preferred)?.id ?? boards[0]?.id ?? ""
+    );
+  }
 
   const visible = records.filter((record) => {
     const suggested = resourceString(record.resource, "suggestedWorkspaceId");
     return !suggested || suggested === workspaceId;
   });
 
-  function replaceRecord(next: InboxItemDto) {
-    setRecords((current) =>
-      current.map((record) => (record.id === next.id ? next : record)),
-    );
+  async function replaceRecord(next: InboxItemDto) {
+    await applyConfirmedInboxItem(queryClient, session.organization.id, next);
   }
 
   async function markDone(record: InboxItemDto) {
@@ -104,7 +102,7 @@ function LiveInbox({
         retainedKey(retryKeys.current, fingerprint),
       );
       retryKeys.current.delete(fingerprint);
-      replaceRecord(response.data);
+      await replaceRecord(response.data);
       setConfirmation({
         title: `Server confirmed “${response.data.title}” as done`,
         description: `Inbox version ${response.data.version} is canonical.`,
@@ -140,7 +138,7 @@ function LiveInbox({
         retainedKey(retryKeys.current, fingerprint),
       );
       retryKeys.current.delete(fingerprint);
-      replaceRecord(response.data);
+      await replaceRecord(response.data);
       setConfirmation({
         title: `Server confirmed undo for “${response.data.title}”`,
         description: `Inbox version ${response.data.version} is canonical and active again.`,
@@ -155,7 +153,7 @@ function LiveInbox({
   }
 
   async function convert(record: InboxItemDto) {
-    const boardId = selectedBoards[record.id];
+    const boardId = selectedBoardId(record);
     if (!boardId) return;
     const fingerprint = `inbox-convert:${record.id}:${record.version}:${boardId}`;
     setPendingId(record.id);
@@ -175,7 +173,9 @@ function LiveInbox({
             resourceString(record.resource, "priority"),
           ),
           status: "not_started",
-          assigneeIds: [],
+          assigneeIds: resourceString(record.resource, "assigneeId")
+            ? [resourceString(record.resource, "assigneeId")!]
+            : [],
           ...(resourceString(record.resource, "dueDate")
             ? { dueDate: resourceString(record.resource, "dueDate")! }
             : {}),
@@ -186,12 +186,13 @@ function LiveInbox({
         retainedKey(retryKeys.current, fingerprint),
       );
       retryKeys.current.delete(fingerprint);
-      replaceRecord(response.data.inboxItem);
+      await replaceRecord(response.data.inboxItem);
+      await liveData.applyConfirmedItem(response.data.workItem);
       setConfirmation({
         title: `Server confirmed conversion of “${record.title}”`,
         description: `Canonical WorkItem ${response.data.workItem.id} now links back to Inbox record ${record.id}.`,
       });
-      await liveData.refresh();
+      void liveData.refresh();
     } catch (reason) {
       if (presentLiveError(reason).kind === "version-conflict") {
         setConflict({ id: record.id, operation: "convert", error: reason });
@@ -201,8 +202,16 @@ function LiveInbox({
     }
   }
 
-  const presented = error ? presentLiveError(error) : null;
+  const visibleError = error ?? inboxQuery.error ?? boardQuery.error;
+  const presented = visibleError ? presentLiveError(visibleError) : null;
   async function loadLatestInboxRecord(reapply: boolean) {
+    try {
+      await reconcileInboxConflict(reapply);
+    } catch (reason) {
+      setError(reason);
+    }
+  }
+  async function reconcileInboxConflict(reapply: boolean) {
     if (!conflict) return;
     const latestRecords = await liveData.client.inbox();
     const latest = latestRecords.find((record) => record.id === conflict.id);
@@ -211,7 +220,8 @@ function LiveInbox({
       setError(new Error("The Inbox record is no longer available."));
       return;
     }
-    setRecords(latestRecords);
+    await queryClient.cancelQueries({ queryKey: inboxKey });
+    queryClient.setQueryData(inboxKey, latestRecords);
     const operation = conflict.operation;
     setConflict(null);
     setError(null);
@@ -237,6 +247,18 @@ function LiveInbox({
       </header>
       {presented ? (
         <LiveStateNotice
+          actions={
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                void inboxQuery.refetch();
+                void boardQuery.refetch();
+              }}
+            >
+              Refresh Inbox
+            </button>
+          }
           description={presented.description}
           kind={presented.kind}
           title={presented.title}
@@ -315,7 +337,17 @@ function LiveInbox({
                 <h3>{record.title}</h3>
                 {record.body ? <span>{record.body}</span> : null}
                 {record.convertedItemId ? (
-                  <small>Converted to WorkItem {record.convertedItemId}</small>
+                  <small>
+                    Converted to WorkItem {record.convertedItemId}
+                    {itemBoardIds.has(record.convertedItemId) ? (
+                      <Link
+                        href={`${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(itemBoardIds.get(record.convertedItemId)!)}#${encodeURIComponent(record.convertedItemId)}`}
+                      >
+                        {" "}
+                        Open work item
+                      </Link>
+                    ) : null}
+                  </small>
                 ) : record.doneAt ? (
                   <small>
                     Done{" "}
@@ -338,7 +370,7 @@ function LiveInbox({
                           [record.id]: event.target.value,
                         }))
                       }
-                      value={selectedBoards[record.id] ?? ""}
+                      value={selectedBoardId(record)}
                     >
                       {boards.length === 0 ? (
                         <option value="">Create a board first</option>
@@ -351,16 +383,14 @@ function LiveInbox({
                     </select>
                   </label>
                   <button
-                    disabled={
-                      pendingId === record.id || !selectedBoards[record.id]
-                    }
+                    disabled={Boolean(pendingId) || !selectedBoardId(record)}
                     onClick={() => void convert(record)}
                     type="button"
                   >
                     <LayoutList size={14} /> Convert to WorkItem
                   </button>
                   <button
-                    disabled={pendingId === record.id}
+                    disabled={Boolean(pendingId)}
                     onClick={() => void markDone(record)}
                     type="button"
                   >
@@ -421,7 +451,7 @@ export function LiveInboxFeature(props: {
   return (
     <InboxExperience
       capturedWork={<LiveInbox {...props} />}
-      initialArea="email"
+      initialArea="captured"
     />
   );
 }

@@ -25,5 +25,7 @@ export function useWorkItemDetails(
     },
     enabled: Boolean(workspaceId && itemId),
     staleTime: 15_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
   });
 }

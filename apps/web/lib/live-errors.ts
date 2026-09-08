@@ -17,6 +17,19 @@ export interface LiveErrorPresentation {
   retryAfterSeconds?: number;
 }
 
+/** A failed read says nothing about whether an earlier write was saved. */
+export function presentLiveReadError(error: unknown): LiveErrorPresentation {
+  const presented = presentLiveError(error);
+  if (presented.kind === "permission-loss" || presented.kind === "rate-limit")
+    return presented;
+  return {
+    ...presented,
+    title: "Unable to refresh current data",
+    description:
+      "Your last loaded records and drafts are kept. Retry to check for updates.",
+  };
+}
+
 export function presentLiveError(error: unknown): LiveErrorPresentation {
   if (error instanceof TrevvApiError) {
     const common = {

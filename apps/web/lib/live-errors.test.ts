@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { TrevvApiError } from "@founderhq/api-client";
-import { presentLiveError } from "./live-errors";
+import { presentLiveError, presentLiveReadError } from "./live-errors";
+
+describe("background read errors", () => {
+  it("does not report a previously saved change as failed when a refresh fails", () => {
+    const error = new TrevvApiError(
+      "unavailable",
+      "Unavailable",
+      "request-one",
+      503,
+    );
+    expect(presentLiveReadError(error)).toMatchObject({
+      title: "Unable to refresh current data",
+      description:
+        "Your last loaded records and drafts are kept. Retry to check for updates.",
+      requestId: "request-one",
+    });
+  });
+  it("still exposes permission loss immediately", () => {
+    expect(
+      presentLiveReadError(
+        new TrevvApiError("forbidden", "Access changed", "request-one", 403),
+      ).kind,
+    ).toBe("permission-loss");
+  });
+});
 
 describe("presentLiveError", () => {
   it.each([

@@ -19,6 +19,10 @@ import {
   type LiveDraftEnvelope,
 } from "@/lib/live-workflow-ui";
 import { LiveStateNotice } from "./live-state";
+import { LiveAssigneeField } from "./live-assignee-field";
+import { useQueryClient } from "@tanstack/react-query";
+import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
+import { applyConfirmedInboxItem } from "@/lib/live-app-mutations";
 import styles from "./live-operating-loop.module.css";
 
 type CaptureType = WorkItemDto["type"];
@@ -32,6 +36,7 @@ interface LiveCaptureDraft {
   description: string;
   priority: CapturePriority;
   dueDate: string;
+  assigneeId?: string;
   attemptedFingerprint: string;
 }
 
@@ -42,6 +47,7 @@ export interface LiveCaptureSuccess {
   workspaceSlug: string;
   routeView: "inbox" | "my-work" | "decisions" | "approvals";
   replayed: boolean;
+  boardId?: string;
 }
 
 const emptyDraft: LiveCaptureDraft = {
@@ -60,20 +66,29 @@ export function LiveQuickCaptureDialog({
   workspaceSlug,
   onClose,
   onConfirmed,
+  defaultDestination = "inbox",
+  defaultAssigneeId = "",
 }: {
   workspaceId: string;
   workspaceSlug: string;
   onClose: () => void;
   onConfirmed: (result: LiveCaptureSuccess) => void;
+  defaultDestination?: "inbox" | "board";
+  defaultAssigneeId?: string;
 }) {
   const session = useAppSession();
+  const queryClient = useQueryClient();
   const liveData = useLiveAppData();
   const storageKey = liveDraftStorageKey({
     organizationId: session.organization.id,
     userId: session.user.id,
     scope: `quick-capture:${workspaceId}`,
   });
-  const [draft, setDraft] = useState<LiveCaptureDraft>(emptyDraft);
+  const [draft, setDraft] = useState<LiveCaptureDraft>(() => ({
+    ...emptyDraft,
+    destination: defaultDestination,
+    assigneeId: defaultAssigneeId,
+  }));
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID(),
   );
@@ -194,11 +209,20 @@ export function LiveQuickCaptureDialog({
               type: attemptedDraft.type,
               priority: attemptedDraft.priority,
               dueDate: attemptedDraft.dueDate || undefined,
+              assigneeId: attemptedDraft.assigneeId || undefined,
             },
           },
           idempotencyKey,
         );
-        await liveData.refresh();
+        await applyConfirmedInboxItem(
+          queryClient,
+          session.organization.id,
+          result.data,
+        );
+        void queryClient.invalidateQueries({
+          queryKey: workspaceResourceKeys.inbox(session.organization.id),
+        });
+        void liveData.refresh();
         clearDraft(storageKey);
         onConfirmed({
           destination: "inbox",
@@ -223,7 +247,9 @@ export function LiveQuickCaptureDialog({
           ...(attemptedDraft.dueDate
             ? { dueDate: attemptedDraft.dueDate }
             : {}),
-          assigneeIds: [],
+          assigneeIds: attemptedDraft.assigneeId
+            ? [attemptedDraft.assigneeId]
+            : [],
           ...(attemptedDraft.type === "decision"
             ? { decisionState: "needed" }
             : {}),
@@ -233,7 +259,8 @@ export function LiveQuickCaptureDialog({
         },
         idempotencyKey,
       );
-      await liveData.refresh();
+      await liveData.applyConfirmedItem(result.data);
+      void liveData.refresh();
       clearDraft(storageKey);
       onConfirmed({
         destination: "board",
@@ -247,6 +274,7 @@ export function LiveQuickCaptureDialog({
               ? "approvals"
               : "my-work",
         replayed: result.replayed,
+        boardId: result.data.boardId,
       });
     } catch (reason) {
       setError(reason);
@@ -435,6 +463,18 @@ export function LiveQuickCaptureDialog({
             </label>
           </div>
 
+          <LiveAssigneeField
+            workspaceId={workspaceId}
+            value={draft.assigneeId ?? ""}
+            onChange={(assigneeId) => changeDraft({ assigneeId })}
+          />
+          {draft.destination === "inbox" && draft.assigneeId ? (
+            <small>
+              The assignee will be applied when this capture becomes a board
+              item.
+            </small>
+          ) : null}
+
           <label className={styles.field}>
             <span>Context · Optional</span>
             <textarea
@@ -501,6 +541,7 @@ function isCaptureDraft(value: unknown): value is LiveCaptureDraft {
       draft.priority ?? "",
     ) &&
     typeof draft.dueDate === "string" &&
+    (draft.assigneeId === undefined || typeof draft.assigneeId === "string") &&
     typeof draft.attemptedFingerprint === "string"
   );
 }
@@ -540,6 +581,7 @@ function captureFingerprint(draft: LiveCaptureDraft) {
     description: draft.description,
     priority: draft.priority,
     dueDate: draft.dueDate,
+    ...(draft.assigneeId ? { assigneeId: draft.assigneeId } : {}),
   });
 }
 

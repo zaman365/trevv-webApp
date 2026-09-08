@@ -1730,3 +1730,16 @@
     scroll-behavior: auto;
   }
 }
+.syncStatus {
+  display: block;
+  min-height: 1rem;
+  color: var(--text-secondary, #5f687c);
+  font-size: 0.7rem;
+}
+.teamWorkActions {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}

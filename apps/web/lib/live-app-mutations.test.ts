@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
-import type { WorkItemDto, WorkspaceDto } from "@founderhq/api-contract";
+import type {
+  InboxItemDto,
+  WorkItemDto,
+  WorkspaceDto,
+} from "@founderhq/api-contract";
 import type { LiveAppDataSnapshot } from "./live-app-data";
 import {
   applyConfirmedWorkItem,
   removeConfirmedWorkItem,
+  applyConfirmedInboxItem,
 } from "./live-app-mutations";
+import { workspaceResourceKeys } from "./workspace-resource-keys";
 const key = ["live-app-data", "workspace", "w"];
 const workspace: WorkspaceDto = {
   id: "w",
@@ -49,6 +55,46 @@ const snapshot = (version: number): LiveAppDataSnapshot => ({
 });
 
 describe("confirmed mutation ordering", () => {
+  const capture: InboxItemDto = {
+    id: "capture",
+    userId: "user",
+    category: "task",
+    title: "Captured",
+    body: "",
+    resource: {},
+    version: 1,
+    createdAt: "2026-09-07T10:00:00.000Z",
+  };
+  it("publishes confirmed Inbox capture once without inventing a complete cold cache", async () => {
+    const client = new QueryClient();
+    const key = workspaceResourceKeys.inbox("org");
+    await applyConfirmedInboxItem(client, "org", capture);
+    expect(client.getQueryData(key)).toBeUndefined();
+    client.setQueryData(key, []);
+    await applyConfirmedInboxItem(client, "org", capture);
+    await applyConfirmedInboxItem(client, "org", capture);
+    await applyConfirmedInboxItem(client, "org", {
+      ...capture,
+      version: 2,
+      doneAt: capture.createdAt,
+    });
+    await applyConfirmedInboxItem(client, "org", capture);
+    expect(client.getQueryData<InboxItemDto[]>(key)).toEqual([
+      { ...capture, version: 2, doneAt: capture.createdAt },
+    ]);
+    client.clear();
+  });
+  it("does not publish an Inbox confirmation into a changed account", async () => {
+    const client = new QueryClient();
+    const key = workspaceResourceKeys.inbox("org");
+    client.setQueryData(key, []);
+    client.setQueryData(["live-app-access"], {
+      session: { organization: { id: "org" }, user: { id: "other-user" } },
+    });
+    await applyConfirmedInboxItem(client, "org", capture);
+    expect(client.getQueryData(key)).toEqual([]);
+    client.clear();
+  });
   it.each(["update", "delete"] as const)(
     "an obsolete in-flight snapshot cannot undo a confirmed %s",
     async (kind) => {

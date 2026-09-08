@@ -22,6 +22,7 @@ import { workspaceSlugFromName } from "@/lib/live-workflow-ui";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
+import { LiveCreateTask } from "./live-create-task";
 import styles from "./live-operating-loop.module.css";
 
 type WorkspaceType = WorkspaceDto["type"];
@@ -118,12 +119,12 @@ export function LivePortfolioExperience() {
         },
         idempotencyKey,
       );
-      await liveData.refresh();
       setConfirmed(result.data.workspace);
       setFormOpen(false);
       setName("");
       setPriority("");
       setIdempotencyKey(crypto.randomUUID());
+      void liveData.refresh();
     } catch (reason) {
       setError(reason);
     } finally {
@@ -141,8 +142,8 @@ export function LivePortfolioExperience() {
             <p>Portfolio · {session.organization.name}</p>
             <h1>{portfolio?.name ?? "Your portfolio"}</h1>
             <span>
-              Durable workspaces and their current operating signals. Updated in{" "}
-              {session.organization.timezone ?? "UTC"}.
+              Your startups, teams, and projects — with a clear view of what
+              needs attention.
             </span>
           </div>
           {portfolio && canCreateWorkspace ? (
@@ -156,6 +157,21 @@ export function LivePortfolioExperience() {
             </button>
           ) : null}
         </header>
+
+        <section className={styles.panel} aria-label="Start your day">
+          <header>
+            <div>
+              <p>Start here</p>
+              <h2>Turn plans into finished work</h2>
+            </div>
+            <Link href="/app/my-work">Open all my work →</Link>
+          </header>
+          <p>
+            Use a workspace for each startup, business, or client. Add project
+            boards, invite your team, and keep tasks and conversations together.
+          </p>
+          <LiveCreateTask workspaces={workspaces} />
+        </section>
 
         {liveData.stale ? (
           <LiveStateNotice
@@ -210,7 +226,7 @@ export function LivePortfolioExperience() {
         >
           <header>
             <div>
-              <p>Canonical workspace records</p>
+              <p>Startups, businesses, clients, and projects</p>
               <h2 id="live-workspaces-title">Workspaces</h2>
             </div>
             <small>
@@ -383,7 +399,9 @@ export function LivePortfolioExperience() {
                         ] as const
                       ).map((candidate) => (
                         <option key={candidate} value={candidate}>
-                          {candidate.replaceAll("_", " ")}
+                          {candidate === "venture"
+                            ? "startup / venture"
+                            : candidate.replaceAll("_", " ")}
                         </option>
                       ))}
                     </select>

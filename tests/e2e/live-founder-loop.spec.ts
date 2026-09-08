@@ -992,6 +992,8 @@ test.describe.serial("live founder operating loop", () => {
     await taskDialog.getByLabel("Title").fill(taskName);
     await taskDialog.getByLabel("Type").selectOption("task");
     await taskDialog.getByLabel("Priority").selectOption("high");
+    await taskDialog.getByLabel("Choose assignee").selectOption(ownerUserId);
+    await taskDialog.getByLabel("Due date").fill("2026-09-12");
     await taskDialog
       .getByLabel("Description · Optional")
       .fill("Agree the durable launch scope with the delivery team.");
@@ -1001,6 +1003,66 @@ test.describe.serial("live founder operating loop", () => {
     await expect(
       page.getByText(`Server confirmed “${taskName}”`),
     ).toBeVisible();
+
+    const taskDetail = page.getByTestId("work-item-detail");
+    await expect(taskDetail).toBeVisible();
+    await taskDetail.getByRole("button", { name: "Edit details" }).click();
+    await taskDetail
+      .getByRole("textbox", { name: "Description", exact: true })
+      .fill("Launch scope approved; implementation can begin.");
+    await taskDetail.getByLabel("Due date", { exact: true }).fill("");
+    await taskDetail.getByRole("button", { name: "Save changes" }).click();
+    await expect(
+      taskDetail.getByText("No due date", { exact: true }),
+    ).toBeVisible();
+    await taskDetail
+      .getByLabel("Post an update")
+      .fill("Ready for the delivery team to pick up.");
+    await taskDetail
+      .getByRole("button", { name: "Post update", exact: true })
+      .click();
+    await expect(
+      taskDetail.getByRole("region", { name: "Updates and evidence" }),
+    ).toContainText("Ready for the delivery team to pick up.");
+    await page.reload();
+    await page.getByRole("button", { name: taskName }).click();
+    await expect(page.getByTestId("work-item-detail")).toContainText(
+      "Launch scope approved; implementation can begin.",
+    );
+    await expect(page.getByTestId("work-item-detail")).toContainText(
+      "Ready for the delivery team to pick up.",
+    );
+    await page.keyboard.press("Escape");
+    await page.goto("/app/my-work");
+    await expect(page.getByTestId("live-personal-work")).toBeVisible();
+    const personalTask = page.getByRole("link", { name: new RegExp(taskName) });
+    await expect(personalTask).toBeVisible();
+    await personalTask.click();
+    await expect(page.getByTestId("work-item-detail")).toContainText(taskName);
+    await page.keyboard.press("Escape");
+    await page
+      .getByTestId("live-board")
+      .getByRole("button", { name: "Board", exact: true })
+      .click();
+    await expect(
+      page.getByRole("region", { name: /^not started/ }),
+    ).toContainText(taskName);
+    await page.screenshot({
+      path: test.info().outputPath("project-board-desktop.png"),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page
+      .getByTestId("live-board")
+      .getByRole("button", { name: "List", exact: true })
+      .click();
+    await expect(page.getByRole("button", { name: taskName })).toBeVisible();
+    await expectNoLiveWcagFindings(page, "task-board-mobile");
+    await page.screenshot({
+      path: test.info().outputPath("project-tasks-mobile.png"),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
 
     await page.goto(`/app/workspaces/${projectSlug}/teams`);
     const createHierarchyTeam = page.getByTestId("create-team-open");
@@ -1024,6 +1086,28 @@ test.describe.serial("live founder operating loop", () => {
 
     await page.reload();
     await expect(page.getByRole("heading", { name: teamName })).toBeVisible();
+    await page.getByRole("button", { name: "View member workload" }).click();
+    await expect(
+      page.getByRole("region", { name: "Member workload", exact: true }),
+    ).toContainText(taskName);
+    await page
+      .getByRole("link", { name: "Open team room", exact: true })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`/app/workspaces/${projectSlug}/messages#.+`),
+    );
+    await expect(
+      page.getByRole("heading", { name: teamName, exact: true }),
+    ).toBeVisible();
+    await page.goto(`/app/workspaces/${projectSlug}/teams`);
+    await page
+      .getByRole("link", { name: `Invite people to ${projectName}` })
+      .click();
+    await expect(page.getByLabel("Workspace access")).not.toHaveValue("");
+    await expect(
+      page.getByLabel("Workspace access").locator("option:checked"),
+    ).toHaveText(projectName);
+
     await page.goto(`/app/workspaces/${projectSlug}/settings`);
     await page.getByLabel("Current priority").fill(updatedPriority);
     await page

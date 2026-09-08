@@ -1066,6 +1066,16 @@ a {
     color: var(--fh-primary);
     font-weight: 700;
   }
+  .product-shell[data-runtime="live"] .mobile-bottom-nav > a > span:last-child,
+  .product-shell[data-runtime="live"]
+    .mobile-bottom-nav
+    > button
+    > span:last-child {
+    white-space: nowrap;
+    font-size: 11px;
+    line-height: 16px;
+    background: var(--fh-surface);
+  }
   .mobile-capture {
     width: 38px;
     height: 38px;

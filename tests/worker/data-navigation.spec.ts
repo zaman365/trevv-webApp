@@ -12,6 +12,42 @@ test.beforeEach(async ({ context, request }) => {
   ]);
 });
 
+test("All my work spans authorized workspaces and retains each task's own destination", async ({
+  page,
+  request,
+}) => {
+  await request.get(`${api}/test/reset?items=2&unrelatedItems=2`);
+  await page.goto("/app/my-work");
+  const work = page.getByTestId("live-personal-work");
+  await expect(
+    work.getByTestId("work-item-workspace-one-item-0"),
+  ).toBeVisible();
+  const second = work.getByTestId("work-item-workspace-two-item-0");
+  await expect(second.getByRole("link")).toHaveAttribute(
+    "href",
+    "/app/workspaces/another-workspace/boards/board-two#workspace-two-item-0",
+  );
+  await work
+    .getByRole("combobox", { name: "Workspace", exact: true })
+    .selectOption("workspace-two");
+  await expect(work.getByTestId("work-item-workspace-one-item-0")).toHaveCount(
+    0,
+  );
+  await expect(second).toBeVisible();
+  await work
+    .getByRole("combobox", { name: "Workspace", exact: true })
+    .selectOption("workspace-one");
+  await expect(second).toHaveCount(0);
+  await request.get(`${api}/test/reset?items=2&unrelatedItems=2&denied=1`);
+  await expect(
+    work.getByRole("combobox", { name: "Workspace", exact: true }),
+  ).toHaveCount(0, { timeout: 10_000 });
+  await expect(work.getByTestId("work-item-workspace-one-item-0")).toHaveCount(
+    0,
+  );
+  await expect(second).toBeVisible();
+});
+
 test("first useful workspace records do not wait for 10,001 current or 10,000 unrelated records", async ({
   page,
   request,

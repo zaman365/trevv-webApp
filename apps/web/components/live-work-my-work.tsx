@@ -1,36 +1,35 @@
 "use client";
 
-import { useReportRouteReady } from "@/lib/navigation-performance";
-
 import type { WorkItemDto } from "@founderhq/api-contract";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
-import { presentLiveError } from "@/lib/live-errors";
-import { workItemStatusLabel } from "@/lib/live-workflow-ui";
+import { presentLiveError, presentLiveReadError } from "@/lib/live-errors";
 import { workspaceHref } from "@/lib/workspace-routes";
+import { retainedKey } from "@/lib/live-work-view-helpers";
 import { LiveStateNotice } from "./live-state";
+import { LiveTaskList } from "./live-task-list";
 import styles from "./live-operating-loop.module.css";
-import { WindowedCollection } from "./windowed-collection";
-import {
-  recordKey,
-  retainedKey,
-  editableStatusOptions,
-} from "@/lib/live-work-view-helpers";
 
 export function LiveMyWork({
   items,
   workspaceSlug,
+  assignedToMe = true,
+  title = "My tasks",
 }: {
   items: WorkItemDto[];
-  workspaceSlug: string;
+  workspaceSlug?: string;
+  assignedToMe?: boolean;
+  title?: string;
 }) {
   useReportRouteReady(true);
   const session = useAppSession();
   const liveData = useLiveAppData();
   const [localItems, setLocalItems] = useState(items);
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const inFlight = useRef(new Set<string>());
   const [notice, setNotice] = useState<ReactNode>(null);
   const [conflict, setConflict] = useState<{
     itemId: string;
@@ -38,32 +37,31 @@ export function LiveMyWork({
     error: unknown;
   } | null>(null);
   const retryKeys = useRef(new Map<string, string>());
-  const mine = localItems.filter(
-    (item) =>
-      item.status !== "done" &&
-      item.assignees.some((assignee) => assignee.id === session.user.id),
-  );
+  const mine = assignedToMe
+    ? localItems.filter((item) =>
+        item.assignees.some((assignee) => assignee.id === session.user.id),
+      )
+    : localItems;
 
   useEffect(() => {
-    if (pendingId) return;
+    if (pendingIds.size) return;
     const timer = window.setTimeout(() => setLocalItems(items), 0);
     return () => window.clearTimeout(timer);
-  }, [items, pendingId]);
+  }, [items, pendingIds.size]);
 
   async function changeStatus(
     item: WorkItemDto,
     status: WorkItemDto["status"],
   ) {
+    if (inFlight.current.has(item.id)) return;
+    inFlight.current.add(item.id);
     const fingerprint = `status:${item.id}:${item.version}:${status}`;
-    const previous = item;
     setLocalItems((current) =>
       current.map((record) =>
-        record.id === item.id
-          ? { ...record, status, updatedAt: new Date().toISOString() }
-          : record,
+        record.id === item.id ? { ...record, status } : record,
       ),
     );
-    setPendingId(item.id);
+    setPendingIds((current) => new Set(current).add(item.id));
     setNotice(null);
     setConflict(null);
     try {
@@ -82,31 +80,44 @@ export function LiveMyWork({
       );
       setNotice(
         <LiveStateNotice
-          description={`Version ${response.data.version} is canonical.`}
+          description="Your change is saved."
           kind="saved"
           title={`Server confirmed “${response.data.title}”`}
         />,
       );
-      await liveData.refresh({ backgroundRecords: true });
+      void liveData.refresh({ backgroundRecords: true });
     } catch (reason) {
       setLocalItems((current) =>
-        current.map((record) =>
-          record.id === previous.id ? previous : record,
-        ),
+        current.map((record) => (record.id === item.id ? item : record)),
       );
       const presented = presentLiveError(reason);
-      if (presented.kind === "version-conflict") {
+      if (presented.kind === "version-conflict")
         setConflict({ itemId: item.id, status, error: reason });
-      }
-      setNotice(
-        <LiveStateNotice
-          description={presented.description}
-          kind={presented.kind}
-          title={presented.title}
-        />,
-      );
+      setNotice(<LiveStateNotice {...presented} />);
     } finally {
-      setPendingId(null);
+      inFlight.current.delete(item.id);
+      setPendingIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+    }
+  }
+
+  async function reloadConflict(reapply: boolean) {
+    if (!conflict) return;
+    try {
+      const latest = await liveData.client.item(conflict.itemId);
+      await liveData.applyConfirmedItem(latest);
+      setLocalItems((current) =>
+        current.map((item) => (item.id === latest.id ? latest : item)),
+      );
+      setConflict(null);
+      if (reapply) await changeStatus(latest, conflict.status);
+      else
+        setNotice(<LiveStateNotice kind="saved" title="Latest task loaded" />);
+    } catch (error) {
+      setNotice(<LiveStateNotice {...presentLiveReadError(error)} />);
     }
   }
 
@@ -114,41 +125,28 @@ export function LiveMyWork({
     <section className={styles.panel} aria-labelledby="my-work-title">
       <header>
         <div>
-          <p>{session.user.name}</p>
-          <h2 id="my-work-title">Assigned WorkItems</h2>
+          <p>
+            {assignedToMe
+              ? session.user.name
+              : "Owners, deadlines, and progress"}
+          </p>
+          <h2 id="my-work-title">{title}</h2>
         </div>
+        <Link
+          href={workspaceSlug ? workspaceHref(workspaceSlug) : "/app/portfolio"}
+        >
+          Open boards
+        </Link>
       </header>
       {notice}
       {conflict ? (
         <LiveStateNotice
           actions={
             <>
-              <button
-                onClick={() =>
-                  void (async () => {
-                    const latest = await liveData.client.item(conflict.itemId);
-                    setLocalItems((current) =>
-                      current.map((item) =>
-                        item.id === latest.id ? latest : item,
-                      ),
-                    );
-                    setConflict(null);
-                  })()
-                }
-                type="button"
-              >
+              <button onClick={() => void reloadConflict(false)} type="button">
                 Load latest
               </button>
-              <button
-                onClick={() =>
-                  void (async () => {
-                    const latest = await liveData.client.item(conflict.itemId);
-                    setConflict(null);
-                    await changeStatus(latest, conflict.status);
-                  })()
-                }
-                type="button"
-              >
+              <button onClick={() => void reloadConflict(true)} type="button">
                 Reapply to latest
               </button>
             </>
@@ -158,64 +156,25 @@ export function LiveMyWork({
           title="Choose how to handle the newer WorkItem"
         />
       ) : null}
-      {mine.length === 0 ? (
-        <LiveStateNotice
-          actions={<Link href={workspaceHref(workspaceSlug)}>Open boards</Link>}
-          description={
-            liveData.recordsComplete
-              ? "Assign a WorkItem to yourself from its board details."
-              : "More workspace records are still arriving."
-          }
-          kind={liveData.recordsComplete ? "empty" : "loading"}
-          title={
-            liveData.recordsComplete
-              ? "Nothing is assigned to you"
-              : "Loading assigned work"
-          }
-        />
+      {mine.length === 0 && !liveData.recordsComplete ? (
+        <LiveStateNotice kind="loading" title="Loading assigned work" />
       ) : (
-        <WindowedCollection
-          className={styles.itemTable}
+        <LiveTaskList
           items={mine}
-          itemKey={recordKey}
-          label="Work records"
-        >
-          {(item) => (
-            <article className={styles.itemRow} key={item.id} role="listitem">
-              <Link
-                className={styles.itemTitle}
-                href={`${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(item.boardId)}#${encodeURIComponent(item.id)}`}
-              >
-                <span className={styles.typePill}>{item.type}</span>
-                <strong>{item.title}</strong>
-                <small>v{item.version}</small>
-              </Link>
-              <select
-                aria-label={`Status for ${item.title}`}
-                disabled={
-                  pendingId === item.id ||
-                  item.status === "blocked" ||
-                  item.status === "done"
-                }
-                onChange={(event) =>
-                  void changeStatus(
-                    item,
-                    event.target.value as WorkItemDto["status"],
-                  )
-                }
-                value={item.status}
-              >
-                {editableStatusOptions(item.status).map((status) => (
-                  <option key={status} value={status}>
-                    {workItemStatusLabel(status)}
-                  </option>
-                ))}
-              </select>
-              <span className={styles.priority}>{item.priority}</span>
-              <span>{pendingId === item.id ? "Saving…" : "Server synced"}</span>
-            </article>
-          )}
-        </WindowedCollection>
+          workspaces={
+            workspaceSlug
+              ? liveData.workspaces.filter(
+                  (workspace) => workspace.slug === workspaceSlug,
+                )
+              : liveData.workspaces
+          }
+          userId={session.user.id}
+          timezone={session.organization.timezone ?? "UTC"}
+          pendingIds={pendingIds}
+          onStatusChange={(item, status) => void changeStatus(item, status)}
+          initialPeriod="open"
+          complete={liveData.recordsComplete}
+        />
       )}
     </section>
   );

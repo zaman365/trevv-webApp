@@ -19,6 +19,7 @@ import {
   teamSchema,
   teamFeatureCapabilitiesForPreset,
   updateMessageResponseSchema,
+  updateItemSchema,
   updateCalendarEventSchema,
   updateWorkspaceSchema,
   versionTagEntityTagSchema,
@@ -622,5 +623,20 @@ describe("Phase 4 collaboration contract", () => {
       database: "ready",
       release: { releaseId: "release-2026.08.30.1" },
     });
+  });
+});
+
+describe("task deadline editing", () => {
+  it("distinguishes clearing a deadline from leaving it unchanged", () => {
+    expect(updateItemSchema.parse({ dueDate: null })).toEqual({
+      dueDate: null,
+    });
+    expect(
+      updateItemSchema.parse({ title: "Scope agreed" }),
+    ).not.toHaveProperty("dueDate");
+    expect(updateItemSchema.safeParse({ dueDate: "" }).success).toBe(false);
+    expect(
+      openApiDocument.components.schemas.WorkItemPatch.properties.dueDate.type,
+    ).toEqual(["string", "null"]);
   });
 });

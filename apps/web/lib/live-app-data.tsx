@@ -168,7 +168,7 @@ function LiveAppDataQuery({
     const read = createLiveAccessReader(
       client,
       { userId, organizationId },
-      { timeoutMs: 1_000 },
+      { timeoutMs: 4_500 },
     );
     return async (signal?: AbortSignal) => {
       const result = await read(signal);
@@ -428,6 +428,7 @@ function LiveAppDataQuery({
     null,
   );
   useEffect(() => {
+    if (refreshedAt === emptySnapshot.refreshedAt) return;
     const expiresAt = Date.parse(refreshedAt) + 15_000;
     const timeout = window.setTimeout(
       () => setExpiredRefreshedAt(refreshedAt),

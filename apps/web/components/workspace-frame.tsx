@@ -69,7 +69,7 @@ import {
   LiveCollaborationEventBridge,
   LiveUnreadBadge,
 } from "@/lib/live-collaboration";
-import { presentLiveError } from "@/lib/live-errors";
+import { presentLiveReadError } from "@/lib/live-errors";
 import {
   clearLiveDraftStorage,
   formatCompactWorkspaceDate,
@@ -457,7 +457,10 @@ function WorkspaceChrome({
   ] as const;
 
   return (
-    <div className="product-shell workspace-product">
+    <div
+      className="product-shell workspace-product"
+      data-runtime={appSession.demo ? "demo" : "live"}
+    >
       {router.pending ? (
         <span className="sr-only" role="status">
           Opening page
@@ -696,11 +699,23 @@ function WorkspaceChrome({
             <Grid2X2 size={17} />
             <span>Portfolio</span>
           </Link>
+          {!appSession.demo ? (
+            <Link
+              className={`nav-item ${active === "myWork" && !workspaceSlug ? "active" : ""}`}
+              href="/app/my-work"
+              onClick={() => setOpen(false)}
+            >
+              <ClipboardCheck size={17} />
+              <span>All my work</span>
+            </Link>
+          ) : null}
           <p className="nav-label spaced">Workspace</p>
           {contextProject ? (
             <>
               {nav.map(([key, label, href, Icon, badge]) => {
-                const isActive = active === key;
+                const isActive =
+                  active === key &&
+                  (key !== "myWork" || Boolean(workspaceSlug));
 
                 return (
                   <Link
@@ -1258,7 +1273,7 @@ function WorkspaceChrome({
             <LiveStateNotice
               compact
               {...(liveData.error
-                ? presentLiveError(liveData.error)
+                ? presentLiveReadError(liveData.error)
                 : {
                     kind: "stale" as const,
                     title: "Showing last-known data",
@@ -1392,10 +1407,14 @@ function WorkspaceChrome({
             </span>
           </div>
           <Link
-            href={workspaceHref(
-              latestLiveCapture.workspaceSlug,
-              latestLiveCapture.routeView,
-            )}
+            href={
+              latestLiveCapture.boardId
+                ? `${workspaceHref(latestLiveCapture.workspaceSlug)}/boards/${encodeURIComponent(latestLiveCapture.boardId)}#${encodeURIComponent(latestLiveCapture.recordId)}`
+                : workspaceHref(
+                    latestLiveCapture.workspaceSlug,
+                    latestLiveCapture.routeView,
+                  )
+            }
           >
             Open
           </Link>

@@ -3,6 +3,17 @@ import { workspaceShellRoute } from "./workspace-shell-route";
 import { workspaceViews } from "./workspace-routes";
 
 describe("persistent shell route ownership", () => {
+  it("loads accessible organization records for all My Work while preserving the scoped route", () => {
+    expect(workspaceShellRoute("/app/my-work")).toEqual({
+      active: "myWork",
+      requiresRecords: true,
+    });
+    expect(workspaceShellRoute("/app/workspaces/launch/my-work")).toEqual({
+      active: "myWork",
+      workspaceSlug: "launch",
+      requiresRecords: true,
+    });
+  });
   it.each(workspaceViews)(
     "preserves chrome and record access for %s",
     (view) => {

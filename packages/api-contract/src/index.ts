@@ -1775,7 +1775,10 @@ export const updateItemSchema = workItemBaseSchema
     dueDate: true,
   })
   .partial()
-  .extend({ assigneeIds: z.array(idSchema).max(100).optional() })
+  .extend({
+    assigneeIds: z.array(idSchema).max(100).optional(),
+    dueDate: z.iso.date().nullable().optional(),
+  })
   .refine(
     (value) => Object.values(value).some((field) => field !== undefined),
     {

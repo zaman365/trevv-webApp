@@ -9,12 +9,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function InvitationsPage() {
+export default async function InvitationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ workspaceId?: string }>;
+}) {
   const session = await requireAppSession("/app/account/invitations");
+  const params = await searchParams;
   if (!["owner", "admin"].includes(session.organization.role)) notFound();
   return (
     <WorkspaceFrame active="settings">
-      <InvitationManagement />
+      <InvitationManagement initialWorkspaceId={params.workspaceId ?? ""} />
     </WorkspaceFrame>
   );
 }

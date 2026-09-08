@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import {
   collaborationKeys,
@@ -34,6 +34,9 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-collaboration.module.css";
+import { LiveMyWork } from "./live-work-my-work";
+import { retainedKey } from "@/lib/live-work-view-helpers";
+import { taskToday } from "@/lib/task-views";
 
 const featureLabels: Record<TeamFeatureCapability, string> = {
   work: "Work coordination",
@@ -70,6 +73,8 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
   const visibleDirectory = directoryAccessLost ? undefined : directory.data;
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [workTeamId, setWorkTeamId] = useState("");
+  const createKeys = useRef(new Map<string, string>());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [savedMessage, setSavedMessage] = useState("");
@@ -101,6 +106,9 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
     setSavedMessage("");
     try {
       const result = await operation();
+      await queryClient.cancelQueries({
+        queryKey: collaborationKeys.teams(result.data.workspaceId),
+      });
       queryClient.setQueryData(
         collaborationKeys.teams(result.data.workspaceId),
         (current: typeof directory.data) =>
@@ -116,7 +124,7 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
             : current,
       );
       setSavedMessage(confirmation);
-      await refreshCollaboration();
+      void refreshCollaboration();
       return result.data;
     } catch (reason) {
       setError(reason);
@@ -127,11 +135,17 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
   }
 
   async function createTeam(input: CreateTeamInput) {
+    const fingerprint = JSON.stringify(input);
     const created = await runTeamMutation(
-      () => liveData.client.createTeam(input, crypto.randomUUID()),
+      () =>
+        liveData.client.createTeam(
+          input,
+          retainedKey(createKeys.current, fingerprint),
+        ),
       `Team “${input.name}” and its room were saved.`,
     );
     if (!created) return false;
+    createKeys.current.delete(fingerprint);
     setCreateOpen(false);
     setSelectedTeamId(created.id);
     return true;
@@ -165,8 +179,8 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
             <p>{workspace.name} / Collaboration</p>
             <h1>Teams</h1>
             <span>
-              Durable membership, clear feature presets, and one synchronized
-              Team room per Team.
+              Bring people together, balance their work, and keep conversations
+              connected.
             </span>
           </div>
           {canCreate ? (
@@ -186,16 +200,22 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
           ) : null}
         </header>
 
+        {["owner", "admin"].includes(session.organization.role) ? (
+          <Link
+            href={`/app/account/invitations?workspaceId=${encodeURIComponent(workspace.id)}`}
+          >
+            Invite people to {workspace.name}
+          </Link>
+        ) : null}
+
         {directory.isLoading ? (
           <LiveStateNotice kind="loading" title="Loading Teams" />
         ) : null}
-        {directory.isFetching && !directory.isLoading ? (
-          <LiveStateNotice
-            compact
-            kind="retrying"
-            title="Checking for Team changes"
-          />
-        ) : null}
+        <span className={styles.syncStatus} aria-live="off">
+          {directory.isFetching && !directory.isLoading
+            ? "Checking for Team changes"
+            : "Team directory"}
+        </span>
         {presentedError ? (
           <LiveStateNotice
             {...presentedError}
@@ -270,6 +290,16 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
                 const lead = team.members.find(
                   (member) => member.role === "lead",
                 );
+                const memberIds = new Set(
+                  team.members.map((member) => member.user.id),
+                );
+                const tasks = liveData.items.filter(
+                  (item) =>
+                    item.workspaceId === workspace.id &&
+                    item.assignees.some((person) => memberIds.has(person.id)) &&
+                    item.status !== "done",
+                );
+                const today = taskToday(session.organization.timezone ?? "UTC");
                 const canManage = canManageTeam(
                   team,
                   session.user.id,
@@ -311,6 +341,35 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
                           </dd>
                         </div>
                       </dl>
+                      <p>
+                        {tasks.length} open tasks ·{" "}
+                        {
+                          tasks.filter(
+                            (item) => item.dueDate && item.dueDate < today,
+                          ).length
+                        }{" "}
+                        overdue ·{" "}
+                        {
+                          tasks.filter((item) => item.status === "blocked")
+                            .length
+                        }{" "}
+                        blocked{liveData.recordsComplete ? "" : " · Loading…"}
+                      </p>
+                      <div className={styles.teamWorkActions}>
+                        <button
+                          type="button"
+                          onClick={() => setWorkTeamId(team.id)}
+                        >
+                          View member workload
+                        </button>
+                        {team.room ? (
+                          <Link
+                            href={`${workspaceHref(workspaceSlug, "messages")}#${encodeURIComponent(team.room.conversationId)}`}
+                          >
+                            Open team room
+                          </Link>
+                        ) : null}
+                      </div>
                       <div
                         className={styles.featureChips}
                         aria-label={`${team.name} interface options`}
@@ -350,6 +409,40 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
               })}
             </div>
           )}
+        </section>
+        <section className={styles.surface} aria-label="Team workload">
+          <label>
+            Show workload for{" "}
+            <select
+              value={workTeamId}
+              onChange={(event) => setWorkTeamId(event.target.value)}
+            >
+              <option value="">Everyone in this workspace</option>
+              {(visibleDirectory?.teams ?? []).map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <LiveMyWork
+            key={workTeamId}
+            workspaceSlug={workspaceSlug}
+            assignedToMe={false}
+            title="Member workload"
+            items={liveData.items.filter(
+              (item) =>
+                item.workspaceId === workspace.id &&
+                (!workTeamId ||
+                  visibleDirectory?.teams
+                    .find((team) => team.id === workTeamId)
+                    ?.members.some((member) =>
+                      item.assignees.some(
+                        (person) => person.id === member.user.id,
+                      ),
+                    )),
+            )}
+          />
         </section>
       </main>
 

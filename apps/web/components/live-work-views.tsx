@@ -80,7 +80,7 @@ const viewCopy: Record<
   },
   "my-work": {
     title: "My Work",
-    subtitle: "Canonical WorkItems assigned to your application identity.",
+    subtitle: "Your tasks in this workspace, from the next step to completion.",
     active: "myWork",
   },
   inbox: {

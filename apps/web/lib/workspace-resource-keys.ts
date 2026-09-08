@@ -1,5 +1,7 @@
 /** Resource caches always include organization and workspace identity. */
 export const workspaceResourceKeys = {
+  inbox: (organizationId: string) =>
+    ["workspace-resources", organizationId, "inbox"] as const,
   boards: (organizationId: string, workspaceId: string) =>
     ["workspace-resources", organizationId, workspaceId, "boards"] as const,
   board: (organizationId: string, workspaceId: string, boardId: string) =>

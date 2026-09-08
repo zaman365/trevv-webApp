@@ -8,6 +8,7 @@ import type {
   WorkItemEvidenceDto,
   WorkItemHistoryEntryDto,
 } from "@founderhq/api-contract";
+import { TrevvApiError } from "@founderhq/api-client";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -23,11 +24,12 @@ import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWorkItemDetails } from "@/lib/use-work-item-details";
+import { useAccessibleDialog } from "@/lib/live-collaboration";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
 import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
-import { presentLiveError } from "@/lib/live-errors";
+import { presentLiveError, presentLiveReadError } from "@/lib/live-errors";
 import {
   formatLiveDate,
   formatLiveDateOnly,
@@ -37,8 +39,8 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
-import { WindowedCollection } from "./windowed-collection";
-const recordKey = (record: { id: string }) => record.id;
+import { LiveTaskList } from "./live-task-list";
+import { LiveAssigneeField } from "./live-assignee-field";
 
 type ItemPatch = Parameters<
   ReturnType<typeof useLiveAppData>["client"]["updateItem"]
@@ -107,24 +109,46 @@ export function LiveBoardExperience({
     workspace?.id,
     selectedId,
   );
-  const history = detailsQuery.error ? [] : (detailsQuery.data?.history ?? []);
-  const evidence = detailsQuery.error
-    ? []
-    : (detailsQuery.data?.evidence ?? []);
+  const detailsAccessLost =
+    detailsQuery.error instanceof TrevvApiError &&
+    [401, 403, 404].includes(detailsQuery.error.status);
+  const history = detailsAccessLost ? [] : (detailsQuery.data?.history ?? []);
+  const evidence = detailsAccessLost ? [] : (detailsQuery.data?.evidence ?? []);
   const detailLoading = detailsQuery.isPending;
   const [createOpen, setCreateOpen] = useState(false);
   const retryKeys = useRef(new Map<string, string>());
   const timezone = session.organization.timezone ?? "UTC";
+  const [itemHash, setItemHash] = useState("");
+  const openedHash = useRef("");
 
   useEffect(() => {
     if (pendingIds.size === 0) setItems(sourceItems);
   }, [pendingIds.size, sourceItems]);
 
   useEffect(() => {
-    const itemId = decodeURIComponent(window.location.hash.slice(1));
-    if (!itemId || !sourceItems.some((item) => item.id === itemId)) return;
-    setSelectedId(itemId);
-  }, [sourceItems]);
+    const readHash = () => {
+      try {
+        setItemHash(decodeURIComponent(window.location.hash.slice(1)));
+      } catch {
+        setItemHash("");
+      }
+      openedHash.current = "";
+    };
+    readHash();
+    window.addEventListener("hashchange", readHash);
+    return () => window.removeEventListener("hashchange", readHash);
+  }, [boardId]);
+
+  useEffect(() => {
+    if (
+      !itemHash ||
+      openedHash.current === itemHash ||
+      !sourceItems.some((item) => item.id === itemHash)
+    )
+      return;
+    openedHash.current = itemHash;
+    setSelectedId(itemHash);
+  }, [itemHash, sourceItems]);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
@@ -157,9 +181,10 @@ export function LiveBoardExperience({
         : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
-      ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
+      ...(patch.dueDate ? { dueDate: patch.dueDate } : {}),
       updatedAt: new Date().toISOString(),
     };
+    if (patch.dueDate === null) delete optimistic.dueDate;
     replaceItem(optimistic);
     setPendingIds((current) => new Set(current).add(item.id));
     setNotice(null);
@@ -179,7 +204,7 @@ export function LiveBoardExperience({
         title: `Server confirmed “${response.data.title}”`,
         description: `Version ${response.data.version} is now canonical.`,
       });
-      await liveData.refresh({ backgroundRecords: true });
+      void liveData.refresh({ backgroundRecords: true });
     } catch (reason) {
       replaceItem(item);
       const presented = presentLiveError(reason);
@@ -203,14 +228,19 @@ export function LiveBoardExperience({
 
   async function reloadConflict() {
     if (!conflict) return;
-    const latest = await liveData.client.item(conflict.itemId);
-    replaceItem(latest);
-    setConflict(null);
-    setNotice({
-      kind: "saved",
-      title: "Loaded the latest server version",
-      description: `Version ${latest.version} is visible. Your conflicting change was not applied.`,
-    });
+    try {
+      const latest = await liveData.client.item(conflict.itemId);
+      await liveData.applyConfirmedItem(latest);
+      replaceItem(latest);
+      setConflict(null);
+      setNotice({
+        kind: "saved",
+        title: "Loaded the latest server version",
+        description: `Version ${latest.version} is visible. Your conflicting change was not applied.`,
+      });
+    } catch (error) {
+      setConflict((current) => (current ? { ...current, error } : current));
+    }
   }
 
   async function retryConflict() {
@@ -232,7 +262,7 @@ export function LiveBoardExperience({
         title: "Server confirmed the change against the latest version",
         description: `Version ${response.data.version} is now canonical.`,
       });
-      await liveData.refresh({ backgroundRecords: true });
+      void liveData.refresh({ backgroundRecords: true });
     } catch (reason) {
       setConflict((current) =>
         current ? { ...current, error: reason } : current,
@@ -246,16 +276,29 @@ export function LiveBoardExperience({
     }
   }
 
-  if (!workspace || (!loading && (!board || boardError))) {
+  const boardAccessLost =
+    boardError instanceof TrevvApiError &&
+    [401, 403, 404].includes(boardError.status);
+  if (!workspace || (!loading && (!board || boardAccessLost))) {
     const presented = boardError ? presentLiveError(boardError) : null;
     return (
       <WorkspaceFrame active="workspace" workspaceSlug={workspaceSlug}>
         <main className={styles.main}>
           <LiveStateNotice
             actions={
-              <Link href={workspaceHref(workspaceSlug)}>
-                Return to workspace
-              </Link>
+              <>
+                {boardError && !boardAccessLost ? (
+                  <button
+                    type="button"
+                    onClick={() => void boardQuery.refetch()}
+                  >
+                    Retry board
+                  </button>
+                ) : null}
+                <Link href={workspaceHref(workspaceSlug)}>
+                  Return to workspace
+                </Link>
+              </>
             }
             description={
               presented?.description ??
@@ -276,12 +319,11 @@ export function LiveBoardExperience({
           <div>
             <p>
               <Link href={workspaceHref(workspaceSlug)}>{workspace.name}</Link>{" "}
-              / Plan board
+              / Project board
             </p>
             <h1>{board?.name ?? "Loading board…"}</h1>
             <span>
-              A durable plan with versioned tasks, decisions, approvals, and
-              evidence.
+              Tasks, owners, due dates, and progress — together in one project.
             </span>
           </div>
           <button
@@ -297,6 +339,16 @@ export function LiveBoardExperience({
 
         {loading ? (
           <LiveStateNotice kind="loading" title="Loading canonical board" />
+        ) : null}
+        {board && boardError && !boardAccessLost ? (
+          <LiveStateNotice
+            {...presentLiveReadError(boardError)}
+            actions={
+              <button type="button" onClick={() => void boardQuery.refetch()}>
+                Retry board
+              </button>
+            }
+          />
         ) : null}
         {liveData.stale ? (
           <LiveStateNotice
@@ -339,7 +391,7 @@ export function LiveBoardExperience({
         <section className={styles.panel} aria-labelledby="board-items-title">
           <header>
             <div>
-              <p>One identity across the operating loop</p>
+              <p>Plan and follow through</p>
               <h2 id="board-items-title">Work items</h2>
             </div>
             <small>
@@ -368,76 +420,19 @@ export function LiveBoardExperience({
               }
             />
           ) : (
-            <WindowedCollection
-              className={styles.itemTable}
-              role="list"
+            <LiveTaskList
               items={items}
-              itemKey={recordKey}
+              workspaces={[workspace]}
+              userId={session.user.id}
+              timezone={timezone}
+              pendingIds={pendingIds}
+              onStatusChange={(item, status) =>
+                void updateItemOptimistically(item, { status })
+              }
+              onOpen={(item) => setSelectedId(item.id)}
               label="Board work items"
-            >
-              {(item) => {
-                const pending = pendingIds.has(item.id);
-                return (
-                  <article
-                    className={styles.itemRow}
-                    data-testid={`work-item-${item.id}`}
-                    role="listitem"
-                    key={item.id}
-                  >
-                    <button
-                      className={styles.itemTitle}
-                      onClick={() => setSelectedId(item.id)}
-                      type="button"
-                    >
-                      <span className={styles.typePill}>{item.type}</span>
-                      <strong>{item.title}</strong>
-                      <small>
-                        {item.assignees
-                          .map((person) => person.name)
-                          .join(", ") || "Unassigned"}
-                      </small>
-                    </button>
-                    <label>
-                      <span className="sr-only">Status for {item.title}</span>
-                      <select
-                        aria-label={`Status for ${item.title}`}
-                        disabled={
-                          pending ||
-                          item.status === "blocked" ||
-                          item.status === "done"
-                        }
-                        onChange={(event) =>
-                          void updateItemOptimistically(item, {
-                            status: event.target.value as WorkItemDto["status"],
-                          })
-                        }
-                        value={item.status}
-                      >
-                        {editableStatusOptions(item.status).map((status) => (
-                          <option key={status} value={status}>
-                            {workItemStatusLabel(status)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <span
-                      className={styles.priority}
-                      data-priority={item.priority}
-                    >
-                      {item.priority}
-                    </span>
-                    <span>
-                      {item.dueDate
-                        ? formatLiveDateOnly(item.dueDate, timezone)
-                        : "No due date"}
-                    </span>
-                    <span className={styles.versionTag}>
-                      {pending ? "Saving…" : `v${item.version}`}
-                    </span>
-                  </article>
-                );
-              }}
-            </WindowedCollection>
+              complete={liveData.recordsComplete}
+            />
           )}
         </section>
 
@@ -449,6 +444,7 @@ export function LiveBoardExperience({
               await liveData.applyConfirmedItem(item);
               replaceItem(item);
               setCreateOpen(false);
+              setSelectedId(item.id);
               setNotice({
                 kind: "saved",
                 title: `Server confirmed “${item.title}”`,
@@ -456,7 +452,7 @@ export function LiveBoardExperience({
                   ? "The original idempotent result was replayed; no duplicate was created."
                   : `Canonical WorkItem ${item.id} was created at version ${item.version}.`,
               });
-              await liveData.refresh({ backgroundRecords: true });
+              void liveData.refresh({ backgroundRecords: true });
             }}
             workspaceId={workspace.id}
           />
@@ -474,6 +470,7 @@ export function LiveBoardExperience({
         ) : null}
         {selected ? (
           <WorkItemDetail
+            key={selected.id}
             evidence={evidence}
             history={history}
             item={selected}
@@ -487,7 +484,7 @@ export function LiveBoardExperience({
                 title: `Server confirmed “${next.title}”`,
                 description: confirmation,
               });
-              await liveData.refresh();
+              void liveData.refresh();
               await loadDetails(next.id);
             }}
             timezone={timezone}
@@ -515,6 +512,7 @@ function CreateWorkItemDialog({
   const [type, setType] = useState<WorkItemDto["type"]>("task");
   const [priority, setPriority] = useState<WorkItemDto["priority"]>("normal");
   const [dueDate, setDueDate] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
@@ -544,7 +542,7 @@ function CreateWorkItemDialog({
           priority,
           status: "not_started",
           ...(dueDate ? { dueDate } : {}),
-          assigneeIds: [],
+          assigneeIds: assigneeId ? [assigneeId] : [],
           ...(type === "decision" ? { decisionState: "needed" } : {}),
           ...(type === "approval" ? { approvalState: "pending" } : {}),
         },
@@ -586,7 +584,7 @@ function CreateWorkItemDialog({
             <X size={17} />
           </button>
         </header>
-        <div className={styles.formBody}>
+        <fieldset className={styles.formBody} disabled={pending}>
           {presented ? (
             <LiveStateNotice
               description={presented.description}
@@ -669,6 +667,14 @@ function CreateWorkItemDialog({
               />
             </label>
           </div>
+          <LiveAssigneeField
+            workspaceId={workspaceId}
+            value={assigneeId}
+            onChange={(id) => {
+              edit();
+              setAssigneeId(id);
+            }}
+          />
           <label className={styles.field}>
             <span>Description · Optional</span>
             <textarea
@@ -681,7 +687,7 @@ function CreateWorkItemDialog({
               value={description}
             />
           </label>
-        </div>
+        </fieldset>
         <footer>
           <span>
             The retry key is retained until this exact draft is confirmed.
@@ -729,38 +735,26 @@ function WorkItemDetail({
   const liveData = useLiveAppData();
   const [reason, setReason] = useState("");
   const [evidenceBody, setEvidenceBody] = useState("");
+  const [updateBody, setUpdateBody] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(item.title);
+  const [editDescription, setEditDescription] = useState(item.description);
+  const [editPriority, setEditPriority] = useState(item.priority);
+  const [editDueDate, setEditDueDate] = useState(item.dueDate ?? "");
+  const [editVersion, setEditVersion] = useState(item.version);
+  const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
   const [waitingDate, setWaitingDate] = useState(() =>
     tomorrowInTimeZone(timezone, new Date().toISOString()),
   );
-  const [assignees, setAssignees] = useState<
-    Array<{ id: string; name: string }>
-  >([{ id: session.user.id, name: session.user.name }]);
-  const [assigneeId, setAssigneeId] = useState(session.user.id);
+  const [assigneeId, setAssigneeId] = useState(
+    item.assignees[0]?.id ?? session.user.id,
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const pendingRef = useRef(false);
   const reasonRevision = useRef(0);
   const evidenceRevision = useRef(0);
   const retryKeys = useRef(new Map<string, string>());
-
-  useEffect(() => {
-    let active = true;
-    liveData.client
-      .memberships()
-      .then((memberships) => {
-        if (!active) return;
-        const available = memberships
-          .filter((membership) => membership.active)
-          .map((membership) => membership.user);
-        if (available.length) setAssignees(available);
-      })
-      .catch(() => {
-        // Current-user assignment stays available if the directory is restricted.
-      });
-    return () => {
-      active = false;
-    };
-  }, [liveData.client]);
 
   async function run(
     operation: () => Promise<{ item: WorkItemDto; confirmation: string }>,
@@ -818,6 +812,7 @@ function WorkItemDetail({
         data-testid="work-item-detail"
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
+        ref={dialogRef}
       >
         <header>
           <div>
@@ -878,7 +873,208 @@ function WorkItemDetail({
               <strong>{formatLiveDate(item.updatedAt, timezone)}</strong>
             </span>
           </section>
+          {item.status === "done" ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                void run(async () => {
+                  const response = await liveData.client.updateItem(
+                    item.id,
+                    { status: "not_started" },
+                    item.version,
+                    retainedKey(
+                      retryKeys.current,
+                      `reopen:${item.id}:${item.version}`,
+                    ),
+                  );
+                  return {
+                    item: response.data,
+                    confirmation:
+                      "Task reopened. Its updates and completion evidence are kept.",
+                  };
+                })
+              }
+            >
+              Reopen task
+            </button>
+          ) : null}
           {item.description ? <p>{item.description}</p> : null}
+          <section className={styles.detailEditor} aria-label="Task details">
+            <header>
+              <h3>Details</h3>
+              {!editing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditTitle(item.title);
+                    setEditDescription(item.description);
+                    setEditPriority(item.priority);
+                    setEditDueDate(item.dueDate ?? "");
+                    setEditVersion(item.version);
+                    setEditing(true);
+                  }}
+                >
+                  Edit details
+                </button>
+              ) : null}
+            </header>
+            {editing ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const patch = {
+                    title: editTitle.trim(),
+                    description: editDescription.trim(),
+                    priority: editPriority,
+                    dueDate: editDueDate || null,
+                  };
+                  void run(async () => {
+                    const response = await liveData.client.updateItem(
+                      item.id,
+                      patch,
+                      editVersion,
+                      retainedKey(
+                        retryKeys.current,
+                        `details:${item.id}:${editVersion}:${JSON.stringify(patch)}`,
+                      ),
+                    );
+                    setEditing(false);
+                    return {
+                      item: response.data,
+                      confirmation: "Task details saved.",
+                    };
+                  });
+                }}
+              >
+                {editing && editVersion !== item.version ? (
+                  <LiveStateNotice
+                    kind="version-conflict"
+                    title="This task changed while you were editing"
+                    description="Your draft is kept. Review the current details, then apply your draft to the latest task."
+                    actions={
+                      <button
+                        type="button"
+                        onClick={() => setEditVersion(item.version)}
+                      >
+                        Use latest version for my draft
+                      </button>
+                    }
+                  />
+                ) : null}
+                <label className={styles.field}>
+                  <span>Task title</span>
+                  <input
+                    required
+                    maxLength={500}
+                    disabled={pending}
+                    value={editTitle}
+                    onChange={(event) => setEditTitle(event.target.value)}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Description</span>
+                  <textarea
+                    maxLength={20000}
+                    rows={4}
+                    disabled={pending}
+                    value={editDescription}
+                    onChange={(event) => setEditDescription(event.target.value)}
+                  />
+                </label>
+                <div className={styles.formGrid}>
+                  <label className={styles.field}>
+                    <span>Priority</span>
+                    <select
+                      disabled={pending}
+                      value={editPriority}
+                      onChange={(event) =>
+                        setEditPriority(
+                          event.target.value as WorkItemDto["priority"],
+                        )
+                      }
+                    >
+                      {["urgent", "high", "normal", "low", "none"].map(
+                        (priority) => (
+                          <option key={priority}>{priority}</option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                  <label className={styles.field}>
+                    <span>Due date</span>
+                    <input
+                      type="date"
+                      disabled={pending}
+                      value={editDueDate}
+                      onChange={(event) => setEditDueDate(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className={styles.buttonGrid}>
+                  <button
+                    type="submit"
+                    disabled={
+                      pending ||
+                      !editTitle.trim() ||
+                      editVersion !== item.version
+                    }
+                  >
+                    Save changes
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => setEditing(false)}
+                  >
+                    Cancel editing
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p>
+                {item.dueDate
+                  ? `Due ${formatLiveDateOnly(item.dueDate, timezone)}`
+                  : "No due date"}
+              </p>
+            )}
+          </section>
+          <label className={styles.field}>
+            <span>Work status</span>
+            <select
+              value={item.status}
+              disabled={
+                pending || item.status === "blocked" || item.status === "done"
+              }
+              onChange={(event) => {
+                const status = event.target.value as WorkItemDto["status"];
+                void run(async () => {
+                  const response = await liveData.client.updateItem(
+                    item.id,
+                    { status },
+                    item.version,
+                    retainedKey(
+                      retryKeys.current,
+                      `status:${item.id}:${item.version}:${status}`,
+                    ),
+                  );
+                  return {
+                    item: response.data,
+                    confirmation: `Status updated to ${workItemStatusLabel(response.data.status)}.`,
+                  };
+                });
+              }}
+            >
+              {editableStatusOptions(item.status).map((status) => (
+                <option key={status} value={status}>
+                  {workItemStatusLabel(status)}
+                </option>
+              ))}
+            </select>
+            <small>
+              Use Resolve with evidence below to complete this item.
+            </small>
+          </label>
           <label className={styles.field}>
             <span>Reason or follow-up note</span>
             <textarea
@@ -911,20 +1107,18 @@ function WorkItemDetail({
               value={waitingDate}
             />
           </label>
-          <label className={styles.field}>
-            <span>Assignee</span>
-            <select
-              aria-label="Choose assignee"
-              onChange={(event) => setAssigneeId(event.target.value)}
-              value={assigneeId}
-            >
-              {assignees.map((assignee) => (
-                <option key={assignee.id} value={assignee.id}>
-                  {assignee.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p>
+            Assigned to:{" "}
+            {item.assignees.map((person) => person.name).join(", ") ||
+              "Unassigned"}
+          </p>
+          <LiveAssigneeField
+            workspaceId={item.workspaceId}
+            value={assigneeId}
+            onChange={setAssigneeId}
+            disabled={pending}
+            allowUnassigned={false}
+          />
           <div className={styles.buttonGrid}>
             <button
               data-testid={`assign-item-${item.id}`}
@@ -941,8 +1135,9 @@ function WorkItemDetail({
                     ),
                   );
                   const assigneeName =
-                    assignees.find((assignee) => assignee.id === assigneeId)
-                      ?.name ?? "the selected member";
+                    response.data.item.assignees.find(
+                      (assignee) => assignee.id === assigneeId,
+                    )?.name ?? "the selected member";
                   return {
                     item: response.data.item,
                     confirmation: `Assignment to ${assigneeName} is durable at version ${response.data.item.version}.`,
@@ -1085,9 +1280,56 @@ function WorkItemDetail({
             </button>
           </div>
 
+          <form
+            className={styles.detailEditor}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const body = updateBody.trim();
+              if (!body) return;
+              void run(async () => {
+                await liveData.client.addItemEvidence(
+                  item.id,
+                  { body },
+                  item.version,
+                  retainedKey(
+                    retryKeys.current,
+                    `update:${item.id}:${item.version}:${body}`,
+                  ),
+                );
+                const latest = await liveData.client.item(item.id);
+                setUpdateBody((current) =>
+                  current.trim() === body ? "" : current,
+                );
+                return {
+                  item: latest,
+                  confirmation: "Update posted to this task.",
+                };
+              });
+            }}
+          >
+            <label className={styles.field}>
+              <span>Post an update</span>
+              <textarea
+                rows={3}
+                maxLength={20000}
+                value={updateBody}
+                disabled={pending}
+                onChange={(event) => setUpdateBody(event.target.value)}
+                placeholder="Ask a question, share progress, or explain the next step…"
+              />
+            </label>
+            <button type="submit" disabled={pending || !updateBody.trim()}>
+              Post update
+            </button>
+            <small>
+              Visible to people with access to this task. Updates stay with its
+              evidence and history.
+            </small>
+          </form>
+
           <section className={styles.timeline} aria-labelledby="evidence-title">
             <h3 id="evidence-title">
-              <FileText size={15} /> Evidence
+              <FileText size={15} /> Updates and evidence
             </h3>
             {loading ? (
               <p>Loading durable evidence…</p>

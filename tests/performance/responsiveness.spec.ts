@@ -83,6 +83,42 @@ const scopedAccess = (workspaceIds = ["workspace-one"], revision = "one") => ({
   })),
 });
 
+test("a first access check taking more than a second loads without a false stale warning", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-09-07T10:00:00Z") });
+  let release!: () => void;
+  let started = false;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("http://trevv.test/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<div id="root"></div>',
+      });
+    if (path !== "/api/v1/sync/status")
+      throw new Error(`Unexpected request: ${path}`);
+    started = true;
+    await held;
+    await route.fulfill({ json: scopedAccess() });
+  });
+  try {
+    await page.goto("http://trevv.test/#account");
+    await page.addScriptTag({ content: script });
+    await expect.poll(() => started).toBe(true);
+    await page.clock.runFor(1_500);
+    await expect(page.locator("#stale")).toHaveText("false");
+    release();
+    await expect(page.locator("#clock")).toContainText("2026-09-07");
+    await expect(page.locator("#stale")).toHaveText("false");
+  } finally {
+    release();
+  }
+});
+
 test("adding a workspace preserves the mounted summary page and draft during refresh", async ({
   page,
 }) => {
