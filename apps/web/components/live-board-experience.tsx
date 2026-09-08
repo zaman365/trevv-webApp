@@ -979,7 +979,6 @@ function WorkItemDetail({
             </button>
           ) : null}
           {item.description ? <p>{item.description}</p> : null}
-          <LiveTaskPlanningSummary item={item} />
           <section className={styles.detailEditor} aria-label="Task owner">
             <p>
               Assigned to:{" "}
@@ -1027,6 +1026,7 @@ function WorkItemDetail({
               </button>
             </div>
           </section>
+          <LiveTaskPlanningSummary item={item} />
           <section className={styles.detailEditor} aria-label="Task details">
             <header>
               <h3>Details</h3>

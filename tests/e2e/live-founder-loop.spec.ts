@@ -1439,6 +1439,15 @@ test.describe.serial("live founder operating loop", () => {
     await expect(
       detail.getByRole("region", { name: "Saved planning context" }),
     ).toContainText("LinkedIn");
+    const ownerBox = await detail
+      .getByRole("region", { name: "Task owner", exact: true })
+      .boundingBox();
+    const planningBox = await detail
+      .getByRole("region", { name: "Saved planning context" })
+      .boundingBox();
+    expect(ownerBox).not.toBeNull();
+    expect(planningBox).not.toBeNull();
+    expect(ownerBox!.y).toBeLessThan(planningBox!.y);
     await memberPage.screenshot({
       path: test.info().outputPath("assigned-task-context.png"),
     });
