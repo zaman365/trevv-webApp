@@ -83,15 +83,24 @@ compute and a persistent database; the concrete proposal is recorded in
   policy and permission checks are not relaxed.
 
 - Web unit tests: 317 passed. API unit tests: 87 passed. API-contract tests:
-  25 passed. Repository type checking: all 18 packages passed.
-- Browser component and responsiveness regressions: 19 passed.
+  25 passed. Repository type checking and lint: all 18 packages passed.
+- Browser component, performance, and responsiveness regressions: 30 passed.
 - Compiled Cloudflare Worker navigation/performance checks: 14 passed, including
   organization-wide assignments and workspace permission revocation.
 - All three real PostgreSQL journeys passed in both Chromium and Safari.
 - Final visual review found Safari's native compact selects clipped task status
   text. The shared controls now use consistent sizing and full-width status
   controls on board cards while retaining native keyboard selection behavior.
+  All three PostgreSQL Safari journeys passed again after the final select and
+  mobile navigation corrections, including the existing accessibility checks.
 - Next and Cloudflare production builds and bundle/style budgets passed.
 
 Deployment is pending. Source changes alone do not mean either public domain
 has been updated.
+
+Automatic approval review blocked publishing the local source commit to the
+existing public `zaman365/trevv-webApp` repository because it requires explicit
+user approval of that publication. Repository ownership and administrator
+access were verified. Publishing and the matching deployment are awaiting that
+approval; the recurring hosting charges require separate approval. No new
+release has been pushed or deployed.

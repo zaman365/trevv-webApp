@@ -68,6 +68,19 @@
   font-weight: 600;
   flex: 1 1 8rem;
 }
+.selectShell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+.selectShell > svg {
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary, #5f687c);
+  pointer-events: none;
+}
 .collection .filters select,
 .collection .task select {
   appearance: none;
@@ -77,9 +90,7 @@
   padding: 0.45rem 1.75rem 0.45rem 0.6rem;
   border: 1px solid var(--border, #dfe3ec);
   border-radius: 6px;
-  background: var(--surface, white)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%235f687c' stroke-width='1.5'/%3E%3C/svg%3E")
-    no-repeat right 0.6rem center;
+  background: var(--surface, white);
   color: var(--text, #1f2433);
   font: inherit;
   font-size: 0.78rem;
@@ -241,7 +252,7 @@
 .cards .assignees {
   width: 100%;
 }
-.cards .task select {
+.cards .task .selectShell {
   flex-basis: 100%;
 }
 .columnEmpty {

@@ -1066,7 +1066,16 @@ a {
     color: var(--fh-primary);
     font-weight: 700;
   }
-  .product-shell[data-runtime="live"] .mobile-bottom-nav > a > span:last-child,
+  .product-shell[data-runtime="live"] .mobile-bottom-nav > a,
+  .product-shell[data-runtime="live"] .mobile-bottom-nav > button {
+    position: relative;
+    z-index: 1;
+    min-height: 44px;
+  }
+  .product-shell[data-runtime="live"]
+    .mobile-bottom-nav
+    > a
+    > span:not([aria-hidden="true"]),
   .product-shell[data-runtime="live"]
     .mobile-bottom-nav
     > button

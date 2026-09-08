@@ -1,8 +1,20 @@
 "use client";
 
 import type { WorkItemDto, WorkspaceDto } from "@founderhq/api-contract";
-import { useEffect, useId, useMemo, useState } from "react";
-import { CalendarDays, Columns3, List, Search } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type ComponentProps,
+} from "react";
+import {
+  CalendarDays,
+  ChevronDown,
+  Columns3,
+  List,
+  Search,
+} from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { editableStatusOptions, recordKey } from "@/lib/live-work-view-helpers";
 import {
@@ -21,6 +33,15 @@ import {
 import { workspaceHref } from "@/lib/workspace-routes";
 import { WindowedCollection } from "./windowed-collection";
 import styles from "./live-task-list.module.css";
+
+function TaskSelect(props: ComponentProps<"select">) {
+  return (
+    <span className={styles.selectShell}>
+      <select {...props} />
+      <ChevronDown size={14} aria-hidden="true" />
+    </span>
+  );
+}
 
 /** The same saved tasks, filters and accessible status controls in every view. */
 export function LiveTaskList({
@@ -174,7 +195,7 @@ export function LiveTaskList({
             ? item.assignees.map((person) => person.name).join(", ")
             : "Unassigned"}
         </span>
-        <select
+        <TaskSelect
           aria-label={`Status for ${item.title}`}
           disabled={
             pendingIds.has(item.id) ||
@@ -191,7 +212,7 @@ export function LiveTaskList({
               {workItemStatusLabel(candidate)}
             </option>
           ))}
-        </select>
+        </TaskSelect>
         <span className={styles.priority} data-priority={item.priority}>
           {item.priority}
         </span>
@@ -265,7 +286,7 @@ export function LiveTaskList({
       <div className={styles.filters}>
         <label>
           Status
-          <select
+          <TaskSelect
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           >
@@ -275,11 +296,11 @@ export function LiveTaskList({
                 {workItemStatusLabel(candidate)}
               </option>
             ))}
-          </select>
+          </TaskSelect>
         </label>
         <label>
           Assignee
-          <select
+          <TaskSelect
             value={assignee}
             onChange={(event) => setAssignee(event.target.value)}
           >
@@ -291,12 +312,12 @@ export function LiveTaskList({
                 {person.name}
               </option>
             ))}
-          </select>
+          </TaskSelect>
         </label>
         {workspaces.length > 1 ? (
           <label>
             Workspace
-            <select
+            <TaskSelect
               value={availableWorkspaceId}
               onChange={(event) => setWorkspaceId(event.target.value)}
             >
@@ -306,12 +327,12 @@ export function LiveTaskList({
                   {workspace.name}
                 </option>
               ))}
-            </select>
+            </TaskSelect>
           </label>
         ) : null}
         <label>
           Priority
-          <select
+          <TaskSelect
             value={priority}
             onChange={(event) => setPriority(event.target.value)}
           >
@@ -319,18 +340,18 @@ export function LiveTaskList({
             {["urgent", "high", "normal", "low", "none"].map((value) => (
               <option key={value}>{value}</option>
             ))}
-          </select>
+          </TaskSelect>
         </label>
         <label>
           Sort by
-          <select
+          <TaskSelect
             value={sort}
             onChange={(event) => setSort(event.target.value as typeof sort)}
           >
             <option value="due">Due date</option>
             <option value="priority">Priority</option>
             <option value="recent">Recently updated</option>
-          </select>
+          </TaskSelect>
         </label>
       </div>
       <div className={styles.progress}>
