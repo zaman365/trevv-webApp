@@ -24,3 +24,5 @@ Validation covers aggregation, deduplication, shared assignments, date boundarie
 The first CI run passed the production build and asset budgets, then found newly indexed dependency advisories. The release pins Next.js and its ESLint configuration to 16.3.3, upgrades vulnerable sharp instances to 0.35.4, and upgrades js-yaml 4.x instances to 4.3.2. The transitive overrides retain the existing major versions and the audit gate remains unchanged.
 
 Maintainer references: [Next.js security release](https://github.com/vercel/next.js/releases/tag/v16.3.3), [sharp advisory](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c), and [js-yaml advisory](https://github.com/advisories/GHSA-2883-xcg3-v3hh).
+
+A subsequent audit indexed [the Nodemailer address-parser advisory](https://github.com/advisories/GHSA-2x7j-588g-ccc2). Nodemailer is pinned to its patched 9.1.0 release. Unrelated direct and transitive package versions remain unchanged.

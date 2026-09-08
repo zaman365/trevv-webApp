@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "better-auth": "latest",
-    "nodemailer": "latest",
+    "nodemailer": "9.1.0",
     "pg": "latest"
   },
   "devDependencies": {

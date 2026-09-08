@@ -369,8 +369,8 @@ importers:
         specifier: latest
         version: 1.7.1(@cloudflare/workers-types@5.20260823.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@5.20260823.1)(@types/pg@8.23.1)(kysely@0.29.5)(pg@8.23.0)(postgres@3.4.9))(next@16.3.3(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.55.1)(@types/node@26.2.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11(@types/node@26.2.0)(vite@8.2.2(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))
       nodemailer:
-        specifier: latest
-        version: 9.0.6
+        specifier: 9.1.0
+        version: 9.1.0
       pg:
         specifier: latest
         version: 8.23.0
@@ -5557,9 +5557,11 @@ packages:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
     engines: {node: '>=18'}
 
-  nodemailer@9.0.6:
-    resolution: {integrity: sha512-IQUGFdhdGwI9+AWX+FpUt4DLmvFaOjTMEoneTIWX/RXxuy1TdenPwWrvFMSfLkPKl+HQEXWuSAxEMMbPYXtBmg==}
-    engines: {node: '>=6.0.0'}
+  nodemailer@9.1.0:
+    resolution:
+      integrity: sha512-xj1Ri5Sau3qpPffHJwi2bY0oWVVWYq62Ph17l+2v1xXpxjqTls3YPc3L8dub9mcJpxj+1ucNnuYVqLlgh4pmDA==
+    engines:
+      node: '>=6.0.0'
 
   npm-package-arg@11.0.3:
     resolution: {integrity: sha512-sHGJy8sOC1YraBywpzQlIKBE4pBbGbiF95U6Auspzyem956E0+FtDtsx1ZxlOJkQCZ1AFXAY/yuvtFYrOxF+Bw==}
@@ -11974,7 +11976,7 @@ snapshots:
 
   node-releases@2.0.53: {}
 
-  nodemailer@9.0.6: {}
+  nodemailer@9.1.0: {}
 
   npm-package-arg@11.0.3:
     dependencies:

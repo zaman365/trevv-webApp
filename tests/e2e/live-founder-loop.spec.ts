@@ -1060,7 +1060,13 @@ test.describe.serial("live founder operating loop", () => {
       .getByTestId("live-board")
       .getByRole("button", { name: "List", exact: true })
       .click();
-    await expect(page.getByRole("button", { name: taskName })).toBeVisible();
+    const mobileTask = page.getByRole("button", { name: taskName });
+    // At the end of the page, its bottom padding keeps the task and cycle
+    // controls clear of the fixed mobile navigation for contrast measurement.
+    await page.evaluate(() =>
+      window.scrollTo(0, document.documentElement.scrollHeight),
+    );
+    await expect(mobileTask).toBeInViewport();
     await expectNoLiveWcagFindings(page, "task-board-mobile");
     await page.screenshot({
       path: test.info().outputPath("project-tasks-mobile.png"),
