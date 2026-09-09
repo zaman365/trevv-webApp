@@ -237,9 +237,10 @@ for (const legacy of [false, true])
     await expect(page.locator("#clock")).toContainText("2026-09-07");
     for (let poll = 0; poll < 4; poll++) {
       const before = checks;
+      const previousCheck = await page.locator("#clock").textContent();
       await page.clock.fastForward(5_000);
       await expect.poll(() => checks).toBeGreaterThan(before);
-      await page.clock.runFor(50);
+      await expect(page.locator("#clock")).not.toHaveText(previousCheck!);
       await expect(page.locator("#stale")).toHaveText("false");
     }
     const lastSuccessfulCheck = await page.locator("#clock").textContent();
