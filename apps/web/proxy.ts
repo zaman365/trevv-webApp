@@ -8,6 +8,7 @@ import {
 } from "./lib/auth-action-cookies";
 import {
   safeReturnPath,
+  webCanonicalUrl,
   webRuntimeMode,
   webSessionCookieNames,
 } from "./lib/web-runtime-config";
@@ -48,6 +49,20 @@ export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/api/web/livez")
     return finish(nextResponse());
   if (webRuntimeMode() === "demo") return finish(nextResponse());
+  // Both Web deployments share the API, but administrator credentials and
+  // passkeys remain bound to the single reviewed production origin.
+  if (
+    webCanonicalUrl().origin === "https://alpha.trevv.de" &&
+    (request.nextUrl.pathname === "/superadmin" ||
+      request.nextUrl.pathname.startsWith("/superadmin/"))
+  ) {
+    const target = new URL(request.nextUrl.pathname, "https://trevv.de");
+    target.search = request.nextUrl.search;
+    const response = NextResponse.redirect(target, 307);
+    response.headers.set("cache-control", "private, no-store, max-age=0");
+    response.headers.set("referrer-policy", "no-referrer");
+    return finish(response);
+  }
   const tokenAction = tokenActionFor(request.nextUrl.pathname);
   const token = request.nextUrl.searchParams.get("token");
   if (tokenAction && token) {

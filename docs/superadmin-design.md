@@ -88,6 +88,8 @@ own factors; no password or recovery secret is generated into this document.
    `BETTER_AUTH_SECRET`. Keep it in the service secret manager, never in Web vars.
    The first `WEB_ORIGIN` is the sole administrator origin and passkey relying
    party. For production access it must be `https://trevv.de`.
+   Alpha uses the same release and redirects its Superadmin pages to this
+   canonical address; ordinary alpha customer sessions remain host-only.
 4. Run the API artifact's `superadmin:bootstrap` command. It sends an invitation
    only to `zaman.ase365@gmail.com` and never prints the activation token. It
    refuses once an administrator exists. A failed initial delivery may be
