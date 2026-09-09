@@ -78,6 +78,10 @@ Do not seed a pilot or alpha database. `pnpm db:seed` is restricted to a disposa
 
 For a focused process, use `pnpm dev:web` or `pnpm dev:api`. Expo runs with `pnpm --filter @founderhq/mobile dev`; the Tauri shell runs with `pnpm --filter @founderhq/desktop tauri dev`.
 
+The separate, invitation-only `/superadmin` console has its own administrator
+identities and authentication methods. See [Superadmin design and activation](docs/superadmin-design.md)
+for its organisation controls, privacy boundaries, configuration and initial-owner setup.
+
 ## Environment
 
 Copy `.env.example`. The variables describe implemented runtime boundaries; configuring them does not promote a preview capability to production. The Web requires its public HTTPS `NEXT_PUBLIC_APP_URL` plus a server-only `API_ORIGIN` pointing at the private API load balancer; it does not own Better Auth configuration. `CSP_MODE` and `HSTS_ENABLED` are Web **build-time** settings because Next.js compiles these headers into the artifact. Local and self-signed builds keep CSP report-only and HSTS off. Promotion to CSP enforcement or HSTS requires a reviewed trusted-HTTPS build and a new artifact.

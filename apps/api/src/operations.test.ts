@@ -74,6 +74,15 @@ describe("API operational controls", () => {
   });
 
   it("assigns stricter authentication and mutation policies", () => {
+    expect(
+      rateLimitPolicy("POST", "/api/superadmin/auth/sign-in/email"),
+    ).toMatchObject({ bucket: "superadmin-auth-sensitive", limit: 10 });
+    expect(
+      rateLimitPolicy("POST", "/api/superadmin/organizations"),
+    ).toMatchObject({ bucket: "superadmin-mutation", limit: 30 });
+    expect(
+      rateLimitPolicy("GET", "/api/superadmin/directory/people"),
+    ).toMatchObject({ bucket: "superadmin-read", limit: 120 });
     expect(rateLimitPolicy("POST", "/api/auth/sign-in/email")).toEqual({
       bucket: "auth-sensitive",
       limit: 10,

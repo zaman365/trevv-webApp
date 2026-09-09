@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+export { sql } from "drizzle-orm";
 import { createDatabase } from "../src/index.js";
 
 export interface TemporaryDatabase {

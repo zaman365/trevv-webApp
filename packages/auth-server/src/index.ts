@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Pool } from "pg";
 import type { MailDelivery } from "./mail.js";
+export * from "./superadmin.js";
 
 export {
   createFileMailSink,

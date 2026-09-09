@@ -170,6 +170,9 @@ describe("service worker cache safety", () => {
   });
 
   it.each([
+    "/superadmin",
+    "/superadmin/organizations",
+    "/superadmin/security",
     "/api/v1/portfolio",
     "/api/auth/session",
     "/app/portfolio",

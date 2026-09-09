@@ -11,6 +11,7 @@
     { "name": "System" },
     { "name": "Identity" },
     { "name": "Platform" },
+    { "name": "Superadmin" },
     { "name": "Organization" },
     { "name": "Portfolio" },
     { "name": "Attention" },
@@ -34,6 +35,751 @@
     { "name": "Events" }
   ],
   "paths": {
+    "/api/superadmin/session": {
+      "get": {
+        "operationId": "superadminSession",
+        "summary": "Resolve the separate administrator identity, including enrollment state",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": ["owner", "operator", "auditor"]
+                    },
+                    "phoneNumber": {
+                      "anyOf": [{ "type": "string" }, { "type": "null" }]
+                    },
+                    "twoFactorEnabled": { "type": "boolean" },
+                    "expiresAt": { "type": "string" },
+                    "assuranceAt": {
+                      "anyOf": [{ "type": "string" }, { "type": "null" }]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "email",
+                    "role",
+                    "phoneNumber",
+                    "twoFactorEnabled",
+                    "expiresAt",
+                    "assuranceAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/overview": {
+      "get": {
+        "operationId": "superadminOverview",
+        "summary": "Read audited operational totals without customer content",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "organizations": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "users": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "verifiedUsers": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "activeSessions": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "pendingInvitations": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "failedDeliveries": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "auditRetentionDays": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "organizations",
+                    "users",
+                    "verifiedUsers",
+                    "activeSessions",
+                    "pendingInvitations",
+                    "failedDeliveries",
+                    "auditRetentionDays"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/directory/{kind}": {
+      "get": {
+        "operationId": "superadminDirectory",
+        "summary": "Read a masked, paginated operational directory",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "organizations",
+                "people",
+                "invitations",
+                "administrators",
+                "audit"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 40000,
+              "default": 0
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": { "type": "string", "maxLength": 100 },
+            "description": "People search matches account IDs; no undisclosed search of personal contact details."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "propertyNames": { "type": "string" },
+                        "additionalProperties": {
+                          "anyOf": [
+                            { "type": "string" },
+                            { "type": "number" },
+                            { "type": "boolean" },
+                            { "type": "null" }
+                          ]
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["items", "total", "page", "pageSize"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/organizations": {
+      "post": {
+        "operationId": "superadminCreateOrganization",
+        "summary": "Create an organisation and invite its first owner; operator/owner and recent authentication required",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 64,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
+                  "ownerEmail": {
+                    "type": "string",
+                    "maxLength": 254,
+                    "format": "email",
+                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["name", "slug", "ownerEmail", "reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Organisation created; deliveryStatus reports sent or failed independently"
+          },
+          "403": { "description": "Not authorised or verification too old" },
+          "409": { "description": "Organisation address already exists" }
+        }
+      }
+    },
+    "/api/superadmin/people/{id}/reveal": {
+      "post": {
+        "operationId": "superadminRevealContact",
+        "summary": "Audit the purpose before revealing one account's name and email",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/people/{id}/revoke-sessions": {
+      "post": {
+        "operationId": "superadminRevokeCustomerSessions",
+        "summary": "Revoke customer sessions for a documented operational reason",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/invitations/{id}/resend": {
+      "post": {
+        "operationId": "superadminResendInvitation",
+        "summary": "Rotate and resend an unclaimed organisation invitation",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/invitations/{id}/revoke": {
+      "post": {
+        "operationId": "superadminRevokeInvitation",
+        "summary": "Withdraw an unaccepted organisation invitation",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/administrator-invitations": {
+      "get": {
+        "operationId": "superadminListAdministratorInvitations",
+        "summary": "Owner-only view of outstanding administrator invitations",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      },
+      "post": {
+        "operationId": "superadminInviteAdministrator",
+        "summary": "Owner-only invitation with an explicit role; recent verification required",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "maxLength": 254,
+                    "format": "email",
+                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": ["owner", "operator", "auditor"]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["email", "role", "reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Administrator invitation created with delivery status"
+          },
+          "403": { "description": "Owner with recent authentication required" },
+          "409": { "description": "Administrator already exists" }
+        }
+      }
+    },
+    "/api/superadmin/administrator-invitations/{id}/revoke": {
+      "post": {
+        "operationId": "superadminRevokeAdministratorInvitation",
+        "summary": "Owner withdraws an administrator invitation",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/administrators/{id}": {
+      "patch": {
+        "operationId": "superadminUpdateAdministrator",
+        "summary": "Owner changes administrator role/access; self-revocation and final-owner removal are blocked",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": ["owner", "operator", "auditor"]
+                  },
+                  "disabled": { "type": "boolean" },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 240
+                  }
+                },
+                "required": ["role", "disabled", "reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/security/phone": {
+      "patch": {
+        "operationId": "superadminUpdatePhone",
+        "summary": "Update own optional, unverified contact phone; never an authentication factor",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "phoneNumber": {
+                    "anyOf": [
+                      { "type": "string", "pattern": "^\\+[1-9]\\d{6,14}$" },
+                      { "type": "null" }
+                    ]
+                  }
+                },
+                "required": ["phoneNumber"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/security/sessions": {
+      "get": {
+        "operationId": "superadminListOwnSessions",
+        "summary": "List own administrator session times without IPs or user agents",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/superadmin/security/revoke-sessions": {
+      "post": {
+        "operationId": "superadminRevokeOwnSessions",
+        "summary": "Revoke other administrator sessions after recent verification",
+        "tags": ["Superadmin"],
+        "security": [{ "SuperadminCookie": [] }],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Authorised administrator response",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "401": { "description": "Separate administrator session required" },
+          "403": {
+            "description": "Role, verified factor or recent authentication required"
+          },
+          "409": { "description": "Conflict or last-owner protection" },
+          "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "security": [],
@@ -2960,6 +3706,12 @@
   },
   "components": {
     "securitySchemes": {
+      "SuperadminCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "trevv_superadmin.session_token",
+        "description": "Separate administrator realm. Secure deployments use __Secure-trevv_superadmin.session_token. Customer sessions and tenant roles never grant this access. Operational routes require completed factor verification."
+      },
       "SessionCookie": {
         "type": "apiKey",
         "in": "cookie",

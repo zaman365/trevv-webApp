@@ -4,7 +4,7 @@ import { webRequestId } from "./security-headers";
 import { readBoundedRequestBody } from "./bounded-request-body";
 import { authActionCookies } from "./auth-action-cookies";
 
-const allowedNamespaces = new Set(["auth", "v1"]);
+const allowedNamespaces = new Set(["auth", "v1", "superadmin"]);
 const browserAuthOperations = new Set([
   "POST request-password-reset",
   "POST send-verification-email",
@@ -67,6 +67,28 @@ export async function proxyApiRequest(
 
   const headers = new Headers(request.headers);
   for (const name of strippedRequestHeaders) headers.delete(name);
+  if (segments[0] === "superadmin") {
+    const cookie = headers
+      .get("cookie")
+      ?.split(";")
+      .map((value) => value.trim())
+      .filter((value) => /^(?:__Secure-)?trevv_superadmin\./u.test(value))
+      .join("; ");
+    headers.delete("cookie");
+    headers.delete("authorization");
+    if (cookie) headers.set("cookie", cookie);
+  } else {
+    headers.delete("x-superadmin-invitation");
+    const cookie = headers
+      .get("cookie")
+      ?.split(";")
+      .filter(
+        (value) => !/^(?:__Secure-)?trevv_superadmin\./u.test(value.trim()),
+      )
+      .join(";");
+    if (cookie) headers.set("cookie", cookie);
+    else headers.delete("cookie");
+  }
   restrictBrowserAuthCookies(headers, segments);
   headers.set("x-forwarded-host", incoming.host);
   headers.set("x-forwarded-proto", incoming.protocol.replace(":", ""));
@@ -221,6 +243,8 @@ export function browserApiOperationAllowed(
   segments: readonly string[],
   method: string,
 ): boolean {
+  if (segments[0] === "superadmin")
+    return ["GET", "POST", "PATCH"].includes(method.toUpperCase());
   if (segments[0] !== "auth") return segments[0] === "v1";
   return browserAuthOperations.has(
     `${method.toUpperCase()} ${segments.slice(1).join("/")}`,

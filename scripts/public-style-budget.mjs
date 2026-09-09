@@ -17,7 +17,12 @@ export async function publicStyleSources() {
   const files = new Set();
   async function routes(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (entry.isDirectory() && !["app", "api"].includes(entry.name))
+      // Superadmin has an independent CSS module and never renders the legacy
+      // product classes. Its private controls must not expand public CSS.
+      if (
+        entry.isDirectory() &&
+        !["app", "api", "superadmin"].includes(entry.name)
+      )
         await routes(resolve(directory, entry.name));
       else if (
         entry.isFile() &&

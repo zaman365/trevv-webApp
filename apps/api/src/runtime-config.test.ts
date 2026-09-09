@@ -23,6 +23,36 @@ const releaseEnvironment = {
 } as const;
 
 describe("live runtime configuration", () => {
+  it("keeps platform authentication disabled until a separate secret is supplied", () => {
+    expect(readRuntimeConfiguration(validLiveEnvironment)).not.toHaveProperty(
+      "superadmin",
+    );
+    expect(() =>
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        SUPERADMIN_ENABLED: "true",
+      }),
+    ).toThrow(/SUPERADMIN_AUTH_SECRET/);
+    expect(() =>
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        SUPERADMIN_ENABLED: "true",
+        SUPERADMIN_AUTH_SECRET: validLiveEnvironment.BETTER_AUTH_SECRET,
+      }),
+    ).toThrow(/must differ/);
+    expect(
+      readRuntimeConfiguration({
+        ...validLiveEnvironment,
+        SUPERADMIN_ENABLED: "true",
+        SUPERADMIN_AUTH_SECRET:
+          "different-random-administrator-secret-32-characters",
+      }),
+    ).toMatchObject({
+      superadmin: {
+        secret: "different-random-administrator-secret-32-characters",
+      },
+    });
+  });
   it("requires an explicit mode and rejects demo production", () => {
     expect(() => readRuntimeConfiguration({})).toThrow(/DEMO_MODE/);
     expect(() =>

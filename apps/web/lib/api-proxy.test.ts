@@ -7,6 +7,49 @@ afterEach(() => {
 });
 
 describe("browser API proxy boundary", () => {
+  it("forwards only separate administrator cookies to the administrator realm", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", upstream);
+    await proxyApiRequest(
+      new Request("https://trevv.test/api/superadmin/overview", {
+        headers: {
+          cookie:
+            "trevv.session_token=customer; __Secure-trevv_superadmin.session_token=administrator; tracking=excluded",
+          authorization: "Bearer customer",
+          "x-superadmin-invitation": "invite-token",
+        },
+      }),
+      ["superadmin", "overview"],
+    );
+    const headers = new Headers(
+      (upstream.mock.calls[0]?.[1] as RequestInit).headers,
+    );
+    expect(headers.get("cookie")).toBe(
+      "__Secure-trevv_superadmin.session_token=administrator",
+    );
+    expect(headers.has("authorization")).toBe(false);
+  });
+  it("does not send administrator cookies or invitation headers to customer routes", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", upstream);
+    await proxyApiRequest(
+      new Request("https://trevv.test/api/v1/session", {
+        headers: {
+          cookie:
+            "trevv.session_token=customer; __Secure-trevv_superadmin.session_token=administrator",
+          "x-superadmin-invitation": "invite-token",
+        },
+      }),
+      ["v1", "session"],
+    );
+    const headers = new Headers(
+      (upstream.mock.calls[0]?.[1] as RequestInit).headers,
+    );
+    expect(headers.get("cookie")).toBe("trevv.session_token=customer");
+    expect(headers.has("x-superadmin-invitation")).toBe(false);
+  });
   it.each([
     ["GET", ["auth", "get-session"]],
     ["GET", ["auth", "list-sessions"]],

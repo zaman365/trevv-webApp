@@ -260,6 +260,18 @@ export function rateLimitPolicy(
     path === "/openapi.json"
   )
     return null;
+  if (path.startsWith("/api/superadmin/auth/"))
+    return method === "GET"
+      ? { bucket: "superadmin-auth-read", limit: 60, windowMs: 60_000 }
+      : {
+          bucket: "superadmin-auth-sensitive",
+          limit: 10,
+          windowMs: 15 * 60_000,
+        };
+  if (path.startsWith("/api/superadmin/"))
+    return method === "GET"
+      ? { bucket: "superadmin-read", limit: 120, windowMs: 60_000 }
+      : { bucket: "superadmin-mutation", limit: 30, windowMs: 60_000 };
   if (path.startsWith("/api/auth/"))
     return method === "GET"
       ? { bucket: "auth-read", limit: 120, windowMs: 60_000 }

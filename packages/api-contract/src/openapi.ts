@@ -1,3 +1,5 @@
+import { superadminOpenApiPaths } from "./superadmin-openapi.js";
+
 export const openApiDocument = {
   openapi: "3.1.0",
   info: {
@@ -12,6 +14,7 @@ export const openApiDocument = {
     { name: "System" },
     { name: "Identity" },
     { name: "Platform" },
+    { name: "Superadmin" },
     { name: "Organization" },
     { name: "Portfolio" },
     { name: "Attention" },
@@ -35,6 +38,7 @@ export const openApiDocument = {
     { name: "Events" },
   ],
   paths: {
+    ...superadminOpenApiPaths,
     "/api/v1/health": {
       get: {
         security: [],
@@ -2964,6 +2968,13 @@ export const openApiDocument = {
   },
   components: {
     securitySchemes: {
+      SuperadminCookie: {
+        type: "apiKey",
+        in: "cookie",
+        name: "trevv_superadmin.session_token",
+        description:
+          "Separate administrator realm. Secure deployments use __Secure-trevv_superadmin.session_token. Customer sessions and tenant roles never grant this access. Operational routes require completed factor verification.",
+      },
       SessionCookie: {
         type: "apiKey",
         in: "cookie",

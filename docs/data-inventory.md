@@ -67,6 +67,31 @@ until all of the following are approved and tested:
 5. provider-specific revocation/deletion adapters and reconciliation;
 6. reviewed privacy notice, terms, DPA, subprocessors, and processing regions.
 
+## Superadmin identity and operational records
+
+The separate Superadmin realm adds administrator email, name, optional unverified
+contact phone, password hashes, encrypted authenticator material/recovery codes,
+passkey public keys and four-hour sessions. These records have no customer
+membership mapping. Administrator session IP addresses and browser user agents
+are not retained. Operational directories mask customer names/emails by default;
+authorised, recently verified operators can reveal an individual contact only
+after supplying an audited purpose. No customer task, message or file content is
+queried by this realm. No online-presence or behavioural tracking is added.
+
+Superadmin audit history is limited to 180 days, and API maintenance at startup
+and hourly while the process is running
+deletes older events, expired sessions/verification challenges, and invitations
+expired more than 90 days ago. Account records and enrolled factors remain until
+the administrator identity is deliberately decommissioned; revocation immediately
+disables access and removes sessions without silently deleting audit evidence.
+The operator must validate these retention periods, lawful bases and offboarding
+procedure for its jurisdiction. Authentication factors and passwords must never
+be included in audit reasons. See [the Superadmin design](superadmin-design.md).
+
+A sleeping preview host cannot guarantee wall-clock deletion deadlines. A
+production operator must run retention maintenance on an available service or
+independent scheduler and monitor its completion.
+
 ## Required review before public beta
 
 - Name the controller/operator and privacy contact.

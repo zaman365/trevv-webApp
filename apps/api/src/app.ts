@@ -53,6 +53,7 @@ import {
   createFileMailSink,
   createSmtpMailDelivery,
   createTrevvAuthRuntime,
+  createSuperadminAuthRuntime,
   type AuthIdentityResolver,
   type MailDelivery,
   type RegistrationMode,
@@ -60,6 +61,9 @@ import {
 } from "@founderhq/auth-server";
 import {
   createDatabase,
+  createSuperadminRepositories,
+  recordSuperadminInvitationDelivery,
+  pruneSuperadminRecords,
   createIdentityScope,
   createOrganizationScope,
   createPlatformScope,
@@ -116,6 +120,7 @@ import {
 import { createPostgresAdapter } from "./postgres-adapter.js";
 import { requestLocalIdentityResolver } from "./request-identity.js";
 import { readRuntimeConfiguration } from "./runtime-config.js";
+import { createSuperadminApi } from "./superadmin.js";
 
 type Variables = {
   requestId: string;
@@ -133,6 +138,7 @@ export interface ApiAppDependencies {
   clock?: () => Date;
   idGenerator?: () => string;
   authHandler?: (request: Request) => Promise<Response>;
+  superadminHandler?: (request: Request) => Promise<Response>;
   registrationMode?: RegistrationMode;
   releaseMetadata?: RuntimeReleaseMetadata | null;
   authIdentityResolver?: AuthIdentityResolver;
@@ -330,6 +336,12 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       );
     return dependencies.authHandler(context.req.raw);
   });
+
+  api.all("/api/superadmin/*", (context) =>
+    dependencies.superadminHandler
+      ? dependencies.superadminHandler(context.req.raw)
+      : context.json({ message: "Not found." }, 404),
+  );
 
   api.get("/internal/livez", (context) =>
     context.json({ status: "ok", service: "trevv-api" }),
@@ -2963,6 +2975,64 @@ export function createRuntimeApi(
   const identityResolver = requestLocalIdentityResolver(
     authRuntime.identityResolver,
   );
+  const superadminAuth = configuration.superadmin
+    ? createSuperadminAuthRuntime({
+        databaseUrl: configuration.databaseUrl,
+        baseUrl: configuration.authBaseUrl,
+        webOrigin: configuration.webOrigin,
+        secret: configuration.superadmin.secret,
+        mailDelivery,
+        mailFrom: configuration.mailFrom,
+      })
+    : null;
+  const superadminApi = superadminAuth
+    ? new Hono().route(
+        "/api/superadmin",
+        createSuperadminApi({
+          auth: superadminAuth,
+          repositories: (scope) =>
+            createSuperadminRepositories(database.db, scope),
+          webOrigin: configuration.webOrigin,
+          mailDelivery,
+          mailFrom: configuration.mailFrom,
+          recordDelivery: (kind, id, token, sent) =>
+            recordSuperadminInvitationDelivery(
+              database.db,
+              kind,
+              id,
+              token,
+              sent,
+            ),
+          onError: (error) =>
+            (runtimeOperations.logger ?? createJsonLogger()).write({
+              level: "error",
+              service: "trevv-api",
+              event: "superadmin_request_failed",
+              errorName: error.name,
+            }),
+        }),
+      )
+    : null;
+  let superadminMaintenanceRun: Promise<void> | null = null;
+  const maintainSuperadmin = () => {
+    if (superadminMaintenanceRun) return;
+    superadminMaintenanceRun = pruneSuperadminRecords(database.db)
+      .catch(() => {
+        (runtimeOperations.logger ?? createJsonLogger()).write({
+          level: "error",
+          service: "trevv-api",
+          event: "superadmin_retention_failed",
+        });
+      })
+      .finally(() => {
+        superadminMaintenanceRun = null;
+      });
+  };
+  if (superadminAuth) maintainSuperadmin();
+  const superadminMaintenance = superadminAuth
+    ? setInterval(maintainSuperadmin, 60 * 60_000)
+    : null;
+  superadminMaintenance?.unref();
   const live = createPostgresAdapter({
     repositories,
     readSnapshotRevision: (organizationId, now) =>
@@ -2984,6 +3054,12 @@ export function createRuntimeApi(
       registrationMode: configuration.registrationMode,
       releaseMetadata: configuration.releaseMetadata,
       authIdentityResolver: identityResolver,
+      ...(superadminApi
+        ? {
+            superadminHandler: async (request: Request) =>
+              superadminApi.fetch(request),
+          }
+        : {}),
       preMembershipPaths: [
         "/api/v1/session/organizations",
         "/api/v1/session/organization",
@@ -3012,8 +3088,14 @@ export function createRuntimeApi(
     }),
     releaseMetadata: configuration.releaseMetadata,
     async close() {
+      if (superadminMaintenance) clearInterval(superadminMaintenance);
+      await superadminMaintenanceRun;
       await rateLimitStore?.drain?.();
-      await Promise.all([database.close(), authRuntime.close()]);
+      await Promise.all([
+        database.close(),
+        authRuntime.close(),
+        superadminAuth?.close(),
+      ]);
     },
   };
 }

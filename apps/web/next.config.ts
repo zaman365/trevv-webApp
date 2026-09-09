@@ -49,6 +49,15 @@ const nextConfig = {
     return [
       { source: "/:path*", headers: webSecurityHeaders() },
       {
+        source: "/superadmin/:path*",
+        headers: [
+          ...sensitiveAuthHeaders.filter(
+            (header) => header.key !== "Referrer-Policy",
+          ),
+          { key: "Referrer-Policy", value: "same-origin" },
+        ],
+      },
+      {
         source: "/app/:path*",
         headers: [
           {

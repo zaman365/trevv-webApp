@@ -20,6 +20,7 @@ export type RuntimeConfiguration =
       databaseUrl: string;
       authBaseUrl: string;
       authSecret: string;
+      superadmin?: { secret: string };
       webOrigin: string;
       webOrigins: readonly string[];
       cookiePrefix: AuthCookiePrefix;
@@ -88,6 +89,23 @@ export function readRuntimeConfiguration(
     webOrigins,
   );
   validateAuthSecret(authSecret);
+  const superadminEnabled =
+    enumValue(
+      environment,
+      "SUPERADMIN_ENABLED",
+      ["true", "false"] as const,
+      "false",
+    ) === "true";
+  const superadminSecret = superadminEnabled
+    ? required(environment, "SUPERADMIN_AUTH_SECRET")
+    : undefined;
+  if (superadminSecret) {
+    validateAuthSecret(superadminSecret);
+    if (superadminSecret === authSecret)
+      throw new Error(
+        "SUPERADMIN_AUTH_SECRET must differ from BETTER_AUTH_SECRET.",
+      );
+  }
   validatePostgresDatabaseUrl(databaseUrl, { production });
   const registrationMode = enumValue(
     environment,
@@ -210,6 +228,7 @@ export function readRuntimeConfiguration(
     databaseUrl,
     authBaseUrl,
     authSecret,
+    ...(superadminSecret ? { superadmin: { secret: superadminSecret } } : {}),
     webOrigin,
     webOrigins,
     cookiePrefix,

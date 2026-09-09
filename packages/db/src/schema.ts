@@ -17,6 +17,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+export * from "./superadmin-schema.js";
 import { sql } from "drizzle-orm";
 
 export const roleEnum = pgEnum("membership_role", [

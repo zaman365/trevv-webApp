@@ -5,6 +5,7 @@ const OFFLINE_SHELL_URL = new URL(
 ).toString();
 
 const PRIVATE_PATH_PREFIXES = [
+  "/superadmin",
   "/app",
   "/api",
   "/auth",

@@ -93,6 +93,7 @@ function reportWebVital(
     "name" | "value" | "delta" | "rating" | "navigationType"
   >,
 ) {
+  if (window.location.pathname.startsWith("/superadmin")) return;
   const body = JSON.stringify({
     name: metric.name,
     value: metric.value,
