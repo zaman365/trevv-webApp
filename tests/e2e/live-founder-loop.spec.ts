@@ -480,9 +480,11 @@ test.describe.serial("live founder operating loop", () => {
       .fill(collaboratorEmail);
     await ownerPage.getByLabel("Organization role").selectOption("admin");
     await ownerPage.getByRole("button", { name: "Send invitation" }).click();
-    await expect(ownerPage.getByRole("status")).toContainText(
-      `Invitation sent to ${collaboratorEmail}`,
-    );
+    await expect(
+      ownerPage
+        .getByRole("status")
+        .filter({ hasText: `Invitation sent to ${collaboratorEmail}` }),
+    ).toBeVisible();
     const invitationUrl = await waitForMailAction(
       collaboratorEmail,
       "You are invited to TREVV",

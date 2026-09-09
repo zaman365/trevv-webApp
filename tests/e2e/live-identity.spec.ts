@@ -223,9 +223,11 @@ test("live identity, onboarding, invitation, revocation, and recovery fail close
     .getByLabel("Workspace access")
     .selectOption({ label: workspaceName });
   await ownerPage.getByRole("button", { name: "Send invitation" }).click();
-  await expect(ownerPage.getByRole("status")).toContainText(
-    `Invitation sent to ${inviteeEmail}`,
-  );
+  await expect(
+    ownerPage
+      .getByRole("status")
+      .filter({ hasText: `Invitation sent to ${inviteeEmail}` }),
+  ).toBeVisible();
   const invitationUrl = await waitForMailAction(
     inviteeEmail,
     "You are invited to TREVV",
