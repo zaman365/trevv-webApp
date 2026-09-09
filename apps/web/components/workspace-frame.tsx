@@ -73,7 +73,10 @@ import {
   clearLiveDraftStorage,
   formatCompactWorkspaceDate,
 } from "@/lib/live-workflow-ui";
-import { LiveRefreshStatusBoundary } from "./live-refresh-status";
+import {
+  LiveHeaderRefreshStatus,
+  LiveRefreshStatusBoundary,
+} from "./live-refresh-status";
 import type { LiveCaptureSuccess } from "./live-quick-capture";
 import {
   portfolioVisualFor,
@@ -1056,7 +1059,11 @@ function WorkspaceChrome({
               <kbd title="Press slash to search">/</kbd>
             </Link>
           )}
-          <TechnicalPreviewBadge mode={appSession.demo ? "demo" : "live"} />
+          {appSession.demo ? (
+            <TechnicalPreviewBadge mode="demo" />
+          ) : (
+            <LiveHeaderRefreshStatus />
+          )}
           <nav className="topbar-actions" aria-label="Workspace shortcuts">
             {contextProject && (
               <>
@@ -1277,7 +1284,9 @@ function WorkspaceChrome({
         {appSession.demo ? (
           children
         ) : (
-          <LiveRefreshStatusBoundary>{children}</LiveRefreshStatusBoundary>
+          <LiveRefreshStatusBoundary statusInHeader>
+            {children}
+          </LiveRefreshStatusBoundary>
         )}
       </div>
 

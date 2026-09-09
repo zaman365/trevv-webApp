@@ -15,6 +15,7 @@ import {
 import { useCustomPortfolios } from "../lib/custom-portfolios";
 import { useCapturedWork } from "../lib/captured-work";
 import {
+  LiveHeaderRefreshStatus,
   LiveRefreshStatus,
   LiveRefreshStatusBoundary,
 } from "../components/live-refresh-status";
@@ -171,7 +172,8 @@ function Harness() {
 }
 
 function ScopedHarness() {
-  const account = location.hash === "#account";
+  const header = location.hash === "#header";
+  const account = header || location.hash === "#account";
   return (
     <LiveAppDataProvider
       identity={{ userId: "user-one", organizationId: "org-one" }}
@@ -179,7 +181,22 @@ function ScopedHarness() {
       recordScope="summary"
       loadRecords={!account}
     >
-      <LiveRefreshStatusBoundary>
+      {header ? (
+        <header
+          data-testid="connection-header"
+          style={{
+            height: 58,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            padding: "0 13px",
+            background: "var(--fh-surface)",
+          }}
+        >
+          <LiveHeaderRefreshStatus />
+        </header>
+      ) : null}
+      <LiveRefreshStatusBoundary statusInHeader={header}>
         <LiveAppRecordsBoundary required={!account}>
           <LiveRefreshStatus />
           <Records />
@@ -191,7 +208,7 @@ function ScopedHarness() {
 }
 
 createRoot(document.getElementById("root")!).render(
-  ["#scope", "#account"].includes(location.hash) ? (
+  ["#scope", "#account", "#header"].includes(location.hash) ? (
     <ScopedHarness />
   ) : (
     <Harness />

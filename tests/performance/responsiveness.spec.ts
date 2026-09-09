@@ -668,7 +668,7 @@ test("persistent collaboration pauses while hidden, reconciles on return, and re
 
 async function connectionHarness(
   page: import("@playwright/test").Page,
-  options: { status?: number; clock?: boolean } = {},
+  options: { status?: number; clock?: boolean; header?: boolean } = {},
 ) {
   if (options.clock !== false)
     await page.clock.install({ time: new Date("2026-09-09T09:00:00Z") });
@@ -696,7 +696,9 @@ async function connectionHarness(
             },
     });
   });
-  await page.goto("http://trevv.test/#account");
+  await page.goto(
+    `http://trevv.test/#${options.header === false ? "account" : "header"}`,
+  );
   await page.addScriptTag({ content: script });
   await page.addStyleTag({ content: connectionStyles });
   await expect.poll(() => state.checks).toBeGreaterThan(0);
@@ -714,6 +716,14 @@ test("intermittent background failures keep one stable connection indicator and 
   const state = await connectionHarness(page);
   const connection = page.getByRole("group", { name: "Workspace connection" });
   await expect(connection).toHaveCount(1);
+  const header = page.getByTestId("connection-header");
+  const headerBounds = (await header.boundingBox())!;
+  const connectionBounds = (await connection.boundingBox())!;
+  expect(headerBounds.height).toBe(58);
+  expect(connectionBounds.y).toBeGreaterThanOrEqual(headerBounds.y);
+  expect(connectionBounds.y + connectionBounds.height).toBeLessThanOrEqual(
+    headerBounds.y + headerBounds.height,
+  );
   const draft = page.getByRole("textbox", { name: "Draft" });
   await draft.fill("Keep while background reads retry");
   const initial = await draft.boundingBox();
@@ -744,7 +754,7 @@ test("a sustained outage remains visible with read-error details and manual reco
   state.status = 503;
   await page.clock.fastForward(5_000);
   await expect(connection).toHaveAttribute("data-sync-status", "checking");
-  await connection.getByText("Connection details", { exact: true }).click();
+  await connection.locator("summary").click();
   await expect(connection).toContainText(
     "Your last loaded records and drafts are kept.",
   );
@@ -774,6 +784,10 @@ test("access revocation bypasses the background warning grace period immediately
     "checking",
   );
   state.status = 403;
+  await page
+    .getByRole("group", { name: "Workspace connection" })
+    .locator("summary")
+    .click();
   await page.getByRole("button", { name: "Refresh connection" }).click();
   await expect(
     page.getByText("Your access has changed", { exact: true }),
@@ -841,7 +855,10 @@ test("connection details are accessible in both themes and stay within a narrow 
   await connectionHarness(page, { clock: false });
   await page.setViewportSize({ width: 320, height: 740 });
   const connection = page.getByRole("group", { name: "Workspace connection" });
-  await connection.getByText("Connection details", { exact: true }).click();
+  await connection.locator("summary").click();
+  await expect(
+    connection.getByText("Authenticated preview", { exact: true }),
+  ).toBeVisible();
   for (const theme of ["light", "dark"]) {
     await page.evaluate(
       (value) => (document.documentElement.dataset.theme = value),
@@ -913,6 +930,24 @@ test("connection details are accessible in both themes and stay within a narrow 
     connection.getByRole("button", { name: "Refresh connection" }),
   ).toBeDisabled();
   await page.context().setOffline(false);
-  await connection.getByText("Connection details", { exact: true }).click();
+  await connection.locator("summary").click();
   await expect(connection.locator("details")).not.toHaveAttribute("open");
+});
+
+test("standalone views retain one connection bar with details and direct retry", async ({
+  page,
+}) => {
+  await connectionHarness(page, { header: false });
+  const connection = page.getByRole("group", { name: "Workspace connection" });
+  await expect(connection).toHaveCount(1);
+  await expect(
+    connection.getByText("Up to date", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    connection.getByRole("button", { name: "Refresh connection" }),
+  ).toBeEnabled();
+  await connection.getByText("Connection details", { exact: true }).click();
+  await expect(
+    connection.getByText(/The latest workspace updates have been checked/),
+  ).toBeVisible();
 });

@@ -95,6 +95,43 @@
   display: block;
   color: var(--fh-muted);
 }
+.compact {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+}
+.compact .details > summary {
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+}
+.compact .label {
+  line-height: 13px;
+}
+.compact .panel {
+  right: 0;
+}
+.panelRefresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--fh-border);
+  border-radius: 8px;
+  background: var(--fh-surface);
+  color: var(--fh-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.panelRefresh:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
 @media (max-width: 600px) {
   .bar {
     padding-inline: 12px;
@@ -103,5 +140,8 @@
   .controls > button,
   .details > summary {
     padding-inline: 4px;
+  }
+  .compact {
+    padding: 0;
   }
 }

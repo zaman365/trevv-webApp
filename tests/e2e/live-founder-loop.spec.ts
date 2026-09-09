@@ -1066,8 +1066,32 @@ test.describe.serial("live founder operating loop", () => {
     // At the end of the page, its bottom padding keeps the task and cycle
     // controls clear of the fixed mobile navigation for contrast measurement.
     await page.evaluate(() =>
-      window.scrollTo(0, document.documentElement.scrollHeight),
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "instant",
+      }),
     );
+    // Font metrics can leave the last date-filter row partly behind the sticky
+    // header at this scroll position. Expose that row before measuring its
+    // actual tap targets; keep every accessibility rule enabled.
+    await page
+      .getByRole("group", { name: "Task dates and completion" })
+      .evaluate((group) => {
+        const headerBottom = document
+          .querySelector(".topbar")!
+          .getBoundingClientRect().bottom;
+        const clipped = [...group.querySelectorAll("button")]
+          .map((button) => button.getBoundingClientRect())
+          .filter(
+            (rect) => rect.top < headerBottom && rect.bottom > headerBottom,
+          );
+        if (clipped.length)
+          window.scrollBy({
+            top:
+              Math.min(...clipped.map((rect) => rect.top)) - headerBottom - 1,
+            behavior: "instant",
+          });
+      });
     await expect(mobileTask).toBeInViewport();
     await expectNoLiveWcagFindings(page, "task-board-mobile");
     await page.screenshot({
@@ -1659,7 +1683,7 @@ test.describe.serial("live founder operating loop", () => {
       .getByRole("combobox", { name: "Dashboard project", exact: true })
       .selectOption("");
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await scrollToTop(page);
     await expectNoLiveWcagFindings(page, "visual-dashboard-mobile");
     expect(
       await page
@@ -1676,6 +1700,7 @@ test.describe.serial("live founder operating loop", () => {
     await page
       .getByRole("combobox", { name: "Dashboard deadline window", exact: true })
       .selectOption("30");
+    await scrollToTop(page);
     await expectNoLiveWcagFindings(page, "visual-dashboard-mobile-30-days");
     expect(
       await page
@@ -1714,6 +1739,22 @@ test.describe.serial("live founder operating loop", () => {
     await context.close();
   });
 });
+
+async function scrollToTop(page: Page) {
+  // End chart scrolling and native select focus scrolling before taking a
+  // viewport accessibility measurement, including after a Safari resize.
+  await expect(async () => {
+    await page.evaluate(async () => {
+      if (document.activeElement instanceof HTMLElement)
+        document.activeElement.blur();
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+    });
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  }).toPass({ timeout: 5_000, intervals: [100, 250, 500] });
+}
 
 async function completeOnboarding(page: Page, name = organizationName) {
   await page.getByLabel("Organization name").fill(name);
