@@ -25,7 +25,7 @@ import {
   type SuperadminDirectoryResult,
   type SuperadminOverview,
   type SuperadminSession,
-} from "@founderhq/api-contract";
+} from "@founderhq/api-contract/superadmin";
 import { superadminRequest } from "@/lib/superadmin-client";
 import styles from "./superadmin.module.css";
 

@@ -2,6 +2,7 @@
   "name": "@founderhq/api-contract",
   "version": "0.1.0",
   "private": true,
+  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -14,6 +15,10 @@
     "./openapi": {
       "production": "./dist/openapi.js",
       "default": "./src/openapi.ts"
+    },
+    "./superadmin": {
+      "production": "./dist/superadmin.js",
+      "default": "./src/superadmin.ts"
     }
   },
   "scripts": {

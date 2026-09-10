@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import {
   superadminDirectoryKindSchema,
   superadminDirectoryFilters,
-} from "@founderhq/api-contract";
+} from "@founderhq/api-contract/superadmin";
 import { requireSuperadminSession } from "@/lib/server-superadmin";
 import { SuperadminConsole } from "@/components/superadmin-console";
 import { SuperadminShell } from "@/components/superadmin-shell";

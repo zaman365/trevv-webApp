@@ -24,7 +24,7 @@ import {
   type SuperadminOrganizationDetail,
   type SuperadminContact,
   type SuperadminSession,
-} from "@founderhq/api-contract";
+} from "@founderhq/api-contract/superadmin";
 import { superadminRequest } from "@/lib/superadmin-client";
 import styles from "./superadmin.module.css";
 

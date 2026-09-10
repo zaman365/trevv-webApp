@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
-import { superadminSessionSchema } from "@founderhq/api-contract";
+import { superadminSessionSchema } from "@founderhq/api-contract/superadmin";
 import { webApiOrigin, webRuntimeMode } from "./web-runtime-config";
 
 export async function requireSuperadminSession(enrollment = false) {
