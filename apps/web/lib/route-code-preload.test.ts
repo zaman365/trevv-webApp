@@ -86,6 +86,8 @@ describe("static route warming", () => {
   it("does not guess an unknown, external, or public route", () => {
     for (const path of [
       "/sign-in",
+      "/app/system/admin",
+      "/superadmin",
       "https://example.test/app/portfolio",
       "/app/workspaces/one/missing",
       "/app/missing",

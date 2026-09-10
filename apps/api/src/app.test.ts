@@ -319,45 +319,25 @@ describe("TREVV API v1 dependency boundaries", () => {
     await expect(errorCode(response)).resolves.toBe("resource_not_found");
   });
 
-  it("returns the redacted dashboard only for the server-derived platform owner", async () => {
+  it("retires platform reads and session mutations even for the former platform owner", async () => {
     const live = createUnavailableLiveDependencies();
-    const dashboard = {
-      owner: {
-        id: "user-live",
-        name: "Live User",
-        email: "live@example.test",
-      },
-      summary: {
-        organizations: 1,
-        users: 1,
-        verifiedUsers: 1,
-        activeSessions: 1,
-        pendingInvitations: 0,
-        failedInvitationDeliveries: 0,
-      },
-      organizations: [],
-      users: [],
-      invitations: [],
-      audit: [],
-    };
+    let accessed = false;
     const repositories = {
-      forPlatform: () => ({
-        dashboard: async () => dashboard,
-        revokeUserSessions: async () => ({
-          revokedSessions: 0,
-          preservedCurrentSession: true,
-        }),
-      }),
+      forPlatform: () => {
+        accessed = true;
+        throw new Error("Retired repository must not be used");
+      },
     } as unknown as PostgresRepositories;
     const platformAccessResolver: AccessResolver = {
       mode: "live",
       async resolve(request, requestId) {
         const resolved = await liveAccessResolver.resolve(request, requestId);
-        if (!resolved) return null;
-        return {
-          ...resolved,
-          session: { ...resolved.session, platformRole: "owner" as const },
-        };
+        return resolved
+          ? {
+              ...resolved,
+              session: { ...resolved.session, platformRole: "owner" as const },
+            }
+          : null;
       },
     };
     const app = createApiApp({
@@ -365,19 +345,16 @@ describe("TREVV API v1 dependency boundaries", () => {
       accessResolver: platformAccessResolver,
       dataPlane: live.dataPlane,
       repositories,
-      registrationMode: "invite_only",
-      releaseMetadata: runtimeRelease,
-      clock: () => new Date(fixedNow),
     });
-    const response = await app.request("/api/v1/platform");
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      role: "owner",
-      ...dashboard,
-      release: runtimeRelease,
-      registrationMode: "invite_only",
-      generatedAt: fixedNow.toISOString(),
-    });
+    for (const [path, method] of [
+      ["/api/v1/platform", "GET"],
+      ["/api/v1/platform/users/other-account/revoke-sessions", "POST"],
+    ] as const) {
+      const response = await app.request(path!, { method });
+      expect(response.status).toBe(404);
+      await expect(errorCode(response)).resolves.toBe("resource_not_found");
+    }
+    expect(accessed).toBe(false);
   });
 
   it("maps live transport failures to stable 401, 429, and 500 envelopes", async () => {

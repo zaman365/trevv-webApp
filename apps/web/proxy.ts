@@ -49,6 +49,17 @@ export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/api/web/livez")
     return finish(nextResponse());
   if (webRuntimeMode() === "demo") return finish(nextResponse());
+  // Leave the customer shell before its session/organisation guards run.
+  if (request.nextUrl.pathname.replace(/\/$/, "") === "/app/system/admin") {
+    const origin =
+      webCanonicalUrl().origin === "https://alpha.trevv.de"
+        ? "https://trevv.de"
+        : webCanonicalUrl().origin;
+    const response = NextResponse.redirect(new URL("/superadmin", origin), 307);
+    response.headers.set("cache-control", "private, no-store, max-age=0");
+    response.headers.set("referrer-policy", "no-referrer");
+    return finish(response);
+  }
   // Both Web deployments share the API, but administrator credentials and
   // passkeys remain bound to the single reviewed production origin.
   if (

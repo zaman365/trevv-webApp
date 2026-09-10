@@ -3,6 +3,8 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import {
   createSuperadminOrganizationSchema,
+  superadminContactSearchSchema,
+  type RuntimeReleaseMetadata,
   inviteSuperadminSchema,
   superadminDirectoryKindSchema,
   superadminDirectoryFilters,
@@ -32,6 +34,8 @@ export interface SuperadminApiDependencies {
   };
   repositories(scope: SuperadminScope): Repositories;
   webOrigin: string;
+  releaseMetadata?: RuntimeReleaseMetadata | null;
+  registrationMode?: "closed" | "invite_only" | "public";
   mailDelivery: MailDelivery;
   mailFrom: string;
   recordDelivery(
@@ -149,7 +153,14 @@ export function createSuperadminApi(dependencies: SuperadminApiDependencies) {
     return context.json(identity);
   });
   app.get("/overview", async (context) =>
-    context.json(await context.get("repositories").overview()),
+    context.json({
+      ...(await context.get("repositories").overview()),
+      operations: {
+        release: dependencies.releaseMetadata ?? null,
+        registrationMode: dependencies.registrationMode ?? "closed",
+        generatedAt: new Date().toISOString(),
+      },
+    }),
   );
   app.get("/directory/:kind", async (context) => {
     const kind = superadminDirectoryKindSchema.parse(context.req.param("kind"));
@@ -166,6 +177,29 @@ export function createSuperadminApi(dependencies: SuperadminApiDependencies) {
       await context
         .get("repositories")
         .directory(kind, input.page, input.q, input),
+    );
+  });
+  app.post("/directory/:kind/search", async (context) => {
+    const kind = z
+      .enum(["people", "invitations"])
+      .parse(context.req.param("kind"));
+    const input = superadminContactSearchSchema.parse(await context.req.json());
+    z.enum(superadminDirectoryFilters[kind]).parse(input.filter);
+    return context.json(
+      await context.get("repositories").directory(kind, input.page, input.q, {
+        ...input,
+        protectedSearchReason: input.reason,
+      }),
+    );
+  });
+  app.post("/invitations/:id/reveal", async (context) => {
+    const { reason } = superadminReasonInputSchema.parse(
+      await context.req.json(),
+    );
+    return context.json(
+      await context
+        .get("repositories")
+        .revealInvitation(context.req.param("id"), reason),
     );
   });
   const organizationId = (value: string) =>

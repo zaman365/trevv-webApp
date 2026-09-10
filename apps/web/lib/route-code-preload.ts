@@ -36,7 +36,6 @@ const modules = {
   sessions: () => import("../components/session-management"),
   privacy: () => import("../components/privacy-center"),
   invitations: () => import("../components/invitation-management"),
-  admin: () => import("../components/platform-admin"),
 };
 type ModuleKey = keyof typeof modules;
 const pending = new Map<ModuleKey, Promise<unknown>>();
@@ -60,7 +59,6 @@ export function routeCodeModules(
     "/app/account/sessions": "sessions",
     "/app/account/privacy": "privacy",
     "/app/account/invitations": "invitations",
-    "/app/system/admin": "admin",
   };
   if (pathname && pages[pathname]) return [pages[pathname]];
   const match = /^\/app\/workspaces\/[^/]+(?:\/(.+))?$/.exec(pathname ?? "");

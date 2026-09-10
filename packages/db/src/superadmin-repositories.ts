@@ -199,14 +199,35 @@ export function createSuperadminRepositories(
       kind: SuperadminDirectory,
       page: number,
       query: string,
-      options: { filter?: string; organizationId?: string | undefined } = {},
+      options: {
+        filter?: string;
+        organizationId?: string | undefined;
+        protectedSearchReason?: string;
+      } = {},
     ) =>
-      run(kind === "administrators" ? "owner" : "read", false, async (tx) => {
-        const limit = 25;
-        const offset = Math.min(Math.max(0, page), 40_000) * limit;
-        const pattern = `%${query.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
-        const statements: Record<SuperadminDirectory, SQL> = {
-          organizations: sql`select o.id, o.name, o.slug, o.created_at as "createdAt",
+      run(
+        kind === "administrators"
+          ? "owner"
+          : options.protectedSearchReason
+            ? "operate"
+            : "read",
+        Boolean(options.protectedSearchReason),
+        async (tx) => {
+          if (
+            options.protectedSearchReason &&
+            kind !== "people" &&
+            kind !== "invitations"
+          )
+            throw new SuperadminError(
+              "invalid_filter",
+              "Contact search is unavailable for this directory.",
+              409,
+            );
+          const limit = 25;
+          const offset = Math.min(Math.max(0, page), 40_000) * limit;
+          const pattern = `%${query.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+          const statements: Record<SuperadminDirectory, SQL> = {
+            organizations: sql`select o.id, o.name, o.slug, o.created_at as "createdAt",
           (select count(*)::int from memberships m where m.organization_id = o.id and m.archived_at is null and m.deleted_at is null) as "memberCount",
           (select count(*)::int from workspaces w where w.organization_id = o.id and w.archived_at is null and w.deleted_at is null) as "workspaceCount",
           (select count(*)::int from memberships m where m.organization_id = o.id and m.role = 'owner' and m.archived_at is null and m.deleted_at is null) as "ownerCount",
@@ -216,7 +237,7 @@ export function createSuperadminRepositories(
           case when c.id is null then null else left(c.email, 1) || '•••@' || split_part(c.email, '@', 2) end as "contactEmail"
           from organizations o left join superadmin_organization_profiles p on p.organization_id = o.id
           left join superadmin_organization_contacts c on c.organization_id = o.id and c.kind = 'primary'  where o.archived_at is null and o.deleted_at is null and (o.name ilike ${pattern} or o.slug ilike ${pattern})`,
-          people: sql`select u.id, ('Account ' || left(u.id, 8)) as name,
+            people: sql`select u.id, ('Account ' || left(u.id, 8)) as name,
           (left(u.email, 1) || '•••@' || split_part(u.email, '@', 2)) as email,
           u."emailVerified", u."createdAt",
           (select max(s."createdAt") from session s where s."userId" = u.id) as "lastSignInAt",
@@ -225,98 +246,115 @@ export function createSuperadminRepositories(
           (select count(*)::int from session s where s."userId" = u.id and s."expiresAt" > now()) as "sessionCount",
           (select count(*)::int from memberships m join auth_user_mappings am on am.app_user_id = m.user_id
             where am.auth_user_id = u.id and m.archived_at is null and m.deleted_at is null) as "organizationCount"
-          from "user" u where u.id ilike ${pattern}
+          , (select string_agg(o.name || ' · ' || m.role::text || case when m.archived_at is not null or m.deleted_at is not null then ' (inactive)' else '' end, '; ' order by o.name, o.id)
+             from memberships m join auth_user_mappings am on am.app_user_id = m.user_id join organizations o on o.id = m.organization_id
+             where am.auth_user_id = u.id and o.deleted_at is null) as memberships
+          from "user" u where (u.id ilike ${pattern}
+            or (${Boolean(options.protectedSearchReason)} and (u.name ilike ${pattern} or u.email ilike ${pattern}))
+            or exists (select 1 from memberships m join auth_user_mappings am on am.app_user_id = m.user_id join organizations o on o.id = m.organization_id
+              where am.auth_user_id = u.id and o.deleted_at is null and (o.name ilike ${pattern} or o.slug ilike ${pattern})))
           and (${!options.organizationId} or exists (select 1 from memberships m join auth_user_mappings am on am.app_user_id = m.user_id
             where am.auth_user_id = u.id and m.organization_id = ${options.organizationId ?? ""} and m.deleted_at is null and m.archived_at is null))`,
-          invitations: sql`select i.id, o.name as name, (left(i.email, 1) || '•••@' || split_part(i.email, '@', 2)) as email,
-          i.organization_id as "organizationId", i.send_count as "sendCount", i.last_sent_at as "lastSentAt", i.role, i.delivery_status as "deliveryStatus", i.created_at as "createdAt", i.expires_at as "expiresAt",
+            invitations: sql`select i.id, o.name as name, (left(i.email, 1) || '•••@' || split_part(i.email, '@', 2)) as email,
+          i.organization_id as "organizationId", i.send_count as "sendCount", i.last_sent_at as "lastSentAt", i.role, i.delivery_error_code as "deliveryErrorCode", (select string_agg(a.workspace_id, ', ' order by a.workspace_id) from invitation_workspace_assignments a where a.invitation_id = i.id and a.organization_id = i.organization_id) as "workspaceIds",
+          (select string_agg(a.team_id, ', ' order by a.team_id) from invitation_team_assignments a where a.invitation_id = i.id and a.organization_id = i.organization_id) as "teamIds", i.delivery_status as "deliveryStatus", i.created_at as "createdAt", i.expires_at as "expiresAt",
           case when i.accepted_at is not null then 'accepted' when i.revoked_at is not null then 'revoked' when i.expires_at <= now() then 'expired' else 'pending' end as status
           from invitations i join organizations o on o.id = i.organization_id
-          where i.deleted_at is null and o.deleted_at is null and o.name ilike ${pattern} and (${!options.organizationId} or i.organization_id = ${options.organizationId ?? ""})`,
-          administrators: sql`select u.id, u.name, u.email, u.role, u.disabled, u."twoFactorEnabled", u."createdAt", u."emailVerified",
+          where i.deleted_at is null and o.deleted_at is null and (o.name ilike ${pattern} or i.delivery_status::text ilike ${pattern} or (${Boolean(options.protectedSearchReason)} and i.email ilike ${pattern})) and (${!options.organizationId} or i.organization_id = ${options.organizationId ?? ""})`,
+            administrators: sql`select u.id, u.name, u.email, u.role, u.disabled, u."twoFactorEnabled", u."createdAt", u."emailVerified",
           (select count(*)::int from superadmin_passkey p where p."userId" = u.id) as "passkeyCount",
           (select count(*)::int from superadmin_session s where s."userId" = u.id and s."expiresAt" > now()) as "sessionCount",
           (select max(s."createdAt") from superadmin_session s where s."userId" = u.id) as "lastSignInAt"
           from superadmin_user u where u.name ilike ${pattern} or u.email ilike ${pattern}`,
-          audit: sql`select a.id, a.action as name, a.target_type as "targetType", a.target_id as "targetId", a.reason,
-          coalesce(u.name, 'Bootstrap') as actor, a.created_at as "createdAt"
+            audit: sql`select a.id, a.action as name, a.target_type as "targetType", a.target_id as "targetId", a.reason,
+          coalesce(u.name, 'Bootstrap') as actor, 'superadmin' as source, a.created_at as "createdAt"
           from superadmin_audit a left join superadmin_user u on u.id = a.actor_id
           where a.created_at >= now() - ${superadminAuditRetentionDays} * interval '1 day'
-            and (a.action ilike ${pattern} or a.target_id ilike ${pattern})`,
-        };
-        const filters: Record<SuperadminDirectory, Record<string, SQL>> = {
-          organizations: {
-            missing_contact: sql`not "hasContact"`,
-            missing_owner: sql`"ownerCount" = 0`,
-            onboarding: sql`stage = 'onboarding'`,
-            needs_review: sql`stage = 'needs_review'`,
-            review_due: sql`"reviewDue"`,
-          },
-          people: {
-            verified: sql`"emailVerified"`,
-            unverified: sql`not "emailVerified"`,
-            has_sessions: sql`"sessionCount" > 0`,
-            no_organization: sql`"organizationCount" = 0`,
-          },
-          invitations: {
-            pending: sql`status = 'pending'`,
-            expired: sql`status = 'expired'`,
-            accepted: sql`status = 'accepted'`,
-            revoked: sql`status = 'revoked'`,
-            delivery_failed: sql`"deliveryStatus" = 'failed' and status = 'pending'`,
-          },
-          administrators: {
-            owner: sql`role = 'owner'`,
-            operator: sql`role = 'operator'`,
-            auditor: sql`role = 'auditor'`,
-            setup_pending: sql`not disabled and (not "twoFactorEnabled" or not "emailVerified")`,
-            disabled: sql`disabled`,
-          },
-          audit: {
-            changes: sql`name not in ('overview.viewed', 'directory.viewed', 'organization.viewed', 'person.contact_revealed', 'organization.contact_revealed')`,
-            contact_access: sql`name in ('person.contact_revealed', 'organization.contact_revealed')`,
-            reads: sql`name in ('overview.viewed', 'directory.viewed', 'organization.viewed')`,
-          },
-        };
-        const filter = options.filter ?? "all";
-        if (filter !== "all" && !filters[kind][filter])
-          throw new SuperadminError(
-            "invalid_filter",
-            "Unknown directory filter.",
-            409,
+            and (a.action ilike ${pattern} or a.target_id ilike ${pattern})
+          union all
+          select 'legacy:' || a.id, a.action, a.target_type, a.target_id, case when jsonb_typeof(a.payload->'summary') = 'string' then left(a.payload->>'summary', 500) else 'Platform action recorded.' end,
+            coalesce(u.name, 'Former platform owner'), 'legacy', a.created_at
+          from platform_audit_events a left join app_users u on u.id = a.actor_user_id
+          where a.action ilike ${pattern} or a.target_id ilike ${pattern}`,
+          };
+          const filters: Record<SuperadminDirectory, Record<string, SQL>> = {
+            organizations: {
+              missing_contact: sql`not "hasContact"`,
+              missing_owner: sql`"ownerCount" = 0`,
+              onboarding: sql`stage = 'onboarding'`,
+              needs_review: sql`stage = 'needs_review'`,
+              review_due: sql`"reviewDue"`,
+            },
+            people: {
+              verified: sql`"emailVerified"`,
+              unverified: sql`not "emailVerified"`,
+              has_sessions: sql`"sessionCount" > 0`,
+              no_organization: sql`"organizationCount" = 0`,
+            },
+            invitations: {
+              pending: sql`status = 'pending'`,
+              expired: sql`status = 'expired'`,
+              accepted: sql`status = 'accepted'`,
+              revoked: sql`status = 'revoked'`,
+              delivery_failed: sql`"deliveryStatus" = 'failed' and status = 'pending'`,
+            },
+            administrators: {
+              owner: sql`role = 'owner'`,
+              operator: sql`role = 'operator'`,
+              auditor: sql`role = 'auditor'`,
+              setup_pending: sql`not disabled and (not "twoFactorEnabled" or not "emailVerified")`,
+              disabled: sql`disabled`,
+            },
+            audit: {
+              legacy: sql`source = 'legacy'`,
+              changes: sql`name not in ('overview.viewed', 'directory.viewed', 'organization.viewed', 'person.contact_revealed', 'organization.contact_revealed', 'invitation.contact_revealed', 'directory.contacts_searched')`,
+              contact_access: sql`name in ('person.contact_revealed', 'organization.contact_revealed', 'invitation.contact_revealed', 'directory.contacts_searched')`,
+              reads: sql`name in ('overview.viewed', 'directory.viewed', 'organization.viewed')`,
+            },
+          };
+          const filter = options.filter ?? "all";
+          if (filter !== "all" && !filters[kind][filter])
+            throw new SuperadminError(
+              "invalid_filter",
+              "Unknown directory filter.",
+              409,
+            );
+          if (
+            options.organizationId &&
+            kind !== "people" &&
+            kind !== "invitations"
+          )
+            throw new SuperadminError(
+              "invalid_filter",
+              "Organisation filtering is unavailable for this directory.",
+              409,
+            );
+          const statement = sql`select * from (${statements[kind]}) source where ${filter === "all" ? sql`true` : filters[kind][filter]!}`;
+          const [total] = await tx.execute<{ total: number }>(
+            sql`select count(*)::int as total from (${statement}) directory`,
           );
-        if (
-          options.organizationId &&
-          kind !== "people" &&
-          kind !== "invitations"
-        )
-          throw new SuperadminError(
-            "invalid_filter",
-            "Organisation filtering is unavailable for this directory.",
-            409,
+          const rows = await tx.execute<DirectoryRow>(
+            sql`select * from (${statement}) directory order by "createdAt" desc, id desc limit ${limit} offset ${offset}`,
           );
-        const statement = sql`select * from (${statements[kind]}) source where ${filter === "all" ? sql`true` : filters[kind][filter]!}`;
-        const [total] = await tx.execute<{ total: number }>(
-          sql`select count(*)::int as total from (${statement}) directory`,
-        );
-        const rows = await tx.execute<DirectoryRow>(
-          sql`select * from (${statement}) directory order by "createdAt" desc, id desc limit ${limit} offset ${offset}`,
-        );
-        await audit(
-          tx,
-          scope,
-          "directory.viewed",
-          "platform",
-          kind,
-          "Viewed a paginated operational directory.",
-        );
-        return {
-          items: Array.from(rows),
-          total: total?.total ?? 0,
-          page,
-          pageSize: limit,
-        };
-      }),
+          await audit(
+            tx,
+            scope,
+            options.protectedSearchReason
+              ? "directory.contacts_searched"
+              : "directory.viewed",
+            "platform",
+            kind,
+            options.protectedSearchReason ??
+              "Viewed a paginated operational directory.",
+          );
+          return {
+            items: Array.from(rows),
+            total: total?.total ?? 0,
+            page,
+            pageSize: limit,
+          };
+        },
+      ),
     organization: (id: string) =>
       run("read", false, async (tx) => {
         const [organization] =
@@ -553,6 +591,27 @@ export function createSuperadminRepositories(
           reason,
         );
         return person;
+      }),
+    revealInvitation: (id: string, reason: string) =>
+      run("operate", true, async (tx) => {
+        const [invitation] = await tx.execute<{
+          id: string;
+          name: string;
+          email: string;
+        }>(sql`
+          select i.id, o.name, i.email from invitations i join organizations o on o.id = i.organization_id
+          where i.id = ${id} and i.deleted_at is null and o.deleted_at is null`);
+        if (!invitation)
+          throw new SuperadminError("not_found", "Invitation not found.", 404);
+        await audit(
+          tx,
+          scope,
+          "invitation.contact_revealed",
+          "organization_invitation",
+          id,
+          reason,
+        );
+        return invitation;
       }),
     revokeCustomerSessions: (id: string, reason: string) =>
       run("operate", true, async (tx) => {

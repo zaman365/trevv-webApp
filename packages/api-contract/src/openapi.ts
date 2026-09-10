@@ -212,20 +212,12 @@ export const openApiDocument = {
       get: {
         tags: ["Platform"],
         operationId: "getPlatformDashboard",
+        deprecated: true,
         description:
-          "Return the redacted, cross-tenant operational dashboard only when the authenticated application user is the database-assigned single platform owner. Other users receive no platform resource.",
+          "Retired. Platform administration now requires the separate Superadmin identity at /api/superadmin/overview. Customer accounts, including the former platform owner, cannot use this endpoint.",
         responses: {
-          "200": {
-            description: "Platform-owner operational dashboard",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/PlatformDashboard" },
-              },
-            },
-          },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
-          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
     },
@@ -233,30 +225,20 @@ export const openApiDocument = {
       post: {
         tags: ["Platform"],
         operationId: "revokePlatformUserSessions",
+        deprecated: true,
         description:
-          "Revoke active sessions for one authentication account. When the target is the platform owner, the current owner session is always preserved.",
+          "Retired. Use /api/superadmin/people/{id}/revoke-sessions with a separately authenticated administrator and an operational reason. Customer sessions cannot authorise platform actions.",
         parameters: [
           {
             name: "authUserId",
             in: "path",
             required: true,
-            schema: { type: "string", minLength: 3, maxLength: 128 },
+            schema: { type: "string" },
           },
         ],
         responses: {
-          "200": {
-            description: "Session revocation result",
-            content: {
-              "application/json": {
-                schema: {
-                  $ref: "#/components/schemas/PlatformSessionRevocation",
-                },
-              },
-            },
-          },
           "401": { $ref: "#/components/responses/Unauthenticated" },
           "404": { $ref: "#/components/responses/NotFound" },
-          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
         },
       },
     },

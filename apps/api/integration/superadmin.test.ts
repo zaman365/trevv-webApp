@@ -161,6 +161,12 @@ beforeAll(async () => {
       auth,
       repositories: (value) => createSuperadminRepositories(database.db, value),
       webOrigin: origin,
+      registrationMode: "invite_only",
+      releaseMetadata: {
+        releaseId: "consolidated-superadmin-test",
+        gitSha: "a".repeat(40),
+        imageId: `sha256:${"b".repeat(64)}`,
+      },
       mailDelivery: mail,
       mailFrom: "control@trevv.test",
       recordDelivery: (kind, id, token, sent) =>
@@ -382,6 +388,127 @@ describe.sequential("isolated Superadmin control plane", () => {
       sql`select count(*)::int as count from superadmin_audit where action = 'person.contact_revealed' and target_id = ${customerId}`,
     );
     expect(audit?.count).toBe(1);
+  });
+  it("preserves platform capabilities behind the separate administrator identity", async () => {
+    const overview = superadminOverviewSchema.parse(
+      await (await request("/overview")).json(),
+    );
+    expect(overview.operations).toMatchObject({
+      registrationMode: "invite_only",
+      release: { gitSha: "a".repeat(40) },
+    });
+    const [customer] = await database.db.execute<{
+      id: string;
+      appUserId: string;
+    }>(sql`
+      select u.id, am.app_user_id as "appUserId" from "user" u join auth_user_mappings am on am.auth_user_id = u.id
+      where u.email = 'customer-owner@example.test'`);
+    expect(customer).toBeTruthy();
+    const [invitation] = await database.db.execute<{
+      id: string;
+      organizationId: string;
+    }>(sql`
+      select id, organization_id as "organizationId" from invitations where email = 'customer-owner@example.test'`);
+    expect(invitation).toBeTruthy();
+    const reason = "Resolve the requested account and invitation support case.";
+    for (const kind of ["people", "invitations"]) {
+      const ordinary = (await (
+        await request(`/directory/${kind}?q=customer-owner%40example.test`)
+      ).json()) as { total: number };
+      expect(ordinary.total).toBe(0);
+      const response = await request(`/directory/${kind}/search`, {
+        q: "customer-owner@example.test",
+        reason,
+      });
+      expect(response.status, await response.clone().text()).toBe(200);
+      const result = (await response.json()) as {
+        total: number;
+        items: Record<string, unknown>[];
+      };
+      expect(result.total).toBe(1);
+      expect(result.items[0]?.email).toBe("c•••@example.test");
+      expect(JSON.stringify(result)).not.toContain("Customer Owner");
+      if (kind === "people")
+        expect(result.items[0]?.memberships).toContain(
+          "New Organisation · owner",
+        );
+      expect(
+        (
+          await request(
+            `/directory/${kind}/search`,
+            { q: "customer", reason },
+            new Map(),
+          )
+        ).status,
+      ).toBe(401);
+      expect(
+        (
+          await request(
+            `/directory/${kind}/search`,
+            { q: "customer", reason },
+            new Map([["trevv.session_token", "customer-only"]]),
+          )
+        ).status,
+      ).toBe(401);
+      const scoped = await request(`/directory/${kind}/search`, {
+        q: "customer",
+        reason,
+        organizationId: "different-org",
+      });
+      expect(await scoped.json()).toMatchObject({ total: 0 });
+    }
+    const contact = await request(`/invitations/${invitation!.id}/reveal`, {
+      reason,
+    });
+    expect(await contact.json()).toMatchObject({
+      email: "customer-owner@example.test",
+    });
+    const invalid = await request("/directory/people/search", {
+      q: "x",
+      reason,
+    });
+    expect(invalid.status).toBe(400);
+    const invalidKind = await request("/directory/administrators/search", {
+      q: "customer",
+      reason,
+    });
+    expect(invalidKind.status).toBe(400);
+    const auditRows = await database.db.execute(
+      sql`select reason, action from superadmin_audit where action = 'directory.contacts_searched'`,
+    );
+    expect(auditRows.length).toBe(4);
+    expect(JSON.stringify(auditRows)).not.toContain(
+      "customer-owner@example.test",
+    );
+    const legacyId = randomUUID();
+    await database.db
+      .execute(sql`insert into platform_audit_events (id, actor_user_id, action, target_type, target_id, request_id, payload, created_at)
+      values (${legacyId}, ${customer!.appUserId}, 'platform.sessions_revoked', 'application_user', ${customer!.appUserId}, ${randomUUID()},
+        '{"summary":"Revoked customer sessions.","private":"never-return-raw-payload"}'::jsonb, now() - interval '200 days')`);
+    const legacy = (await (
+      await request("/directory/audit?filter=legacy")
+    ).json()) as { items: Record<string, unknown>[] };
+    expect(legacy.items).toContainEqual(
+      expect.objectContaining({
+        id: `legacy:${legacyId}`,
+        source: "legacy",
+        reason: "Revoked customer sessions.",
+      }),
+    );
+    expect(JSON.stringify(legacy)).not.toContain("never-return-raw-payload");
+    for (let i = 0; i < 2; i++)
+      await database.db
+        .execute(sql`insert into session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+      values (${randomUUID()}, ${randomUUID()}, ${customer!.id}, now() + interval '1 day', now(), now())`);
+    const revoked = await request(`/people/${customer!.id}/revoke-sessions`, {
+      reason,
+    });
+    expect(await revoked.json()).toMatchObject({ revokedSessions: 2 });
+    expect((await request("/overview")).status).toBe(200);
+    const [sessions] = await database.db.execute<{ count: number }>(
+      sql`select count(*)::int as count from session where "userId" = ${customer!.id}`,
+    );
+    expect(sessions?.count).toBe(0);
   });
   it("manages versioned organisation profiles and masked business contacts without changing tenant access", async () => {
     const owner = createSuperadminRepositories(database.db, ownerScope);
@@ -660,6 +787,31 @@ describe.sequential("isolated Superadmin control plane", () => {
     await activate(invitation.email, invitation.token, jar, "owner");
     await enroll(jar);
     const auditor = await scope(jar);
+    for (const [path, body] of [
+      [
+        "/directory/people/search",
+        { q: "customer", reason: "Review requested personal account details." },
+      ],
+      [
+        "/directory/invitations/search",
+        {
+          q: "customer",
+          reason: "Review requested invitation contact details.",
+        },
+      ],
+      [
+        "/invitations/any/reveal",
+        { reason: "Reveal requested invitation contact details." },
+      ],
+      [
+        "/people/any/revoke-sessions",
+        { reason: "Revoke requested customer account sessions." },
+      ],
+    ] as const)
+      expect((await request(path, body, jar)).status).toBe(403);
+    expect(
+      (await request("/directory/audit?filter=legacy", undefined, jar)).status,
+    ).toBe(200);
     const session = (await (
       await request("/session", undefined, jar)
     ).json()) as { role: string };
@@ -752,6 +904,21 @@ describe.sequential("isolated Superadmin control plane", () => {
       sql`update superadmin_session set "assuranceAt" = now() - interval '11 minutes' where id = ${ownerScope.sessionId}`,
     );
     expect((await request("/overview")).status).toBe(200);
+    expect(
+      (
+        await request("/directory/people/search", {
+          q: "customer",
+          reason: "Find the requested account for support.",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request("/invitations/any/reveal", {
+          reason: "Reveal the invitation for a support review.",
+        })
+      ).status,
+    ).toBe(403);
     await expect(owner.updatePhone("+491234567890")).rejects.toMatchObject({
       code: "superadmin_access_denied",
     });

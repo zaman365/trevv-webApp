@@ -23,6 +23,19 @@ export const superadminOverviewSchema = z.object({
   missingOwners: z.number().int().nonnegative(),
   reviewsDue: z.number().int().nonnegative(),
   newOrganizations: z.number().int().nonnegative(),
+  operations: z
+    .object({
+      registrationMode: z.enum(["closed", "invite_only", "public"]),
+      release: z
+        .object({
+          releaseId: z.string(),
+          gitSha: z.string(),
+          imageId: z.string(),
+        })
+        .nullable(),
+      generatedAt: z.iso.datetime(),
+    })
+    .optional(),
 });
 export const superadminDirectoryKindSchema = z.enum([
   "organizations",
@@ -147,7 +160,7 @@ export const superadminDirectoryFilters = {
     "setup_pending",
     "disabled",
   ],
-  audit: ["all", "changes", "contact_access", "reads"],
+  audit: ["all", "changes", "contact_access", "reads", "legacy"],
 } as const;
 export const superadminDirectoryQuerySchema = z
   .object({
@@ -155,6 +168,12 @@ export const superadminDirectoryQuerySchema = z
     q: z.string().max(100).default(""),
     filter: z.string().max(40).default("all"),
     organizationId: z.string().min(1).max(128).optional(),
+  })
+  .strict();
+export const superadminContactSearchSchema = superadminDirectoryQuerySchema
+  .extend({
+    q: z.string().trim().min(3).max(100),
+    reason: superadminReasonSchema,
   })
   .strict();
 export const createSuperadminOrganizationSchema = z

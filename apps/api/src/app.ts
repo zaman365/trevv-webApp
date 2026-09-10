@@ -70,7 +70,6 @@ import {
   pruneSuperadminRecords,
   createIdentityScope,
   createOrganizationScope,
-  createPlatformScope,
   createPostgresRepositories,
   createRateLimitRepository,
   hashInvitationToken,
@@ -483,36 +482,13 @@ export function createApiApp(dependencies: ApiAppDependencies) {
 
   api.get("/api/v1/session", (context) => context.json(context.get("session")));
 
-  api.get("/api/v1/platform", async (context) => {
-    requirePlatformOwner(context);
-    const dashboard = await platformRepositories(
-      dependencies,
-      context,
-    ).dashboard(clock());
-    return context.json({
-      role: "owner" as const,
-      ...dashboard,
-      release: dependencies.releaseMetadata ?? null,
-      registrationMode: dependencies.registrationMode ?? "closed",
-      generatedAt: clock().toISOString(),
-    });
+  // Retired customer-account administration cannot bypass the Superadmin realm.
+  api.all("/api/v1/platform", () => {
+    throw new PlatformAccessError();
   });
-
-  api.post(
-    "/api/v1/platform/users/:authUserId/revoke-sessions",
-    async (context) => {
-      requirePlatformOwner(context);
-      const result = await platformRepositories(
-        dependencies,
-        context,
-      ).revokeUserSessions(
-        context.req.param("authUserId"),
-        context.get("authIdentity").sessionId,
-        clock(),
-      );
-      return context.json(result);
-    },
-  );
+  api.all("/api/v1/platform/*", () => {
+    throw new PlatformAccessError();
+  });
 
   api.get("/api/v1/session/organizations", async (context) => {
     const resolved = await identityRepositories(
@@ -3119,6 +3095,8 @@ export function createRuntimeApi(
         "/api/superadmin",
         createSuperadminApi({
           auth: superadminAuth,
+          releaseMetadata: configuration.releaseMetadata,
+          registrationMode: configuration.registrationMode,
           repositories: (scope) =>
             createSuperadminRepositories(database.db, scope),
           webOrigin: configuration.webOrigin,
@@ -3369,24 +3347,6 @@ function organizationRepositories(
       requestId: context.get("requestId"),
     }),
   );
-}
-
-function platformRepositories(
-  dependencies: ApiAppDependencies,
-  context: ApiContext,
-) {
-  if (!dependencies.repositories) throw new PlatformAccessError();
-  return dependencies.repositories.forPlatform(
-    createPlatformScope({
-      actorUserId: context.get("access").userId,
-      requestId: context.get("requestId"),
-    }),
-  );
-}
-
-function requirePlatformOwner(context: ApiContext): void {
-  if (context.get("session").platformRole !== "owner")
-    throw new PlatformAccessError();
 }
 
 function requireOrganizationManagement(access: AccessContext): void {

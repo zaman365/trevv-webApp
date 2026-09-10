@@ -72,7 +72,7 @@ export const workerRouteEntrypoints = Object.freeze({
   "/app/account/sessions": ["session-management"],
   "/app/account/privacy": ["privacy-center"],
   "/app/account/invitations": ["invitation-management"],
-  "/app/system/admin": ["platform-admin"],
+  "/app/system/admin": [], // Compatibility redirect to the separate Superadmin realm.
   "/app/mail": ["email-inbox-workflow"],
 });
 

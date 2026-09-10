@@ -129,9 +129,13 @@ record, after which the empty-database guard deliberately blocks retry. For the
 first staging baseline, discard and recreate that empty staging database; do
 not delete selected rows to bypass the guard.
 
-## Single platform-owner assignment
+## Legacy single platform-owner assignment
 
-Platform control is separate from tenant ownership and has exactly one durable
+This historical procedure is retained for recovery documentation. New access must
+be assigned through Superadmin; this assignment no longer exposes a console or
+authorises platform API requests.
+
+The legacy assignment is separate from tenant ownership and has exactly one durable
 assignee. Assign it only after the guarded migration and after the controlled
 account is verified, mapped to an application user, and remains an active
 organization owner. The one-off command refuses demo mode, public registration,
@@ -168,8 +172,9 @@ Success prints only the normalized email, application-user ID, database name,
 and `assigned` or `no_op`. It never prints authentication credentials or
 sessions. Verify that the assigned account's next `/api/v1/session` response
 contains `platformRole: "owner"`, that ordinary organization owners receive a
-404 from `/api/v1/platform`, and that only the assignee sees **Platform
-control** under System and in the avatar menu.
+404 from `/api/v1/platform` for all customer accounts, including the assignee.
+No Platform control entry is rendered. Old `/app/system/admin` bookmarks redirect
+to the separately authenticated `/superadmin` entrance.
 
 ## Public trusted-TLS smoke
 

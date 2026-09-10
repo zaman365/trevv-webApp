@@ -26,7 +26,6 @@ import {
   Plus,
   Search,
   Settings2,
-  Shield,
   ShieldCheck,
   Sparkles,
   Sun,
@@ -844,15 +843,6 @@ function WorkspaceChrome({
                 <ClipboardCheck size={17} />
                 <span>Getting started</span>
               </Link>
-              {appSession.platformRole === "owner" ? (
-                <Link
-                  className={`nav-item ${active === "platform" ? "active" : ""}`}
-                  href="/app/system/admin"
-                >
-                  <Shield size={17} />
-                  <span>Platform control</span>
-                </Link>
-              ) : null}
               <Link
                 className={`nav-item ${active === "settings" ? "active" : ""}`}
                 href={scopedHref("settings")}
@@ -1208,15 +1198,6 @@ function WorkspaceChrome({
                       </Link>
                     </>
                   )}
-                  {appSession.platformRole === "owner" ? (
-                    <Link
-                      href="/app/system/admin"
-                      role="menuitem"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      <Shield size={14} /> Platform control
-                    </Link>
-                  ) : null}
                   <Link
                     href="/app/account/sessions"
                     role="menuitem"

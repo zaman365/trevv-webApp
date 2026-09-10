@@ -35,6 +35,8 @@ type DialogAction = {
     | "organization"
     | "administrator"
     | "reveal"
+    | "reveal-invitation"
+    | "contact-search"
     | "revoke-sessions"
     | "resend"
     | "revoke"
@@ -58,7 +60,8 @@ const subtitles = {
   invitations:
     "Track delivery, send a fresh invitation, or withdraw pending access.",
   administrators: "Choose who can operate the platform and what they can do.",
-  audit: "Administrative access and actions, retained for 180 days.",
+  audit:
+    "Administrative actions from Superadmin and the former platform console.",
 };
 export function SuperadminConsole({
   session,
@@ -81,6 +84,10 @@ export function SuperadminConsole({
   const [page, setPage] = useState(0),
     [query, setQuery] = useState(initialQuery);
   const [filter, setFilter] = useState(initialFilter);
+  const [contactSearch, setContactSearch] = useState<{
+    q: string;
+    reason: string;
+  } | null>(null);
   const [createdOrganization, setCreatedOrganization] = useState<string | null>(
     null,
   );
@@ -95,6 +102,7 @@ export function SuperadminConsole({
   const [working, setWorking] = useState(false),
     [dialogError, setDialogError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
+  const protectedRequest = useRef<AbortController | null>(null);
   const canOperate = session.role !== "auditor";
   const directoryKind = section === "overview" ? "organizations" : section;
   const loadKey = JSON.stringify([
@@ -103,6 +111,7 @@ export function SuperadminConsole({
     query,
     filter,
     organizationId,
+    contactSearch,
     revision,
   ]);
   const loading = loadedKey !== loadKey;
@@ -113,12 +122,24 @@ export function SuperadminConsole({
     void (async () => {
       try {
         const values = await Promise.all([
-          superadminRequest(
-            `/directory/${directoryKind}?page=${page}&q=${encodeURIComponent(query)}&filter=${encodeURIComponent(filter)}${organizationId ? `&organizationId=${encodeURIComponent(organizationId)}` : ""}`,
-            undefined,
-            "GET",
-            controller.signal,
-          ),
+          contactSearch
+            ? superadminRequest(
+                `/directory/${directoryKind}/search`,
+                {
+                  ...contactSearch,
+                  page,
+                  filter,
+                  ...(organizationId ? { organizationId } : {}),
+                },
+                "POST",
+                controller.signal,
+              )
+            : superadminRequest(
+                `/directory/${directoryKind}?page=${page}&q=${encodeURIComponent(query)}&filter=${encodeURIComponent(filter)}${organizationId ? `&organizationId=${encodeURIComponent(organizationId)}` : ""}`,
+                undefined,
+                "GET",
+                controller.signal,
+              ),
           section === "overview"
             ? superadminRequest(
                 "/overview",
@@ -165,6 +186,7 @@ export function SuperadminConsole({
     query,
     filter,
     organizationId,
+    contactSearch,
     revision,
     loadKey,
   ]);
@@ -174,11 +196,54 @@ export function SuperadminConsole({
   }, [action]);
   useEffect(() => {
     if (!revealed) return;
-    const timer = setTimeout(() => setRevealed(null), 60_000);
-    return () => clearTimeout(timer);
+    const clear = () => setRevealed(null);
+    const hide = () => {
+      if (document.hidden) clear();
+    };
+    const timer = setTimeout(clear, 60_000);
+    document.addEventListener("visibilitychange", hide);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", hide);
+    };
   }, [revealed]);
 
+  useEffect(() => {
+    if (!contactSearch) return;
+    const clear = () => {
+      setContactSearch(null);
+      setDirectory(null);
+      setPage(0);
+    };
+    const hide = () => {
+      if (document.hidden) clear();
+    };
+    const timer = setTimeout(clear, 60_000);
+    document.addEventListener("visibilitychange", hide);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", hide);
+    };
+  }, [contactSearch]);
+
+  useEffect(() => {
+    const hide = () => {
+      if (!document.hidden) return;
+      protectedRequest.current?.abort();
+      dialog.current?.querySelector("form")?.reset();
+      setRevealed(null);
+      setAction(null);
+    };
+    document.addEventListener("visibilitychange", hide);
+    return () => {
+      protectedRequest.current?.abort();
+      document.removeEventListener("visibilitychange", hide);
+    };
+  }, []);
+
   function open(value: DialogAction) {
+    protectedRequest.current?.abort();
+    dialog.current?.querySelector("form")?.reset();
     setRevealed(null);
     setDialogError("");
     setAction(value);
@@ -205,6 +270,18 @@ export function SuperadminConsole({
           "Enter the contact person’s name to save their phone number.",
         );
       let result: Record<string, unknown> = {};
+      if (action.kind === "contact-search") {
+        event.currentTarget.reset();
+        setDirectory(null);
+        setPage(0);
+        setQuery("");
+        setContactSearch({
+          q: String(form.get("contactQuery")).trim(),
+          reason,
+        });
+        setAction(null);
+        return;
+      }
       if (action.kind === "organization")
         result = await superadminRequest("/organizations", {
           name: form.get("name"),
@@ -229,11 +306,17 @@ export function SuperadminConsole({
           role: form.get("role"),
           reason,
         });
-      if (action.kind === "reveal") {
+      if (action.kind === "reveal" || action.kind === "reveal-invitation") {
+        protectedRequest.current?.abort();
+        const controller = new AbortController();
+        protectedRequest.current = controller;
         const person = await superadminRequest<{ name: string; email: string }>(
-          `/people/${id}/reveal`,
+          `/${action.kind === "reveal" ? "people" : "invitations"}/${id}/reveal`,
           { reason },
+          "POST",
+          controller.signal,
         );
+        if (controller.signal.aborted) return;
         setRevealed(person);
         return;
       }
@@ -288,6 +371,8 @@ export function SuperadminConsole({
         organization: "Create an organisation",
         administrator: "Invite an administrator",
         reveal: "View protected contact details",
+        "reveal-invitation": "View invitation contact",
+        "contact-search": "Find by name or email",
         "revoke-sessions": "Revoke account sessions",
         resend: "Send a fresh invitation",
         revoke: "Withdraw invitation",
@@ -445,6 +530,39 @@ export function SuperadminConsole({
               )}
             </ul>
           </section>
+          {overview.operations && (
+            <section className={styles.panel} aria-label="Operational status">
+              <header className={styles.panelHeader}>
+                <h2>Operational status</h2>
+                <Activity size={19} />
+              </header>
+              <div className={styles.panelBody}>
+                <div className={styles.statLine}>
+                  <span>Registration</span>
+                  <strong>
+                    {filterLabel(overview.operations.registrationMode)}
+                  </strong>
+                </div>
+                <div className={styles.statLine}>
+                  <span>Release</span>
+                  <strong>
+                    {overview.operations.release?.releaseId ?? "Unavailable"}
+                  </strong>
+                </div>
+                <div className={styles.statLine}>
+                  <span>Source revision</span>
+                  <strong>
+                    {overview.operations.release?.gitSha.slice(0, 12) ??
+                      "Unavailable"}
+                  </strong>
+                </div>
+                <div className={styles.statLine}>
+                  <span>Updated</span>
+                  <strong>{date(overview.operations.generatedAt, true)}</strong>
+                </div>
+              </div>
+            </section>
+          )}
           <div className={styles.twoColumns}>
             <section className={styles.panel}>
               <header className={styles.panelHeader}>
@@ -552,13 +670,16 @@ export function SuperadminConsole({
             onSubmit={(event) => {
               event.preventDefault();
               setPage(0);
+              setContactSearch(null);
               setQuery(String(new FormData(event.currentTarget).get("q")));
             }}
           >
             <Search size={18} />
             <input
               aria-label={
-                section === "people" ? "Search by account ID" : "Search records"
+                section === "people"
+                  ? "Search by account ID or organisation"
+                  : "Search records"
               }
               name="q"
               defaultValue={initialQuery}
@@ -566,7 +687,7 @@ export function SuperadminConsole({
               maxLength={100}
               placeholder={
                 section === "people"
-                  ? "Find an account by ID…"
+                  ? "Account ID or organisation…"
                   : section === "audit"
                     ? "Search action or target ID…"
                     : "Search records…"
@@ -587,7 +708,18 @@ export function SuperadminConsole({
               ))}
             </select>
             <button className={styles.secondary}>Search</button>
-            {(filter !== "all" || query) && (
+            {canOperate &&
+              (directoryKind === "people" ||
+                directoryKind === "invitations") && (
+                <button
+                  type="button"
+                  className={styles.secondary}
+                  onClick={() => open({ kind: "contact-search" })}
+                >
+                  Find by name or email
+                </button>
+              )}
+            {(filter !== "all" || query || contactSearch) && (
               <button
                 type="button"
                 className={styles.textButton}
@@ -595,6 +727,7 @@ export function SuperadminConsole({
                   setPage(0);
                   setFilter("all");
                   setQuery("");
+                  setContactSearch(null);
                   const input =
                     event.currentTarget.form?.elements.namedItem("q");
                   if (input instanceof HTMLInputElement) input.value = "";
@@ -604,6 +737,12 @@ export function SuperadminConsole({
               </button>
             )}
           </form>
+        )}
+        {contactSearch && (
+          <p className={styles.scopeBanner}>
+            Protected search is active. Results are masked and clear after one
+            minute or when you leave this tab.
+          </p>
         )}
         {!directory ? (
           <div className={styles.empty}>
@@ -744,6 +883,11 @@ export function SuperadminConsole({
                           <>
                             {String(row.actor)}
                             <small>
+                              {row.source === "legacy"
+                                ? "Former platform console"
+                                : "Superadmin"}
+                            </small>
+                            <small>
                               {String(row.targetType)} ·{" "}
                               {row.targetType === "organization" ? (
                                 <Link
@@ -768,6 +912,11 @@ export function SuperadminConsole({
                           <>
                             {row.sessionCount} sessions ·{" "}
                             {row.organizationCount} organisations
+                            <small>
+                              {String(
+                                row.memberships || "No organisation membership",
+                              )}
+                            </small>
                             <small>
                               Latest retained sign-in:{" "}
                               {row.lastSignInAt
@@ -807,6 +956,19 @@ export function SuperadminConsole({
                               Email {String(row.deliveryStatus)} ·{" "}
                               {row.sendCount} attempts
                             </small>
+                            {row.deliveryErrorCode && (
+                              <small>
+                                Delivery issue: {String(row.deliveryErrorCode)}
+                              </small>
+                            )}
+                            {row.workspaceIds && (
+                              <small>
+                                Workspaces: {String(row.workspaceIds)}
+                              </small>
+                            )}
+                            {row.teamIds && (
+                              <small>Teams: {String(row.teamIds)}</small>
+                            )}
                             <small>Expires {date(row.expiresAt)}</small>
                             <small>
                               Last sent{" "}
@@ -864,6 +1026,16 @@ export function SuperadminConsole({
                                     Revoke sessions
                                   </button>
                                 </>
+                              )}
+                              {directoryKind === "invitations" && (
+                                <button
+                                  className={styles.textButton}
+                                  onClick={() =>
+                                    open({ kind: "reveal-invitation", row })
+                                  }
+                                >
+                                  View contact
+                                </button>
                               )}
                               {directoryKind === "invitations" &&
                                 (row.status === "pending" ||
@@ -986,10 +1158,14 @@ export function SuperadminConsole({
         className={`${styles.root} ${styles.modal}`}
         ref={dialog}
         onCancel={() => {
+          protectedRequest.current?.abort();
+          dialog.current?.querySelector("form")?.reset();
           setAction(null);
           setRevealed(null);
         }}
         onClose={() => {
+          protectedRequest.current?.abort();
+          dialog.current?.querySelector("form")?.reset();
           setAction(null);
           setRevealed(null);
         }}
@@ -1136,7 +1312,27 @@ export function SuperadminConsole({
                 content is unchanged.
               </p>
             )}
-            {action?.kind === "reveal" && (
+            {action?.kind === "contact-search" && (
+              <label>
+                {directoryKind === "people"
+                  ? "Name or email"
+                  : "Invitation email"}
+                <input
+                  name="contactQuery"
+                  type="search"
+                  minLength={3}
+                  maxLength={100}
+                  required
+                  autoComplete="off"
+                />
+                <small>
+                  Requires recent authentication. Search terms stay out of URLs
+                  and audit records.
+                </small>
+              </label>
+            )}
+            {(action?.kind === "reveal" ||
+              action?.kind === "reveal-invitation") && (
               <p className={styles.muted}>
                 Contact details may be used only for a defined operational
                 purpose. This read will be recorded.
@@ -1158,13 +1354,16 @@ export function SuperadminConsole({
             <button className={styles.primary} disabled={working}>
               {working
                 ? "Saving…"
-                : action?.kind === "reveal"
-                  ? "Record reason and show contact"
-                  : action?.kind === "organization"
-                    ? "Create and send invitation"
-                    : action?.kind === "administrator"
-                      ? "Send private invitation"
-                      : "Confirm action"}
+                : action?.kind === "contact-search"
+                  ? "Record reason and search"
+                  : action?.kind === "reveal" ||
+                      action?.kind === "reveal-invitation"
+                    ? "Record reason and show contact"
+                    : action?.kind === "organization"
+                      ? "Create and send invitation"
+                      : action?.kind === "administrator"
+                        ? "Send private invitation"
+                        : "Confirm action"}
               <ArrowRight size={16} />
             </button>
           </form>
@@ -1202,6 +1401,7 @@ function filterLabel(value: string) {
     contact_access: "Protected contact access",
     changes: "Changes only",
     reads: "Summary views",
+    legacy: "Former platform console",
     disabled: "Access revoked",
   };
   return (

@@ -6,7 +6,7 @@ A separate `/superadmin` entrance and identity realm, outside the workspace
 shell. The visual direction is a quiet operations desk: dark ink navigation,
 white working surfaces, blue actions, compact readable tables, and clear
 permission and security status. No link is added to ordinary tenant navigation.
-The existing `/app/system/admin` console remains available to its existing owner.
+The former `/app/system/admin` entrance redirects to `/superadmin` before customer session checks. Its duplicate console and workspace buttons have been retired by explicit product decision.
 
 The first screen shows organisation, account, invitation and session totals.
 Navigation contains Overview, Organisations, People, Invitations, Administrators,
@@ -105,12 +105,12 @@ own factors; no password or recovery secret is generated into this document.
 Roll back by disabling the new API realm and restoring the prior compatible Web
 and API artifacts. Keep the additive tables and migration history; do not delete
 the administrator identities, audit evidence or any customer data as rollback.
-The predecessor owner console and customer authentication remain independent.
+Customer authentication remains independent. Do not restore the retired customer-account administration API as a rollback shortcut.
 
 ## Organisation profiles and operational follow-up
 
 Each organisation row opens `/superadmin/organizations/:id`. The original
-creation, owner invitation, directories and predecessor admin remain available.
+creation, owner invitation and directories remain available.
 The profile shows member, owner and workspace totals, pending invitations and
 delivery failures, language, time zone, creation date and stable organisation ID.
 Business metadata includes legal name, website, industry, country/region and city.
@@ -158,3 +158,34 @@ masked reads, owner/operator boundaries, auditor denial, stale MFA, optimistic
 concurrency, contact capacity and primary uniqueness, organisation isolation,
 contact removal, filter correctness, preserved first-owner invitation acceptance,
 proxy cookie separation and alpha redirects for the nested routes.
+
+## Consolidated platform administration
+
+Superadmin is the sole interactive platform administration surface. Normal TREVV
+accounts, including the former singleton platform owner, cannot read or mutate
+`/api/v1/platform` (404 after authentication). Existing assignment records, API
+contracts marked deprecated, and historical audit data remain stored; assignment
+never grants a Superadmin identity. Old page bookmarks redirect without forwarding
+customer cookies or accepting a return URL. Alpha redirects to the canonical
+Superadmin origin. No Superadmin link is added to ordinary workspace navigation.
+
+Existing overview totals, organisation profiles, people, invitation management,
+session revocation, administrator management and personal security are retained.
+The overview also exposes registration policy, release identity and snapshot time.
+People show organisation membership roles (including inactive memberships), and
+invitation rows retain delivery error codes, scope IDs and send history. Revoking
+customer sessions leaves the separate administrator session intact.
+
+Name/email lookup is available to owners and operators through a reasoned POST
+search with recent factor verification. Ordinary queries support account IDs and
+organisation names; contact search results remain masked. Search terms never enter
+URLs or audit payloads. Search state clears after one minute or on tab hiding.
+Individual invitation contacts can be revealed with the same audited recent-factor
+boundary as account contacts. Auditors cannot search by personal contact details,
+reveal them, or revoke customer sessions.
+
+The audit directory includes the former platform console's existing history with
+a source label and filter. It returns only the prior bounded summary, not raw
+payloads. The existing 180-day Superadmin retention applies to Superadmin records;
+legacy records remain under their existing retention policy without deletion or
+relabeling. No schema migration or automatic administrator provisioning is needed.
