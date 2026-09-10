@@ -26,6 +26,10 @@ import {
   sql,
   type TemporaryDatabase,
 } from "../../../packages/db/integration/database-test-helper.js";
+import {
+  superadminOrganizationDetailSchema,
+  superadminOverviewSchema,
+} from "@founderhq/api-contract";
 import { createSuperadminApi } from "../src/superadmin.js";
 
 const origin = "https://control.trevv.test";
@@ -37,6 +41,7 @@ let app: Hono;
 const mail = createMemoryMailSink();
 const ownerCookies = new Map<string, string>();
 let ownerScope: SuperadminScope;
+let profileOrganizationId: string;
 let ownerSetup: { totpURI: string; backupCodes: string[] };
 
 async function request(
@@ -44,6 +49,7 @@ async function request(
   body?: unknown,
   jar = ownerCookies,
   extra: Record<string, string> = {},
+  method = body === undefined ? "GET" : "POST",
 ) {
   const headers = new Headers({
     origin,
@@ -52,7 +58,7 @@ async function request(
     ...extra,
   });
   const response = await app.request(`${origin}/api/superadmin${path}`, {
-    method: body === undefined ? "GET" : "POST",
+    method,
     headers,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
@@ -377,6 +383,272 @@ describe.sequential("isolated Superadmin control plane", () => {
     );
     expect(audit?.count).toBe(1);
   });
+  it("manages versioned organisation profiles and masked business contacts without changing tenant access", async () => {
+    const owner = createSuperadminRepositories(database.db, ownerScope);
+    const contact = {
+      kind: "primary" as const,
+      name: "Confidential Contact Person",
+      jobTitle: "Operations lead",
+      email: "contact-private@example.test",
+      phone: "+491234567891",
+    };
+    const created = await request("/organizations", {
+      name: "Profile Company",
+      slug: "profile-company",
+      ownerEmail: "profile-owner@example.test",
+      contact,
+      reason: "Set up the requested business relationship.",
+    });
+    expect(created.status, await created.clone().text()).toBe(201);
+    profileOrganizationId = ((await created.json()) as { id: string }).id;
+    const path = `/organizations/${profileOrganizationId}`;
+    const read = await request(path);
+    expect(read.headers.get("cache-control")).toContain("no-store");
+    const detail = superadminOrganizationDetailSchema.parse(await read.json());
+    expect(detail.profile.version).toBe(0);
+    expect(detail.contacts).toHaveLength(1);
+    expect(detail.ownerCount).toBe(0);
+    for (const value of [
+      contact.name,
+      contact.email,
+      contact.phone,
+      contact.jobTitle,
+    ])
+      expect(JSON.stringify(detail)).not.toContain(value);
+    const input = {
+      ...detail.profile,
+      legalName: "Profile Company GmbH",
+      website: "https://example.test",
+      country: "Germany",
+      city: "Berlin",
+      industry: "Software",
+      stage: "needs_review" as const,
+      priority: "priority" as const,
+      nextReviewAt: "2020-01-01",
+      reason: "Record business details and schedule the review.",
+    };
+    const writes = await Promise.all([
+      request(path, input, ownerCookies, {}, "PATCH"),
+      request(path, input, ownerCookies, {}, "PATCH"),
+    ]);
+    expect(writes.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(
+      (
+        await request(
+          path,
+          { ...input, version: 1, website: "javascript:alert(1)" },
+          ownerCookies,
+          {},
+          "PATCH",
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(
+          path,
+          { ...input, version: 1, nextReviewAt: "2026-02-30" },
+          ownerCookies,
+          {},
+          "PATCH",
+        )
+      ).status,
+    ).toBe(400);
+    const contactId = detail.contacts[0]!.id;
+    expect(
+      await (
+        await request(`${path}/contacts/${contactId}/reveal`, {
+          reason: "Contact the organisation about onboarding.",
+        })
+      ).json(),
+    ).toMatchObject(contact);
+    const duplicate = await request(`${path}/contacts`, {
+      ...contact,
+      version: 0,
+      reason: "Try adding a second primary business contact.",
+    });
+    expect(duplicate.status).toBe(409);
+    const other = await owner.createOrganization({
+      name: "Other Company",
+      slug: "other-company",
+      ownerEmail: "other@example.test",
+      reason: "Set up an independent organisation for comparison.",
+    });
+    expect(
+      (
+        await request(
+          `/organizations/${other.id}/contacts/${contactId}/reveal`,
+          { reason: "This contact must be scoped to its organisation." },
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(
+          `/organizations/${other.id}/contacts/${contactId}`,
+          {
+            ...contact,
+            version: 1,
+            reason: "Do not edit a different organisation contact.",
+          },
+          ownerCookies,
+          {},
+          "PATCH",
+        )
+      ).status,
+    ).toBe(409);
+    const updated = await request(
+      `${path}/contacts/${contactId}`,
+      {
+        ...contact,
+        jobTitle: "Operations manager",
+        version: 1,
+        reason: "Correct the current business contact responsibility.",
+      },
+      ownerCookies,
+      {},
+      "PATCH",
+    );
+    expect(updated.status).toBe(200);
+    expect(
+      (
+        await request(
+          `${path}/contacts/${contactId}`,
+          {
+            version: 1,
+            reason: "A stale contact revision must not be removed.",
+          },
+          ownerCookies,
+          {},
+          "DELETE",
+        )
+      ).status,
+    ).toBe(409);
+    const overview = superadminOverviewSchema.parse(
+      await (await request("/overview")).json(),
+    );
+    expect(overview.reviewsDue).toBeGreaterThanOrEqual(1);
+    expect(overview.missingContacts).toBeGreaterThanOrEqual(1);
+    for (const filter of ["needs_review", "review_due"]) {
+      const result = (await (
+        await request(`/directory/organizations?filter=${filter}&q=Profile`)
+      ).json()) as { items: { id: string }[] };
+      expect(result.items.map((row) => row.id)).toContain(
+        profileOrganizationId,
+      );
+      expect(JSON.stringify(result)).not.toContain(contact.name);
+      expect(JSON.stringify(result)).not.toContain(contact.email);
+    }
+    expect(
+      (await request("/directory/people?filter=missing_contact")).status,
+    ).toBe(400);
+    expect(
+      (await request("/directory/audit?organizationId=anything")).status,
+    ).toBe(400);
+    const inviteList = (await (
+      await request(
+        `/directory/invitations?organizationId=${profileOrganizationId}&filter=pending`,
+      )
+    ).json()) as { items: { organizationId: string }[] };
+    expect(inviteList.items).toHaveLength(1);
+    expect(inviteList.items[0]!.organizationId).toBe(profileOrganizationId);
+    const auditRows = await database.db.execute<{
+      action: string;
+      reason: string;
+    }>(
+      sql`select action, reason from superadmin_audit where target_id = ${profileOrganizationId}`,
+    );
+    expect(
+      auditRows.some((row) => row.action === "organization.contact_revealed"),
+    ).toBe(true);
+    expect(JSON.stringify(auditRows)).not.toContain(contact.name);
+    expect(JSON.stringify(auditRows)).not.toContain(contact.phone);
+    expect(
+      (
+        await request(
+          `${path}/contacts/${contactId}`,
+          {
+            version: 2,
+            reason: "Remove an outdated contact under the retention review.",
+          },
+          ownerCookies,
+          {},
+          "DELETE",
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(`${path}/contacts/${contactId}/reveal`, {
+          reason: "Removed contacts must no longer be returned.",
+        })
+      ).status,
+    ).toBe(404);
+    const [members] = await database.db.execute<{ count: number }>(
+      sql`select count(*)::int as count from memberships where organization_id = ${profileOrganizationId}`,
+    );
+    expect(members!.count).toBe(0);
+    await database.db.execute(
+      sql`update superadmin_session set "assuranceAt" = now() - interval '11 minutes' where id = ${ownerScope.sessionId}`,
+    );
+    expect((await request(path)).status).toBe(200);
+    expect(
+      (await request(path, { ...input, version: 1 }, ownerCookies, {}, "PATCH"))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await request(`${path}/contacts`, {
+          ...contact,
+          version: 0,
+          reason: "A fresh verification is required to add contacts.",
+        })
+      ).status,
+    ).toBe(403);
+    await database.db.execute(
+      sql`update superadmin_session set "assuranceAt" = now() where id = ${ownerScope.sessionId}`,
+    );
+  });
+  it("enforces contact capacity atomically and filters administrator, invitation and people states", async () => {
+    const owner = createSuperadminRepositories(database.db, ownerScope);
+    const contact = {
+      kind: "other" as const,
+      name: "Business Contact",
+      jobTitle: "",
+      email: "business@example.test",
+      phone: "",
+      version: 0,
+      reason: "Maintain the organisation business contact directory.",
+    };
+    for (let index = 0; index < 11; index++)
+      await owner.saveOrganizationContact(profileOrganizationId, null, contact);
+    const writes = await Promise.allSettled([
+      owner.saveOrganizationContact(profileOrganizationId, null, contact),
+      owner.saveOrganizationContact(profileOrganizationId, null, contact),
+    ]);
+    expect(writes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(writes.find((r) => r.status === "rejected")).toMatchObject({
+      reason: { code: "contact_limit" },
+    });
+    for (const [kind, filter] of [
+      ["people", "verified"],
+      ["people", "unverified"],
+      ["people", "no_organization"],
+      ["administrators", "setup_pending"],
+      ["administrators", "owner"],
+      ["invitations", "delivery_failed"],
+      ["audit", "contact_access"],
+      ["audit", "changes"],
+    ]) {
+      expect(
+        (await request(`/directory/${kind}?filter=${filter}`)).status,
+      ).toBe(200);
+    }
+    const rows = (await (
+      await request(`/directory/people?organizationId=${profileOrganizationId}`)
+    ).json()) as { total: number };
+    expect(rows.total).toBe(0);
+  });
   it("assigns invited roles server-side and immediately revokes delegated administrator sessions", async () => {
     const owner = createSuperadminRepositories(database.db, ownerScope);
     const invitation = await owner.inviteAdministrator(
@@ -392,6 +664,39 @@ describe.sequential("isolated Superadmin control plane", () => {
       await request("/session", undefined, jar)
     ).json()) as { role: string };
     expect(session.role).toBe("auditor");
+    expect(
+      (await request(`/organizations/${profileOrganizationId}`, undefined, jar))
+        .status,
+    ).toBe(200);
+    expect(
+      (
+        await request(
+          `/organizations/${profileOrganizationId}/contacts`,
+          {
+            kind: "other",
+            name: "Denied Contact",
+            jobTitle: "",
+            email: "denied@example.test",
+            phone: "",
+            version: 0,
+            reason: "Auditors cannot mutate business contacts.",
+          },
+          jar,
+        )
+      ).status,
+    ).toBe(403);
+    const masked = (await (
+      await request(`/organizations/${profileOrganizationId}`, undefined, jar)
+    ).json()) as { contacts: { id: string }[] };
+    expect(
+      (
+        await request(
+          `/organizations/${profileOrganizationId}/contacts/${masked.contacts[0]!.id}/reveal`,
+          { reason: "Auditors cannot access unmasked personal contact data." },
+          jar,
+        )
+      ).status,
+    ).toBe(403);
     expect((await request("/overview", undefined, jar)).status).toBe(200);
     expect(
       (await request("/directory/administrators", undefined, jar)).status,

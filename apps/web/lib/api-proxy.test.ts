@@ -30,6 +30,60 @@ describe("browser API proxy boundary", () => {
     );
     expect(headers.has("authorization")).toBe(false);
   });
+  it.each([
+    ["GET", "organizations/org-123", ""],
+    ["PATCH", "organizations/org-123", ""],
+    ["POST", "organizations/org-123/contacts", ""],
+    ["PATCH", "organizations/org-123/contacts/contact-123", ""],
+    ["DELETE", "organizations/org-123/contacts/contact-123", ""],
+    ["POST", "organizations/org-123/contacts/contact-123/reveal", ""],
+    ["GET", "directory/people", "?organizationId=org-123&filter=verified"],
+  ])(
+    "preserves %s organisation operations and their private boundary",
+    async (method, path, query) => {
+      vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+      const upstream = vi.fn().mockResolvedValue(
+        Response.json(
+          { ok: true },
+          {
+            headers: {
+              "x-robots-tag": "noindex",
+              "cache-control": "no-store",
+            },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", upstream);
+      const response = await proxyApiRequest(
+        new Request(`https://trevv.test/api/superadmin/${path}${query}`, {
+          method,
+          headers: {
+            cookie:
+              "trevv.session_token=customer; __Secure-trevv_superadmin.session_token=administrator",
+            "content-type": "application/json",
+            origin: "https://trevv.test",
+          },
+          ...(method === "GET"
+            ? {}
+            : {
+                body: JSON.stringify({ reason: "Operational contact review" }),
+              }),
+        }),
+        ["superadmin", ...path.split("/")],
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      const [url, init] = upstream.mock.calls[0] as [URL, RequestInit];
+      expect(url.search).toBe(query);
+      expect(init.method).toBe(method);
+      expect(new Headers(init.headers).get("cookie")).toBe(
+        "__Secure-trevv_superadmin.session_token=administrator",
+      );
+      expect(new Headers(init.headers).get("origin")).toBe(
+        "https://trevv.test",
+      );
+    },
+  );
   it("does not send administrator cookies or invitation headers to customer routes", async () => {
     vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
     const upstream = vi.fn().mockResolvedValue(Response.json({ ok: true }));
@@ -51,6 +105,8 @@ describe("browser API proxy boundary", () => {
     expect(headers.has("x-superadmin-invitation")).toBe(false);
   });
   it.each([
+    ["DELETE", ["superadmin", "auth", "delete-user"]],
+    ["DELETE", ["superadmin", "organizations", "org-123"]],
     ["GET", ["auth", "get-session"]],
     ["GET", ["auth", "list-sessions"]],
     ["POST", ["auth", "revoke-session"]],

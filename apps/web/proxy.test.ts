@@ -13,6 +13,8 @@ describe("Superadmin canonical origin", () => {
       "/superadmin/sign-in",
       "/superadmin/activate",
       "/superadmin/security",
+      "/superadmin/organizations/org-123",
+      "/superadmin/people?organizationId=org-123&filter=unverified",
     ]) {
       const response = proxy(new NextRequest(`https://alpha.trevv.de${path}`));
       expect(response.status).toBe(307);

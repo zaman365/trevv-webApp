@@ -244,7 +244,13 @@ export function browserApiOperationAllowed(
   method: string,
 ): boolean {
   if (segments[0] === "superadmin")
-    return ["GET", "POST", "PATCH"].includes(method.toUpperCase());
+    return (
+      ["GET", "POST", "PATCH"].includes(method.toUpperCase()) ||
+      (method.toUpperCase() === "DELETE" &&
+        segments.length === 5 &&
+        segments[1] === "organizations" &&
+        segments[3] === "contacts")
+    );
   if (segments[0] !== "auth") return segments[0] === "v1";
   return browserAuthOperations.has(
     `${method.toUpperCase()} ${segments.slice(1).join("/")}`,

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { sql, type SQL } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "./schema.js";
 
@@ -32,6 +32,62 @@ export function maskSuperadminEmail(email: string): string {
 }
 export function superadminTokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+type ContactInput = {
+  kind: "primary" | "billing" | "technical" | "security" | "other";
+  name: string;
+  jobTitle: string;
+  email: string;
+  phone: string;
+};
+type ProfileInput = {
+  legalName: string;
+  website: string;
+  industry: string;
+  country: string;
+  city: string;
+  stage: "onboarding" | "established" | "needs_review";
+  priority: "standard" | "priority" | "urgent";
+  nextReviewAt: string | null;
+  version: number;
+  reason: string;
+};
+const defaultProfile = {
+  legalName: "",
+  website: "",
+  industry: "",
+  country: "",
+  city: "",
+  stage: "onboarding" as const,
+  priority: "standard" as const,
+  nextReviewAt: null,
+  version: 0,
+};
+async function lockOrganization(tx: Database, id: string) {
+  const rows = await tx.execute(sql`select id from organizations
+    where id = ${id} and deleted_at is null and archived_at is null for update`);
+  if (!rows.length)
+    throw new SuperadminError("not_found", "Organisation not found.", 404);
+}
+function contactProjection(
+  contact: typeof schema.superadminOrganizationContacts.$inferSelect,
+  revealed = false,
+) {
+  return {
+    id: contact.id,
+    kind: contact.kind,
+    version: contact.version,
+    name: revealed ? contact.name : `${contact.name.slice(0, 1)}•••`,
+    jobTitle: revealed ? contact.jobTitle : "Protected",
+    email: revealed ? contact.email : maskSuperadminEmail(contact.email),
+    phone: revealed
+      ? contact.phone
+      : contact.phone
+        ? `•••${contact.phone.slice(-3)}`
+        : "",
+    updatedAt: contact.updatedAt.toISOString(),
+  };
 }
 
 function audit(
@@ -110,6 +166,10 @@ export function createSuperadminRepositories(
           activeSessions: number;
           pendingInvitations: number;
           failedDeliveries: number;
+          missingContacts: number;
+          missingOwners: number;
+          reviewsDue: number;
+          newOrganizations: number;
         }>(sql`
         select
           (select count(*)::int from organizations where deleted_at is null and archived_at is null) as organizations,
@@ -117,7 +177,14 @@ export function createSuperadminRepositories(
           (select count(*)::int from "user" where "emailVerified") as "verifiedUsers",
           (select count(*)::int from session where "expiresAt" > now()) as "activeSessions",
           (select count(*)::int from invitations where accepted_at is null and revoked_at is null and deleted_at is null and expires_at > now()) as "pendingInvitations",
-          (select count(*)::int from invitations where delivery_status = 'failed' and accepted_at is null and revoked_at is null and deleted_at is null and expires_at > now()) as "failedDeliveries"`);
+          (select count(*)::int from invitations where delivery_status = 'failed' and accepted_at is null and revoked_at is null and deleted_at is null and expires_at > now()) as "failedDeliveries",
+          (select count(*)::int from organizations o where o.deleted_at is null and o.archived_at is null and not exists
+            (select 1 from superadmin_organization_contacts c where c.organization_id = o.id and c.kind = 'primary')) as "missingContacts",
+          (select count(*)::int from organizations o where o.deleted_at is null and o.archived_at is null and not exists
+            (select 1 from memberships m where m.organization_id = o.id and m.role = 'owner' and m.deleted_at is null and m.archived_at is null)) as "missingOwners",
+          (select count(*)::int from organizations o join superadmin_organization_profiles p on p.organization_id = o.id
+            where o.deleted_at is null and o.archived_at is null and p.next_review_at <= (now() at time zone 'UTC')::date) as "reviewsDue",
+          (select count(*)::int from organizations where deleted_at is null and archived_at is null and created_at >= now() - interval '30 days') as "newOrganizations"`);
         await audit(
           tx,
           scope,
@@ -128,7 +195,12 @@ export function createSuperadminRepositories(
         );
         return { ...row!, auditRetentionDays: superadminAuditRetentionDays };
       }),
-    directory: (kind: SuperadminDirectory, page: number, query: string) =>
+    directory: (
+      kind: SuperadminDirectory,
+      page: number,
+      query: string,
+      options: { filter?: string; organizationId?: string | undefined } = {},
+    ) =>
       run(kind === "administrators" ? "owner" : "read", false, async (tx) => {
         const limit = 25;
         const offset = Math.min(Math.max(0, page), 40_000) * limit;
@@ -136,29 +208,94 @@ export function createSuperadminRepositories(
         const statements: Record<SuperadminDirectory, SQL> = {
           organizations: sql`select o.id, o.name, o.slug, o.created_at as "createdAt",
           (select count(*)::int from memberships m where m.organization_id = o.id and m.archived_at is null and m.deleted_at is null) as "memberCount",
-          (select count(*)::int from workspaces w where w.organization_id = o.id and w.archived_at is null and w.deleted_at is null) as "workspaceCount"
-          from organizations o where o.archived_at is null and o.deleted_at is null and (o.name ilike ${pattern} or o.slug ilike ${pattern})`,
+          (select count(*)::int from workspaces w where w.organization_id = o.id and w.archived_at is null and w.deleted_at is null) as "workspaceCount",
+          (select count(*)::int from memberships m where m.organization_id = o.id and m.role = 'owner' and m.archived_at is null and m.deleted_at is null) as "ownerCount",
+          coalesce(p.stage, 'onboarding') as stage, coalesce(p.priority, 'standard') as priority, p.country, p.city, p.next_review_at::text as "nextReviewAt",
+          p.next_review_at <= (now() at time zone 'UTC')::date as "reviewDue",
+          c.id is not null as "hasContact", coalesce(left(c.name, 1) || '•••', 'Not provided') as "contactName",
+          case when c.id is null then null else left(c.email, 1) || '•••@' || split_part(c.email, '@', 2) end as "contactEmail"
+          from organizations o left join superadmin_organization_profiles p on p.organization_id = o.id
+          left join superadmin_organization_contacts c on c.organization_id = o.id and c.kind = 'primary'  where o.archived_at is null and o.deleted_at is null and (o.name ilike ${pattern} or o.slug ilike ${pattern})`,
           people: sql`select u.id, ('Account ' || left(u.id, 8)) as name,
           (left(u.email, 1) || '•••@' || split_part(u.email, '@', 2)) as email,
           u."emailVerified", u."createdAt",
+          (select max(s."createdAt") from session s where s."userId" = u.id) as "lastSignInAt",
+          (select m.role::text from memberships m join auth_user_mappings am on am.app_user_id = m.user_id
+            where am.auth_user_id = u.id and m.organization_id = ${options.organizationId ?? ""} and m.deleted_at is null and m.archived_at is null limit 1) as "membershipRole",
           (select count(*)::int from session s where s."userId" = u.id and s."expiresAt" > now()) as "sessionCount",
           (select count(*)::int from memberships m join auth_user_mappings am on am.app_user_id = m.user_id
             where am.auth_user_id = u.id and m.archived_at is null and m.deleted_at is null) as "organizationCount"
-          from "user" u where u.id ilike ${pattern}`,
+          from "user" u where u.id ilike ${pattern}
+          and (${!options.organizationId} or exists (select 1 from memberships m join auth_user_mappings am on am.app_user_id = m.user_id
+            where am.auth_user_id = u.id and m.organization_id = ${options.organizationId ?? ""} and m.deleted_at is null and m.archived_at is null))`,
           invitations: sql`select i.id, o.name as name, (left(i.email, 1) || '•••@' || split_part(i.email, '@', 2)) as email,
-          i.role, i.delivery_status as "deliveryStatus", i.created_at as "createdAt", i.expires_at as "expiresAt",
+          i.organization_id as "organizationId", i.send_count as "sendCount", i.last_sent_at as "lastSentAt", i.role, i.delivery_status as "deliveryStatus", i.created_at as "createdAt", i.expires_at as "expiresAt",
           case when i.accepted_at is not null then 'accepted' when i.revoked_at is not null then 'revoked' when i.expires_at <= now() then 'expired' else 'pending' end as status
           from invitations i join organizations o on o.id = i.organization_id
-          where i.deleted_at is null and o.deleted_at is null and o.name ilike ${pattern}`,
-          administrators: sql`select id, name, email, role, disabled, "twoFactorEnabled", "createdAt" from superadmin_user
-          where name ilike ${pattern} or email ilike ${pattern}`,
+          where i.deleted_at is null and o.deleted_at is null and o.name ilike ${pattern} and (${!options.organizationId} or i.organization_id = ${options.organizationId ?? ""})`,
+          administrators: sql`select u.id, u.name, u.email, u.role, u.disabled, u."twoFactorEnabled", u."createdAt", u."emailVerified",
+          (select count(*)::int from superadmin_passkey p where p."userId" = u.id) as "passkeyCount",
+          (select count(*)::int from superadmin_session s where s."userId" = u.id and s."expiresAt" > now()) as "sessionCount",
+          (select max(s."createdAt") from superadmin_session s where s."userId" = u.id) as "lastSignInAt"
+          from superadmin_user u where u.name ilike ${pattern} or u.email ilike ${pattern}`,
           audit: sql`select a.id, a.action as name, a.target_type as "targetType", a.target_id as "targetId", a.reason,
           coalesce(u.name, 'Bootstrap') as actor, a.created_at as "createdAt"
           from superadmin_audit a left join superadmin_user u on u.id = a.actor_id
           where a.created_at >= now() - ${superadminAuditRetentionDays} * interval '1 day'
             and (a.action ilike ${pattern} or a.target_id ilike ${pattern})`,
         };
-        const statement = statements[kind];
+        const filters: Record<SuperadminDirectory, Record<string, SQL>> = {
+          organizations: {
+            missing_contact: sql`not "hasContact"`,
+            missing_owner: sql`"ownerCount" = 0`,
+            onboarding: sql`stage = 'onboarding'`,
+            needs_review: sql`stage = 'needs_review'`,
+            review_due: sql`"reviewDue"`,
+          },
+          people: {
+            verified: sql`"emailVerified"`,
+            unverified: sql`not "emailVerified"`,
+            has_sessions: sql`"sessionCount" > 0`,
+            no_organization: sql`"organizationCount" = 0`,
+          },
+          invitations: {
+            pending: sql`status = 'pending'`,
+            expired: sql`status = 'expired'`,
+            accepted: sql`status = 'accepted'`,
+            revoked: sql`status = 'revoked'`,
+            delivery_failed: sql`"deliveryStatus" = 'failed' and status = 'pending'`,
+          },
+          administrators: {
+            owner: sql`role = 'owner'`,
+            operator: sql`role = 'operator'`,
+            auditor: sql`role = 'auditor'`,
+            setup_pending: sql`not disabled and (not "twoFactorEnabled" or not "emailVerified")`,
+            disabled: sql`disabled`,
+          },
+          audit: {
+            changes: sql`name not in ('overview.viewed', 'directory.viewed', 'organization.viewed', 'person.contact_revealed', 'organization.contact_revealed')`,
+            contact_access: sql`name in ('person.contact_revealed', 'organization.contact_revealed')`,
+            reads: sql`name in ('overview.viewed', 'directory.viewed', 'organization.viewed')`,
+          },
+        };
+        const filter = options.filter ?? "all";
+        if (filter !== "all" && !filters[kind][filter])
+          throw new SuperadminError(
+            "invalid_filter",
+            "Unknown directory filter.",
+            409,
+          );
+        if (
+          options.organizationId &&
+          kind !== "people" &&
+          kind !== "invitations"
+        )
+          throw new SuperadminError(
+            "invalid_filter",
+            "Organisation filtering is unavailable for this directory.",
+            409,
+          );
+        const statement = sql`select * from (${statements[kind]}) source where ${filter === "all" ? sql`true` : filters[kind][filter]!}`;
         const [total] = await tx.execute<{ total: number }>(
           sql`select count(*)::int as total from (${statement}) directory`,
         );
@@ -179,6 +316,224 @@ export function createSuperadminRepositories(
           page,
           pageSize: limit,
         };
+      }),
+    organization: (id: string) =>
+      run("read", false, async (tx) => {
+        const [organization] =
+          await tx.execute<DirectoryRow>(sql`select o.id, o.name, o.slug, o.locale, o.timezone, o.created_at as "createdAt",
+        (select count(*)::int from memberships m where m.organization_id = o.id and m.archived_at is null and m.deleted_at is null) as "memberCount",
+        (select count(*)::int from memberships m where m.organization_id = o.id and m.role = 'owner' and m.archived_at is null and m.deleted_at is null) as "ownerCount",
+        (select count(*)::int from workspaces w where w.organization_id = o.id and w.archived_at is null and w.deleted_at is null) as "workspaceCount",
+        (select count(*)::int from invitations i where i.organization_id = o.id and i.deleted_at is null and i.accepted_at is null and i.revoked_at is null and i.expires_at > now()) as "pendingInvitations",
+        (select count(*)::int from invitations i where i.organization_id = o.id and i.deleted_at is null and i.accepted_at is null and i.revoked_at is null and i.expires_at > now() and i.delivery_status = 'failed') as "failedDeliveries"
+        from organizations o where o.id = ${id} and o.deleted_at is null and o.archived_at is null`);
+        if (!organization)
+          throw new SuperadminError(
+            "not_found",
+            "Organisation not found.",
+            404,
+          );
+        const [stored] = await tx
+          .select()
+          .from(schema.superadminOrganizationProfiles)
+          .where(eq(schema.superadminOrganizationProfiles.organizationId, id));
+        const contacts = await tx
+          .select()
+          .from(schema.superadminOrganizationContacts)
+          .where(eq(schema.superadminOrganizationContacts.organizationId, id))
+          .orderBy(
+            schema.superadminOrganizationContacts.createdAt,
+            schema.superadminOrganizationContacts.id,
+          )
+          .limit(12);
+        const {
+          organizationId: _organizationId,
+          updatedAt,
+          ...profile
+        } = stored ?? {
+          ...defaultProfile,
+          organizationId: id,
+          updatedAt: null,
+        };
+        await audit(
+          tx,
+          scope,
+          "organization.viewed",
+          "organization",
+          id,
+          "Viewed masked organisation profile and operational totals.",
+        );
+        return {
+          ...organization,
+          profile,
+          updatedAt: updatedAt?.toISOString() ?? null,
+          contacts: contacts.map((c) => contactProjection(c)),
+        };
+      }),
+    updateOrganization: (id: string, input: ProfileInput) =>
+      run("operate", true, async (tx) => {
+        await lockOrganization(tx, id);
+        await tx
+          .insert(schema.superadminOrganizationProfiles)
+          .values({ organizationId: id })
+          .onConflictDoNothing();
+        const { reason, version, ...fields } = input;
+        const rows = await tx
+          .update(schema.superadminOrganizationProfiles)
+          .set({ ...fields, version: version + 1, updatedAt: new Date() })
+          .where(
+            and(
+              eq(schema.superadminOrganizationProfiles.organizationId, id),
+              eq(schema.superadminOrganizationProfiles.version, version),
+            ),
+          )
+          .returning({
+            version: schema.superadminOrganizationProfiles.version,
+          });
+        if (!rows.length)
+          throw new SuperadminError(
+            "version_conflict",
+            "This profile changed. Refresh before saving again.",
+            409,
+          );
+        await audit(
+          tx,
+          scope,
+          "organization.profile_updated",
+          "organization",
+          id,
+          reason,
+        );
+        return rows[0]!;
+      }),
+    saveOrganizationContact: (
+      id: string,
+      contactId: string | null,
+      input: ContactInput & { version: number; reason: string },
+    ) =>
+      run("operate", true, async (tx) => {
+        await lockOrganization(tx, id);
+        const { reason, version, ...fields } = input;
+        const contacts = schema.superadminOrganizationContacts;
+        const contact = {
+          ...fields,
+          email: fields.email.toLowerCase(),
+          updatedAt: new Date(),
+        };
+        let saved;
+        if (contactId) {
+          [saved] = await tx
+            .update(contacts)
+            .set({ ...contact, version: version + 1 })
+            .where(
+              and(
+                eq(contacts.organizationId, id),
+                eq(contacts.id, contactId),
+                eq(contacts.version, version),
+              ),
+            )
+            .returning({ id: contacts.id, version: contacts.version });
+          if (!saved)
+            throw new SuperadminError(
+              "version_conflict",
+              "This contact changed or is unavailable. Refresh before saving again.",
+              409,
+            );
+        } else {
+          if (version !== 0)
+            throw new SuperadminError(
+              "version_conflict",
+              "New contacts must start at version zero.",
+              409,
+            );
+          const [count] = await tx.execute<{ total: number }>(
+            sql`select count(*)::int as total from superadmin_organization_contacts where organization_id = ${id}`,
+          );
+          if (count!.total >= 12)
+            throw new SuperadminError(
+              "contact_limit",
+              "Keep up to 12 current business contacts. Remove an outdated contact first.",
+              409,
+            );
+          [saved] = await tx
+            .insert(contacts)
+            .values({ ...contact, id: randomUUID(), organizationId: id })
+            .returning({ id: contacts.id, version: contacts.version });
+        }
+        await audit(
+          tx,
+          scope,
+          contactId
+            ? "organization.contact_updated"
+            : "organization.contact_added",
+          "organization",
+          id,
+          reason,
+        );
+        return saved!;
+      }),
+    revealOrganizationContact: (
+      id: string,
+      contactId: string,
+      reason: string,
+    ) =>
+      run("operate", true, async (tx) => {
+        await lockOrganization(tx, id);
+        const [contact] = await tx
+          .select()
+          .from(schema.superadminOrganizationContacts)
+          .where(
+            and(
+              eq(schema.superadminOrganizationContacts.organizationId, id),
+              eq(schema.superadminOrganizationContacts.id, contactId),
+            ),
+          );
+        if (!contact)
+          throw new SuperadminError("not_found", "Contact not found.", 404);
+        await audit(
+          tx,
+          scope,
+          "organization.contact_revealed",
+          "organization",
+          id,
+          reason,
+        );
+        return contactProjection(contact, true);
+      }),
+    deleteOrganizationContact: (
+      id: string,
+      contactId: string,
+      version: number,
+      reason: string,
+    ) =>
+      run("operate", true, async (tx) => {
+        await lockOrganization(tx, id);
+        const contacts = schema.superadminOrganizationContacts;
+        const rows = await tx
+          .delete(contacts)
+          .where(
+            and(
+              eq(contacts.organizationId, id),
+              eq(contacts.id, contactId),
+              eq(contacts.version, version),
+            ),
+          )
+          .returning({ id: contacts.id });
+        if (!rows.length)
+          throw new SuperadminError(
+            "version_conflict",
+            "This contact changed or was removed. Refresh first.",
+            409,
+          );
+        await audit(
+          tx,
+          scope,
+          "organization.contact_removed",
+          "organization",
+          id,
+          reason,
+        );
+        return { removed: true };
       }),
     revealPerson: (id: string, reason: string) =>
       run("operate", true, async (tx) => {
@@ -218,6 +573,7 @@ export function createSuperadminRepositories(
       name: string;
       slug: string;
       ownerEmail: string;
+      contact?: ContactInput | undefined;
       reason: string;
     }) =>
       run("operate", true, async (tx) => {
@@ -228,6 +584,13 @@ export function createSuperadminRepositories(
         await tx
           .insert(schema.organizations)
           .values({ id, name: input.name, slug: input.slug });
+        if (input.contact)
+          await tx.insert(schema.superadminOrganizationContacts).values({
+            ...input.contact,
+            email: input.contact.email.toLowerCase(),
+            id: randomUUID(),
+            organizationId: id,
+          });
         await tx.insert(schema.portfolios).values({
           id: randomUUID(),
           organizationId: id,

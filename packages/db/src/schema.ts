@@ -171,6 +171,76 @@ export const organizations = pgTable(
   (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)],
 );
 
+// Private operational records; never included in tenant organisation snapshots.
+export const superadminOrganizationProfiles = pgTable(
+  "superadmin_organization_profiles",
+  {
+    organizationId: text("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    legalName: text("legal_name").notNull().default(""),
+    website: text("website").notNull().default(""),
+    industry: text("industry").notNull().default(""),
+    country: text("country").notNull().default(""),
+    city: text("city").notNull().default(""),
+    stage: text("stage").notNull().default("onboarding"),
+    priority: text("priority").notNull().default("standard"),
+    nextReviewAt: date("next_review_at"),
+    version: integer("version").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "superadmin_org_stage_check",
+      sql`${table.stage} in ('onboarding', 'established', 'needs_review')`,
+    ),
+    check(
+      "superadmin_org_priority_check",
+      sql`${table.priority} in ('standard', 'priority', 'urgent')`,
+    ),
+    check("superadmin_org_version_check", sql`${table.version} >= 0`),
+    index("superadmin_org_review_idx").on(table.nextReviewAt),
+  ],
+);
+
+export const superadminOrganizationContacts = pgTable(
+  "superadmin_organization_contacts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    jobTitle: text("job_title").notNull().default(""),
+    email: text("email").notNull(),
+    phone: text("phone").notNull().default(""),
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("superadmin_org_contact_org_idx").on(table.organizationId),
+    uniqueIndex("superadmin_org_primary_contact_unique")
+      .on(table.organizationId)
+      .where(sql`${table.kind} = 'primary'`),
+    check(
+      "superadmin_org_contact_kind_check",
+      sql`${table.kind} in ('primary', 'billing', 'technical', 'security', 'other')`,
+    ),
+    check(
+      "superadmin_org_contact_phone_check",
+      sql`${table.phone} = '' or ${table.phone} ~ '^[+][1-9][0-9]{6,14}$'`,
+    ),
+  ],
+);
+
 /** Transactional invalidation for the complete organization snapshot. */
 export const organizationSnapshotRevisions = pgTable(
   "organization_snapshot_revisions",

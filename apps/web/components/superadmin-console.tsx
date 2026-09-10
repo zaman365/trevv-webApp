@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   superadminDirectorySchema,
+  superadminDirectoryFilters,
   superadminOverviewSchema,
   type SuperadminDirectoryKind,
   type SuperadminDirectoryResult,
@@ -62,9 +63,15 @@ const subtitles = {
 export function SuperadminConsole({
   session,
   section,
+  initialFilter = "all",
+  initialQuery = "",
+  organizationId,
 }: {
   session: SuperadminSession;
   section: "overview" | SuperadminDirectoryKind;
+  initialFilter?: string;
+  initialQuery?: string;
+  organizationId?: string | undefined;
 }) {
   const [overview, setOverview] = useState<SuperadminOverview | null>(null);
   const [directory, setDirectory] = useState<SuperadminDirectoryResult | null>(
@@ -72,7 +79,11 @@ export function SuperadminConsole({
   );
   const [pendingAdmins, setPendingAdmins] = useState<Row[]>([]);
   const [page, setPage] = useState(0),
-    [query, setQuery] = useState("");
+    [query, setQuery] = useState(initialQuery);
+  const [filter, setFilter] = useState(initialFilter);
+  const [createdOrganization, setCreatedOrganization] = useState<string | null>(
+    null,
+  );
   const [revision, setRevision] = useState(0);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -86,7 +97,14 @@ export function SuperadminConsole({
   const dialog = useRef<HTMLDialogElement>(null);
   const canOperate = session.role !== "auditor";
   const directoryKind = section === "overview" ? "organizations" : section;
-  const loadKey = JSON.stringify([section, page, query, revision]);
+  const loadKey = JSON.stringify([
+    section,
+    page,
+    query,
+    filter,
+    organizationId,
+    revision,
+  ]);
   const loading = loadedKey !== loadKey;
 
   useEffect(() => {
@@ -96,7 +114,7 @@ export function SuperadminConsole({
       try {
         const values = await Promise.all([
           superadminRequest(
-            `/directory/${directoryKind}?page=${page}&q=${encodeURIComponent(query)}`,
+            `/directory/${directoryKind}?page=${page}&q=${encodeURIComponent(query)}&filter=${encodeURIComponent(filter)}${organizationId ? `&organizationId=${encodeURIComponent(organizationId)}` : ""}`,
             undefined,
             "GET",
             controller.signal,
@@ -140,7 +158,16 @@ export function SuperadminConsole({
       alive = false;
       controller.abort();
     };
-  }, [directoryKind, section, page, query, revision, loadKey]);
+  }, [
+    directoryKind,
+    section,
+    page,
+    query,
+    filter,
+    organizationId,
+    revision,
+    loadKey,
+  ]);
   useEffect(() => {
     if (action) dialog.current?.showModal();
     else dialog.current?.close();
@@ -169,12 +196,31 @@ export function SuperadminConsole({
     setDialogError("");
     const id = encodeURIComponent(String(action.row?.id ?? ""));
     try {
+      if (
+        action.kind === "organization" &&
+        String(form.get("contactPhone") ?? "").trim() &&
+        !String(form.get("contactName") ?? "").trim()
+      )
+        throw new Error(
+          "Enter the contact person’s name to save their phone number.",
+        );
       let result: Record<string, unknown> = {};
       if (action.kind === "organization")
         result = await superadminRequest("/organizations", {
           name: form.get("name"),
           slug: form.get("slug"),
           ownerEmail: form.get("email"),
+          ...(String(form.get("contactName") ?? "").trim()
+            ? {
+                contact: {
+                  kind: "primary",
+                  name: form.get("contactName"),
+                  email: form.get("email"),
+                  phone: String(form.get("contactPhone") ?? "").trim(),
+                  jobTitle: "",
+                },
+              }
+            : {}),
           reason,
         });
       if (action.kind === "administrator")
@@ -214,6 +260,8 @@ export function SuperadminConsole({
           },
           "PATCH",
         );
+      if (action.kind === "organization")
+        setCreatedOrganization(String(result.id));
       setAction(null);
       setMessage(
         result.deliveryStatus === "failed"
@@ -287,6 +335,14 @@ export function SuperadminConsole({
       {message && (
         <p className={styles.notice} role="status">
           {message}{" "}
+          {createdOrganization && (
+            <Link
+              href={`/superadmin/organizations/${encodeURIComponent(createdOrganization)}`}
+              prefetch={false}
+            >
+              Complete organisation profile ·{" "}
+            </Link>
+          )}
           <Link href="/superadmin/security" prefetch={false}>
             Security settings
           </Link>
@@ -299,7 +355,7 @@ export function SuperadminConsole({
               {
                 title: "Organisations",
                 value: overview.organizations,
-                detail: "Active organisations",
+                detail: `${overview.newOrganizations} joined in the last 30 days`,
                 icon: Building2,
               },
               {
@@ -330,6 +386,64 @@ export function SuperadminConsole({
                 <span>{metric.detail}</span>
               </article>
             ))}
+          </section>
+          <section
+            className={`${styles.panel} ${styles.attention}`}
+            aria-label="Platform follow-up"
+          >
+            <header className={styles.panelHeader}>
+              <div>
+                <h2>Needs attention</h2>
+                <p>Follow up on contact details, ownership and access.</p>
+              </div>
+            </header>
+            <ul className={styles.attentionList}>
+              {[
+                {
+                  count: overview.missingContacts,
+                  text: "Organisations missing a primary contact",
+                  href: "/superadmin/organizations?filter=missing_contact",
+                },
+                {
+                  count: overview.missingOwners,
+                  text: "Organisations awaiting an owner",
+                  href: "/superadmin/organizations?filter=missing_owner",
+                },
+                {
+                  count: overview.reviewsDue,
+                  text: "Organisation reviews due",
+                  href: "/superadmin/organizations?filter=review_due",
+                },
+                {
+                  count: overview.failedDeliveries,
+                  text: "Pending invitations with delivery failures",
+                  href: "/superadmin/invitations?filter=delivery_failed",
+                },
+                {
+                  count: overview.users - overview.verifiedUsers,
+                  text: "Accounts awaiting email verification",
+                  href: "/superadmin/people?filter=unverified",
+                },
+              ].map((item) => (
+                <li key={item.href}>
+                  <Link href={item.href} prefetch={false}>
+                    <strong>{item.count}</strong>
+                    {item.text}
+                    <ArrowRight size={16} />
+                  </Link>
+                </li>
+              ))}
+              {session.role === "owner" && (
+                <li>
+                  <Link
+                    href="/superadmin/administrators?filter=setup_pending"
+                    prefetch={false}
+                  >
+                    Review administrator security setup <ArrowRight size={16} />
+                  </Link>
+                </li>
+              )}
+            </ul>
           </section>
           <div className={styles.twoColumns}>
             <section className={styles.panel}>
@@ -416,6 +530,22 @@ export function SuperadminConsole({
             </Link>
           )}
         </header>
+        {organizationId && (
+          <div className={styles.scopeBanner}>
+            <span>
+              Showing records for one organisation ·{" "}
+              <Link
+                href={`/superadmin/organizations/${encodeURIComponent(organizationId)}`}
+                prefetch={false}
+              >
+                View profile
+              </Link>
+            </span>
+            <Link href={`/superadmin/${directoryKind}`} prefetch={false}>
+              Clear organisation filter
+            </Link>
+          </div>
+        )}
         {section !== "overview" && (
           <form
             className={styles.search}
@@ -431,6 +561,7 @@ export function SuperadminConsole({
                 section === "people" ? "Search by account ID" : "Search records"
               }
               name="q"
+              defaultValue={initialQuery}
               type="search"
               maxLength={100}
               placeholder={
@@ -441,7 +572,37 @@ export function SuperadminConsole({
                     : "Search records…"
               }
             />
+            <select
+              aria-label="Filter records"
+              value={filter}
+              onChange={(event) => {
+                setPage(0);
+                setFilter(event.target.value);
+              }}
+            >
+              {superadminDirectoryFilters[directoryKind].map((value) => (
+                <option key={value} value={value}>
+                  {filterLabel(value)}
+                </option>
+              ))}
+            </select>
             <button className={styles.secondary}>Search</button>
+            {(filter !== "all" || query) && (
+              <button
+                type="button"
+                className={styles.textButton}
+                onClick={(event) => {
+                  setPage(0);
+                  setFilter("all");
+                  setQuery("");
+                  const input =
+                    event.currentTarget.form?.elements.namedItem("q");
+                  if (input instanceof HTMLInputElement) input.value = "";
+                }}
+              >
+                Reset search
+              </button>
+            )}
           </form>
         )}
         {!directory ? (
@@ -461,7 +622,11 @@ export function SuperadminConsole({
         ) : directory.items.length === 0 ? (
           <div className={styles.empty}>
             <Building2 size={28} />
-            <h3>{query ? "No matching records" : "No records yet"}</h3>
+            <h3>
+              {query || filter !== "all"
+                ? "No matching records"
+                : "No records yet"}
+            </h3>
             <p>
               {section === "organizations" || section === "overview"
                 ? "Create an organisation and invite its owner to bring them onto TREVV."
@@ -482,6 +647,9 @@ export function SuperadminConsole({
                           ? "Organisation / recipient"
                           : "Name"}
                   </th>
+                  {directoryKind === "organizations" && (
+                    <th>Primary contact</th>
+                  )}
                   <th>
                     {directoryKind === "organizations"
                       ? "Members / workspaces"
@@ -510,7 +678,31 @@ export function SuperadminConsole({
                   .map((row) => (
                     <tr key={String(row.id)}>
                       <td>
-                        <strong>{String(row.name)}</strong>
+                        {directoryKind === "organizations" ||
+                        directoryKind === "invitations" ? (
+                          <Link
+                            className={styles.recordLink}
+                            href={`/superadmin/organizations/${encodeURIComponent(String(directoryKind === "organizations" ? row.id : row.organizationId))}`}
+                            prefetch={false}
+                          >
+                            {String(row.name)}
+                          </Link>
+                        ) : (
+                          <strong>
+                            {directoryKind === "audit"
+                              ? String(row.name)
+                                  .replaceAll(".", " · ")
+                                  .replaceAll("_", " ")
+                              : String(row.name)}
+                          </strong>
+                        )}
+                        {directoryKind === "organizations" && (
+                          <small>
+                            {[row.city, row.country]
+                              .filter(Boolean)
+                              .join(", ") || "Location not provided"}
+                          </small>
+                        )}
                         <small>
                           {String(
                             row.email ??
@@ -519,20 +711,50 @@ export function SuperadminConsole({
                           )}
                         </small>
                       </td>
+                      {directoryKind === "organizations" && (
+                        <td>
+                          <strong>{String(row.contactName)}</strong>
+                          <small>
+                            {row.contactEmail
+                              ? String(row.contactEmail)
+                              : "Add a contact in the profile"}
+                          </small>
+                        </td>
+                      )}
                       <td>
                         {directoryKind === "organizations" ? (
-                          `${row.memberCount} members · ${row.workspaceCount} workspaces`
+                          <>
+                            {row.memberCount} members · {row.workspaceCount}{" "}
+                            workspaces<small>{row.ownerCount} owners</small>
+                          </>
                         ) : directoryKind === "people" ? (
-                          <span
-                            className={`${styles.badge} ${row.emailVerified ? styles.good : styles.warn}`}
-                          >
-                            {row.emailVerified ? "Verified" : "Unverified"}
-                          </span>
+                          <>
+                            <span
+                              className={`${styles.badge} ${row.emailVerified ? styles.good : styles.warn}`}
+                            >
+                              {row.emailVerified ? "Verified" : "Unverified"}
+                            </span>
+                            {row.membershipRole && (
+                              <small>
+                                Organisation role: {String(row.membershipRole)}
+                              </small>
+                            )}
+                          </>
                         ) : directoryKind === "audit" ? (
                           <>
                             {String(row.actor)}
                             <small>
-                              {String(row.targetType)} · {String(row.targetId)}
+                              {String(row.targetType)} ·{" "}
+                              {row.targetType === "organization" ? (
+                                <Link
+                                  href={`/superadmin/organizations/${encodeURIComponent(String(row.targetId))}`}
+                                  prefetch={false}
+                                >
+                                  {String(row.targetId)}
+                                </Link>
+                              ) : (
+                                String(row.targetId)
+                              )}
                             </small>
                           </>
                         ) : (
@@ -543,17 +765,37 @@ export function SuperadminConsole({
                       </td>
                       <td>
                         {directoryKind === "people" ? (
-                          `${row.sessionCount} sessions · ${row.organizationCount} organisations`
+                          <>
+                            {row.sessionCount} sessions ·{" "}
+                            {row.organizationCount} organisations
+                            <small>
+                              Latest retained sign-in:{" "}
+                              {row.lastSignInAt
+                                ? date(row.lastSignInAt)
+                                : "None"}
+                            </small>
+                          </>
                         ) : directoryKind === "audit" ? (
                           String(row.reason)
                         ) : directoryKind === "organizations" ? (
-                          <span
-                            className={`${styles.badge} ${Number(row.memberCount) ? styles.good : styles.warn}`}
-                          >
-                            {Number(row.memberCount)
-                              ? "Active"
-                              : "Awaiting owner"}
-                          </span>
+                          <>
+                            <span
+                              className={`${styles.badge} ${Number(row.ownerCount) ? styles.good : styles.warn}`}
+                            >
+                              {Number(row.ownerCount)
+                                ? "Active"
+                                : "Awaiting owner"}
+                            </span>
+                            <small>
+                              {filterLabel(String(row.stage))} ·{" "}
+                              {String(row.priority)} priority
+                            </small>
+                            <small>
+                              {row.nextReviewAt
+                                ? `Review ${date(row.nextReviewAt)}${row.reviewDue ? " · Due" : ""}`
+                                : "Review not scheduled"}
+                            </small>
+                          </>
                         ) : directoryKind === "invitations" ? (
                           <>
                             <span
@@ -561,7 +803,15 @@ export function SuperadminConsole({
                             >
                               {String(row.status)}
                             </span>
-                            <small>Email {String(row.deliveryStatus)}</small>
+                            <small>
+                              Email {String(row.deliveryStatus)} ·{" "}
+                              {row.sendCount} attempts
+                            </small>
+                            <small>Expires {date(row.expiresAt)}</small>
+                            <small>
+                              Last sent{" "}
+                              {row.lastSentAt ? date(row.lastSentAt) : "—"}
+                            </small>
                           </>
                         ) : (
                           <>
@@ -575,10 +825,20 @@ export function SuperadminConsole({
                                 ? "Authenticator enrolled"
                                 : "Setup pending"}
                             </small>
+                            <small>
+                              {row.passkeyCount} passkeys · {row.sessionCount}{" "}
+                              sessions
+                            </small>
+                            <small>
+                              Latest retained sign-in:{" "}
+                              {row.lastSignInAt
+                                ? date(row.lastSignInAt)
+                                : "None"}
+                            </small>
                           </>
                         )}
                       </td>
-                      <td>{date(row.createdAt)}</td>
+                      <td>{date(row.createdAt, directoryKind === "audit")}</td>
                       {canOperate &&
                         directoryKind !== "audit" &&
                         directoryKind !== "organizations" && (
@@ -802,6 +1062,28 @@ export function SuperadminConsole({
                   <input name="email" type="email" required maxLength={254} />
                   <small>An invitation will be sent to this address.</small>
                 </label>
+                <label>
+                  Contact person (optional)
+                  <input name="contactName" minLength={2} maxLength={100} />
+                  <small>
+                    Record the owner as the primary business contact. You can
+                    add other contacts after creation.
+                  </small>
+                </label>
+                <label>
+                  Contact phone (optional)
+                  <input
+                    name="contactPhone"
+                    type="tel"
+                    pattern="\+[1-9][0-9]{6,14}"
+                    maxLength={16}
+                    placeholder="+491234567890"
+                  />
+                  <small>
+                    Include the country code and contact person’s name to save
+                    this number.
+                  </small>
+                </label>
               </>
             )}
             {action?.kind === "administrator" && (
@@ -891,14 +1173,39 @@ export function SuperadminConsole({
     </main>
   );
 }
-function date(value: Row[string] | undefined) {
+function date(value: Row[string] | undefined, includeTime = false) {
   if (!value) return "—";
   const result = new Date(String(value));
   return Number.isNaN(result.getTime())
     ? "—"
-    : result.toLocaleDateString("en-GB", {
+    : result.toLocaleString("en-GB", {
         day: "numeric",
         month: "short",
         year: "numeric",
+        timeZone: "UTC",
+        ...(includeTime
+          ? ({ hour: "2-digit", minute: "2-digit" } as const)
+          : {}),
       });
+}
+
+function filterLabel(value: string) {
+  const labels: Record<string, string> = {
+    all: "All records",
+    missing_contact: "Missing primary contact",
+    missing_owner: "Awaiting owner",
+    review_due: "Review due",
+    has_sessions: "Has active sessions",
+    no_organization: "No organisation",
+    delivery_failed: "Pending delivery failures",
+    setup_pending: "Security setup pending",
+    contact_access: "Protected contact access",
+    changes: "Changes only",
+    reads: "Summary views",
+    disabled: "Access revoked",
+  };
+  return (
+    labels[value] ??
+    value.replaceAll("_", " ").replace(/^./u, (first) => first.toUpperCase())
+  );
 }

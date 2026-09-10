@@ -52,10 +52,16 @@ export function SuperadminSecurity({
     [codes, setCodes] = useState<string[]>([]);
   const [keys, setKeys] = useState<PasskeyRow[]>([]),
     [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
   const [phone, setPhone] = useState(initial.phoneNumber ?? "");
   const enrolled = session.twoFactorEnabled && !!session.assuranceAt;
   const applySecurity = useCallback(
     (value: Awaited<ReturnType<typeof readSecurity>>) => {
+      setNow(Date.now());
       setSession(value.current);
       setSessions(value.sessions);
       setKeys(value.keys);
@@ -177,6 +183,49 @@ export function SuperadminSecurity({
         <p className={styles.notice} role="status">
           {message}
         </p>
+      )}
+      {enrolled && (
+        <section className={styles.metrics} aria-label="Your security status">
+          <article className={styles.metric}>
+            <p>Current session</p>
+            <strong>{session.role}</strong>
+            <span>
+              Expires{" "}
+              {new Date(session.expiresAt).toLocaleString("en-GB", {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: "UTC",
+              })}{" "}
+              UTC
+            </span>
+          </article>
+          <article className={styles.metric}>
+            <p>Sensitive actions</p>
+            <strong>
+              {now === null
+                ? "Checking…"
+                : session.assuranceAt &&
+                    now - Date.parse(session.assuranceAt) < 600_000
+                  ? "Verified"
+                  : "Verify again"}
+            </strong>
+            <span>Reverify below to edit profiles or view contacts</span>
+          </article>
+          <article className={styles.metric}>
+            <p>Passkeys</p>
+            <strong>{keys.length}</strong>
+            <span>
+              {keys.length
+                ? "Registered on your account"
+                : "Add a passkey for another sign-in option"}
+            </span>
+          </article>
+          <article className={styles.metric}>
+            <p>Contact phone</p>
+            <strong>{session.phoneNumber ? "Added" : "Optional"}</strong>
+            <span>Contact only · not verified for sign-in</span>
+          </article>
+        </section>
       )}
       <div className={styles.securityGrid}>
         <section className={styles.panel}>

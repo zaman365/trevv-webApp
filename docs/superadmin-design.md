@@ -106,3 +106,55 @@ Roll back by disabling the new API realm and restoring the prior compatible Web
 and API artifacts. Keep the additive tables and migration history; do not delete
 the administrator identities, audit evidence or any customer data as rollback.
 The predecessor owner console and customer authentication remain independent.
+
+## Organisation profiles and operational follow-up
+
+Each organisation row opens `/superadmin/organizations/:id`. The original
+creation, owner invitation, directories and predecessor admin remain available.
+The profile shows member, owner and workspace totals, pending invitations and
+delivery failures, language, time zone, creation date and stable organisation ID.
+Business metadata includes legal name, website, industry, country/region and city.
+Operators can record an onboarding/established/needs-review stage, support priority
+and next review date. These are follow-up metadata; they do not suspend accounts,
+change tenant roles or represent a billing entitlement. Review dates use UTC.
+
+Up to twelve business contacts can be maintained, with primary, billing,
+technical, security or other responsibilities. A database uniqueness constraint
+allows only one primary contact per organisation. Each contact has a name, job
+title, email and optional international phone number. The creation form can save
+the first owner's contact details alongside the existing invitation. Adding or
+editing a business contact alone sends no email and confers no membership or
+administrator access. Existing tenant account details are not copied implicitly.
+
+Profiles and contacts use two additive private tables from migration
+`0023_bored_jackal`; tenant snapshots and normal customer APIs never include them.
+Contact names, email addresses, phone numbers and job titles remain masked in
+all routine reads. Revealing one contact requires an operator/owner, verification
+within ten minutes and a purpose recorded before disclosure. The browser clears
+revealed details and unsaved edits after one minute, on closing the dialog or
+when leaving its tab. Auditors cannot reveal or mutate contacts. Contact removal
+physically removes its saved details; audit retains the action and purpose, not a
+copy of those details. Existing audit retention and governance requirements apply.
+
+Profile and contact updates require the version the operator read. Stale updates
+or removals return a conflict instead of overwriting later changes. Organisation
+row locks serialize contact capacity checks; database constraints protect primary
+contact uniqueness. The website permits HTTP(S) only, dates and international
+phone numbers are validated, and all mutation schemas reject unknown fields.
+
+The overview links directly to organisations missing contacts or owners, reviews
+due, failed pending invitations and unverified accounts. Each directory provides
+server-side filters before pagination. People and invitations can be scoped to an
+organisation; people search still matches account IDs only. Invitation rows expose
+expiry, send attempts and last-sent time. Administrator rows show passkey/session
+totals and enrollment; the security screen shows session expiry and verification
+freshness. Retained sign-in timestamps come from existing session records and are
+not a complete login history or an online-presence indicator. The audit directory
+can separate changes, protected contact access and summary views, and links
+organisation actions back to the profile.
+
+Regression coverage exercises the real administrator authentication and database:
+masked reads, owner/operator boundaries, auditor denial, stale MFA, optimistic
+concurrency, contact capacity and primary uniqueness, organisation isolation,
+contact removal, filter correctness, preserved first-owner invitation acceptance,
+proxy cookie separation and alpha redirects for the nested routes.

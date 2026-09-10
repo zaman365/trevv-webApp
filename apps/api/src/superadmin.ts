@@ -5,6 +5,11 @@ import {
   createSuperadminOrganizationSchema,
   inviteSuperadminSchema,
   superadminDirectoryKindSchema,
+  superadminDirectoryFilters,
+  superadminDirectoryQuerySchema,
+  superadminOrganizationUpdateSchema,
+  superadminContactInputSchema,
+  superadminContactDeleteSchema,
   superadminPhoneSchema,
   superadminReasonInputSchema,
   updateSuperadminSchema,
@@ -74,11 +79,14 @@ export function createSuperadminApi(dependencies: SuperadminApiDependencies) {
       return context.json(
         {
           message:
-            "Review the form fields and provide a reason of 10–240 characters.",
+            context.req.method === "GET"
+              ? "Review the search and filter values for this directory."
+              : "Review the form fields and provide a reason of 10–240 characters.",
         },
         400,
       );
-    const cause = error.cause as { code?: string } | undefined;
+    const cause = error.cause as
+      { code?: string; constraint_name?: string } | undefined;
     if (
       cause?.code === "23505" ||
       (error as { code?: string }).code === "23505"
@@ -86,7 +94,9 @@ export function createSuperadminApi(dependencies: SuperadminApiDependencies) {
       return context.json(
         {
           message:
-            "This record already exists. Review the directory before retrying.",
+            cause?.constraint_name === "superadmin_org_primary_contact_unique"
+              ? "This organisation already has a primary contact. Change that contact’s responsibility before adding another."
+              : "This record already exists. Review the directory before retrying.",
         },
         409,
       );
@@ -143,18 +153,90 @@ export function createSuperadminApi(dependencies: SuperadminApiDependencies) {
   );
   app.get("/directory/:kind", async (context) => {
     const kind = superadminDirectoryKindSchema.parse(context.req.param("kind"));
-    const page = z.coerce
-      .number()
-      .int()
-      .min(0)
-      .max(40_000)
-      .parse(context.req.query("page") ?? 0);
-    const query = z
-      .string()
-      .max(100)
-      .parse(context.req.query("q") ?? "");
+    const input = superadminDirectoryQuerySchema.parse(context.req.query());
+    z.enum(superadminDirectoryFilters[kind]).parse(input.filter);
+    if (input.organizationId && kind !== "people" && kind !== "invitations")
+      return context.json(
+        {
+          message: "Organisation filtering is unavailable for this directory.",
+        },
+        400,
+      );
     return context.json(
-      await context.get("repositories").directory(kind, page, query),
+      await context
+        .get("repositories")
+        .directory(kind, input.page, input.q, input),
+    );
+  });
+  const organizationId = (value: string) =>
+    z.string().min(1).max(128).parse(value);
+  app.get("/organizations/:id", async (context) =>
+    context.json(
+      await context
+        .get("repositories")
+        .organization(organizationId(context.req.param("id"))),
+    ),
+  );
+  app.patch("/organizations/:id", async (context) =>
+    context.json(
+      await context
+        .get("repositories")
+        .updateOrganization(
+          organizationId(context.req.param("id")),
+          superadminOrganizationUpdateSchema.parse(await context.req.json()),
+        ),
+    ),
+  );
+  app.post("/organizations/:id/contacts", async (context) =>
+    context.json(
+      await context
+        .get("repositories")
+        .saveOrganizationContact(
+          organizationId(context.req.param("id")),
+          null,
+          superadminContactInputSchema.parse(await context.req.json()),
+        ),
+      201,
+    ),
+  );
+  app.patch("/organizations/:id/contacts/:contactId", async (context) =>
+    context.json(
+      await context
+        .get("repositories")
+        .saveOrganizationContact(
+          organizationId(context.req.param("id")),
+          organizationId(context.req.param("contactId")),
+          superadminContactInputSchema.parse(await context.req.json()),
+        ),
+    ),
+  );
+  app.post("/organizations/:id/contacts/:contactId/reveal", async (context) => {
+    const { reason } = superadminReasonInputSchema.parse(
+      await context.req.json(),
+    );
+    return context.json(
+      await context
+        .get("repositories")
+        .revealOrganizationContact(
+          organizationId(context.req.param("id")),
+          organizationId(context.req.param("contactId")),
+          reason,
+        ),
+    );
+  });
+  app.delete("/organizations/:id/contacts/:contactId", async (context) => {
+    const { reason, version } = superadminContactDeleteSchema.parse(
+      await context.req.json(),
+    );
+    return context.json(
+      await context
+        .get("repositories")
+        .deleteOrganizationContact(
+          organizationId(context.req.param("id")),
+          organizationId(context.req.param("contactId")),
+          version,
+          reason,
+        ),
     );
   });
   app.post("/organizations", async (context) => {

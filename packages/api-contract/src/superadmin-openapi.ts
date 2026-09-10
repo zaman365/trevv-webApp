@@ -3,6 +3,12 @@ import {
   createSuperadminOrganizationSchema,
   inviteSuperadminSchema,
   superadminDirectorySchema,
+  superadminDirectoryFilters,
+  superadminOrganizationDetailSchema,
+  superadminOrganizationUpdateSchema,
+  superadminContactInputSchema,
+  superadminContactDeleteSchema,
+  superadminContactSchema,
   superadminOverviewSchema,
   superadminPhoneSchema,
   superadminReasonInputSchema,
@@ -48,6 +54,15 @@ function operation(
 const target = [
   {
     name: "id",
+    in: "path",
+    required: true,
+    schema: { type: "string", minLength: 1, maxLength: 128 },
+  },
+];
+const contactTarget = [
+  ...target,
+  {
+    name: "contactId",
     in: "path",
     required: true,
     schema: { type: "string", minLength: 1, maxLength: 128 },
@@ -105,6 +120,24 @@ export const superadminOpenApiPaths = {
           description:
             "People search matches account IDs; no undisclosed search of personal contact details.",
         },
+        {
+          name: "filter",
+          in: "query",
+          schema: {
+            type: "string",
+            enum: [
+              ...new Set(Object.values(superadminDirectoryFilters).flat()),
+            ],
+            default: "all",
+          },
+          description: "Filter must be supported by the selected directory.",
+        },
+        {
+          name: "organizationId",
+          in: "query",
+          schema: { type: "string", minLength: 1, maxLength: 128 },
+          description: "Scope people or invitations to one organisation.",
+        },
       ],
     ),
   },
@@ -125,6 +158,65 @@ export const superadminOpenApiPaths = {
         "409": { description: "Organisation address already exists" },
       },
     },
+  },
+  "/api/superadmin/organizations/{id}": {
+    get: operation(
+      "superadminOrganization",
+      "Read an audited organisation profile with masked business contacts",
+      z.toJSONSchema(superadminOrganizationDetailSchema),
+      undefined,
+      target,
+    ),
+    patch: operation(
+      "superadminUpdateOrganization",
+      "Update operational profile with recent verification, reason and optimistic version",
+      undefined,
+      z.toJSONSchema(superadminOrganizationUpdateSchema),
+      target,
+    ),
+  },
+  "/api/superadmin/organizations/{id}/contacts": {
+    post: {
+      ...operation(
+        "superadminCreateOrganizationContact",
+        "Add a business contact; at most 12 contacts and one primary per organisation",
+        undefined,
+        z.toJSONSchema(superadminContactInputSchema),
+        target,
+      ),
+      responses: {
+        "201": { description: "Contact created" },
+        "403": {
+          description: "Recent operator or owner verification required",
+        },
+        "409": { description: "Primary contact or limit conflict" },
+      },
+    },
+  },
+  "/api/superadmin/organizations/{id}/contacts/{contactId}": {
+    patch: operation(
+      "superadminUpdateOrganizationContact",
+      "Update a contact without overwriting concurrent changes",
+      undefined,
+      z.toJSONSchema(superadminContactInputSchema),
+      contactTarget,
+    ),
+    delete: operation(
+      "superadminDeleteOrganizationContact",
+      "Remove an outdated business contact, retaining only action context in audit",
+      undefined,
+      z.toJSONSchema(superadminContactDeleteSchema),
+      contactTarget,
+    ),
+  },
+  "/api/superadmin/organizations/{id}/contacts/{contactId}/reveal": {
+    post: operation(
+      "superadminRevealOrganizationContact",
+      "Audit purpose before revealing one business contact; operator or owner and recent verification required",
+      z.toJSONSchema(superadminContactSchema),
+      reason,
+      contactTarget,
+    ),
   },
   "/api/superadmin/people/{id}/reveal": {
     post: mutation(

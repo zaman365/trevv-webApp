@@ -19,6 +19,10 @@ export const superadminOverviewSchema = z.object({
   pendingInvitations: z.number().int().nonnegative(),
   failedDeliveries: z.number().int().nonnegative(),
   auditRetentionDays: z.number().int().positive(),
+  missingContacts: z.number().int().nonnegative(),
+  missingOwners: z.number().int().nonnegative(),
+  reviewsDue: z.number().int().nonnegative(),
+  newOrganizations: z.number().int().nonnegative(),
 });
 export const superadminDirectoryKindSchema = z.enum([
   "organizations",
@@ -44,6 +48,115 @@ export const superadminReasonSchema = z.string().trim().min(10).max(240);
 export const superadminReasonInputSchema = z
   .object({ reason: superadminReasonSchema })
   .strict();
+export const superadminContactFieldsSchema = z
+  .object({
+    kind: z.enum(["primary", "billing", "technical", "security", "other"]),
+    name: z.string().trim().min(2).max(100),
+    jobTitle: z.string().trim().max(100),
+    email: z.string().trim().email().max(254),
+    phone: z.union([z.literal(""), z.string().regex(/^\+[1-9]\d{6,14}$/u)]),
+  })
+  .strict();
+export const superadminContactInputSchema = superadminContactFieldsSchema
+  .extend({
+    version: z.number().int().nonnegative(),
+    reason: superadminReasonSchema,
+  })
+  .strict();
+export const superadminContactDeleteSchema = superadminReasonInputSchema
+  .extend({
+    version: z.number().int().positive(),
+  })
+  .strict();
+export const superadminOrganizationProfileSchema = z
+  .object({
+    legalName: z.string().trim().max(160),
+    website: z.union([
+      z.literal(""),
+      z
+        .string()
+        .trim()
+        .url()
+        .max(300)
+        .regex(/^https?:\/\//iu),
+    ]),
+    industry: z.string().trim().max(100),
+    country: z.string().trim().max(80),
+    city: z.string().trim().max(100),
+    stage: z.enum(["onboarding", "established", "needs_review"]),
+    priority: z.enum(["standard", "priority", "urgent"]),
+    nextReviewAt: z.string().date().nullable(),
+    version: z.number().int().nonnegative(),
+  })
+  .strict();
+export const superadminOrganizationUpdateSchema =
+  superadminOrganizationProfileSchema
+    .extend({
+      reason: superadminReasonSchema,
+    })
+    .strict();
+export const superadminContactSchema = z.object({
+  id: z.string(),
+  kind: superadminContactFieldsSchema.shape.kind,
+  name: z.string(),
+  jobTitle: z.string(),
+  email: z.string(),
+  phone: z.string(),
+  version: z.number().int().positive(),
+  updatedAt: z.string(),
+});
+export const superadminOrganizationDetailSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  locale: z.string(),
+  timezone: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string().nullable(),
+  memberCount: z.number().int(),
+  ownerCount: z.number().int(),
+  workspaceCount: z.number().int(),
+  pendingInvitations: z.number().int(),
+  failedDeliveries: z.number().int(),
+  profile: superadminOrganizationProfileSchema,
+  contacts: z.array(superadminContactSchema).max(12),
+});
+export const superadminDirectoryFilters = {
+  organizations: [
+    "all",
+    "missing_contact",
+    "missing_owner",
+    "onboarding",
+    "needs_review",
+    "review_due",
+  ],
+  people: ["all", "verified", "unverified", "has_sessions", "no_organization"],
+  invitations: [
+    "all",
+    "pending",
+    "expired",
+    "accepted",
+    "revoked",
+    "delivery_failed",
+  ],
+  administrators: [
+    "all",
+    "owner",
+    "operator",
+    "auditor",
+    "setup_pending",
+    "disabled",
+  ],
+  audit: ["all", "changes", "contact_access", "reads"],
+} as const;
+export const superadminDirectoryQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(0).max(40_000).default(0),
+    q: z.string().max(100).default(""),
+    filter: z.string().max(40).default("all"),
+    organizationId: z.string().min(1).max(128).optional(),
+  })
+  .strict();
 export const createSuperadminOrganizationSchema = z
   .object({
     name: z.string().trim().min(2).max(100),
@@ -54,6 +167,7 @@ export const createSuperadminOrganizationSchema = z
       .max(64)
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
     ownerEmail: z.string().trim().email().max(254),
+    contact: superadminContactFieldsSchema.optional(),
     reason: superadminReasonSchema,
   })
   .strict();
@@ -80,6 +194,10 @@ export const superadminPhoneSchema = z
   })
   .strict();
 export type SuperadminSession = z.infer<typeof superadminSessionSchema>;
+export type SuperadminOrganizationDetail = z.infer<
+  typeof superadminOrganizationDetailSchema
+>;
+export type SuperadminContact = z.infer<typeof superadminContactSchema>;
 export type SuperadminOverview = z.infer<typeof superadminOverviewSchema>;
 export type SuperadminDirectoryResult = z.infer<
   typeof superadminDirectorySchema
