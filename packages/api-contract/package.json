@@ -19,6 +19,10 @@
     "./superadmin": {
       "production": "./dist/superadmin.js",
       "default": "./src/superadmin.ts"
+    },
+    "./report-plan": {
+      "production": "./dist/report-plan.js",
+      "default": "./src/report-plan.ts"
     }
   },
   "scripts": {

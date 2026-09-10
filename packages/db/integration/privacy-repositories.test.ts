@@ -167,7 +167,7 @@ describe("privacy data-lifecycle repositories", () => {
         providerRevocation: "not_applicable_no_provider_enabled",
         effectsApplied: false,
         submission: {
-          inventoryVersion: "2026-08-29.1",
+          inventoryVersion: "2026-09-10.1",
           policyVersion: "2026-08-29.1",
           deadlineBasis: "engineering_30_day_review_target",
           retention: expect.arrayContaining([

@@ -51,7 +51,7 @@ export interface RetentionPolicyProjection {
   enforcementStatus: "not_implemented";
 }
 
-export const privacyInventoryVersion = "2026-08-29.1";
+export const privacyInventoryVersion = "2026-09-10.1";
 export const privacyPolicyVersion = "2026-08-29.1";
 export const privacyDataInventory = [
   {
@@ -72,7 +72,13 @@ export const privacyDataInventory = [
   },
   {
     category: "work",
-    examples: ["work items", "decisions", "reviews", "evidence"],
+    examples: [
+      "work items",
+      "decisions",
+      "reviews",
+      "evidence",
+      "member reports and plans (including private drafts)",
+    ],
     purpose: "Provide the founder operating workflow and its history.",
     classification: "customer_content",
     defaultRetentionDays: 730,

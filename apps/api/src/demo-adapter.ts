@@ -160,7 +160,17 @@ export function createDemoAdapter(): DemoAdapter {
     },
   };
 
+  const reportPlansUnavailable = async (): Promise<never> => {
+    throw demoUnavailable(
+      "Server-saved member reports and plans require a live account. The demo uses separate browser-only drafts.",
+    );
+  };
   const dataPlane: DataPlane = {
+    listReportPlans: reportPlansUnavailable,
+    getReportPlan: reportPlansUnavailable,
+    createReportPlan: reportPlansUnavailable,
+    updateReportPlan: reportPlansUnavailable,
+    archiveReportPlan: reportPlansUnavailable,
     mode: "demo",
     async readiness() {
       return { database: "not_applicable" };

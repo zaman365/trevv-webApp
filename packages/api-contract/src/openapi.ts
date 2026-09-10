@@ -1,3 +1,4 @@
+import { reportPlanOpenApiPaths } from "./report-plan-openapi.js";
 import { superadminOpenApiPaths } from "./superadmin-openapi.js";
 
 export const openApiDocument = {
@@ -21,6 +22,7 @@ export const openApiDocument = {
     { name: "Waiting" },
     { name: "Management Memory" },
     { name: "Reviews" },
+    { name: "Report and plan" },
     { name: "Insights" },
     { name: "Blueprints" },
     { name: "Commercial" },
@@ -39,6 +41,7 @@ export const openApiDocument = {
   ],
   paths: {
     ...superadminOpenApiPaths,
+    ...reportPlanOpenApiPaths,
     "/api/v1/health": {
       get: {
         security: [],

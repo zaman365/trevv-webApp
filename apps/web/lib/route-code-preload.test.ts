@@ -62,6 +62,16 @@ describe("static route warming", () => {
       ).toHaveLength(2);
     }
   });
+  it("loads member reports separately while preserving workspace reviews", () => {
+    for (const mode of ["demo", "live"] as const) {
+      expect(routeCodeModules("/app/workspaces/one/report-plan", mode)).toEqual(
+        ["moduleLoader", "reportPlan"],
+      );
+      expect(
+        routeCodeModules("/app/workspaces/one/reviews", mode),
+      ).not.toContain("reportPlan");
+    }
+  });
   it("opens Dashboard from both the workspace home and explicit dashboard URL", () => {
     for (const mode of ["demo", "live"] as const) {
       expect(routeCodeModules("/app/workspaces/one", mode)).toEqual(

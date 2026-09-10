@@ -422,18 +422,6 @@ function WorkspaceChrome({
 
   const nav = [
     ["dashboard", "Dashboard", scopedHref("dashboard"), ChartColumn, undefined],
-    ...(!appSession.demo
-      ? [
-          [
-            "planning",
-            "Projects & sprints",
-            scopedHref("planning"),
-            FolderKanban,
-            undefined,
-          ] as const,
-        ]
-      : []),
-    ["calendar", "Calendar", scopedHref("calendar"), CalendarDays, undefined],
     [
       "attention",
       copy.nav.attention,
@@ -448,6 +436,18 @@ function WorkspaceChrome({
       ClipboardCheck,
       undefined,
     ],
+    ["teams", copy.nav.teams, scopedHref("teams"), Users, undefined],
+    ...(!appSession.demo
+      ? [
+          [
+            "planning",
+            "Sprints",
+            scopedHref("planning"),
+            FolderKanban,
+            undefined,
+          ] as const,
+        ]
+      : []),
     ["inbox", copy.nav.inbox, scopedHref("inbox"), Inbox, undefined],
     [
       "messages",
@@ -456,11 +456,12 @@ function WorkspaceChrome({
       MessageCircleMore,
       appSession.demo ? 4 : undefined,
     ],
+    ["calendar", "Calendar", scopedHref("calendar"), CalendarDays, undefined],
     [
-      "guide",
-      "Getting started",
-      contextProject ? scopedHref("guide") : "/app/guide",
-      ClipboardCheck,
+      "report-plan",
+      "Report and plan",
+      scopedHref("report-plan"),
+      BookOpenText,
       undefined,
     ],
   ] as const;
@@ -708,16 +709,6 @@ function WorkspaceChrome({
             <Grid2X2 size={17} />
             <span>Portfolio</span>
           </Link>
-          {!appSession.demo ? (
-            <Link
-              className={`nav-item ${active === "myWork" && !workspaceSlug ? "active" : ""}`}
-              href="/app/my-work"
-              onClick={() => setOpen(false)}
-            >
-              <ClipboardCheck size={17} />
-              <span>All my work</span>
-            </Link>
-          ) : null}
           <p className="nav-label spaced">Workspace</p>
           {contextProject ? (
             <>
@@ -748,13 +739,6 @@ function WorkspaceChrome({
                   </Link>
                 );
               })}
-              <Link
-                className={`nav-item ${active === "teams" ? "active" : ""}`}
-                href={scopedHref("teams")}
-              >
-                <Users size={17} />
-                <span>{copy.nav.teams}</span>
-              </Link>
               <p className="nav-label spaced">Work</p>
               <Link
                 className={`nav-item ${active === "decisions" ? "active" : ""}`}
@@ -851,6 +835,15 @@ function WorkspaceChrome({
                   <Lightbulb size={11} />
                 </span>
               </button>
+              <Link
+                className={`nav-item ${active === "guide" ? "active" : ""}`}
+                href={scopedHref("guide")}
+                aria-current={active === "guide" ? "page" : undefined}
+                onClick={() => setOpen(false)}
+              >
+                <ClipboardCheck size={17} />
+                <span>Getting started</span>
+              </Link>
               {appSession.platformRole === "owner" ? (
                 <Link
                   className={`nav-item ${active === "platform" ? "active" : ""}`}
@@ -1083,8 +1076,7 @@ function WorkspaceChrome({
                   aria-label="Create work"
                   aria-describedby="create-work-shortcut"
                 >
-                  <Plus size={16} />
-                  <span className="topbar-create-label">Create</span>
+                  <Plus size={26} strokeWidth={2.5} aria-hidden="true" />
                   <span
                     className="topbar-create-shortcut"
                     id="create-work-shortcut"

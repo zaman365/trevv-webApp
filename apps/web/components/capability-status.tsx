@@ -11,10 +11,8 @@ export function TechnicalPreviewBadge({
 }: {
   mode?: "demo" | "live";
 }) {
-  const live = mode === "live";
-  const label = live
-    ? "Authenticated preview · canonical changes save to TREVV"
-    : productPreview.conciseLabel;
+  if (mode === "live") return null;
+  const label = productPreview.conciseLabel;
   return (
     <span
       className={styles.previewBadge}
@@ -24,12 +22,8 @@ export function TechnicalPreviewBadge({
     >
       <span className={styles.previewBadgeDot} aria-hidden="true" />
       <span className={styles.previewBadgeText}>
-        <strong>{live ? "Authenticated preview" : productPreview.stage}</strong>
-        <small>
-          {live
-            ? "Canonical work · server-saved"
-            : "Fictional data · browser-only"}
-        </small>
+        <strong>{productPreview.stage}</strong>
+        <small>Fictional data · browser-only</small>
       </span>
     </span>
   );

@@ -3,6 +3,7 @@ export const workspaceViews = [
   "planning",
   "guide",
   "calendar",
+  "report-plan",
   "attention",
   "my-work",
   "inbox",

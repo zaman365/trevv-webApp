@@ -1,3 +1,5 @@
+import type { ReportPlanDto } from "@founderhq/api-contract/report-plan";
+import type { MemberReportPlanRecord } from "@founderhq/db";
 import type {
   AttentionSignalDto,
   BoardDto,
@@ -1201,6 +1203,51 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       } satisfies WorkspaceCalendarDto;
     },
 
+    async listReportPlans(context, workspaceId, filters) {
+      requireWorkspaceAccess(context.access, "read", workspaceId);
+      const repositories = scoped(options.repositories, context);
+      const result = await repositories.reportPlans.list(workspaceId, filters);
+      return { ...result, data: result.data.map(toReportPlanDto) };
+    },
+    async getReportPlan(context, id) {
+      const record = await scoped(
+        options.repositories,
+        context,
+      ).reportPlans.get(id);
+      requireWorkspaceAccess(context.access, "read", record.workspaceId);
+      return toReportPlanDto(record);
+    },
+    async createReportPlan(context, workspaceId, input) {
+      requireWorkspaceAccess(context.access, "create", workspaceId);
+      const result = await scoped(
+        options.repositories,
+        context,
+      ).reportPlans.create(workspaceId, input, mutation(context));
+      return { ...result, value: toReportPlanDto(result.value) };
+    },
+    async updateReportPlan(context, id, expectedVersion, input) {
+      const repository = scoped(options.repositories, context).reportPlans;
+      const current = await repository.get(id);
+      requireWorkspaceAccess(context.access, "update", current.workspaceId);
+      const result = await repository.update(
+        id,
+        expectedVersion,
+        input,
+        mutation(context),
+      );
+      return { ...result, value: toReportPlanDto(result.value) };
+    },
+    async archiveReportPlan(context, id, expectedVersion) {
+      const repository = scoped(options.repositories, context).reportPlans;
+      const current = await repository.get(id);
+      requireWorkspaceAccess(context.access, "update", current.workspaceId);
+      const result = await repository.archive(
+        id,
+        expectedVersion,
+        mutation(context),
+      );
+      return { ...result, value: toReportPlanDto(result.value) };
+    },
     async createCalendarEvent(context, workspaceId, input) {
       requireWorkspaceAccess(context.access, "create", workspaceId);
       const result = await scoped(
@@ -3064,4 +3111,27 @@ function invalidManagementValue(field: string): DataPlaneError {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toReportPlanDto(record: MemberReportPlanRecord): ReportPlanDto {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    authorId: record.authorId,
+    authorName: record.authorName,
+    kind: record.kind,
+    title: record.title,
+    period: record.period,
+    periodStart: record.periodStart,
+    periodEnd: record.periodEnd,
+    context: record.context,
+    health: record.health,
+    state: record.state,
+    content: record.content,
+    version: record.version,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    publishedAt: record.publishedAt?.toISOString() ?? null,
+    archivedAt: record.archivedAt?.toISOString() ?? null,
+  };
 }

@@ -7,6 +7,7 @@ export type ActiveWorkspacePage =
   | "planning"
   | "guide"
   | "calendar"
+  | "report-plan"
   | "attention"
   | "myWork"
   | "inbox"

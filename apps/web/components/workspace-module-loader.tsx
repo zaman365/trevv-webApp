@@ -26,6 +26,13 @@ const DashboardExperience = dynamic(
     ),
   { loading },
 );
+const ReportPlanExperience = dynamic(
+  () =>
+    import("./report-plan-experience").then(
+      (module) => module.ReportPlanExperience,
+    ),
+  { loading },
+);
 const CalendarExperience = dynamic(
   () =>
     import("./calendar-experience").then((module) => module.CalendarExperience),
@@ -137,6 +144,8 @@ export function WorkspaceModuleLoader({
     ) : (
       <TrevvGuide workspaceSlug={workspaceSlug} />
     );
+  if (view === "report-plan")
+    return <ReportPlanExperience workspaceSlug={workspaceSlug} />;
   if (view === "calendar") {
     return <CalendarExperience workspaceSlug={workspaceSlug} />;
   }

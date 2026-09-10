@@ -1,4 +1,10 @@
 import type {
+  ReportPlanDto,
+  ReportPlanList,
+  ReportPlanQuery,
+  SaveReportPlanInput,
+} from "@founderhq/api-contract/report-plan";
+import type {
   AppSyncSummary,
   ApprovalTransitionInput,
   AssignWorkItemInput,
@@ -119,6 +125,29 @@ export interface ImportPreviewInput {
 }
 
 export interface DataPlane {
+  listReportPlans(
+    context: ApiRequestContext,
+    workspaceId: string,
+    filters: ReportPlanQuery,
+  ): Promise<ReportPlanList>;
+  getReportPlan(context: ApiRequestContext, id: string): Promise<ReportPlanDto>;
+  createReportPlan(
+    context: ApiMutationContext,
+    workspaceId: string,
+    input: SaveReportPlanInput,
+  ): Promise<MutationResult<ReportPlanDto>>;
+  updateReportPlan(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: SaveReportPlanInput,
+  ): Promise<MutationResult<ReportPlanDto>>;
+  archiveReportPlan(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+  ): Promise<MutationResult<ReportPlanDto>>;
+
   readonly mode: ApiMode;
   getSnapshotRevision?(context: ApiRequestContext): Promise<string | null>;
   getConversationUnread?(

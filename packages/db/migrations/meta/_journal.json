@@ -169,6 +169,13 @@
       "when": 1789026889569,
       "tag": "0023_bored_jackal",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789031654481,
+      "tag": "0024_wild_jamie_braddock",
+      "breakpoints": true
     }
   ]
 }

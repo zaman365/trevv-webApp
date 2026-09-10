@@ -18,6 +18,7 @@
     { "name": "Waiting" },
     { "name": "Management Memory" },
     { "name": "Reviews" },
+    { "name": "Report and plan" },
     { "name": "Insights" },
     { "name": "Blueprints" },
     { "name": "Commercial" },
@@ -1490,6 +1491,1043 @@
           },
           "409": { "description": "Conflict or last-owner protection" },
           "429": { "description": "Administrator rate limit exceeded" }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/report-plans": {
+      "get": {
+        "operationId": "listReportPlans",
+        "summary": "List published workspace updates and your private drafts",
+        "tags": ["Report and plan"],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          { "name": "kind", "in": "query", "schema": { "type": "string" } },
+          { "name": "authorId", "in": "query", "schema": { "type": "string" } },
+          { "name": "state", "in": "query", "schema": { "type": "string" } },
+          {
+            "name": "attention",
+            "in": "query",
+            "schema": { "type": "string" }
+          },
+          { "name": "from", "in": "query", "schema": { "type": "string" } },
+          { "name": "to", "in": "query", "schema": { "type": "string" } },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            },
+            "description": "24 records per page, filtered before pagination. Date ranges match overlapping report/plan periods."
+          }
+        ],
+        "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
+        "responses": {
+          "200": {
+            "description": "Scoped report and plan response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["report", "plan"]
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "period": {
+                            "type": "string",
+                            "enum": ["day", "week", "month", "sprint", "custom"]
+                          },
+                          "periodStart": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "periodEnd": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "context": { "type": "string", "maxLength": 240 },
+                          "health": {
+                            "type": "string",
+                            "enum": ["on_track", "at_risk", "blocked", "done"]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": ["draft", "published"]
+                          },
+                          "content": {
+                            "type": "object",
+                            "properties": {
+                              "workingOn": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "completed": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "blockers": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "supportNeeded": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "nextSteps": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "goals": { "type": "string", "maxLength": 4000 },
+                              "successCriteria": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "dependencies": {
+                                "type": "string",
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": [
+                              "workingOn",
+                              "completed",
+                              "blockers",
+                              "supportNeeded",
+                              "nextSteps",
+                              "goals",
+                              "successCriteria",
+                              "dependencies"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "id": { "type": "string", "minLength": 1 },
+                          "workspaceId": { "type": "string", "minLength": 1 },
+                          "authorId": { "type": "string", "minLength": 1 },
+                          "authorName": { "type": "string" },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          },
+                          "publishedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "archivedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              },
+                              { "type": "null" }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "title",
+                          "period",
+                          "periodStart",
+                          "periodEnd",
+                          "context",
+                          "health",
+                          "state",
+                          "content",
+                          "id",
+                          "workspaceId",
+                          "authorId",
+                          "authorName",
+                          "version",
+                          "createdAt",
+                          "updatedAt",
+                          "publishedAt",
+                          "archivedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "hasMore": { "type": "boolean" }
+                  },
+                  "required": ["data", "page", "hasMore"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Authentication required" },
+          "403": {
+            "description": "Workspace access or writing permission required"
+          },
+          "404": { "description": "Record not available to this user" },
+          "409": {
+            "description": "Version conflict, invalid state change, or reused idempotency key"
+          },
+          "422": { "description": "Invalid fields, dates or mutation headers" },
+          "428": { "description": "Current record version required" }
+        }
+      },
+      "post": {
+        "operationId": "createReportPlan",
+        "summary": "Save a private draft or publish a member report or plan",
+        "tags": ["Report and plan"],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "kind": { "type": "string", "enum": ["report", "plan"] },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "period": {
+                    "type": "string",
+                    "enum": ["day", "week", "month", "sprint", "custom"]
+                  },
+                  "periodStart": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  "periodEnd": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  "context": { "type": "string", "maxLength": 240 },
+                  "health": {
+                    "type": "string",
+                    "enum": ["on_track", "at_risk", "blocked", "done"]
+                  },
+                  "state": { "type": "string", "enum": ["draft", "published"] },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "workingOn": { "type": "string", "maxLength": 4000 },
+                      "completed": { "type": "string", "maxLength": 4000 },
+                      "blockers": { "type": "string", "maxLength": 4000 },
+                      "supportNeeded": { "type": "string", "maxLength": 4000 },
+                      "nextSteps": { "type": "string", "maxLength": 4000 },
+                      "goals": { "type": "string", "maxLength": 4000 },
+                      "successCriteria": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "dependencies": { "type": "string", "maxLength": 4000 }
+                    },
+                    "required": [
+                      "workingOn",
+                      "completed",
+                      "blockers",
+                      "supportNeeded",
+                      "nextSteps",
+                      "goals",
+                      "successCriteria",
+                      "dependencies"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "title",
+                  "period",
+                  "periodStart",
+                  "periodEnd",
+                  "context",
+                  "health",
+                  "state",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Scoped report and plan response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160
+                    },
+                    "period": {
+                      "type": "string",
+                      "enum": ["day", "week", "month", "sprint", "custom"]
+                    },
+                    "periodStart": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "periodEnd": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "context": { "type": "string", "maxLength": 240 },
+                    "health": {
+                      "type": "string",
+                      "enum": ["on_track", "at_risk", "blocked", "done"]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["draft", "published"]
+                    },
+                    "content": {
+                      "type": "object",
+                      "properties": {
+                        "workingOn": { "type": "string", "maxLength": 4000 },
+                        "completed": { "type": "string", "maxLength": 4000 },
+                        "blockers": { "type": "string", "maxLength": 4000 },
+                        "supportNeeded": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "nextSteps": { "type": "string", "maxLength": 4000 },
+                        "goals": { "type": "string", "maxLength": 4000 },
+                        "successCriteria": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "dependencies": { "type": "string", "maxLength": 4000 }
+                      },
+                      "required": [
+                        "workingOn",
+                        "completed",
+                        "blockers",
+                        "supportNeeded",
+                        "nextSteps",
+                        "goals",
+                        "successCriteria",
+                        "dependencies"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "id": { "type": "string", "minLength": 1 },
+                    "workspaceId": { "type": "string", "minLength": 1 },
+                    "authorId": { "type": "string", "minLength": 1 },
+                    "authorName": { "type": "string" },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "archivedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "title",
+                    "period",
+                    "periodStart",
+                    "periodEnd",
+                    "context",
+                    "health",
+                    "state",
+                    "content",
+                    "id",
+                    "workspaceId",
+                    "authorId",
+                    "authorName",
+                    "version",
+                    "createdAt",
+                    "updatedAt",
+                    "publishedAt",
+                    "archivedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Authentication required" },
+          "403": {
+            "description": "Workspace access or writing permission required"
+          },
+          "404": { "description": "Record not available to this user" },
+          "409": {
+            "description": "Version conflict, invalid state change, or reused idempotency key"
+          },
+          "422": { "description": "Invalid fields, dates or mutation headers" },
+          "428": { "description": "Current record version required" }
+        }
+      }
+    },
+    "/api/v1/report-plans/{id}": {
+      "get": {
+        "operationId": "getReportPlan",
+        "summary": "Read an accessible report or plan",
+        "tags": ["Report and plan"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
+        "responses": {
+          "200": {
+            "description": "Scoped report and plan response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160
+                    },
+                    "period": {
+                      "type": "string",
+                      "enum": ["day", "week", "month", "sprint", "custom"]
+                    },
+                    "periodStart": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "periodEnd": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "context": { "type": "string", "maxLength": 240 },
+                    "health": {
+                      "type": "string",
+                      "enum": ["on_track", "at_risk", "blocked", "done"]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["draft", "published"]
+                    },
+                    "content": {
+                      "type": "object",
+                      "properties": {
+                        "workingOn": { "type": "string", "maxLength": 4000 },
+                        "completed": { "type": "string", "maxLength": 4000 },
+                        "blockers": { "type": "string", "maxLength": 4000 },
+                        "supportNeeded": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "nextSteps": { "type": "string", "maxLength": 4000 },
+                        "goals": { "type": "string", "maxLength": 4000 },
+                        "successCriteria": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "dependencies": { "type": "string", "maxLength": 4000 }
+                      },
+                      "required": [
+                        "workingOn",
+                        "completed",
+                        "blockers",
+                        "supportNeeded",
+                        "nextSteps",
+                        "goals",
+                        "successCriteria",
+                        "dependencies"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "id": { "type": "string", "minLength": 1 },
+                    "workspaceId": { "type": "string", "minLength": 1 },
+                    "authorId": { "type": "string", "minLength": 1 },
+                    "authorName": { "type": "string" },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "archivedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "title",
+                    "period",
+                    "periodStart",
+                    "periodEnd",
+                    "context",
+                    "health",
+                    "state",
+                    "content",
+                    "id",
+                    "workspaceId",
+                    "authorId",
+                    "authorName",
+                    "version",
+                    "createdAt",
+                    "updatedAt",
+                    "publishedAt",
+                    "archivedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Authentication required" },
+          "403": {
+            "description": "Workspace access or writing permission required"
+          },
+          "404": { "description": "Record not available to this user" },
+          "409": {
+            "description": "Version conflict, invalid state change, or reused idempotency key"
+          },
+          "422": { "description": "Invalid fields, dates or mutation headers" },
+          "428": { "description": "Current record version required" }
+        }
+      },
+      "patch": {
+        "operationId": "updateReportPlan",
+        "summary": "Update your own report or plan",
+        "tags": ["Report and plan"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Quoted record version, for example \"0\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "kind": { "type": "string", "enum": ["report", "plan"] },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "period": {
+                    "type": "string",
+                    "enum": ["day", "week", "month", "sprint", "custom"]
+                  },
+                  "periodStart": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  "periodEnd": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  "context": { "type": "string", "maxLength": 240 },
+                  "health": {
+                    "type": "string",
+                    "enum": ["on_track", "at_risk", "blocked", "done"]
+                  },
+                  "state": { "type": "string", "enum": ["draft", "published"] },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "workingOn": { "type": "string", "maxLength": 4000 },
+                      "completed": { "type": "string", "maxLength": 4000 },
+                      "blockers": { "type": "string", "maxLength": 4000 },
+                      "supportNeeded": { "type": "string", "maxLength": 4000 },
+                      "nextSteps": { "type": "string", "maxLength": 4000 },
+                      "goals": { "type": "string", "maxLength": 4000 },
+                      "successCriteria": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "dependencies": { "type": "string", "maxLength": 4000 }
+                    },
+                    "required": [
+                      "workingOn",
+                      "completed",
+                      "blockers",
+                      "supportNeeded",
+                      "nextSteps",
+                      "goals",
+                      "successCriteria",
+                      "dependencies"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "title",
+                  "period",
+                  "periodStart",
+                  "periodEnd",
+                  "context",
+                  "health",
+                  "state",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scoped report and plan response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160
+                    },
+                    "period": {
+                      "type": "string",
+                      "enum": ["day", "week", "month", "sprint", "custom"]
+                    },
+                    "periodStart": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "periodEnd": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "context": { "type": "string", "maxLength": 240 },
+                    "health": {
+                      "type": "string",
+                      "enum": ["on_track", "at_risk", "blocked", "done"]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["draft", "published"]
+                    },
+                    "content": {
+                      "type": "object",
+                      "properties": {
+                        "workingOn": { "type": "string", "maxLength": 4000 },
+                        "completed": { "type": "string", "maxLength": 4000 },
+                        "blockers": { "type": "string", "maxLength": 4000 },
+                        "supportNeeded": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "nextSteps": { "type": "string", "maxLength": 4000 },
+                        "goals": { "type": "string", "maxLength": 4000 },
+                        "successCriteria": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "dependencies": { "type": "string", "maxLength": 4000 }
+                      },
+                      "required": [
+                        "workingOn",
+                        "completed",
+                        "blockers",
+                        "supportNeeded",
+                        "nextSteps",
+                        "goals",
+                        "successCriteria",
+                        "dependencies"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "id": { "type": "string", "minLength": 1 },
+                    "workspaceId": { "type": "string", "minLength": 1 },
+                    "authorId": { "type": "string", "minLength": 1 },
+                    "authorName": { "type": "string" },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "archivedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "title",
+                    "period",
+                    "periodStart",
+                    "periodEnd",
+                    "context",
+                    "health",
+                    "state",
+                    "content",
+                    "id",
+                    "workspaceId",
+                    "authorId",
+                    "authorName",
+                    "version",
+                    "createdAt",
+                    "updatedAt",
+                    "publishedAt",
+                    "archivedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Authentication required" },
+          "403": {
+            "description": "Workspace access or writing permission required"
+          },
+          "404": { "description": "Record not available to this user" },
+          "409": {
+            "description": "Version conflict, invalid state change, or reused idempotency key"
+          },
+          "422": { "description": "Invalid fields, dates or mutation headers" },
+          "428": { "description": "Current record version required" }
+        }
+      },
+      "delete": {
+        "operationId": "archiveReportPlan",
+        "summary": "Archive your own report or plan without deleting its history",
+        "tags": ["Report and plan"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "Quoted record version, for example \"0\".",
+            "schema": { "type": "string" }
+          }
+        ],
+        "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
+        "responses": {
+          "200": {
+            "description": "Scoped report and plan response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160
+                    },
+                    "period": {
+                      "type": "string",
+                      "enum": ["day", "week", "month", "sprint", "custom"]
+                    },
+                    "periodStart": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "periodEnd": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "context": { "type": "string", "maxLength": 240 },
+                    "health": {
+                      "type": "string",
+                      "enum": ["on_track", "at_risk", "blocked", "done"]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["draft", "published"]
+                    },
+                    "content": {
+                      "type": "object",
+                      "properties": {
+                        "workingOn": { "type": "string", "maxLength": 4000 },
+                        "completed": { "type": "string", "maxLength": 4000 },
+                        "blockers": { "type": "string", "maxLength": 4000 },
+                        "supportNeeded": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "nextSteps": { "type": "string", "maxLength": 4000 },
+                        "goals": { "type": "string", "maxLength": 4000 },
+                        "successCriteria": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "dependencies": { "type": "string", "maxLength": 4000 }
+                      },
+                      "required": [
+                        "workingOn",
+                        "completed",
+                        "blockers",
+                        "supportNeeded",
+                        "nextSteps",
+                        "goals",
+                        "successCriteria",
+                        "dependencies"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "id": { "type": "string", "minLength": 1 },
+                    "workspaceId": { "type": "string", "minLength": 1 },
+                    "authorId": { "type": "string", "minLength": 1 },
+                    "authorName": { "type": "string" },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "publishedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    },
+                    "archivedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        { "type": "null" }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "title",
+                    "period",
+                    "periodStart",
+                    "periodEnd",
+                    "context",
+                    "health",
+                    "state",
+                    "content",
+                    "id",
+                    "workspaceId",
+                    "authorId",
+                    "authorName",
+                    "version",
+                    "createdAt",
+                    "updatedAt",
+                    "publishedAt",
+                    "archivedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "description": "Authentication required" },
+          "403": {
+            "description": "Workspace access or writing permission required"
+          },
+          "404": { "description": "Record not available to this user" },
+          "409": {
+            "description": "Version conflict, invalid state change, or reused idempotency key"
+          },
+          "422": { "description": "Invalid fields, dates or mutation headers" },
+          "428": { "description": "Current record version required" }
         }
       }
     },

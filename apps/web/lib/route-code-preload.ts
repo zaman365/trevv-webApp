@@ -12,6 +12,7 @@ const modules = {
   board: () => import("../components/board-experience"),
   liveBoard: () => import("../components/live-board-experience"),
   calendar: () => import("../components/calendar-experience"),
+  reportPlan: () => import("../components/report-plan-experience"),
   dashboard: () => import("../components/dashboard-experience"),
   management: () => import("../components/management-experience"),
   focus: () => import("../components/focus-experience"),
@@ -75,6 +76,7 @@ export function routeCodeModules(
   if (view === "guide") component = "guide";
   else if (view === "planning") component = live ? "planning" : "guide";
   else if (view === "calendar") component = "calendar";
+  else if (view === "report-plan") component = "reportPlan";
   else if (live)
     component =
       view === "dashboard"

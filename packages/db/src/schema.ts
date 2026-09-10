@@ -1173,6 +1173,91 @@ export const workspaceUpdates = pgTable(
     ),
   ],
 );
+export interface MemberReportPlanContent {
+  workingOn: string;
+  completed: string;
+  blockers: string;
+  supportNeeded: string;
+  nextSteps: string;
+  goals: string;
+  successCriteria: string;
+  dependencies: string;
+}
+
+export const memberReportPlans = pgTable(
+  "member_report_plans",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    kind: text("kind", { enum: ["report", "plan"] }).notNull(),
+    title: text("title").notNull(),
+    period: text("period", {
+      enum: ["day", "week", "month", "sprint", "custom"],
+    }).notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    context: text("context").notNull().default(""),
+    health: text("health", { enum: ["on_track", "at_risk", "blocked", "done"] })
+      .notNull()
+      .default("on_track"),
+    state: text("state", { enum: ["draft", "published"] })
+      .notNull()
+      .default("draft"),
+    content: jsonb("content").$type<MemberReportPlanContent>().notNull(),
+    version: integer("version").notNull().default(0),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "member_report_plans_org_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.authorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "member_report_plans_org_author_fk",
+    }),
+    index("member_report_plans_workspace_period_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.periodStart,
+    ),
+    index("member_report_plans_author_idx").on(
+      table.organizationId,
+      table.authorId,
+    ),
+    check(
+      "member_report_plans_dates_check",
+      sql`${table.periodEnd} >= ${table.periodStart} AND (${table.period} <> 'day' OR ${table.periodEnd} = ${table.periodStart})`,
+    ),
+    check(
+      "member_report_plans_kind_check",
+      sql`${table.kind} IN ('report', 'plan')`,
+    ),
+    check(
+      "member_report_plans_period_check",
+      sql`${table.period} IN ('day', 'week', 'month', 'sprint', 'custom')`,
+    ),
+    check(
+      "member_report_plans_health_check",
+      sql`${table.health} IN ('on_track', 'at_risk', 'blocked', 'done')`,
+    ),
+    check(
+      "member_report_plans_state_check",
+      sql`(${table.state} = 'draft' AND ${table.publishedAt} IS NULL) OR (${table.state} = 'published' AND ${table.publishedAt} IS NOT NULL)`,
+    ),
+    check("member_report_plans_version_check", sql`${table.version} >= 0`),
+  ],
+);
+
 export const workspaceMetrics = pgTable("workspace_metrics", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),

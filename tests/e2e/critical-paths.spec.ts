@@ -113,10 +113,10 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
   expect(primaryNavLabels.indexOf("Dashboard")).toBe(
     primaryNavLabels.indexOf("Portfolio") + 1,
   );
-  // The setup guide remains discoverable after Dashboard becomes the workspace home.
+  // The setup guide remains discoverable immediately after Learning Center.
   await expect(
     page.locator(
-      `nav[aria-label="Primary navigation"] a[href="${workspaceRoute("guide")}"]`,
+      `.sidebar-foot .learning-center-nav + a[href="${workspaceRoute("guide")}"]`,
     ),
   ).toHaveText("Getting started");
   // Inside a workspace the reporting hierarchy is Workspace/Team/Personal;

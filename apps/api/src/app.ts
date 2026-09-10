@@ -1,4 +1,8 @@
 import {
+  reportPlanQuerySchema,
+  saveReportPlanSchema,
+} from "@founderhq/api-contract/report-plan";
+import {
   acceptInvitationSchema,
   approvalTransitionSchema,
   assignWorkItemSchema,
@@ -2030,6 +2034,131 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     },
   );
 
+  api.get(
+    "/api/v1/workspaces/:workspaceId/report-plans",
+    zValidator(
+      "query",
+      reportPlanQuerySchema,
+      queryValidation("Choose valid report filters."),
+    ),
+    async (context) =>
+      context.json(
+        await dependencies.dataPlane.listReportPlans(
+          requestContext(context, clock, idGenerator),
+          context.req.param("workspaceId"),
+          context.req.valid("query"),
+        ),
+      ),
+  );
+  api.get("/api/v1/report-plans/:id", async (context) => {
+    const record = await dependencies.dataPlane.getReportPlan(
+      requestContext(context, clock, idGenerator),
+      context.req.param("id"),
+    );
+    context.header("etag", `"${record.version}"`);
+    return context.json(record);
+  });
+  api.post("/api/v1/workspaces/:workspaceId/report-plans", async (context) => {
+    const parsed = saveReportPlanSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the report or plan fields.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const workspaceId = context.req.param("workspaceId");
+    const result = await dependencies.dataPlane.createReportPlan(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/workspaces/:workspaceId/report-plans",
+        { workspaceId, ...parsed.data },
+        idempotency,
+        201,
+      ),
+      workspaceId,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value, 201);
+  });
+  api.patch("/api/v1/report-plans/:id", async (context) => {
+    const parsed = saveReportPlanSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the report or plan fields.",
+        parsed.error.flatten(),
+      );
+    const version = readIfMatch(context);
+    if (version instanceof Response) return version;
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.updateReportPlan(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/report-plans/:id",
+        { id, ...parsed.data },
+        idempotency,
+        200,
+        version,
+      ),
+      id,
+      version,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+  api.delete("/api/v1/report-plans/:id", async (context) => {
+    const version = readIfMatch(context);
+    if (version instanceof Response) return version;
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.archiveReportPlan(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/report-plans/:id",
+        { id, action: "archive" },
+        idempotency,
+        200,
+        version,
+      ),
+      id,
+      version,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
   api.post(
     "/api/v1/workspaces/:workspaceId/calendar/events",
     async (context) => {
@@ -3161,6 +3290,11 @@ export function createUnavailableLiveDependencies(): {
     updateBoard: unavailable,
     getWorkspaceCalendar: unavailable,
     createCalendarEvent: unavailable,
+    listReportPlans: unavailable,
+    getReportPlan: unavailable,
+    createReportPlan: unavailable,
+    updateReportPlan: unavailable,
+    archiveReportPlan: unavailable,
     updateCalendarEvent: unavailable,
     deleteCalendarEvent: unavailable,
     listInbox: unavailable,

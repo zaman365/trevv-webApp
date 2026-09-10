@@ -20,3 +20,5 @@ export * from "./rate-limit-repository.js";
 export * from "./staging-bootstrap.js";
 export * from "./staging-migration.js";
 export * from "./snapshot-revision.js";
+
+export * from "./report-plan-repositories.js";

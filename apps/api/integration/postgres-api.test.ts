@@ -1,3 +1,6 @@
+import { createReportPlanClient } from "../../../packages/api-client/src/report-plan.js";
+import type { SaveReportPlanInput } from "@founderhq/api-contract/report-plan";
+import { createOrganizationScope, memberReportPlans } from "@founderhq/db";
 import {
   createApiClient,
   TrevvApiError,
@@ -2066,6 +2069,360 @@ describe("PostgreSQL-backed API", () => {
         organizationId: fixture.first.organizationId,
         user: { email: inviteeEmail, role: "member" },
       });
+    } finally {
+      await live.close();
+    }
+  });
+
+  it("persists member reports with author-only drafts, workspace publishing, version checks and idempotent archiving", async () => {
+    const live = createLiveHarness();
+    const reports = (userId: string) =>
+      createReportPlanClient({
+        baseUrl: "http://trevv.test/api/v1",
+        getAccessToken: async () => userId,
+        fetchImpl: async (input, init) => live.app.request(input, init),
+      });
+    const member = reports(fixture.first.memberId);
+    const owner = reports(fixture.first.ownerId);
+    const outsider = reports(fixture.second.ownerId);
+    const workspaceId = fixture.first.visibleWorkspaceId;
+    const input: SaveReportPlanInput = {
+      kind: "report",
+      title: "Member daily delivery",
+      period: "day",
+      periodStart: "2026-09-10",
+      periodEnd: "2026-09-10",
+      context: "Sprint 12",
+      health: "blocked",
+      state: "draft",
+      content: {
+        workingOn: "Preparing the launch checklist",
+        completed: "Verified the onboarding flow",
+        blockers: "Pending brand sign-off",
+        supportNeeded: "Review from the designer by 16:00",
+        nextSteps: "Publish the revised checklist",
+        goals: "",
+        successCriteria: "",
+        dependencies: "",
+      },
+    };
+    try {
+      const key = crypto.randomUUID();
+      const created = await member.create(workspaceId, input, key);
+      const replay = await member.create(workspaceId, input, key);
+      expect(replay).toEqual(created);
+      expect(created).toMatchObject({
+        authorId: fixture.first.memberId,
+        workspaceId,
+        version: 0,
+        state: "draft",
+        publishedAt: null,
+      });
+      expect(
+        (await member.list(workspaceId, { page: 1, state: "draft" })).data.map(
+          (row) => row.id,
+        ),
+      ).toContain(created.id);
+      expect(
+        (
+          await owner.list(workspaceId, {
+            page: 1,
+            authorId: fixture.first.memberId,
+          })
+        ).data,
+      ).toEqual([]);
+      await expect(owner.get(created.id)).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(outsider.get(created.id)).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(
+        member.create(
+          fixture.first.hiddenWorkspaceId,
+          input,
+          crypto.randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        owner.create(fixture.second.workspaceId, input, crypto.randomUUID()),
+      ).rejects.toMatchObject({ status: 404 });
+      const exported = await createPostgresRepositories(seedConnection.db)
+        .forOrganization(
+          createOrganizationScope({
+            organizationId: fixture.first.organizationId,
+            userId: fixture.first.ownerId,
+            requestId: "report-plan-export-test",
+          }),
+        )
+        .exportOrganization();
+      expect(JSON.stringify(exported.reportPlans)).not.toContain(created.id);
+      const publishedInput = { ...input, state: "published" as const };
+      const publishKey = crypto.randomUUID();
+      const published = await member.update(
+        created.id,
+        created.version,
+        publishedInput,
+        publishKey,
+      );
+      expect(
+        await member.update(
+          created.id,
+          created.version,
+          publishedInput,
+          publishKey,
+        ),
+      ).toEqual(published);
+      expect(published).toMatchObject({
+        version: 1,
+        state: "published",
+        publishedAt: now.toISOString(),
+      });
+      expect(await owner.get(created.id)).toEqual(published);
+      await expect(
+        owner.update(
+          created.id,
+          published.version,
+          publishedInput,
+          crypto.randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        member.update(
+          created.id,
+          created.version,
+          { ...publishedInput, title: "Stale edit" },
+          crypto.randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      await expect(
+        member.update(
+          created.id,
+          published.version,
+          input,
+          crypto.randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(
+        (
+          await owner.list(workspaceId, {
+            page: 1,
+            attention: "true",
+            from: "2026-09-10",
+            to: "2026-09-10",
+          })
+        ).data.map((row) => row.id),
+      ).toContain(created.id);
+      expect(
+        (
+          await owner.list(workspaceId, { page: 1, from: "2026-09-11" })
+        ).data.map((row) => row.id),
+      ).not.toContain(created.id);
+      const restarted = createLiveHarness();
+      try {
+        const restored = createReportPlanClient({
+          baseUrl: "http://trevv.test/api/v1",
+          getAccessToken: async () => fixture.first.memberId,
+          fetchImpl: async (url, init) => restarted.app.request(url, init),
+        });
+        expect(await restored.get(created.id)).toEqual(published);
+      } finally {
+        await restarted.close();
+      }
+      const archiveKey = crypto.randomUUID();
+      const archived = await member.archive(
+        created.id,
+        published.version,
+        archiveKey,
+      );
+      expect(
+        await member.archive(created.id, published.version, archiveKey),
+      ).toEqual(archived);
+      expect(archived.archivedAt).toBe(now.toISOString());
+      expect(
+        (await member.list(workspaceId, { page: 1 })).data.map((row) => row.id),
+      ).not.toContain(created.id);
+      await expect(owner.get(created.id)).rejects.toMatchObject({
+        status: 404,
+      });
+      const audit = (await seedConnection.db.select().from(auditLogs)).filter(
+        (row) => row.targetId === created.id,
+      );
+      expect(audit).toHaveLength(3);
+      expect(JSON.stringify(audit)).not.toContain(
+        "Preparing the launch checklist",
+      );
+      expect(JSON.stringify(audit)).not.toContain("Review from the designer");
+    } finally {
+      await live.close();
+    }
+  });
+
+  it("validates plan publishing, excludes drafts before pagination, and enforces read-only member roles", async () => {
+    const live = createLiveHarness();
+    const workspaceId = fixture.first.visibleWorkspaceId;
+    const base: SaveReportPlanInput = {
+      kind: "plan",
+      title: "Sprint delivery plan",
+      period: "sprint",
+      periodStart: "2026-09-14",
+      periodEnd: "2026-09-27",
+      context: "Sprint 13",
+      health: "on_track",
+      state: "published",
+      content: {
+        workingOn: "",
+        completed: "",
+        blockers: "",
+        supportNeeded: "",
+        nextSteps: "Finish the invitation journey",
+        goals: "Release onboarding",
+        successCriteria: "New members can join their team",
+        dependencies: "Design review",
+      },
+    };
+    const request = (
+      method: string,
+      path: string,
+      user: string,
+      body?: unknown,
+      extraHeaders?: Record<string, string>,
+    ) =>
+      live.app.request(path, {
+        method,
+        headers: {
+          ...authorization(user),
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
+          ...extraHeaders,
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    try {
+      for (const patch of [
+        { content: { ...base.content, goals: "" } },
+        { authorId: fixture.first.ownerId },
+        { organizationId: fixture.second.organizationId },
+        { periodEnd: "2026-09-13" },
+      ]) {
+        expect(
+          (
+            await request(
+              "POST",
+              `/api/v1/workspaces/${workspaceId}/report-plans`,
+              fixture.first.memberId,
+              { ...base, ...patch },
+            )
+          ).status,
+        ).toBe(422);
+      }
+      const createdResponse = await request(
+        "POST",
+        `/api/v1/workspaces/${workspaceId}/report-plans`,
+        fixture.first.memberId,
+        base,
+      );
+      expect(createdResponse.status).toBe(201);
+      const created = (await createdResponse.json()) as {
+        id: string;
+        version: number;
+      };
+      expect(
+        (
+          await request(
+            "PATCH",
+            `/api/v1/report-plans/${created.id}`,
+            fixture.first.memberId,
+            base,
+          )
+        ).status,
+      ).toBe(428);
+      for (const role of ["viewer", "guest"] as const) {
+        const id = `report-plan-${role}`;
+        await seedMappedIdentity({
+          id,
+          email: `${id}@example.test`,
+          name: `Report ${role}`,
+          memberships: [{ organizationId: fixture.first.organizationId, role }],
+          selectedOrganizationId: fixture.first.organizationId,
+        });
+        await seedConnection.db.insert(workspaceMembers).values({
+          organizationId: fixture.first.organizationId,
+          workspaceId,
+          userId: id,
+          canManage: false,
+        });
+        expect(
+          (await request("GET", `/api/v1/report-plans/${created.id}`, id))
+            .status,
+        ).toBe(200);
+        expect(
+          (
+            await request(
+              "POST",
+              `/api/v1/workspaces/${workspaceId}/report-plans`,
+              id,
+              base,
+            )
+          ).status,
+        ).toBe(404);
+        expect(
+          (
+            await request(
+              "PATCH",
+              `/api/v1/report-plans/${created.id}`,
+              id,
+              base,
+              { "if-match": '"0"' },
+            )
+          ).status,
+        ).toBe(404);
+      }
+      // Newer private rows must never consume a teammate's published page.
+      await seedConnection.db.insert(memberReportPlans).values(
+        Array.from({ length: 26 }, (_, index) => ({
+          ...base,
+          id: `report-pagination-private-${index}`,
+          state: "draft" as const,
+          organizationId: fixture.first.organizationId,
+          workspaceId,
+          authorId: fixture.first.memberId,
+          periodStart: "2026-10-01",
+          periodEnd: "2026-10-14",
+        })),
+      );
+      const client = createReportPlanClient({
+        baseUrl: "http://trevv.test/api/v1",
+        getAccessToken: async () => fixture.first.ownerId,
+        fetchImpl: async (url, init) => live.app.request(url, init),
+      });
+      const visible = await client.list(workspaceId, { page: 1, kind: "plan" });
+      expect(visible.data.map((row) => row.id)).toContain(created.id);
+      expect(visible.data.every((row) => row.state === "published")).toBe(true);
+      expect(visible.hasMore).toBe(false);
+      const member = createReportPlanClient({
+        baseUrl: "http://trevv.test/api/v1",
+        getAccessToken: async () => fixture.first.memberId,
+        fetchImpl: async (url, init) => live.app.request(url, init),
+      });
+      const page1 = await member.list(workspaceId, { page: 1, state: "draft" });
+      const page2 = await member.list(workspaceId, { page: 2, state: "draft" });
+      expect(page1.data).toHaveLength(24);
+      expect(page1.hasMore).toBe(true);
+      expect(page2.data).toHaveLength(2);
+      expect(page2.hasMore).toBe(false);
+      expect(
+        new Set([...page1.data, ...page2.data].map((row) => row.id)).size,
+      ).toBe(26);
+      expect(
+        (
+          await client.list(workspaceId, {
+            page: 1,
+            from: "2026-09-20",
+            to: "2026-09-21",
+          })
+        ).data.map((row) => row.id),
+      ).toContain(created.id);
     } finally {
       await live.close();
     }

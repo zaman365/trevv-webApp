@@ -1,3 +1,7 @@
+import {
+  createReportPlanRepositories,
+  type ReportPlanRepositories,
+} from "./report-plan-repositories.js";
 import type { BoardPlanning, WorkItemPlanning } from "@founderhq/core";
 import { createHash } from "node:crypto";
 import {
@@ -76,6 +80,7 @@ import {
   workItems,
   workspaceSnapshots,
   workspaceUpdates,
+  memberReportPlans,
   workspaceMembers,
   workspaceCalendars,
   workspaces,
@@ -582,6 +587,7 @@ export interface OrganizationSummaryProjection {
 export interface OrganizationScopedRepositories {
   collaboration: CollaborationRepositories;
   privacy: PrivacyRepositories;
+  reportPlans: ReportPlanRepositories;
   organization: {
     get: () => Promise<typeof organizations.$inferSelect>;
     update: (
@@ -1305,6 +1311,11 @@ function createScopedRepositories(
       runInTransaction,
     ),
     privacy: createPrivacyRepositories(database, scope, runInTransaction),
+    reportPlans: createReportPlanRepositories(
+      database,
+      scope,
+      runInTransaction,
+    ),
     organization: {
       get: () => getOrganization(database, scope),
       update: (input, context) =>
@@ -8339,6 +8350,7 @@ async function exportOrganization(
     scopedAttention,
     scopedWaiting,
     scopedUpdates,
+    scopedReportPlans,
     memory,
   ] = await Promise.all([
     database
@@ -8369,6 +8381,22 @@ async function exportOrganization(
       .select()
       .from(workspaceUpdates)
       .where(eq(workspaceUpdates.organizationId, scope.organizationId)),
+    database
+      .select()
+      .from(memberReportPlans)
+      .where(
+        and(
+          eq(memberReportPlans.organizationId, scope.organizationId),
+          or(
+            eq(memberReportPlans.authorId, scope.userId),
+            and(
+              eq(memberReportPlans.state, "published"),
+              isNull(memberReportPlans.archivedAt),
+            ),
+          ),
+          isNull(memberReportPlans.deletedAt),
+        ),
+      ),
     getManagementMemory(database, scope),
   ]);
   return {
@@ -8385,6 +8413,7 @@ async function exportOrganization(
     attention: scopedAttention,
     waiting: scopedWaiting,
     updates: scopedUpdates,
+    reportPlans: scopedReportPlans,
     ...memory,
   };
 }
