@@ -859,7 +859,9 @@ test("connection details are accessible in both themes and stay within a narrow 
   await connection.locator("summary").click();
   await expect(
     connection.getByText("Authenticated preview", { exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(connection.locator("details strong")).toHaveText("Up to date");
+  await expect(connection.locator("details strong")).toBeVisible();
   for (const theme of ["light", "dark"]) {
     await page.evaluate(
       (value) => (document.documentElement.dataset.theme = value),
