@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import PlatformAdminRedirect from "../app/app/system/admin/page";
 import { proxy } from "../proxy";
 import { clientNavigationHeader } from "./navigation-request";
 
@@ -197,12 +198,28 @@ describe("optimistic private-route boundary", () => {
 });
 
 describe("authoritative app page boundary", () => {
+  it("sends the retired admin page directly to the separate Superadmin boundary", () => {
+    expect(PlatformAdminRedirect).toThrowError(
+      expect.objectContaining({
+        digest: "NEXT_REDIRECT;replace;/superadmin;307;",
+      }),
+    );
+  });
+
   it("keeps a DAL authorization call in every private leaf page", () => {
     const appDirectory = fileURLToPath(new URL("../app/app", import.meta.url));
     const pages = pageFiles(appDirectory);
     expect(pages.length).toBeGreaterThan(0);
     for (const page of pages) {
       const source = readFileSync(page, "utf8");
+      if (page === join(appDirectory, "system/admin/page.tsx")) {
+        // This compatibility route must contain only an unconditional redirect.
+        // Any rendering or data access requires an authoritative boundary again.
+        expect(source.replace(/^\s*\/\/.*$/gm, "").trim()).toMatch(
+          /^import \{ redirect \} from "next\/navigation";\s+export default function PlatformAdminRedirect\(\) \{\s+redirect\("\/superadmin"\);\s+\}$/,
+        );
+        continue;
+      }
       expect(
         source.includes("requireAppSession") ||
           source.includes("requireWorkspaceAccess"),
