@@ -66,7 +66,16 @@ export async function proxyApiRequest(
   if (!upstreamUrl) return notFoundResponse();
 
   const headers = new Headers(request.headers);
+  // The deployment must sanitize this explicitly trusted header at its edge,
+  // matching the server-rendered API and authentication forwarding paths.
+  const trustedClientIpHeader =
+    process.env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
+  const trustedClientIp = trustedClientIpHeader
+    ? request.headers.get(trustedClientIpHeader)
+    : null;
   for (const name of strippedRequestHeaders) headers.delete(name);
+  if (trustedClientIpHeader && trustedClientIp)
+    headers.set(trustedClientIpHeader, trustedClientIp);
   if (segments[0] === "superadmin") {
     const cookie = headers
       .get("cookie")

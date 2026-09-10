@@ -1,5 +1,5 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { superadminSessionSchema } from "@founderhq/api-contract/superadmin";
 import { webApiOrigin, webRuntimeMode } from "./web-runtime-config";
@@ -12,9 +12,16 @@ export async function requireSuperadminSession(enrollment = false) {
     .map((item) => `${item.name}=${item.value}`)
     .join("; ");
   if (!cookie) redirect("/superadmin/sign-in");
+  const outgoing = new Headers({ cookie });
+  const trustedClientIpHeader =
+    process.env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
+  if (trustedClientIpHeader) {
+    const clientIp = (await headers()).get(trustedClientIpHeader);
+    if (clientIp) outgoing.set(trustedClientIpHeader, clientIp);
+  }
   const response = await fetch(
     new URL("/api/superadmin/session", webApiOrigin()),
-    { headers: { cookie }, cache: "no-store" },
+    { headers: outgoing, cache: "no-store" },
   );
   if (response.status === 401) redirect("/superadmin/sign-in");
   if (response.status === 404) notFound();

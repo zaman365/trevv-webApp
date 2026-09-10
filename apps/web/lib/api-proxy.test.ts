@@ -311,6 +311,33 @@ describe("browser API proxy boundary", () => {
     expect(upstreamHeaders.get("x-forwarded-proto")).toBe("https");
   });
 
+  it.each(["v1", "superadmin"])(
+    "preserves only the configured edge identity for %s requests",
+    async (namespace) => {
+      vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+      vi.stubEnv("TRUSTED_CLIENT_IP_HEADER", "cf-connecting-ip");
+      const upstream = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+      vi.stubGlobal("fetch", upstream);
+      await proxyApiRequest(
+        new Request(`https://trevv.test/api/${namespace}/session`, {
+          headers: {
+            "cf-connecting-ip": "192.0.2.10",
+            "x-forwarded-for": "198.51.100.5",
+            "x-real-ip": "198.51.100.6",
+            forwarded: "for=198.51.100.7",
+          },
+        }),
+        [namespace, "session"],
+      );
+      const headers = new Headers(
+        (upstream.mock.calls[0]?.[1] as RequestInit).headers,
+      );
+      expect(headers.get("cf-connecting-ip")).toBe("192.0.2.10");
+      for (const name of ["x-forwarded-for", "x-real-ip", "forwarded"])
+        expect(headers.has(name)).toBe(false);
+    },
+  );
+
   it("forwards sign-up when a non-production suite explicitly enables it", async () => {
     vi.stubEnv("REGISTRATION_MODE", "public");
     vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
