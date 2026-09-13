@@ -65,7 +65,15 @@ export async function setup(
   options: {
     dashboard?: boolean;
     styled?: boolean;
-    view?: "teams" | "team" | "attention" | "capture" | "messages";
+    view?:
+      | "teams"
+      | "team"
+      | "attention"
+      | "capture"
+      | "messages"
+      | "people"
+      | "person"
+      | "chat";
     attention?: AttentionSignalDto[];
     teamId?: string;
     api?: (route: Route) => Promise<boolean>;
@@ -89,7 +97,9 @@ export async function setup(
   if (
     options.dashboard ||
     options.view === "team" ||
-    options.view === "attention"
+    options.view === "attention" ||
+    options.view === "person" ||
+    options.view === "people"
   ) {
     await page.addInitScript((items) => {
       Object.defineProperty(window, "__workflowInitialItems", { value: items });
@@ -111,7 +121,7 @@ export async function setup(
     if (path === "/")
       return route.fulfill({
         contentType: "text/html",
-        body: `${
+        body: `<!doctype html><html lang="en"><head><title>TREVV test workspace</title>${
           Boolean(options.view) || options.styled
             ? '<meta name="viewport" content="width=device-width, initial-scale=1">' +
               [...assets.keys()]
@@ -119,7 +129,7 @@ export async function setup(
                 .map((path) => `<link rel="stylesheet" href="${path}">`)
                 .join("")
             : ""
-        }<div id="root"></div><script type="module" src="/harness.js"></script>`,
+        }</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`,
       });
     if (assets.has(path))
       return route.fulfill({
@@ -127,6 +137,8 @@ export async function setup(
         body: assets.get(path)!,
       });
     if (options.api && (await options.api(route))) return;
+    if (path === `/api/v1/workspaces/${board.workspaceId}/conversation-unread`)
+      return route.fulfill({ json: { unreadCount: 0 } });
     if (
       path === `/api/v1/workspaces/${board.workspaceId}/conversations` &&
       request.method() === "GET"
@@ -315,6 +327,12 @@ export async function setup(
         .getByRole("button")
         .first(),
     ).toBeEnabled();
+  } else if (
+    options.view === "chat" ||
+    options.view === "people" ||
+    options.view === "person"
+  ) {
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   } else if (options.view === "messages") {
     await expect(
       page.getByRole("heading", { name: "Messages", exact: true }),

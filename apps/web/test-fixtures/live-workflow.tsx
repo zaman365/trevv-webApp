@@ -2,6 +2,8 @@ import "@founderhq/design-tokens/css";
 import "../app/globals.css";
 import "../app/workspace.css";
 import "../app/design-system.css";
+import { FloatingChatProvider } from "../lib/floating-chat-context";
+import { LivePeoplePage } from "../components/live-people-page";
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { QuickCaptureButton } from "../components/quick-capture-button";
@@ -31,6 +33,25 @@ function Workflow() {
   const queryClient = useQueryClient();
   const [capture, setCapture] = useState(false);
   const [confirmed, setConfirmed] = useState<LiveCaptureSuccess | null>(null);
+  if (new URLSearchParams(window.location.search).get("view") === "people")
+    return <LivePeoplePage workspaceSlug="launch" />;
+  if (new URLSearchParams(window.location.search).get("view") === "person")
+    return (
+      <LivePeoplePage
+        workspaceSlug="launch"
+        userId={
+          new URLSearchParams(window.location.search).get("userId") ??
+          "user-two"
+        }
+      />
+    );
+  if (new URLSearchParams(window.location.search).get("view") === "chat")
+    return (
+      <main>
+        <h1>Workspace overview</h1>
+        <a href="#projects">Projects on this page</a>
+      </main>
+    );
   if (new URLSearchParams(window.location.search).get("view") === "attention")
     return (
       <main style={{ padding: 24 }}>
@@ -128,7 +149,9 @@ createRoot(document.getElementById("root")!).render(
       }}
     >
       <PlanningSharingProvider>
-        <Workflow />
+        <FloatingChatProvider defaultWorkspaceSlug="launch">
+          <Workflow />
+        </FloatingChatProvider>
       </PlanningSharingProvider>
     </LiveAppDataProvider>
   </AppSessionProvider>,

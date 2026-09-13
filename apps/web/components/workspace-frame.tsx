@@ -1,4 +1,5 @@
 "use client";
+import { personHref } from "@/lib/people-routes";
 
 import { QuickCaptureButton } from "./quick-capture-button";
 
@@ -1160,6 +1161,19 @@ function WorkspaceChrome({
                   </header>
                   {contextProject && (
                     <>
+                      {!appSession.demo ? (
+                        <Link
+                          href={personHref(
+                            contextProject.slug,
+                            appSession.user.id,
+                          )}
+                          role="menuitem"
+                          onClick={() => setUserMenuOpen(false)}
+                        >
+                          <Users size={14} />
+                          My profile
+                        </Link>
+                      ) : null}
                       <Link
                         href={scopedHref("settings")}
                         role="menuitem"

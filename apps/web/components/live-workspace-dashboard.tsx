@@ -48,7 +48,10 @@ import {
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
-import { LiveCreateTask } from "./live-create-task";
+const LiveCreateTask = dynamic(
+  () => import("./live-create-task").then((module) => module.LiveCreateTask),
+  { loading: () => <p role="status">Loading task actions…</p> },
+);
 const LiveMyWork = dynamic(
   () => import("./live-work-my-work").then((m) => m.LiveMyWork),
   { loading: () => <p>Loading workspace tasks…</p> },
@@ -60,7 +63,17 @@ import {
   dashboardPlanItems,
   type DashboardFocus,
 } from "@/lib/workspace-dashboard";
-import { WorkspaceDashboardWidgets } from "./workspace-dashboard-widgets";
+const WorkspaceDashboardWidgets = dynamic(
+  () =>
+    import("./workspace-dashboard-widgets").then(
+      (module) => module.WorkspaceDashboardWidgets,
+    ),
+  {
+    loading: () => (
+      <LiveStateNotice kind="loading" title="Loading workspace progress" />
+    ),
+  },
+);
 import dashboardStyles from "./workspace-dashboard.module.css";
 import styles from "./live-operating-loop.module.css";
 

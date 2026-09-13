@@ -1,5 +1,7 @@
 "use client";
 import { PlanningContextLink } from "./planning-context-link";
+import { useFloatingChat } from "@/lib/floating-chat-context";
+import { PersonIdentity } from "./person-identity";
 
 import { dateTimeFormatter } from "@/lib/date-format";
 
@@ -43,6 +45,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -145,10 +148,26 @@ export function LiveMessagingWorkspace({
 export function LiveMessagingContent({
   workspaceSlug,
   embedded = false,
+  floating = false,
+  conversationId,
+  onConversationSelected,
+  onBusyChange,
 }: {
   workspaceSlug: string;
   embedded?: boolean;
+  floating?: boolean;
+  conversationId?: string;
+  onConversationSelected?: (conversation: ConversationDto) => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
+  const instanceId = useId();
+  const elementId = (name: string) =>
+    floating ? `${instanceId}-${name}` : name;
+  const floatingChat = useFloatingChat();
+  const paused =
+    !floating &&
+    floatingChat?.isOpen === true &&
+    floatingChat.workspaceSlug === workspaceSlug;
   const Content = embedded ? "div" : "main";
   const Heading = embedded ? "h3" : "h1";
   const session = useAppSession();
@@ -168,6 +187,7 @@ export function LiveMessagingContent({
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => {
+    if (floating) return;
     const readRoom = () => {
       try {
         const id = decodeURIComponent(window.location.hash.slice(1));
@@ -179,11 +199,12 @@ export function LiveMessagingContent({
     readRoom();
     window.addEventListener("hashchange", readRoom);
     return () => window.removeEventListener("hashchange", readRoom);
-  }, [workspaceSlug]);
+  }, [workspaceSlug, floating]);
   const effectiveSelectedId =
-    selectedId && conversations.some((item) => item.id === selectedId)
+    conversationId ??
+    (selectedId && conversations.some((item) => item.id === selectedId)
       ? selectedId
-      : (conversations[0]?.id ?? null);
+      : (conversations[0]?.id ?? null));
   const selectedSummary = conversations.find(
     (conversation) => conversation.id === effectiveSelectedId,
   );
@@ -209,12 +230,13 @@ export function LiveMessagingContent({
   const messageQuery = useLiveConversationMessages(
     workspace?.id,
     selectedConversationCandidate?.id,
+    { enabled: !paused },
   );
   const threadQuery = useLiveConversationMessages(
     workspace?.id,
     selectedConversationCandidate?.id,
     {
-      enabled: Boolean(activeThreadId),
+      enabled: Boolean(activeThreadId) && !paused,
       ...(activeThreadId ? { parentMessageId: activeThreadId } : {}),
     },
   );
@@ -280,7 +302,12 @@ export function LiveMessagingContent({
   const previousMessageCountRef = useRef(0);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const canCreateConversation = canCreateMessages(session.organization.role);
-  const canSendMessage = session.organization.role !== "viewer";
+  const canSendMessage = session.organization.role !== "viewer" && !paused;
+  const reportBusy = onBusyChange ?? floatingChat?.setBusy;
+  useEffect(() => {
+    reportBusy?.(Boolean(pendingAction));
+    return () => reportBusy?.(false);
+  }, [pendingAction, reportBusy]);
   const timezone = session.organization.timezone ?? "UTC";
   const layoutStorageKey = workspace
     ? liveConversationLayoutStorageKey({
@@ -358,6 +385,10 @@ export function LiveMessagingContent({
   );
 
   useEffect(() => {
+    if (paused) {
+      const reset = window.setTimeout(() => setHydratedDraftKey(""), 0);
+      return () => window.clearTimeout(reset);
+    }
     let recovered: LiveDraftEnvelope<MessageDraft> | null = null;
     if (draftStorageKey) {
       try {
@@ -381,7 +412,7 @@ export function LiveMessagingContent({
       setHydratedDraftKey(draftStorageKey);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [draftStorageKey]);
+  }, [draftStorageKey, paused]);
 
   const writeDraft = useCallback(
     (value: { draft: MessageDraft; idempotencyKey: string }) => {
@@ -391,15 +422,26 @@ export function LiveMessagingContent({
   );
   const draftPersistence = useBufferedPersistence(writeDraft);
   useEffect(() => {
+    if (paused) {
+      draftPersistence.flush();
+      return;
+    }
     if (!draftHydrated || !draftStorageKey) return;
     draftPersistence.schedule({
       draft: { ...draft, body: draftBody.current },
       idempotencyKey,
     });
-  }, [draft, draftHydrated, draftStorageKey, idempotencyKey, draftPersistence]);
+  }, [
+    draft,
+    draftHydrated,
+    draftStorageKey,
+    idempotencyKey,
+    draftPersistence,
+    paused,
+  ]);
 
   useEffect(() => {
-    if (!delivery) return;
+    if (paused || !delivery) return;
     if (delivery.conversationId !== selectedConversation?.id) return;
     const authoritativeMessages = delivery.parentMessageId
       ? threadMessages
@@ -429,6 +471,7 @@ export function LiveMessagingContent({
     }
   }, [
     delivery,
+    paused,
     draftStorageKey,
     draftPersistence,
     messages,
@@ -441,6 +484,7 @@ export function LiveMessagingContent({
       .sort((left, right) => left.sequence - right.sequence)
       .at(-1);
     if (
+      paused ||
       !workspace ||
       !selectedConversation ||
       !latest ||
@@ -469,6 +513,7 @@ export function LiveMessagingContent({
     messages,
     queryClient,
     selectedConversation,
+    paused,
     threadMessages,
     workspace,
   ]);
@@ -660,6 +705,7 @@ export function LiveMessagingContent({
     const currentDraft = { ...draft, body: draftBody.current };
     draftPersistence.flush();
     if (
+      paused ||
       !selectedConversation ||
       !workspace ||
       !draftHydrated ||
@@ -872,6 +918,7 @@ export function LiveMessagingContent({
       );
       setCreateOpen(false);
       setSelectedId(result.data.id);
+      onConversationSelected?.(result.data);
       setMobileThreadOpen(true);
       setNotice({
         kind: "saved",
@@ -1026,34 +1073,36 @@ export function LiveMessagingContent({
   return (
     <>
       <Content
-        className={`${styles.messagePage} ${embedded ? styles.embeddedContent : ""}`}
+        className={`${styles.messagePage} ${embedded ? styles.embeddedContent : ""} ${floating ? styles.floatingContent : ""}`}
         data-testid="live-messages"
       >
-        <header className={styles.pageHeader}>
-          <div>
-            <p>{workspace.name} / Collaboration</p>
-            <Heading>Messages</Heading>
-            <span>
-              Contextual Team rooms, work rooms, and direct conversations.
-            </span>
-          </div>
-          {canCreateConversation ? (
-            <button
-              className="primary-button"
-              disabled={
-                pendingAction === "send" ||
-                directoryQuery.isLoading ||
-                Boolean(directoryQuery.error)
-              }
-              onClick={() => {
-                openConversationCreator("direct");
-              }}
-              type="button"
-            >
-              <Plus size={16} /> New message
-            </button>
-          ) : null}
-        </header>
+        {!floating ? (
+          <header className={styles.pageHeader}>
+            <div>
+              <p>{workspace.name} / Collaboration</p>
+              <Heading>Messages</Heading>
+              <span>
+                Contextual Team rooms, work rooms, and direct conversations.
+              </span>
+            </div>
+            {canCreateConversation ? (
+              <button
+                className="primary-button"
+                disabled={
+                  pendingAction === "send" ||
+                  directoryQuery.isLoading ||
+                  Boolean(directoryQuery.error)
+                }
+                onClick={() => {
+                  openConversationCreator("direct");
+                }}
+                type="button"
+              >
+                <Plus size={16} /> New message
+              </button>
+            ) : null}
+          </header>
+        ) : null}
 
         <div className={styles.messageNotices}>
           {notice ? (
@@ -1108,7 +1157,7 @@ export function LiveMessagingContent({
           data-conversation-rail={
             conversationRailCollapsed ? "collapsed" : "open"
           }
-          data-mobile-thread={mobileThreadOpen ? "open" : "list"}
+          data-mobile-thread={floating || mobileThreadOpen ? "open" : "list"}
           style={
             {
               "--conversation-rail-width": `${conversationRailWidthValue}px`,
@@ -1117,7 +1166,7 @@ export function LiveMessagingContent({
         >
           <aside
             className={styles.conversationRail}
-            id="live-conversation-rail"
+            id={elementId("live-conversation-rail")}
           >
             <header>
               <div>
@@ -1136,7 +1185,7 @@ export function LiveMessagingContent({
                   <RefreshCw size={15} />
                 </button>
                 <button
-                  aria-controls="live-conversation-rail"
+                  aria-controls={elementId("live-conversation-rail")}
                   aria-expanded="true"
                   aria-label="Collapse conversations"
                   className={styles.tabletRailCollapse}
@@ -1158,11 +1207,11 @@ export function LiveMessagingContent({
               {!conversationsQuery.isLoading
                 ? conversationGroups.map(({ key, label, icon: Icon }) => (
                     <section
-                      aria-labelledby={`live-message-group-${key}`}
+                      aria-labelledby={elementId(`live-message-group-${key}`)}
                       key={key}
                     >
                       <header>
-                        <span id={`live-message-group-${key}`}>
+                        <span id={elementId(`live-message-group-${key}`)}>
                           <Icon size={14} aria-hidden="true" /> {label}
                         </span>
                         {grouped[key].length > 0 ? (
@@ -1218,6 +1267,7 @@ export function LiveMessagingContent({
                             key={conversation.id}
                             onClick={() => {
                               setSelectedId(conversation.id);
+                              onConversationSelected?.(conversation);
                               setMobileThreadOpen(true);
                             }}
                             type="button"
@@ -1266,7 +1316,7 @@ export function LiveMessagingContent({
           </aside>
 
           <div
-            aria-controls="live-conversation-rail"
+            aria-controls={elementId("live-conversation-rail")}
             aria-label="Resize conversation list"
             aria-orientation="vertical"
             aria-valuemax={conversationRailWidth.maximum}
@@ -1301,7 +1351,7 @@ export function LiveMessagingContent({
           </div>
 
           <button
-            aria-controls="live-conversation-rail"
+            aria-controls={elementId("live-conversation-rail")}
             aria-expanded="false"
             aria-label="Show conversations"
             className={styles.collapsedRailButton}
@@ -1313,7 +1363,7 @@ export function LiveMessagingContent({
 
           <section
             className={styles.threadPane}
-            aria-labelledby="live-thread-title"
+            aria-labelledby={elementId("live-thread-title")}
           >
             {selectedConversation ? (
               <>
@@ -1328,7 +1378,9 @@ export function LiveMessagingContent({
                   </button>
                   <div>
                     <span>{conversationKindLabel(selectedConversation)}</span>
-                    <h2 id="live-thread-title">{selectedConversation.title}</h2>
+                    <h2 id={elementId("live-thread-title")}>
+                      {selectedConversation.title}
+                    </h2>
                     {selectedConversation.context ? (
                       <PlanningContextLink
                         conversation={selectedConversation}
@@ -1414,6 +1466,7 @@ export function LiveMessagingContent({
                             canSendMessage,
                           )}
                           currentUserId={session.user.id}
+                          workspaceSlug={workspaceSlug}
                           message={message}
                           pendingAction={pendingAction}
                           timezone={timezone}
@@ -1423,6 +1476,8 @@ export function LiveMessagingContent({
                         />
                         {activeThreadRoot?.id === message.id ? (
                           <ThreadReplyPanel
+                            workspaceSlug={workspaceSlug}
+                            composerId={elementId("live-message-composer")}
                             canInteract={canSendMessage}
                             canToggleResponse={(message) =>
                               canToggleMessageResponse(
@@ -1503,10 +1558,14 @@ export function LiveMessagingContent({
                         </button>
                       </div>
                     ) : null}
-                    <label className="sr-only" htmlFor="live-message-composer">
+                    <label
+                      className="sr-only"
+                      htmlFor={elementId("live-message-composer")}
+                    >
                       Message
                     </label>
                     <MessageComposerInput
+                      id={elementId("live-message-composer")}
                       key={`${draftStorageKey}:${composerRevision}`}
                       disabled={!draftHydrated || pendingAction === "send"}
                       initialBody={draftHydrated ? draft.body : ""}
@@ -1516,8 +1575,9 @@ export function LiveMessagingContent({
                     />
                     <div>
                       <small>
-                        Draft recovered only on this signed-in browser · Server
-                        acknowledgement required
+                        {floating
+                          ? "Your draft is saved on this device."
+                          : "Draft recovered only on this signed-in browser · Server acknowledgement required"}
                       </small>
                       <button
                         className="primary-button"
@@ -1541,7 +1601,9 @@ export function LiveMessagingContent({
                   <div className={styles.readOnlyComposer}>
                     <ShieldCheck size={16} aria-hidden="true" />
                     <span>
-                      Viewer access is read-only in this conversation.
+                      {paused
+                        ? "Continue this conversation in the floating chat. Close it to resume here."
+                        : "Viewer access is read-only in this conversation."}
                     </span>
                   </div>
                 )}
@@ -1549,7 +1611,9 @@ export function LiveMessagingContent({
             ) : (
               <div className={styles.threadEmpty}>
                 <MessageCircleMore size={25} aria-hidden="true" />
-                <h2 id="live-thread-title">Choose a conversation</h2>
+                <h2 id={elementId("live-thread-title")}>
+                  Choose a conversation
+                </h2>
                 <p>
                   Select a Team room, work room, or person. Empty navigation
                   groups explain how to create the missing conversation type.
@@ -1611,6 +1675,8 @@ export function LiveMessagingContent({
 }
 
 function ThreadReplyPanel({
+  workspaceSlug,
+  composerId,
   canInteract,
   canToggleResponse,
   closeDisabled,
@@ -1632,6 +1698,8 @@ function ThreadReplyPanel({
   onRetry,
   onToggleResponse,
 }: {
+  workspaceSlug: string;
+  composerId: string;
   canInteract: boolean;
   canToggleResponse: (message: ConversationMessageDto) => boolean;
   closeDisabled: boolean;
@@ -1653,25 +1721,21 @@ function ThreadReplyPanel({
   onRetry: () => Promise<unknown>;
   onToggleResponse: (message: ConversationMessageDto) => Promise<void>;
 }) {
+  const replyHeadingId = useId();
   const presentedError = error ? presentLiveError(error) : null;
   return (
-    <section
-      aria-labelledby={`live-thread-replies-${rootMessage.id}`}
-      className={styles.threadReplies}
-    >
+    <section aria-labelledby={replyHeadingId} className={styles.threadReplies}>
       <header className={styles.threadRepliesHeader}>
         <div>
           <span>Thread</span>
-          <h3 id={`live-thread-replies-${rootMessage.id}`}>
-            Replies to {rootMessage.sender.name}
-          </h3>
+          <h3 id={replyHeadingId}>Replies to {rootMessage.sender.name}</h3>
         </div>
         <div>
           {canInteract ? (
             <button
               onClick={() => {
                 onReply();
-                document.getElementById("live-message-composer")?.focus();
+                document.getElementById(composerId)?.focus();
               }}
               type="button"
             >
@@ -1732,6 +1796,7 @@ function ThreadReplyPanel({
       >
         {(message) => (
           <MessageRow
+            workspaceSlug={workspaceSlug}
             canInteract={canInteract}
             canToggleResponse={canToggleResponse(message)}
             currentUserId={currentUserId}
@@ -1793,6 +1858,7 @@ const MessageRow = memo(function MessageRow({
   message,
   pendingAction,
   timezone,
+  workspaceSlug,
   onReact,
   onReply,
   onToggleResponse,
@@ -1803,11 +1869,13 @@ const MessageRow = memo(function MessageRow({
   message: ConversationMessageDto;
   pendingAction: string;
   timezone: string;
+  workspaceSlug?: string;
   onReact: (message: ConversationMessageDto, emoji: string) => Promise<void>;
   onReply: (messageId: string) => void;
   onToggleResponse: (message: ConversationMessageDto) => Promise<void>;
 }) {
   const own = message.senderId === currentUserId;
+
   const needsResponse =
     (message.intent === "request" || message.intent === "decision") &&
     message.responseState;
@@ -1821,7 +1889,17 @@ const MessageRow = memo(function MessageRow({
       </span>
       <div>
         <header>
-          <strong>{message.sender.name}</strong>
+          <strong>
+            {workspaceSlug ? (
+              <PersonIdentity
+                workspaceSlug={workspaceSlug}
+                userId={message.sender.id}
+                name={message.sender.name}
+              />
+            ) : (
+              message.sender.name
+            )}
+          </strong>
           <span>{message.intent}</span>
           <time dateTime={message.createdAt}>
             {formatMessageTime(message.createdAt, timezone)}
@@ -1913,6 +1991,10 @@ function ConversationContext({
   onRemoveParticipant: (userId: string) => Promise<void>;
   onTransferOwnership: (userId: string) => Promise<void>;
 }) {
+  const data = useLiveAppData();
+  const slug = data.workspaces.find(
+    (entry) => entry.id === conversation.workspaceId,
+  )?.slug;
   return (
     <aside className={className} aria-label="Conversation context">
       <header>
@@ -1935,7 +2017,17 @@ function ConversationContext({
                 {initials(participant.user.name)}
               </span>
               <div>
-                <strong>{participant.user.name}</strong>
+                <strong>
+                  {slug ? (
+                    <PersonIdentity
+                      workspaceSlug={slug}
+                      userId={participant.user.id}
+                      name={participant.user.name}
+                    />
+                  ) : (
+                    participant.user.name
+                  )}
+                </strong>
                 <small>
                   {participant.participantRole} ·{" "}
                   {participant.user.organizationRole.replaceAll("_", " ")}
@@ -2040,7 +2132,7 @@ function ConversationContextDrawer({
   );
 }
 
-function CreateConversationDialog({
+export function CreateConversationDialog({
   currentUserId,
   initialKind,
   members,
@@ -2064,6 +2156,7 @@ function CreateConversationDialog({
   onSubmit: (input: CreateConversationInput) => Promise<boolean>;
 }) {
   const dialogRef = useAccessibleDialog(onClose);
+  const headingId = useId();
   const [kind, setKind] = useState<"direct" | "workspace">(initialKind);
   const [title, setTitle] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -2099,7 +2192,7 @@ function CreateConversationDialog({
   return (
     <div className={styles.modalBackdrop}>
       <div
-        aria-labelledby="create-live-conversation-title"
+        aria-labelledby={headingId}
         aria-modal="true"
         className={styles.dialog}
         ref={dialogRef}
@@ -2109,7 +2202,7 @@ function CreateConversationDialog({
         <header className={styles.dialogHeader}>
           <div>
             <p>New conversation</p>
-            <h2 id="create-live-conversation-title">Choose its job</h2>
+            <h2 id={headingId}>Choose its job</h2>
           </div>
           <button
             aria-label="Close conversation creator"

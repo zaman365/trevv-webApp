@@ -65,7 +65,7 @@ export function workspaceShellRoute(
     return { active: "dashboard", workspaceSlug, requiresRecords: true };
   if (/^boards\/[^/]+$/.test(view))
     return { active: "workspace", workspaceSlug, requiresRecords: true };
-  if (/^teams\/[^/]+$/.test(view))
+  if (view === "people" || /^(teams|people)\/[^/]+$/.test(view))
     return { active: "teams", workspaceSlug, requiresRecords: true };
   if (view === "settings/import")
     return { active: "settings", workspaceSlug, requiresRecords: true };

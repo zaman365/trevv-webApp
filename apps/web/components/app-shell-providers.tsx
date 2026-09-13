@@ -33,6 +33,7 @@ import { WorkspaceShell } from "./workspace-frame";
 import { workspaceShellRoute } from "@/lib/workspace-shell-route";
 import type { LiveAppAccessSnapshot } from "@/lib/live-app-sync";
 import { LiveStateNotice } from "./live-state";
+import { FloatingChatProvider } from "@/lib/floating-chat-context";
 import { PlanningSharingProvider } from "@/lib/planning-sharing";
 
 const workspaceSlugFrom = (pathname: string) => {
@@ -189,32 +190,38 @@ function AppShellProviderContent({
         {...(liveSource ? { liveSource } : {})}
       >
         <LearningCenterProvider>
-          <PlanningProvider>
-            {route ? (
-              <WorkspaceShell
-                active={route.active}
-                {...(route.workspaceSlug
-                  ? { workspaceSlug: route.workspaceSlug }
-                  : {})}
-              >
-                <LiveAppRecordsBoundary
-                  required={
-                    route.requiresRecords &&
-                    (!route.workspaceSlug ||
-                      !access ||
-                      !liveData ||
-                      liveData.workspaces.some(
-                        (workspace) => workspace.slug === route.workspaceSlug,
-                      ))
-                  }
+          <FloatingChatProvider
+            {...(route?.workspaceSlug
+              ? { defaultWorkspaceSlug: route.workspaceSlug }
+              : {})}
+          >
+            <PlanningProvider>
+              {route ? (
+                <WorkspaceShell
+                  active={route.active}
+                  {...(route.workspaceSlug
+                    ? { workspaceSlug: route.workspaceSlug }
+                    : {})}
                 >
-                  {children}
-                </LiveAppRecordsBoundary>
-              </WorkspaceShell>
-            ) : (
-              children
-            )}
-          </PlanningProvider>
+                  <LiveAppRecordsBoundary
+                    required={
+                      route.requiresRecords &&
+                      (!route.workspaceSlug ||
+                        !access ||
+                        !liveData ||
+                        liveData.workspaces.some(
+                          (workspace) => workspace.slug === route.workspaceSlug,
+                        ))
+                    }
+                  >
+                    {children}
+                  </LiveAppRecordsBoundary>
+                </WorkspaceShell>
+              ) : (
+                children
+              )}
+            </PlanningProvider>
+          </FloatingChatProvider>
         </LearningCenterProvider>
       </WorkspaceProvider>
     </AppSessionProvider>

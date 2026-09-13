@@ -128,6 +128,29 @@ export function teamWorkspaceApi() {
     const conversation = state.conversations.find(
       (entry) => path === `/api/v1/conversations/${entry.id}`,
     );
+    const changedMessage = state.messages.find((entry) =>
+      path.startsWith(`/api/v1/messages/${entry.id}/`),
+    );
+    if (changedMessage) {
+      expect(request.headers()["if-match"]).toBe(`"${changedMessage.version}"`);
+      if (path.endsWith("/response"))
+        changedMessage.responseState = request.postDataJSON().responseState;
+      else {
+        const emoji = decodeURIComponent(path.split("/").at(-1)!);
+        changedMessage.reactions =
+          method === "DELETE"
+            ? []
+            : [
+                {
+                  emoji,
+                  userIds: [session.user.id],
+                  reactedByCurrentUser: true,
+                },
+              ];
+      }
+      changedMessage.version++;
+      return respond(route, changedMessage, 200, changedMessage.version);
+    }
     if (conversation && method === "GET") {
       return state.roomDenied
         ? respond(
@@ -155,7 +178,10 @@ export function teamWorkspaceApi() {
       }
       return respond(route, { data: state.conversations, nextCursor: null });
     }
-    if (path === `/api/v1/conversations/${teamConversation.id}/messages`) {
+    const messageConversation = state.conversations.find(
+      (entry) => path === `/api/v1/conversations/${entry.id}/messages`,
+    );
+    if (messageConversation) {
       if (state.roomDenied)
         return respond(
           route,
@@ -182,6 +208,7 @@ export function teamWorkspaceApi() {
         const message: ConversationMessageDto = {
           ...teamMessage,
           ...input,
+          conversationId: messageConversation.id,
           id: `message-${state.messages.length + 1}`,
           sequence: state.messages.length + 1,
           senderId: session.user.id,
@@ -192,20 +219,25 @@ export function teamWorkspaceApi() {
       }
       const parent = url.searchParams.get("parentMessageId");
       return respond(route, {
-        data: state.messages.filter((entry) =>
-          parent ? entry.parentMessageId === parent : !entry.parentMessageId,
+        data: state.messages.filter(
+          (entry) =>
+            entry.conversationId === messageConversation.id &&
+            (parent
+              ? entry.parentMessageId === parent
+              : !entry.parentMessageId),
         ),
         nextCursor: null,
       });
     }
-    if (
-      path === `/api/v1/conversations/${teamConversation.id}/read-checkpoint`
-    ) {
+    const readConversation = state.conversations.find(
+      (entry) => path === `/api/v1/conversations/${entry.id}/read-checkpoint`,
+    );
+    if (readConversation) {
       const messageId = request.postDataJSON().messageId;
       const team = state.teams[0]!;
       if (team.room) team.room.unreadCount = 0;
       return respond(route, {
-        conversationId: teamConversation.id,
+        conversationId: readConversation.id,
         userId: session.user.id,
         messageId,
         messageSequence: state.messages.find(

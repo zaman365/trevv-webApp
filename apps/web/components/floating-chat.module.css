@@ -1,0 +1,397 @@
+.launcher {
+  position: fixed;
+  right: max(1.25rem, env(safe-area-inset-right));
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3.25rem;
+  min-width: 3.25rem;
+  padding: 0 1rem;
+  border: 1px solid var(--fh-primary, #5b56db);
+  border-radius: 1.1rem;
+  background: var(--fh-primary, #5b56db);
+  color: var(--fh-on-primary, #fff);
+  box-shadow: 0 8px 28px rgb(30 25 70 / 22%);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+.window,
+.loading {
+  position: fixed;
+  z-index: 89;
+  right: 1.25rem;
+  bottom: 5.25rem;
+  width: min(53rem, calc(100vw - 2.5rem));
+  height: min(43rem, calc(100dvh - 7rem));
+  min-height: 0;
+  color: var(--text, #1f2433);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 1.25rem;
+  box-shadow: 0 20px 80px rgb(21 25 38 / 24%);
+  overflow: hidden;
+}
+.window {
+  margin: 0;
+  top: auto;
+  left: auto;
+  display: flex;
+  flex-direction: column;
+}
+.loading {
+  height: auto;
+  padding: 2rem;
+}
+.expanded {
+  width: min(78rem, calc(100vw - 2.5rem));
+  height: calc(100dvh - 7rem);
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.heading > div {
+  min-width: 0;
+}
+.heading h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.heading select {
+  max-width: 13rem;
+  border: 0;
+  padding: 0.15rem 0;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.headerActions {
+  display: flex;
+  gap: 0.25rem;
+}
+.iconButton,
+.headerActions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  color: var(--text-secondary);
+  background: var(--surface);
+  cursor: pointer;
+}
+.iconButton:hover,
+.headerActions a:hover {
+  background: var(--surface-secondary, #f5f6fa);
+  border-color: var(--border);
+}
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.directory {
+  width: 17rem;
+  min-width: 14rem;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem;
+  gap: 0.7rem;
+  overflow-y: auto;
+  background: var(--surface-secondary, #f5f6fa);
+}
+.primaryTabs {
+  display: flex;
+  gap: 0.2rem;
+  border: 1px solid var(--border);
+  padding: 0.25rem;
+  border-radius: 0.85rem;
+  background: var(--surface);
+}
+.primaryTabs button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 0;
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.3rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.primaryTabs button[aria-selected="true"] {
+  background: var(--fh-primary-soft, #efeeff);
+  color: var(--fh-primary, #5b56db);
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+}
+.search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline-offset: 3px;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-size: 0.83rem;
+}
+.newThread {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.65rem;
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.7rem;
+  background: var(--fh-primary-soft);
+  color: var(--fh-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rows {
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+}
+.row {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--surface);
+  padding: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.row > button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.row strong {
+  display: block;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.row small {
+  display: block;
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
+}
+.row a {
+  font-size: 0.75rem;
+  color: var(--fh-primary);
+}
+.unread {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.2rem;
+  border-radius: 1rem;
+  background: var(--fh-primary);
+  color: var(--fh-on-primary);
+  font-size: 0.7rem;
+}
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border-radius: 0.6rem;
+  background: var(--fh-primary-soft);
+  color: var(--fh-primary);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+.conversation {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chatTabs {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+  min-height: 2.8rem;
+  padding: 0.3rem;
+  gap: 0.3rem;
+}
+.chatTab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  flex: 0 0 auto;
+  max-width: 13rem;
+}
+.chatTab[data-active="true"] {
+  background: var(--fh-primary-soft);
+  border-color: var(--fh-primary);
+}
+.chatTab button {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  padding: 0.4rem;
+}
+.chatTab button[role="tab"] {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.8rem;
+}
+.chatTab .iconButton {
+  width: 1.65rem;
+  height: 1.65rem;
+}
+.conversationContent {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.empty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 1.5rem;
+  flex: 1;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.empty h3,
+.empty p {
+  margin: 0;
+}
+.empty h3 {
+  color: var(--text);
+}
+.notice {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.mobileBack {
+  display: none;
+}
+.window :is(button, a, input, select):focus-visible,
+.launcher:focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 2px;
+}
+.window button:disabled,
+.launcher:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+@media (max-width: 700px) {
+  .window,
+  .expanded {
+    right: 0.5rem;
+    bottom: 4.8rem;
+    width: calc(100vw - 1rem);
+    height: calc(100dvh - 6rem);
+    border-radius: 0.9rem;
+  }
+  .launcher {
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    right: 0.75rem;
+    height: 3rem;
+  }
+  .directory {
+    width: 100%;
+    border-right: 0;
+  }
+  .window[data-mobile="conversation"] .directory {
+    display: none;
+  }
+  .window[data-mobile="directory"] .conversation {
+    display: none;
+  }
+  .mobileBack {
+    display: inline-flex;
+  }
+  .heading h2 {
+    font-size: 1rem;
+  }
+  .heading select {
+    max-width: 9rem;
+  }
+  .header {
+    padding: 0.65rem;
+  }
+  .headerActions {
+    gap: 0;
+  }
+  .launcherLabel {
+    display: none;
+  }
+}
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+}
+.tabBar .chatTabs {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+.tabBar > button {
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}

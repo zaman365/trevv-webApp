@@ -1,4 +1,5 @@
 "use client";
+import { personHref } from "@/lib/people-routes";
 
 import {
   teamFeatureCapabilitiesForPreset,
@@ -165,6 +166,10 @@ export function LiveTeamWorkflowContent({
             </span>
           </div>
           <div className={styles.headerActions}>
+            <Link href={personHref(workspaceSlug)}>
+              <Users size={16} />
+              People directory
+            </Link>
             {canCreate ? (
               <button
                 className="primary-button"

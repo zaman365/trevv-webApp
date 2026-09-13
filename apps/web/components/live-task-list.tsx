@@ -1,4 +1,5 @@
 "use client";
+import { PersonIdentity } from "./person-identity";
 
 import type { WorkItemDto, WorkspaceDto } from "@founderhq/api-contract";
 import {
@@ -213,7 +214,20 @@ export function LiveTaskList({
           }
         >
           {item.assignees.length
-            ? item.assignees.map((person) => person.name).join(", ")
+            ? item.assignees.map((person, index) => (
+                <span key={person.id}>
+                  {index ? ", " : ""}
+                  {workspace?.slug ? (
+                    <PersonIdentity
+                      workspaceSlug={workspace.slug}
+                      userId={person.id}
+                      name={person.name}
+                    />
+                  ) : (
+                    person.name
+                  )}
+                </span>
+              ))
             : "Unassigned"}
         </span>
         <TaskSelect

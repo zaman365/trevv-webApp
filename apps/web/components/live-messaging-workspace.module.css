@@ -1374,3 +1374,72 @@
   margin: 0;
   font-size: 1.15rem;
 }
+
+/* The floating host owns conversation navigation; the complete thread stays here. */
+.messagePage.floatingContent {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.floatingContent .messageLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.floatingContent
+  :is(
+    .conversationRail,
+    .conversationRailResizer,
+    .collapsedRailButton,
+    .contextRail,
+    .mobileBack
+  ) {
+  display: none !important;
+}
+.floatingContent .threadPane {
+  display: grid !important;
+  height: 100%;
+  min-height: 0;
+}
+.floatingContent .threadHeader {
+  padding: 0.65rem 0.8rem;
+}
+.floatingContent .threadHeader h2 {
+  font-size: 1rem;
+}
+.floatingContent .threadHeader small {
+  font-size: 0.7rem;
+}
+.floatingContent .timeline {
+  padding: 0.75rem;
+}
+.floatingContent .composer {
+  padding: 0.65rem;
+}
+.floatingContent .composer > div > small {
+  max-width: 70%;
+  font-size: 0.65rem;
+}
+.floatingContent .messageNotices:empty {
+  display: none;
+}
+
+.messagePage.floatingContent {
+  display: flex;
+  flex-direction: column;
+}
+.messagePage:not(.floatingContent) {
+  padding-bottom: 5rem;
+}
+.floatingContent .messageLayout {
+  flex: 1;
+  min-height: 0;
+}
+.floatingContent .messageNotices {
+  flex: 0 0 auto;
+}

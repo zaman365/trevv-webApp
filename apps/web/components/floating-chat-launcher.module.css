@@ -1,0 +1,58 @@
+.launcher {
+  position: fixed;
+  right: max(1.25rem, env(safe-area-inset-right));
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3.25rem;
+  width: 3.25rem;
+  padding: 0;
+  border: 1px solid var(--fh-primary, #5b56db);
+  border-radius: 50%;
+  background: var(--fh-primary, #5b56db);
+  color: var(--fh-on-primary, #fff);
+  box-shadow: 0 8px 28px rgb(30 25 70 / 22%);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.loading {
+  position: fixed;
+  z-index: 89;
+  right: 1.25rem;
+  bottom: 5.25rem;
+  padding: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+  color: var(--text);
+}
+.launcher:focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 3px;
+}
+.launcher:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+@media (max-width: 700px) {
+  .launcher {
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    right: 0.75rem;
+    height: 3rem;
+  }
+  .launcherLabel {
+    display: none;
+  }
+}
+
+.launcher :global(.nav-badge) {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+  border: 2px solid var(--surface);
+}

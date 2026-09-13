@@ -1,4 +1,5 @@
 "use client";
+import { PersonIdentity } from "./person-identity";
 import { SharedPlanningHub } from "./shared-planning-hub";
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -615,7 +616,13 @@ export function LiveTeamPage({
                             {initials(member.user.name)}
                           </span>
                           <span>
-                            <strong>{member.user.name}</strong>
+                            <strong>
+                              <PersonIdentity
+                                workspaceSlug={workspaceSlug}
+                                userId={member.user.id}
+                                name={member.user.name}
+                              />
+                            </strong>
                             <small>
                               {member.role === "lead"
                                 ? "Team lead"

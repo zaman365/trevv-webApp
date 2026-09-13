@@ -1,4 +1,5 @@
 "use client";
+import { PersonIdentity } from "./person-identity";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   teamFeatureCapabilitiesForPreset,
@@ -216,7 +217,13 @@ export function TeamManagementContent({
                       {initials(member.user.name)}
                     </span>
                     <div>
-                      <strong>{member.user.name}</strong>
+                      <strong>
+                        <PersonIdentity
+                          workspaceSlug={workspaceSlug}
+                          userId={member.user.id}
+                          name={member.user.name}
+                        />
+                      </strong>
                       <small>
                         {member.user.organizationRole.replaceAll("_", " ")} ·{" "}
                         {member.user.email}

@@ -16,8 +16,8 @@ import { AppLink as Link } from "@/components/navigation-link";
 import {
   dashboardMetrics,
   dashboardStatuses,
-  type DashboardFocus,
-} from "@/lib/workspace-dashboard";
+} from "@/lib/workspace-dashboard-metrics";
+import type { DashboardFocus } from "@/lib/workspace-dashboard";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { formatLiveDateOnly } from "@/lib/live-workflow-ui";
 import styles from "./workspace-dashboard.module.css";

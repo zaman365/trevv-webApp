@@ -2,12 +2,14 @@
 import { useState } from "react";
 
 export function MessageComposerInput({
+  id = "live-message-composer",
   initialBody,
   disabled,
   title,
   onChange,
   onBlur,
 }: {
+  id?: string;
   initialBody: string;
   disabled: boolean;
   title: string;
@@ -18,7 +20,7 @@ export function MessageComposerInput({
   return (
     <textarea
       disabled={disabled}
-      id="live-message-composer"
+      id={id}
       rows={2}
       placeholder={`Message ${title}`}
       value={body}

@@ -1,4 +1,5 @@
 "use client";
+import { PersonIdentity } from "./person-identity";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -215,7 +216,13 @@ export function LiveTeamCommunication({
         </span>
         <div>
           <header>
-            <strong>{message.sender.name}</strong>
+            <strong>
+              <PersonIdentity
+                workspaceSlug={workspaceSlug}
+                userId={message.sender.id}
+                name={message.sender.name}
+              />
+            </strong>
             <time dateTime={message.createdAt}>
               {time.format(new Date(message.createdAt))}
             </time>
