@@ -990,7 +990,11 @@ test.describe.serial("live founder operating loop", () => {
     await expect(
       page.getByText(`Server confirmed “${planName}”`),
     ).toBeVisible();
-    await page.getByRole("link", { name: "Open plan" }).click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: `Server confirmed “${planName}”` })
+      .getByRole("link", { name: "Open plan" })
+      .click();
 
     await page.getByTestId("create-item-open").click();
     const taskDialog = page.getByTestId("create-item-dialog");

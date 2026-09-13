@@ -4,9 +4,10 @@ const SharedPlanningHub = dynamic(
   { loading: () => <p>Loading plans and ideas…</p> },
 );
 import dynamic from "next/dynamic";
-const PlanningPeopleFields = dynamic(
-  () => import("./planning-people-fields").then((m) => m.PlanningPeopleFields),
-  { loading: () => <p>Loading people…</p> },
+const LiveDashboardPlanDialog = dynamic(() =>
+  import("./live-dashboard-plan-dialog").then(
+    (module) => module.LiveDashboardPlanDialog,
+  ),
 );
 import {
   emptyPeopleChoice,
@@ -14,7 +15,6 @@ import {
   type PeopleChoice,
 } from "@/lib/planning-sharing";
 
-import { useAccessibleDialog } from "@/lib/live-collaboration";
 import { LiveRefreshStatus } from "./live-refresh-status";
 import {
   DashboardTabs,
@@ -25,14 +25,11 @@ import {
 
 import type { BoardDto } from "@founderhq/api-contract";
 import {
-  CheckCircle2,
   ClipboardCheck,
   Clock3,
   FileQuestion,
-  LayoutList,
   Plus,
   Sparkles,
-  X,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -123,11 +120,6 @@ export function LiveWorkspaceDashboard({
   const operationStatus = operationsQuery.data;
   const loadError = boardsQuery.error;
   const [createOpen, setCreateOpen] = useState(false);
-  const planDialog = useAccessibleDialog<HTMLFormElement>(
-    () => setCreateOpen(false),
-    undefined,
-    createOpen,
-  );
   const shareResource = usePlanningSharing();
   const [boardTeamId, setBoardTeamId] = useState("");
   const [people, setPeople] = useState<PeopleChoice>(emptyPeopleChoice);
@@ -290,9 +282,6 @@ export function LiveWorkspaceDashboard({
   }
 
   const presentedLoadError = loadError ? presentLiveError(loadError) : null;
-  const presentedMutationError = mutationError
-    ? presentLiveError(mutationError)
-    : null;
 
   return (
     <WorkspaceFrame active="dashboard" workspaceSlug={workspaceSlug}>
@@ -601,164 +590,36 @@ export function LiveWorkspaceDashboard({
           ))}
 
         {createOpen ? (
-          <div
-            className={`dialog-layer ${styles.dialogLayer}`}
-            onMouseDown={() => setCreateOpen(false)}
-            role="presentation"
-          >
-            <form
-              aria-labelledby="live-board-create-title"
-              aria-modal="true"
-              className={`capture-dialog ${styles.captureDialog} ${styles.smallDialog}`}
-              data-testid="create-board-dialog"
-              ref={planDialog}
-              onMouseDown={(event) => event.stopPropagation()}
-              onSubmit={createBoard}
-              role="dialog"
-            >
-              <header>
-                <span className="attention-icon">
-                  <LayoutList size={17} />
-                </span>
-                <div>
-                  <h2 id="live-board-create-title">Create a plan</h2>
-                  <p>Organize tasks and milestones for {workspace.name}.</p>
-                </div>
-                <button
-                  aria-label="Close plan creation"
-                  onClick={() => setCreateOpen(false)}
-                  type="button"
-                >
-                  <X size={17} />
-                </button>
-              </header>
-              <div className={styles.formBody}>
-                {presentedMutationError ? (
-                  <LiveStateNotice
-                    description={presentedMutationError.description}
-                    kind={presentedMutationError.kind}
-                    title={presentedMutationError.title}
-                  />
-                ) : pending ? (
-                  <LiveStateNotice
-                    description="Success appears only after the server commits the plan."
-                    kind="pending"
-                    title="Waiting for server confirmation"
-                  />
-                ) : null}
-                <label className={styles.field}>
-                  <span>Plan name</span>
-                  <input
-                    autoFocus
-                    maxLength={160}
-                    onChange={(event) => {
-                      if (mutationError) {
-                        setMutationError(null);
-                        setIdempotencyKey(crypto.randomUUID());
-                      }
-                      setBoardName(event.target.value);
-                    }}
-                    required
-                    value={boardName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>Description · Optional</span>
-                  <textarea
-                    maxLength={5000}
-                    onChange={(event) => {
-                      if (mutationError) {
-                        setMutationError(null);
-                        setIdempotencyKey(crypto.randomUUID());
-                      }
-                      setBoardDescription(event.target.value);
-                    }}
-                    value={boardDescription}
-                  />
-                </label>
-                <div className={styles.formGrid}>
-                  <label className={styles.field}>
-                    <span>Start date · Optional</span>
-                    <input
-                      onChange={(event) => {
-                        if (mutationError) {
-                          setMutationError(null);
-                          setIdempotencyKey(crypto.randomUUID());
-                        }
-                        setBoardStartDate(event.target.value);
-                      }}
-                      type="date"
-                      value={boardStartDate}
-                    />
-                  </label>
-                  <label className={styles.field}>
-                    <span>End date · Optional</span>
-                    <input
-                      min={boardStartDate || undefined}
-                      onChange={(event) => {
-                        if (mutationError) {
-                          setMutationError(null);
-                          setIdempotencyKey(crypto.randomUUID());
-                        }
-                        setBoardEndDate(event.target.value);
-                      }}
-                      type="date"
-                      value={boardEndDate}
-                    />
-                  </label>
-                </div>
-                <PlanningPeopleFields
-                  workspaceId={workspaceId}
-                  teamId={boardTeamId}
-                  onTeamChange={(id) => {
-                    setBoardTeamId(id);
-                    setPeople((current) => ({
-                      ...current,
-                      participantIds: [],
-                    }));
-                    if (mutationError) {
-                      setMutationError(null);
-                      setIdempotencyKey(crypto.randomUUID());
-                    }
-                  }}
-                  value={people}
-                  onChange={setPeople}
-                  disabled={pending}
-                />
-              </div>
-              <footer>
-                <span>
-                  {people.enabled
-                    ? "Selected people will receive a shared discussion."
-                    : "Create now. Invite collaborators whenever you are ready."}
-                </span>
-                <div>
-                  <button onClick={() => setCreateOpen(false)} type="button">
-                    Cancel
-                  </button>
-                  <button
-                    className="primary-button"
-                    disabled={
-                      pending ||
-                      !boardName.trim() ||
-                      (people.enabled && !people.participantIds.length)
-                    }
-                    type="submit"
-                  >
-                    {pending ? (
-                      "Waiting for confirmation…"
-                    ) : mutationError ? (
-                      "Retry same request"
-                    ) : (
-                      <>
-                        <CheckCircle2 size={14} /> Create plan
-                      </>
-                    )}
-                  </button>
-                </div>
-              </footer>
-            </form>
-          </div>
+          <LiveDashboardPlanDialog
+            workspaceId={workspaceId}
+            workspaceName={workspace.name}
+            draft={{
+              name: boardName,
+              description: boardDescription,
+              startDate: boardStartDate,
+              endDate: boardEndDate,
+              teamId: boardTeamId,
+              people,
+            }}
+            onChange={(next) => {
+              if (mutationError) {
+                setMutationError(null);
+                setIdempotencyKey(crypto.randomUUID());
+              }
+              if (next.name !== undefined) setBoardName(next.name);
+              if (next.description !== undefined)
+                setBoardDescription(next.description);
+              if (next.startDate !== undefined)
+                setBoardStartDate(next.startDate);
+              if (next.endDate !== undefined) setBoardEndDate(next.endDate);
+              if (next.teamId !== undefined) setBoardTeamId(next.teamId);
+              if (next.people !== undefined) setPeople(next.people);
+            }}
+            pending={pending}
+            error={mutationError}
+            onSubmit={createBoard}
+            onClose={() => setCreateOpen(false)}
+          />
         ) : null}
       </main>
     </WorkspaceFrame>

@@ -98,6 +98,21 @@
   opacity: 0.55;
 }
 
+.pageHeader .headerActions {
+  justify-items: end;
+  flex-shrink: 1;
+  max-width: 100%;
+  gap: 0.5rem;
+}
+.headerActions > a {
+  font-size: 0.8rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+}
+
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -952,10 +967,19 @@
 }
 .teamWorkActions {
   display: flex;
+  grid-column: 1 / -1;
   gap: 0.65rem;
   align-items: center;
   flex-wrap: wrap;
   font-size: 0.75rem;
+}
+.teamWorkActions > a,
+.teamWorkActions > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-height: 2rem;
+  white-space: nowrap;
 }
 .teamTabs {
   display: flex;

@@ -164,40 +164,41 @@ export function LiveTeamWorkflowContent({
               connected.
             </span>
           </div>
-          {canCreate ? (
-            <button
-              className="primary-button"
-              data-testid="create-team-open"
-              disabled={directoryAccessLost || directory.isLoading}
-              onClick={(event) => {
-                teamTriggerRef.current = event.currentTarget;
-                setError(null);
-                setSavedMessage("");
-                setCreateOpen(true);
-              }}
-              type="button"
-            >
-              <Plus size={16} /> Create Team
-            </button>
-          ) : null}
+          <div className={styles.headerActions}>
+            {canCreate ? (
+              <button
+                className="primary-button"
+                data-testid="create-team-open"
+                disabled={directoryAccessLost || directory.isLoading}
+                onClick={(event) => {
+                  teamTriggerRef.current = event.currentTarget;
+                  setError(null);
+                  setSavedMessage("");
+                  setCreateOpen(true);
+                }}
+                type="button"
+              >
+                <Plus size={16} /> Create Team
+              </button>
+            ) : null}
+            {["owner", "admin"].includes(session.organization.role) ? (
+              <Link
+                href={`/app/account/invitations?workspaceId=${encodeURIComponent(workspace.id)}`}
+              >
+                Invite people to {workspace.name}
+              </Link>
+            ) : null}
+            <small className={styles.syncStatus} aria-live="off">
+              {directory.isFetching && !directory.isLoading
+                ? "Checking for Team changes"
+                : "Team directory"}
+            </small>
+          </div>
         </header>
-
-        {["owner", "admin"].includes(session.organization.role) ? (
-          <Link
-            href={`/app/account/invitations?workspaceId=${encodeURIComponent(workspace.id)}`}
-          >
-            Invite people to {workspace.name}
-          </Link>
-        ) : null}
 
         {directory.isLoading ? (
           <LiveStateNotice kind="loading" title="Loading Teams" />
         ) : null}
-        <span className={styles.syncStatus} aria-live="off">
-          {directory.isFetching && !directory.isLoading
-            ? "Checking for Team changes"
-            : "Team directory"}
-        </span>
         {presentedError ? (
           <LiveStateNotice
             {...presentedError}
@@ -372,25 +373,6 @@ export function LiveTeamWorkflowContent({
                         }{" "}
                         blocked{liveData.recordsComplete ? "" : " · Loading…"}
                       </p>
-                      <div className={styles.teamWorkActions}>
-                        <Link href={teamHref(workspaceSlug, team.id)}>
-                          Open team{" "}
-                          <ChevronRight size={14} aria-hidden="true" />
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setWorkTeamId(team.id)}
-                        >
-                          View member workload
-                        </button>
-                        {team.room ? (
-                          <Link
-                            href={`${workspaceHref(workspaceSlug, "messages")}#${encodeURIComponent(team.room.conversationId)}`}
-                          >
-                            Open team room
-                          </Link>
-                        ) : null}
-                      </div>
                       <div
                         className={styles.featureChips}
                         aria-label={`${team.name} interface options`}
@@ -405,6 +387,26 @@ export function LiveTeamWorkflowContent({
                           <span>No feature preset</span>
                         ) : null}
                       </div>
+                    </div>
+                    <div className={styles.teamWorkActions}>
+                      <Link href={teamHref(workspaceSlug, team.id)}>
+                        Open team <ChevronRight size={14} aria-hidden="true" />
+                      </Link>
+                      <button
+                        type="button"
+                        aria-label="View member workload"
+                        onClick={() => setWorkTeamId(team.id)}
+                      >
+                        Workload
+                      </button>
+                      {team.room ? (
+                        <Link
+                          aria-label="Open team room"
+                          href={`${workspaceHref(workspaceSlug, "messages")}#${encodeURIComponent(team.room.conversationId)}`}
+                        >
+                          Team room
+                        </Link>
+                      ) : null}
                     </div>
                     <footer className={styles.teamCardFooter}>
                       <small>{teamFeatureAvailability(team)}</small>

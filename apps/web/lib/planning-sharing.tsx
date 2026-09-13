@@ -10,14 +10,17 @@ import {
 } from "react";
 import type { CreateConversationInput } from "@founderhq/api-contract";
 import { useQueryClient } from "@tanstack/react-query";
-import { AppLink as Link } from "@/components/navigation-link";
+import dynamic from "next/dynamic";
 import { useAppSession } from "./app-session-context";
 import { useLiveAppRecords } from "./live-app-data";
 import { collaborationKeys } from "./live-collaboration";
 import { liveDraftStorageKey } from "./live-workflow-ui";
 import { presentLiveError } from "./live-errors";
-import { workspaceHref } from "./workspace-routes";
-import styles from "@/components/planning-sharing-status.module.css";
+const PlanningSharingStatus = dynamic(() =>
+  import("@/components/planning-sharing-status").then(
+    (module) => module.PlanningSharingStatus,
+  ),
+);
 
 export type PeopleChoice = {
   enabled: boolean;
@@ -198,71 +201,16 @@ export function PlanningSharingProvider({ children }: { children: ReactNode }) {
     <SharingContext.Provider value={share}>
       {children}
       {jobs.length ? (
-        <aside
-          className={styles.tray}
-          aria-label="Plan and idea sharing"
-          aria-live="polite"
-        >
-          {jobs.map((job) => {
-            const workspace = data.workspaces.find(
-              (entry) => entry.id === job.input.workspaceId,
-            );
-            if (!workspace) return null;
-            const busy = pending.includes(job.key);
-            return (
-              <div key={job.key} className={styles.shareStatus}>
-                <strong>{job.title}</strong>
-                <p>
-                  {job.roomId
-                    ? "Shared with your selected people. The discussion is ready."
-                    : busy
-                      ? "Saved. Sharing with your selected people…"
-                      : "Saved. Sharing has not been confirmed; retry without creating another plan or idea."}
-                </p>
-                {errors[job.key] ? <p role="alert">{errors[job.key]}</p> : null}
-                <div className={styles.actions}>
-                  {job.roomId ? (
-                    <Link
-                      href={`${workspaceHref(workspace.slug, "messages")}#${encodeURIComponent(job.roomId)}`}
-                      onClick={() =>
-                        persist(
-                          journal.current.filter(
-                            (entry) => entry.key !== job.key,
-                          ),
-                        )
-                      }
-                    >
-                      Open discussion
-                    </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void send(job)}
-                    >
-                      Retry sharing
-                    </button>
-                  )}
-                  {job.roomId ? (
-                    <button
-                      type="button"
-                      aria-label={`Dismiss sharing confirmation for ${job.title}`}
-                      onClick={() =>
-                        persist(
-                          journal.current.filter(
-                            (entry) => entry.key !== job.key,
-                          ),
-                        )
-                      }
-                    >
-                      Dismiss
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </aside>
+        <PlanningSharingStatus
+          jobs={jobs}
+          pending={pending}
+          errors={errors}
+          workspaces={data.workspaces}
+          onRetry={(job) => void send(job)}
+          onDismiss={(key) =>
+            persist(journal.current.filter((entry) => entry.key !== key))
+          }
+        />
       ) : null}
     </SharingContext.Provider>
   );
