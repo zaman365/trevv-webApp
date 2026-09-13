@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { setup } from "../fixtures/live-workflow-browser";
 import { teamWorkspaceApi } from "../fixtures/team-workspace-api";
 import {
@@ -176,6 +177,54 @@ async function includeTeam(page: Page) {
     .getByLabel("Invitation note")
     .fill("Please help shape the first milestone.");
 }
+
+test("planning cards keep wrapped descriptions and actions readable across multiple rows", async ({
+  page,
+}) => {
+  const api = planningApi();
+  const initial = api.state.boards[0]!;
+  initial.description = "A focused operating loop for recurring company work.";
+  for (let index = 1; index <= 3; index++) {
+    api.state.boards.push({
+      ...initial,
+      id: `layout-plan-${index}`,
+      name: `Delivery plan ${index} with a longer title to wrap`,
+      description:
+        "A clear goal and shared delivery plan.\nKeep ownership, decisions and next steps visible to everyone involved.",
+    });
+  }
+  await setup(page, "", { dashboard: true, styled: true, api: api.api });
+  const hub = page.getByRole("region", {
+    name: "Plans and ideas",
+    exact: true,
+  });
+  await expect(hub.locator("article")).toHaveCount(4);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1050 });
+    for (const card of await hub.locator("article").all()) {
+      await card.scrollIntoViewIfNeeded();
+      expect(
+        await card.evaluate((element) => {
+          const children = [...element.children].map((child) =>
+            child.getBoundingClientRect(),
+          );
+          return children.every(
+            (rect, index) =>
+              index === 0 || rect.top >= children[index - 1]!.bottom - 1,
+          );
+        }),
+      ).toBe(true);
+      await expect(card.getByRole("link", { name: "Open plan" })).toBeVisible();
+    }
+    const findings = await new AxeBuilder({ page })
+      .include('[aria-label="Plans and ideas"]')
+      .analyze();
+    expect(findings.violations).toEqual([]);
+    expect(
+      findings.incomplete.filter((finding) => finding.id === "color-contrast"),
+    ).toEqual([]);
+  }
+});
 
 test("plan creation optionally includes selected teammates, announces once and appears on dashboard and personal work", async ({
   page,

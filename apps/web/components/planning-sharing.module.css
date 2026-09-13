@@ -90,6 +90,11 @@
   cursor: default;
   opacity: 0.5;
 }
+.hub a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .hub {
   display: grid;
   gap: 18px;
@@ -128,13 +133,21 @@
   gap: 14px;
 }
 .card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 18px;
   border: 1px solid #e4e6f0;
   border-radius: 14px;
   background: var(--surface-subtle, #fafaff);
   min-width: 0;
+}
+.card > .actions {
+  margin-top: auto;
+}
+.card h3 {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 .card p {
   overflow-wrap: anywhere;
