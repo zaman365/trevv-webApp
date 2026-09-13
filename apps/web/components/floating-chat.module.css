@@ -395,3 +395,18 @@
   flex-shrink: 0;
   margin-right: 0.5rem;
 }
+
+@media (max-width: 600px) {
+  .launcher {
+    bottom: calc(70px + max(0.75rem, env(safe-area-inset-bottom)));
+  }
+  .window,
+  .expanded,
+  .loading {
+    bottom: calc(70px + 4.8rem);
+  }
+  .window,
+  .expanded {
+    height: calc(100dvh - 70px - 6rem);
+  }
+}

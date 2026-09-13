@@ -30,6 +30,55 @@ async function openTeamChat(page: Page) {
   return floating;
 }
 
+test("mobile navigation stays clickable below the chat launcher and window", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await start(page);
+  // The isolated workflow fixture omits WorkspaceFrame. Recreate its five
+  // bottom targets with the production navigation styles for overlap coverage.
+  await page.evaluate(() => {
+    const nav = document.createElement("nav");
+    nav.className = "mobile-bottom-nav";
+    nav.setAttribute("aria-label", "Mobile navigation");
+    for (const label of ["My work", "Capture", "Inbox", "Messages", "More"]) {
+      const button = document.createElement("button");
+      button.textContent = label;
+      button.onclick = () => nav.setAttribute("data-selected", label);
+      nav.append(button);
+    }
+    document.body.append(nav);
+  });
+  const nav = page.getByRole("navigation", { name: "Mobile navigation" });
+  for (const width of [320, 390, 600]) {
+    await page.setViewportSize({ width, height: 844 });
+    const launcher = await page
+      .getByLabel("Open chats", { exact: true })
+      .boundingBox();
+    const navigation = await nav.boundingBox();
+    expect(launcher!.y + launcher!.height).toBeLessThan(navigation!.y);
+    await nav.getByRole("button", { name: "More", exact: true }).click();
+    await expect(nav).toHaveAttribute("data-selected", "More");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const floating = await openTeamChat(page);
+  const windowBounds = await floating.boundingBox();
+  const navigation = await nav.boundingBox();
+  expect(windowBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(windowBounds!.y + windowBounds!.height).toBeLessThan(navigation!.y);
+  await expect(
+    floating.getByRole("button", { name: "Send", exact: true }),
+  ).toBeInViewport();
+  await floating.getByRole("button", { name: "Minimize chat window" }).click();
+  const violations = (
+    await new AxeBuilder({ page })
+      .include(".mobile-bottom-nav")
+      .withRules(["target-size"])
+      .analyze()
+  ).violations;
+  expect(violations).toEqual([]);
+});
+
 test("floating conversation sends and retries real messages without changing the page, and keeps drafts after minimizing", async ({
   page,
 }) => {

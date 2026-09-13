@@ -56,3 +56,12 @@
   right: -0.25rem;
   border: 2px solid var(--surface);
 }
+
+@media (max-width: 600px) {
+  .launcher {
+    bottom: calc(70px + max(0.75rem, env(safe-area-inset-bottom)));
+  }
+  .loading {
+    bottom: calc(70px + 4.8rem);
+  }
+}

@@ -96,3 +96,7 @@ A local preview at `http://127.0.0.1:4178/?view=person` uses isolated sample dat
 and supports exercising chat and profile interactions without contacting real
 users. These checks do not establish production deployment; release status is
 tracked separately.
+
+The mobile launcher and its window reserve space above the bottom navigation.
+The release regression checks keep every navigation target clickable at narrow
+phone widths and retain access to the message composer after opening chats.
