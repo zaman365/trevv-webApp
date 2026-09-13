@@ -1,5 +1,7 @@
 "use client";
 
+import { QuickCaptureButton } from "./quick-capture-button";
+
 import {
   Bell,
   BookOpenText,
@@ -1050,31 +1052,14 @@ function WorkspaceChrome({
           <nav className="topbar-actions" aria-label="Workspace shortcuts">
             {contextProject && (
               <>
-                <button
-                  className="quiet-button capture-button topbar-create-button"
-                  onPointerEnter={() =>
-                    warmCreateDialog(
-                      appSession.demo ? "demo-capture" : "live-capture",
-                    )
-                  }
-                  onFocus={() =>
+                <QuickCaptureButton
+                  onIntent={() =>
                     warmCreateDialog(
                       appSession.demo ? "demo-capture" : "live-capture",
                     )
                   }
                   onClick={() => setCaptureOpen(true)}
-                  aria-label="Create work"
-                  aria-describedby="create-work-shortcut"
-                >
-                  <Plus size={26} strokeWidth={2.5} aria-hidden="true" />
-                  <span
-                    className="topbar-create-shortcut"
-                    id="create-work-shortcut"
-                    role="tooltip"
-                  >
-                    Press <kbd>Q</kbd>
-                  </span>
-                </button>
+                />
                 <Link
                   className={`topbar-tool topbar-tool-attention ${active === "attention" ? "active" : ""}`}
                   aria-label={`Attention, ${attentionCount} items`}

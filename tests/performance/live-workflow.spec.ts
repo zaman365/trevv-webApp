@@ -1,292 +1,14 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
-import { createRequire } from "node:module";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { resolve, extname } from "node:path";
-import type {
-  InboxItemDto,
-  WorkItemDto,
-  WorkItemEvidenceDto,
-} from "@founderhq/api-contract";
+import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import type { WorkItemDto } from "@founderhq/api-contract";
 import {
   board,
   item,
   members,
   snapshot,
+  teams,
 } from "../../apps/web/test-fixtures/live-workflow-data";
-
-let directory = "";
-const assets = new Map<string, Buffer>();
-test.beforeAll(async () => {
-  const require = createRequire(resolve("apps/web/package.json"));
-  const { build } = await import(require.resolve("vite"));
-  const shell = resolve("apps/web/test-fixtures/live-workflow-shell.tsx");
-  directory = await mkdtemp(resolve(tmpdir(), "trevv-live-workflow-"));
-  await build({
-    configFile: false,
-    root: resolve("apps/web"),
-    logLevel: "error",
-    resolve: {
-      alias: [
-        {
-          find: "@founderhq/api-contract",
-          replacement: resolve("packages/api-contract/src/index.ts"),
-        },
-        { find: "./workspace-frame", replacement: shell },
-        { find: "@/components/navigation-link", replacement: shell },
-        { find: "@/lib/navigation-performance", replacement: shell },
-        { find: "@", replacement: resolve("apps/web") },
-      ],
-    },
-    define: { "process.env.NODE_ENV": JSON.stringify("production") },
-    build: {
-      outDir: directory,
-      minify: true,
-      lib: {
-        entry: resolve("apps/web/test-fixtures/live-workflow.tsx"),
-        formats: ["es"],
-        fileName: () => "harness.js",
-      },
-    },
-  });
-  for (const file of await readdir(directory))
-    assets.set(`/${file}`, await readFile(resolve(directory, file)));
-});
-test.afterAll(async () => {
-  if (directory) await rm(directory, { recursive: true, force: true });
-});
-
-async function setup(
-  page: Page,
-  hash = "",
-  options: {
-    dashboard?: boolean;
-    records?: WorkItemDto[];
-    operations?: (route: Route) => Promise<void>;
-  } = {},
-) {
-  let records = options.records ?? [structuredClone(item)];
-  let inbox: InboxItemDto[] = [];
-  const evidence: WorkItemEvidenceDto[] = [];
-  let holdReads = false;
-  let holdInboxReads = false;
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const creations: Array<Record<string, unknown>> = [];
-  const conversions: Array<Record<string, unknown>> = [];
-  const transitions: Array<{
-    path: string;
-    body: Record<string, unknown>;
-    version: string;
-  }> = [];
-  await page.route("https://trevv.test/**", async (route) => {
-    const request = route.request();
-    const path = new URL(request.url()).pathname;
-    if (path === "/")
-      return route.fulfill({
-        contentType: "text/html",
-        body: '<div id="root"></div><script type="module" src="/harness.js"></script>',
-      });
-    if (assets.has(path))
-      return route.fulfill({
-        contentType: extname(path) === ".css" ? "text/css" : "text/javascript",
-        body: assets.get(path)!,
-      });
-    if (path === "/api/v1/operations/status")
-      return options.operations
-        ? options.operations(route)
-        : route.fulfill({ json: { pendingOutbox: 0, failedCount: 0 } });
-    const existing = records.find(
-      (record) =>
-        path === `/api/v1/items/${record.id}` ||
-        path.startsWith(`/api/v1/items/${record.id}/`),
-    );
-    if (existing && ["PATCH", "PUT", "POST"].includes(request.method())) {
-      const input = request.postDataJSON();
-      transitions.push({
-        path,
-        body: input,
-        version: request.headers()["if-match"],
-      });
-      expect(request.headers()["if-match"]).toBe(`"${existing.version}"`);
-      const next = {
-        ...existing,
-        ...input,
-        version: existing.version + 1,
-        ...(path.endsWith("/resolve") ? { status: "done" as const } : {}),
-        ...(path.endsWith("/assignees")
-          ? {
-              assignees: members
-                .filter((m) => input.assigneeIds.includes(m.user.id))
-                .map((m) => ({ id: m.user.id, name: m.user.name })),
-            }
-          : {}),
-      };
-      if (input.dueDate === null) delete next.dueDate;
-      records = records.map((record) =>
-        record.id === next.id ? next : record,
-      );
-      if (path.endsWith("/evidence")) {
-        const entry: WorkItemEvidenceDto = {
-          id: `evidence-${evidence.length}`,
-          itemId: next.id,
-          author: { id: "user-one", name: "Owner" },
-          body: input.body,
-          evidence: true,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-        evidence.push(entry);
-        return route.fulfill({
-          headers: { etag: `"${next.version}"` },
-          json: { evidence: entry, itemVersion: next.version },
-        });
-      }
-      return route.fulfill({
-        headers: { etag: `"${next.version}"` },
-        json:
-          request.method() === "PATCH"
-            ? next
-            : { item: next, attentionRefreshQueued: true },
-      });
-    }
-    if (path === "/api/v1/inbox" && request.method() === "POST") {
-      const input = request.postDataJSON();
-      const captured = {
-        ...input,
-        id: "capture-one",
-        userId: "user-one",
-        version: 1,
-        createdAt: item.createdAt,
-      };
-      inbox = [...inbox, captured];
-      return route.fulfill({
-        status: 201,
-        headers: { etag: '"1"' },
-        json: captured,
-      });
-    }
-    if (path === "/api/v1/inbox/capture-one/convert") {
-      const input = request.postDataJSON();
-      conversions.push(input);
-      const next = {
-        ...item,
-        ...input,
-        id: "capture-one",
-        assignees: members
-          .filter((m) => input.assigneeIds.includes(m.user.id))
-          .map((m) => ({ id: m.user.id, name: m.user.name })),
-      };
-      records = [...records, next];
-      const converted = {
-        ...inbox[0],
-        convertedItemId: next.id,
-        convertedAt: item.createdAt,
-        version: 2,
-      };
-      inbox = [converted];
-      return route.fulfill({
-        headers: { etag: '"2"' },
-        json: { inboxItem: converted, workItem: next },
-      });
-    }
-    if (path === "/api/v1/items" && request.method() === "POST") {
-      const input = request.postDataJSON();
-      creations.push(input);
-      const next = {
-        ...item,
-        ...input,
-        id: "created-item",
-        assignees: members
-          .filter((m) => input.assigneeIds.includes(m.user.id))
-          .map((m) => ({ id: m.user.id, name: m.user.name })),
-      };
-      records = [...records, next];
-      return route.fulfill({
-        status: 201,
-        headers: { etag: '"1"' },
-        json: next,
-      });
-    }
-    if (path === "/api/v1/items" && holdReads) await held;
-    if (path === "/api/v1/inbox" && holdInboxReads) await held;
-    const json =
-      existing && path === `/api/v1/items/${existing.id}`
-        ? existing
-        : existing && path.endsWith("/evidence")
-          ? evidence.filter((entry) => entry.itemId === existing.id)
-          : path === "/api/v1/portfolios"
-            ? snapshot.portfolios
-            : path === "/api/v1/workspaces"
-              ? snapshot.workspaces
-              : path === "/api/v1/items"
-                ? { data: records, nextCursor: null }
-                : path === "/api/v1/boards"
-                  ? [board]
-                  : path === `/api/v1/boards/${board.id}`
-                    ? board
-                    : path === `/api/v1/workspaces/${board.workspaceId}/teams`
-                      ? {
-                          teams: [],
-                          availableMembers: members.map((member) => ({
-                            ...member.user,
-                            organizationRole: member.role,
-                          })),
-                        }
-                      : path === "/api/v1/inbox"
-                        ? inbox
-                        : path === "/api/v1/attention" ||
-                            path === "/api/v1/invitations" ||
-                            path === "/api/v1/waiting" ||
-                            /\/(history|evidence)$/.test(path)
-                          ? []
-                          : undefined;
-    if (json === undefined)
-      throw new Error(`Unexpected request: ${request.method()} ${path}`);
-    return route.fulfill({ json });
-  });
-  await page.goto(
-    `https://trevv.test/${options.dashboard ? "?view=dashboard" : ""}${hash}`,
-  );
-  if (options.dashboard) {
-    await expect(page.getByTestId("live-dashboard")).toBeVisible();
-    await expect(
-      page
-        .getByRole("region", { name: "Project progress", exact: true })
-        .getByRole("link", {
-          name: new RegExp(board.name),
-        }),
-    ).toBeVisible();
-  } else {
-    await expect(page.getByTestId("live-board")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: board.name, exact: true }),
-    ).toBeVisible();
-  }
-  return {
-    setRecords: (next: WorkItemDto[]) => {
-      records = next;
-    },
-    creations,
-    conversions,
-    transitions,
-    hold: () => {
-      holdReads = true;
-    },
-    holdInbox: () => {
-      holdInboxReads = true;
-    },
-    release,
-    change: () => {
-      records = records.map((record) => ({
-        ...record,
-        version: record.version + 1,
-      }));
-    },
-  };
-}
+import { setup } from "../fixtures/live-workflow-browser";
 
 test("dashboard keeps worker status loading when boards finish first", async ({
   page,
@@ -318,6 +40,216 @@ test("dashboard keeps worker status loading when boards finish first", async ({
     release();
   }
 });
+
+test("team summary cards open team details, unique people assignments, and accessible rooms", async ({
+  page,
+}) => {
+  await setup(page, "", { view: "teams", teams });
+  const summary = page.getByRole("region", { name: "Team summary" });
+  const teamCard = summary.getByRole("button", { name: "3 Teams View teams" });
+  const peopleCard = summary.getByRole("button", {
+    name: "2 Assigned people View people",
+  });
+  const roomsCard = summary.getByRole("button", {
+    name: "3 Synchronized rooms View rooms",
+  });
+
+  await teamCard.focus();
+  await page.keyboard.press("Enter");
+  const teamSummary = page.getByRole("dialog", { name: "Teams", exact: true });
+  await expect(teamSummary.getByRole("listitem")).toHaveCount(3);
+  await expect(teamSummary).toContainText("Bring the launch to customers.");
+  await expect(teamSummary).toContainText("Lead: Owner");
+  await teamSummary
+    .getByRole("button", { name: "View Launch team details" })
+    .click();
+  const details = page.getByRole("dialog", {
+    name: "Launch team",
+    exact: true,
+  });
+  await expect(teamSummary).toHaveCount(0);
+  await expect(
+    details.getByRole("button", { name: "People (2)" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(details.getByText(/teammate@example\.test/)).toBeVisible();
+  await expect(
+    details.getByRole("button", { name: "Projects and work" }),
+  ).toBeVisible();
+  await expect(
+    details.getByRole("button", { name: "Topics and discussions" }),
+  ).toBeVisible();
+  await details.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(details.getByLabel("Name", { exact: true })).toBeEditable();
+  await page.keyboard.press("Escape");
+  await expect(teamCard).toBeFocused();
+
+  await peopleCard.click();
+  const people = page.getByRole("dialog", { name: "Assigned people" });
+  await expect(people.getByRole("listitem")).toHaveCount(2);
+  const owner = people
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: "Owner", exact: true }) });
+  await expect(owner).toContainText("owner@example.test");
+  await expect(owner).toContainText("Launch team · Lead");
+  await expect(owner).toContainText("Operations · Member");
+  await owner
+    .getByRole("button", {
+      name: "Operations · Member: View team members for Owner",
+    })
+    .click();
+  const operations = page.getByRole("dialog", {
+    name: "Operations",
+    exact: true,
+  });
+  await expect(
+    operations.getByRole("button", { name: "People (1)" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await operations
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  await expect(operations.getByLabel("Name", { exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(peopleCard).toBeFocused();
+
+  await roomsCard.click();
+  const rooms = page.getByRole("dialog", { name: "Synchronized rooms" });
+  await expect(rooms.getByRole("listitem")).toHaveCount(3);
+  await expect(rooms).toContainText("3 unread messages");
+  await expect(rooms).toContainText("Up to date");
+  const privateRoom = rooms.getByRole("listitem").filter({
+    has: page.getByRole("heading", { name: "Private team", exact: true }),
+  });
+  await expect(privateRoom).toContainText("Private to team members");
+  await expect(privateRoom.getByRole("link")).toHaveCount(0);
+  await privateRoom
+    .getByRole("button", { name: "View Private team members" })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Private team", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(roomsCard).toBeFocused();
+  await roomsCard.click();
+  const roomLink = rooms.getByRole("link", { name: "Open Launch team room" });
+  await expect(roomLink).toHaveAttribute(
+    "href",
+    "/app/workspaces/launch/messages#room-launch",
+  );
+  await page.route(
+    "https://trevv.test/app/workspaces/launch/messages",
+    (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<h1>Room destination</h1>",
+      }),
+  );
+  await roomLink.click();
+  await expect(page).toHaveURL(
+    "https://trevv.test/app/workspaces/launch/messages#room-launch",
+  );
+});
+
+test("team summary details stay current and close when directory access is lost", async ({
+  page,
+}) => {
+  const state = await setup(page, "", { view: "teams", teams });
+  const summary = page.getByRole("region", { name: "Team summary" });
+  await summary.getByRole("button", { name: /Assigned people/ }).click();
+  const people = page.getByRole("dialog", { name: "Assigned people" });
+  await expect(people.getByRole("listitem")).toHaveCount(2);
+  state.setTeams(
+    teams.map((team) => ({
+      ...team,
+      members: team.members.filter((member) => member.user.id !== "user-two"),
+    })),
+  );
+  await expect(people.getByRole("listitem")).toHaveCount(1, {
+    timeout: 10_000,
+  });
+  await expect(
+    summary.getByRole("button", { name: /Assigned people/ }),
+  ).toContainText("1");
+  state.denyTeamAccess();
+  await expect(people).toHaveCount(0, { timeout: 15_000 });
+  for (const card of await summary.getByRole("button").all())
+    await expect(card).toBeDisabled();
+  await expect(
+    page.getByRole("heading", { name: "Launch team", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("team summary cards provide empty details without inventing people or rooms", async ({
+  page,
+}) => {
+  await setup(page, "", { view: "teams" });
+  const summary = page.getByRole("region", { name: "Team summary" });
+  for (const [name, message] of [
+    ["Teams", "No teams yet."],
+    ["Assigned people", "No assigned people yet."],
+    ["Synchronized rooms", "No team rooms yet."],
+  ]) {
+    const card = summary.getByRole("button", { name: new RegExp(name) });
+    await expect(card).toContainText("0");
+    await card.click();
+    const dialog = page.getByRole("dialog", { name, exact: true });
+    await expect(dialog).toContainText(message);
+    await expect(dialog.getByRole("listitem")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Close team summary" }).click();
+    await expect(card).toBeFocused();
+  }
+});
+
+for (const theme of ["light", "dark"] as const)
+  test(`team summary panels fit mobile screens and keep keyboard focus inside in ${theme}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await setup(page, "", { view: "teams", teams });
+    const summary = page.getByRole("region", { name: "Team summary" });
+    await summary.screenshot({
+      path: test.info().outputPath("team-summary-mobile.png"),
+    });
+    const peopleCard = summary.getByRole("button", { name: /Assigned people/ });
+    await peopleCard.focus();
+    await page.keyboard.press("Space");
+    const dialog = page.getByRole("dialog", { name: "Assigned people" });
+    const close = dialog.getByRole("button", { name: "Close team summary" });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button").last()).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+    await page.screenshot({
+      path: test.info().outputPath("assigned-people-mobile.png"),
+    });
+    const accessibility = await new AxeBuilder({ page })
+      .include('[role="dialog"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .analyze();
+    expect(accessibility.violations).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(peopleCard).toBeFocused();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await summary.screenshot({
+      path: test.info().outputPath("team-summary-desktop.png"),
+    });
+    await peopleCard.click();
+    await page.screenshot({
+      path: test.info().outputPath("assigned-people-desktop.png"),
+    });
+    await page.mouse.click(10, 10);
+    await expect(dialog).toHaveCount(0);
+    await expect(peopleCard).toBeFocused();
+  });
 
 test("dashboard shows a real worker status failure and supports retry", async ({
   page,

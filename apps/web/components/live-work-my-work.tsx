@@ -20,12 +20,14 @@ export function LiveMyWork({
   assignedToMe = true,
   title = "My tasks",
   initialPeriod = "open",
+  onOpen,
 }: {
   items: WorkItemDto[];
   workspaceSlug?: string;
   assignedToMe?: boolean;
   title?: string;
   initialPeriod?: TaskPeriod;
+  onOpen?: (item: WorkItemDto) => void;
 }) {
   useReportRouteReady(true);
   const session = useAppSession();
@@ -175,6 +177,7 @@ export function LiveMyWork({
           timezone={session.organization.timezone ?? "UTC"}
           pendingIds={pendingIds}
           onStatusChange={(item, status) => void changeStatus(item, status)}
+          {...(onOpen ? { onOpen } : {})}
           initialPeriod={initialPeriod}
           complete={liveData.recordsComplete}
         />

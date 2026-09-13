@@ -1,4 +1,4 @@
-import type { BoardDto, WorkItemDto } from "@founderhq/api-contract";
+import type { BoardDto, TeamDto, WorkItemDto } from "@founderhq/api-contract";
 import type { LiveAppDataSnapshot } from "../lib/live-app-data";
 
 export const timestamp = "2026-09-07T10:00:00.000Z";
@@ -92,3 +92,72 @@ export const members = [
   createdAt: timestamp,
   updatedAt: timestamp,
 }));
+
+export const teams: TeamDto[] = [
+  {
+    id: "team-launch",
+    organizationId: session.organization.id,
+    portfolioId: "portfolio-one",
+    workspaceId: board.workspaceId,
+    name: "Launch team",
+    purpose: "Bring the launch to customers.",
+    preset: "marketing",
+    featureCapabilities: ["work", "messages"],
+    featurePolicySource: "preset",
+    members: members.map((member, index) => ({
+      user: { ...member.user, organizationRole: "member" },
+      role: index === 0 ? "lead" : "member",
+      joinedAt: timestamp,
+    })),
+    room: {
+      conversationId: "room-launch",
+      title: "Launch team",
+      unreadCount: 3,
+    },
+    version: 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  },
+  {
+    id: "team-operations",
+    organizationId: session.organization.id,
+    portfolioId: "portfolio-one",
+    workspaceId: board.workspaceId,
+    name: "Operations",
+    purpose: "Keep delivery running.",
+    preset: "operations",
+    featureCapabilities: ["work", "messages"],
+    featurePolicySource: "preset",
+    members: [
+      {
+        user: { ...session.user, organizationRole: "owner" },
+        role: "member",
+        joinedAt: timestamp,
+      },
+    ],
+    room: {
+      conversationId: "room-operations",
+      title: "Operations",
+      unreadCount: 0,
+    },
+    version: 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  },
+  {
+    id: "team-private",
+    organizationId: session.organization.id,
+    portfolioId: "portfolio-one",
+    workspaceId: board.workspaceId,
+    name: "Private team",
+    purpose: "Plan the next project.",
+    preset: "custom",
+    featureCapabilities: ["messages"],
+    featurePolicySource: "override",
+    members: [],
+    room: null,
+    version: 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  },
+];

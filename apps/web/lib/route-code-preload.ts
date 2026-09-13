@@ -22,6 +22,7 @@ const modules = {
   planning: () => import("../components/live-project-planning"),
   guide: () => import("../components/trevv-guide"),
   liveTeams: () => import("../components/live-team-workflow"),
+  liveTeamPage: () => import("../components/live-team-page"),
   liveWork: () => import("../components/live-work-views"),
   liveWorkMyWork: () => import("../components/live-work-my-work"),
   liveWorkAttention: () => import("../components/live-work-attention"),
@@ -67,6 +68,8 @@ export function routeCodeModules(
   if (!view) return ["moduleLoader", live ? "liveDashboard" : "dashboard"];
   if (/^boards\/[^/]+$/.test(view))
     return ["boardLoader", live ? "liveBoard" : "board"];
+  if (/^teams\/[^/]+$/.test(view))
+    return live ? ["liveTeamPage"] : ["moduleLoader", "management"];
   if (view === "settings/import") return ["management"];
   if (view === "stakeholder") return ["stakeholder"];
   if (!isWorkspaceView(view)) return [];

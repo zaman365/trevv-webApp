@@ -1,201 +1,316 @@
 "use client";
 
-import { useReportRouteReady } from "@/lib/navigation-performance";
-
-import type { AttentionSignalDto } from "@founderhq/api-contract";
-import { Sparkles } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useAppSession } from "@/lib/app-session-context";
 import {
-  useLiveAppRecords as useLiveAppData,
-  useLiveAppRefreshedAt,
-} from "@/lib/live-app-data";
-import { presentLiveError } from "@/lib/live-errors";
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type {
+  AttentionAction,
+  AttentionSignalDto,
+} from "@founderhq/api-contract";
+import { attentionActionSchema } from "@founderhq/api-contract";
+import { ChevronRight, Sparkles } from "lucide-react";
+import { useReportRouteReady } from "@/lib/navigation-performance";
+import { useAppSession } from "@/lib/app-session-context";
+import { useLiveAppRecords } from "@/lib/live-app-data";
+import {
+  isLiveAccessLoss,
+  presentLiveError,
+  presentLiveReadError,
+} from "@/lib/live-errors";
 import { formatLiveDate } from "@/lib/live-workflow-ui";
-import { LiveStateNotice } from "./live-state";
-import styles from "./live-operating-loop.module.css";
-import { WindowedCollection } from "./windowed-collection";
+import {
+  issueHash,
+  issueIdFromHash,
+  issueResolutionSection,
+  isActiveIssue,
+  type IssueSection,
+} from "@/lib/attention-workspace";
 import { recordKey, retainedKey } from "@/lib/live-work-view-helpers";
+import { LiveStateNotice } from "./live-state";
+import { WindowedCollection } from "./windowed-collection";
+import styles from "./live-operating-loop.module.css";
+import issueStyles from "./live-issue-detail.module.css";
+
+const IssueDetail = lazy(() =>
+  import("./live-issue-detail").then((module) => ({
+    default: module.LiveIssueDetail,
+  })),
+);
+type Selection = {
+  signal: AttentionSignalDto;
+  section: IssueSection;
+  action?: AttentionAction["action"];
+};
 
 export function LiveAttention({ signals }: { signals: AttentionSignalDto[] }) {
   useReportRouteReady(true);
   const session = useAppSession();
-  const liveData = useLiveAppData();
-  const refreshedAt = useLiveAppRefreshedAt()!;
+  const data = useLiveAppRecords();
   const [records, setRecords] = useState(signals);
+  const [selected, setSelected] = useState<Selection | null>(null);
+  const trigger = useRef<HTMLElement | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const busy = useRef(false);
   const [notice, setNotice] = useState<ReactNode>(null);
-  const [conflict, setConflict] = useState<{
-    signalId: string;
-    input: {
-      action: "resolve" | "dismiss" | "snooze";
-      reason?: string;
-      snoozedUntil?: string;
-    };
+  const [failure, setFailure] = useState<{
+    signal: AttentionSignalDto;
+    input: AttentionAction;
     error: unknown;
   } | null>(null);
   const retryKeys = useRef(new Map<string, string>());
-  const active = records.filter(
-    (signal) => !signal.resolvedAt && !signal.dismissedAt,
+  const confirmed = useRef(new Map<string, AttentionSignalDto>());
+  const [now, setNow] = useState(Date.now);
+  const active = data.accessLost
+    ? []
+    : records.filter((signal) => isActiveIssue(signal, now));
+  const selectedSignal = selected
+    ? (records.find((record) => record.id === selected.signal.id) ??
+      selected.signal)
+    : null;
+  const workspace = data.workspaces.find(
+    (record) => record.id === selectedSignal?.workspaceId,
   );
 
   useEffect(() => {
-    if (pendingId) return;
-    const timer = window.setTimeout(() => setRecords(signals), 0);
+    const timer = window.setTimeout(
+      () =>
+        setRecords(
+          signals.map((signal) => {
+            const saved = confirmed.current.get(signal.id);
+            return saved && saved.version > signal.version ? saved : signal;
+          }),
+        ),
+      0,
+    );
     return () => window.clearTimeout(timer);
-  }, [pendingId, signals]);
-
-  async function act(
-    signal: AttentionSignalDto,
-    action: "resolve" | "dismiss" | "snooze",
-  ) {
-    const reason =
-      action === "resolve"
-        ? undefined
-        : window
-            .prompt(
-              action === "dismiss"
-                ? "Why is this signal not actionable?"
-                : "Why should this signal be snoozed?",
-            )
-            ?.trim();
-    if (action !== "resolve" && !reason) return;
-    const input = {
-      action,
-      ...(reason ? { reason } : {}),
-      ...(action === "snooze"
-        ? {
-            snoozedUntil: new Date(
-              Date.parse(refreshedAt) + 86_400_000,
-            ).toISOString(),
-          }
-        : {}),
+  }, [signals]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const sync = () => {
+      const id = issueIdFromHash(window.location.hash);
+      setSelected((current) => {
+        if (!id) return null;
+        if (current?.signal.id === id) return current;
+        const signal = signals.find((record) => record.id === id);
+        return signal ? { signal, section: "overview" } : null;
+      });
     };
-    await performAttentionAction(signal, input);
-  }
-
-  async function performAttentionAction(
+    const timer = window.setTimeout(sync, 0);
+    window.addEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener("hashchange", sync);
+    };
+  }, [signals]);
+  function open(
     signal: AttentionSignalDto,
-    input: {
-      action: "resolve" | "dismiss" | "snooze";
-      reason?: string;
-      snoozedUntil?: string;
-    },
+    element: HTMLElement,
+    section: IssueSection = "overview",
+    action?: AttentionAction["action"],
   ) {
-    const fingerprint = `attention:${signal.id}:${signal.version}:${JSON.stringify(input)}`;
+    trigger.current = element;
+    setSelected({ signal, section, ...(action ? { action } : {}) });
+    setNotice(null);
+    setFailure(null);
+    if (window.location.hash !== issueHash(signal.id))
+      window.history.pushState(null, "", issueHash(signal.id));
+  }
+  function close() {
+    setSelected(null);
+    if (issueIdFromHash(window.location.hash))
+      window.history.pushState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
+    trigger.current?.focus();
+  }
+  async function perform(signal: AttentionSignalDto, input: AttentionAction) {
+    if (busy.current) return false;
+    const parsed = attentionActionSchema.safeParse(input);
+    if (!parsed.success) {
+      setNotice(
+        <LiveStateNotice
+          kind="validation"
+          title="Add a reason of at least three characters"
+        />,
+      );
+      return false;
+    }
+    busy.current = true;
     setPendingId(signal.id);
     setNotice(null);
-    setConflict(null);
+    setFailure(null);
+    const fingerprint = `attention:${signal.id}:${signal.version}:${JSON.stringify(input)}`;
     try {
-      const response = await liveData.client.actOnAttention(
+      const response = await data.client.actOnAttention(
         signal.id,
-        input,
+        {
+          action: input.action,
+          ...(input.reason ? { reason: input.reason } : {}),
+          ...(input.snoozedUntil ? { snoozedUntil: input.snoozedUntil } : {}),
+        },
         signal.version,
         retainedKey(retryKeys.current, fingerprint),
       );
       retryKeys.current.delete(fingerprint);
+      confirmed.current.set(signal.id, response.data);
       setRecords((current) =>
         current.map((record) =>
-          record.id === response.data.id ? response.data : record,
+          record.id === signal.id ? response.data : record,
         ),
       );
       setNotice(
         <LiveStateNotice
-          description={`Signal version ${response.data.version} is canonical. This action has no safe inverse in the domain, so Undo is intentionally not offered.`}
           kind="saved"
-          title={`Server confirmed ${input.action}`}
+          title={
+            input.action === "resolve"
+              ? "Issue marked resolved"
+              : input.action === "dismiss"
+                ? "Issue dismissed"
+                : "Issue snoozed for 24 hours"
+          }
+          {...(input.reason ? { description: input.reason } : {})}
         />,
       );
-      await liveData.refresh();
-    } catch (reason) {
-      const presented = presentLiveError(reason);
-      if (presented.kind === "version-conflict") {
-        setConflict({ signalId: signal.id, input, error: reason });
-      } else {
-        setNotice(
-          <LiveStateNotice
-            description={presented.description}
-            kind={presented.kind}
-            title={presented.title}
-          />,
-        );
-      }
+      // Refresh failure cannot turn an acknowledged write into an unconfirmed one.
+      void data.refresh().catch(() => undefined);
+      return true;
+    } catch (error) {
+      setFailure({ signal, input, error });
+      return false;
     } finally {
+      busy.current = false;
       setPendingId(null);
     }
   }
-
+  async function loadLatest(reapply = false) {
+    if (!failure || busy.current) return;
+    const current = failure;
+    try {
+      const latest = await data.client.attention(
+        current.signal.workspaceId
+          ? { workspaceId: current.signal.workspaceId }
+          : {},
+      );
+      const signal = latest.find((record) => record.id === current.signal.id);
+      if (!signal) {
+        setRecords((records) =>
+          records.filter((record) => record.id !== current.signal.id),
+        );
+        setFailure(null);
+        setNotice(
+          <LiveStateNotice
+            kind="saved"
+            title="This issue is no longer active"
+            description="The latest server check no longer lists it as open."
+          />,
+        );
+        void data.refresh();
+      } else if (reapply) await perform(signal, current.input);
+      else {
+        setRecords((records) =>
+          records.map((record) => (record.id === signal.id ? signal : record)),
+        );
+        setFailure(null);
+        setNotice(
+          <LiveStateNotice
+            kind="saved"
+            title="Latest issue loaded"
+            description="Review the current issue and your kept draft before applying an action."
+          />,
+        );
+      }
+    } catch (error) {
+      setFailure({ ...current, error });
+    }
+  }
+  const presented = failure ? presentLiveError(failure.error) : null;
+  const actionNotice = (
+    <>
+      {notice}
+      {failure && presented ? (
+        <LiveStateNotice
+          {...presented}
+          title={
+            presented.kind === "terminal-error"
+              ? "Could not confirm the issue action"
+              : presented.title
+          }
+          description={
+            presented.kind === "terminal-error"
+              ? "Your outcome is kept. Check the latest issue state before retrying; the action may already have been saved."
+              : presented.description
+          }
+          actions={
+            <>
+              <button type="button" onClick={() => void loadLatest()}>
+                Load latest
+              </button>
+              {presented.kind === "version-conflict" ? (
+                <button type="button" onClick={() => void loadLatest(true)}>
+                  Reapply to latest
+                </button>
+              ) : !isLiveAccessLoss(failure.error) ? (
+                <button
+                  type="button"
+                  onClick={() => void perform(failure.signal, failure.input)}
+                >
+                  Retry action
+                </button>
+              ) : null}
+            </>
+          }
+        />
+      ) : null}
+    </>
+  );
+  const canWrite = !["guest", "viewer"].includes(session.organization.role);
   return (
     <section className={styles.panel} aria-labelledby="attention-signals-title">
       <header>
         <div>
-          <p>Computed from canonical records</p>
+          <p>Issues that need a next step</p>
           <h2 id="attention-signals-title">Open signals</h2>
         </div>
         <span>
           {active.length}
-          {liveData.recordsComplete ? " active" : " active loaded"}
+          {data.recordsComplete ? " active" : " active loaded"}
         </span>
       </header>
-      {notice}
-      {conflict ? (
+      {!selected ? actionNotice : null}
+      {data.error ? (
         <LiveStateNotice
+          {...presentLiveReadError(data.error)}
           actions={
-            <>
-              <button
-                onClick={() =>
-                  void (async () => {
-                    const latest = (await liveData.client.attention()).find(
-                      (signal) => signal.id === conflict.signalId,
-                    );
-                    if (latest) {
-                      setRecords((current) =>
-                        current.map((signal) =>
-                          signal.id === latest.id ? latest : signal,
-                        ),
-                      );
-                    }
-                    setConflict(null);
-                  })()
-                }
-                type="button"
-              >
-                Load latest
-              </button>
-              <button
-                onClick={() =>
-                  void (async () => {
-                    const current = conflict;
-                    const latest = (await liveData.client.attention()).find(
-                      (signal) => signal.id === current.signalId,
-                    );
-                    if (latest)
-                      await performAttentionAction(latest, current.input);
-                  })()
-                }
-                type="button"
-              >
-                Reapply to latest
-              </button>
-            </>
+            <button type="button" onClick={() => void data.refresh()}>
+              Refresh issues
+            </button>
           }
-          description={presentLiveError(conflict.error).description}
-          kind="version-conflict"
-          title="Choose how to handle the recomputed signal"
         />
       ) : null}
       {active.length === 0 ? (
         <LiveStateNotice
-          description={
-            liveData.recordsComplete
-              ? "The worker found no unresolved deterministic signals."
-              : "More workspace records are still arriving."
-          }
-          kind={liveData.recordsComplete ? "empty" : "loading"}
+          kind={data.recordsComplete ? "empty" : "loading"}
           title={
-            liveData.recordsComplete
+            data.recordsComplete
               ? "Nothing needs attention"
               : "Loading attention signals"
+          }
+          description={
+            data.recordsComplete
+              ? "There are no open issues requiring attention right now."
+              : "Workspace records are still arriving."
           }
         />
       ) : (
@@ -207,22 +322,46 @@ export function LiveAttention({ signals }: { signals: AttentionSignalDto[] }) {
         >
           {(signal) => (
             <article
-              className={styles.signalCard}
+              className={`${styles.signalCard} ${issueStyles.card}`}
               data-severity={signal.severity}
               data-testid={`attention-signal-${signal.id}`}
               key={signal.id}
+              onClick={(event) => {
+                if (
+                  !(event.target as HTMLElement).closest(
+                    "button, a, input, select, textarea, summary",
+                  )
+                ) {
+                  const button =
+                    event.currentTarget.querySelector<HTMLButtonElement>(
+                      "button",
+                    );
+                  if (button) open(signal, button);
+                }
+              }}
             >
               <span className={styles.rowIcon}>
-                <Sparkles size={16} />
+                <Sparkles size={16} aria-hidden="true" />
               </span>
               <div>
                 <p>
                   {signal.severity} · {signal.reasonCode}
                 </p>
-                <h3>{signal.reason}</h3>
+                <h3>
+                  <button
+                    type="button"
+                    className={issueStyles.openIssue}
+                    onClick={(event) => open(signal, event.currentTarget)}
+                  >
+                    {signal.reason}
+                  </button>
+                </h3>
                 {signal.recommendedAction ? (
                   <span>{signal.recommendedAction}</span>
                 ) : null}
+                <span className={issueStyles.cardHint}>
+                  Open details & next steps <ChevronRight size={13} />
+                </span>
                 <ul>
                   {signal.sourceEvidence.map((source) => (
                     <li key={`${source.sourceType}:${source.sourceId}`}>
@@ -240,31 +379,65 @@ export function LiveAttention({ signals }: { signals: AttentionSignalDto[] }) {
               </div>
               <div className={styles.rowActions}>
                 <button
-                  disabled={pendingId === signal.id}
-                  onClick={() => void act(signal, "resolve")}
                   type="button"
+                  onClick={(event) =>
+                    open(
+                      signal,
+                      event.currentTarget,
+                      issueResolutionSection(signal),
+                    )
+                  }
                 >
                   Resolve
                 </button>
-                <button
-                  disabled={pendingId === signal.id}
-                  onClick={() => void act(signal, "snooze")}
-                  type="button"
-                >
-                  Snooze 24h
-                </button>
-                <button
-                  disabled={pendingId === signal.id}
-                  onClick={() => void act(signal, "dismiss")}
-                  type="button"
-                >
-                  Dismiss
-                </button>
+                {canWrite ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={pendingId === signal.id}
+                      onClick={(event) =>
+                        open(signal, event.currentTarget, "overview", "snooze")
+                      }
+                    >
+                      Snooze 24h
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pendingId === signal.id}
+                      onClick={(event) =>
+                        open(signal, event.currentTarget, "overview", "dismiss")
+                      }
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                ) : null}
               </div>
             </article>
           )}
         </WindowedCollection>
       )}
+      {selected && selectedSignal && workspace && !data.accessLost ? (
+        <Suspense
+          fallback={
+            <LiveStateNotice kind="loading" title="Opening issue details" />
+          }
+        >
+          <IssueDetail
+            key={`${selectedSignal.id}:${selected.section}:${selected.action ?? ""}`}
+            signal={selectedSignal}
+            workspace={workspace}
+            initialSection={selected.section}
+            {...(selected.action ? { initialAction: selected.action } : {})}
+            active={active.some((record) => record.id === selectedSignal.id)}
+            pending={pendingId === selectedSignal.id}
+            actionNotice={actionNotice}
+            returnFocusRef={trigger}
+            onClose={close}
+            onAction={perform}
+          />
+        </Suspense>
+      ) : null}
     </section>
   );
 }

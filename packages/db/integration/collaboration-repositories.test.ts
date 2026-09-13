@@ -6,6 +6,9 @@ import {
   createPostgresRepositories,
 } from "../src/index.js";
 import {
+  boards,
+  workItems,
+  conversations,
   conversationMessages,
   conversationReactions,
   memberships,
@@ -127,6 +130,146 @@ async function seed(label: string) {
 }
 
 describe("collaboration PostgreSQL repositories", () => {
+  it("shares a plan atomically, replays safely, and limits announcements and replies to selected people", async () => {
+    const fixture = await seed("planning-sharing");
+    const reposFor = (userId: string) =>
+      createPostgresRepositories(connection.db).forOrganization(
+        createOrganizationScope({
+          organizationId: fixture.organizationId,
+          userId,
+          requestId: "planning-sharing-test",
+        }),
+      );
+    const owner = reposFor(fixture.ownerId);
+    const member = reposFor(fixture.memberId);
+    const observer = reposFor(fixture.observerId);
+    const sourceId = "shared-plan-source";
+    await connection.db.insert(boards).values({
+      id: sourceId,
+      organizationId: fixture.organizationId,
+      workspaceId: fixture.workspaceId,
+      name: "Shared plan",
+    });
+    const input = {
+      workspaceId: fixture.workspaceId,
+      title: "Plan: Shared plan",
+      kind: "workspace" as const,
+      visibility: "private" as const,
+      participantIds: [fixture.memberId],
+      context: { entityType: "board" as const, entityId: sourceId },
+      openingMessage: "Please review the plan and suggest next steps.",
+    };
+    const mutation = {
+      method: "POST",
+      route: "/api/v1/conversations",
+      idempotencyKey: "shared-plan-key",
+    };
+    const created = await owner.collaboration.createConversation(
+      input,
+      mutation,
+    );
+    const replay = await owner.collaboration.createConversation(
+      input,
+      mutation,
+    );
+    expect(replay.replayed).toBe(true);
+    expect(replay.value.conversation.id).toBe(created.value.conversation.id);
+    expect(created.value.conversation.contextBoardId).toBe(sourceId);
+    const roomId = created.value.conversation.id;
+    const messages = await member.collaboration.listMessages(roomId);
+    expect(messages.data).toHaveLength(1);
+    expect(messages.data[0]!.message.body).toBe(input.openingMessage);
+    expect(
+      (await member.collaboration.getConversation(roomId)).unreadCount,
+    ).toBe(1);
+    expect(
+      (await observer.collaboration.listConversations(fixture.workspaceId))
+        .data,
+    ).toHaveLength(0);
+    await expect(
+      observer.collaboration.getConversation(roomId),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    const reply = await member.collaboration.sendMessage(
+      roomId,
+      {
+        clientMessageId: "db877f20-b7f8-4682-9747-cf9f16bfe230",
+        parentMessageId: messages.data[0]!.message.id,
+        body: "I can help with the first milestone.",
+      },
+      { method: "POST", route: "/api/v1/messages" },
+    );
+    expect(reply.value.message.parentMessageId).toBe(
+      messages.data[0]!.message.id,
+    );
+    const before = (
+      await owner.collaboration.listConversations(fixture.workspaceId)
+    ).data.length;
+    await expect(
+      owner.collaboration.createConversation(
+        { ...input, openingMessage: " " },
+        { ...mutation, idempotencyKey: "invalid-announcement" },
+      ),
+    ).rejects.toThrow();
+    expect(
+      (await owner.collaboration.listConversations(fixture.workspaceId)).data,
+    ).toHaveLength(before);
+    const foreign = await seed("planning-foreign");
+    await connection.db.insert(boards).values({
+      id: "foreign-plan-source",
+      organizationId: foreign.organizationId,
+      workspaceId: foreign.workspaceId,
+      name: "Foreign plan",
+    });
+    await expect(
+      owner.collaboration.createConversation(
+        {
+          ...input,
+          context: { entityType: "board", entityId: "foreign-plan-source" },
+        },
+        { ...mutation, idempotencyKey: "foreign-context" },
+      ),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    await expect(
+      owner.collaboration.createConversation(
+        { ...input, visibility: "organization" },
+        { ...mutation, idempotencyKey: "public-context" },
+      ),
+    ).rejects.toThrow();
+    await connection.db.insert(workItems).values({
+      id: "shared-idea-source",
+      organizationId: fixture.organizationId,
+      workspaceId: fixture.workspaceId,
+      boardId: sourceId,
+      title: "Shared idea",
+      itemType: "idea",
+      status: "not_started",
+      creatorId: fixture.ownerId,
+    });
+    const idea = await owner.collaboration.createConversation(
+      {
+        ...input,
+        context: { entityType: "work_item", entityId: "shared-idea-source" },
+      },
+      { ...mutation, idempotencyKey: "idea-context" },
+    );
+    expect(idea.value.conversation.contextWorkItemId).toBe(
+      "shared-idea-source",
+    );
+    // Purging a source remains possible and cascades only its linked discussion.
+    await connection.db
+      .delete(workItems)
+      .where(eq(workItems.id, "shared-idea-source"));
+    expect(
+      await connection.db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, idea.value.conversation.id)),
+    ).toHaveLength(0);
+    expect(
+      (await owner.collaboration.getConversation(roomId)).conversation.id,
+    ).toBe(roomId);
+  });
+
   it("lists and materializes implicit administrator Workspace access for Team assignment", async () => {
     const fixture = await seed("implicit-admin-team");
     const adminId = "admin-collab-implicit-admin-team";

@@ -773,9 +773,43 @@
   font-size: 0.7rem;
 }
 
-.dialogLayer {
+.dialogLayer:global(.dialog-layer) {
   place-items: center;
   padding: 1rem;
+}
+
+.embeddedDetail,
+.embeddedDetailContent,
+.embeddedCapture {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+.embeddedDetailContent > header,
+.embeddedCapture > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.embeddedDetailContent > .drawerBody {
+  padding: 0;
+  overflow: visible;
+}
+.embeddedCapture > .formBody {
+  padding: 0;
+  overflow: visible;
+}
+.embeddedCapture > footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.embeddedCapture > footer > div {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .captureDialog,
@@ -1064,4 +1098,8 @@
 }
 .planCard > button {
   justify-self: start;
+}
+
+.captureBoardField {
+  grid-column: 1 / -1;
 }

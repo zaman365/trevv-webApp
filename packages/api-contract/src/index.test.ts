@@ -493,6 +493,38 @@ describe("Phase 4 collaboration contract", () => {
     ]);
   });
 
+  it("accepts optional plan context and atomic announcements only for private workspace discussions", () => {
+    const input = {
+      workspaceId: "workspace-1",
+      title: "Plan discussion",
+      kind: "workspace",
+      visibility: "private",
+      participantIds: ["user-1", "user-2"],
+      context: { entityType: "board", entityId: "board-1" },
+      openingMessage: "Please share your feedback.",
+    };
+    expect(createConversationSchema.safeParse(input).success).toBe(true);
+    expect(
+      createConversationSchema.safeParse({
+        ...input,
+        visibility: "organization",
+      }).success,
+    ).toBe(false);
+    expect(
+      createConversationSchema.safeParse({ ...input, kind: "direct" }).success,
+    ).toBe(false);
+    expect(
+      createConversationSchema.safeParse({ ...input, context: undefined })
+        .success,
+    ).toBe(false);
+    expect(
+      createConversationSchema.safeParse({
+        ...input,
+        context: { entityType: "work_item", entityId: "idea-1" },
+      }).success,
+    ).toBe(true);
+  });
+
   it("keeps direct and external conversations scoped explicitly", () => {
     expect(
       createConversationSchema.safeParse({

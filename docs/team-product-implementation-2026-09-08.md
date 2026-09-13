@@ -33,6 +33,12 @@ browser regression coverage for the complete journeys, including narrow screens.
 - Team management opens on People, with existing-member selection, invitations,
   roles and membership controls. Projects and work, Topics and discussions, and
   Settings have separate tabs. Team/profile conflicts preserve the user's draft.
+- Team directory summary cards open details: Teams lists purposes, leads and
+  membership counts; Assigned people lists each person once with their team
+  roles; Synchronized rooms shows unread counts and links to accessible rooms.
+  Team and membership actions open the existing team details. Private rooms
+  retain membership restrictions. The panels support keyboard navigation,
+  focus restoration, mobile layouts, empty states and live directory updates.
 - Marketing, Technology, Sales, Operations and Leadership have purpose, project
   templates, work categories and context fields appropriate to their work.
 - Projects contain dated sprints/campaigns and milestone-linked tasks. Team,

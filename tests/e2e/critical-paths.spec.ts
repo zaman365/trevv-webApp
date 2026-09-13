@@ -167,7 +167,7 @@ test("Dashboard turns portfolio signals into auditable next actions", async ({
 
   await page.getByRole("button", { name: "Create a follow-up" }).click();
   await expect(
-    page.getByRole("dialog", { name: "Create in TREVV" }),
+    page.getByRole("dialog", { name: "Quick capture" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close Create" }).click();
 });

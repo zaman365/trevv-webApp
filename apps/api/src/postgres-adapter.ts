@@ -2053,6 +2053,21 @@ function toConversationDto(
     portfolioId: conversation.portfolioId,
     workspaceId: conversation.workspaceId,
     ...(projection.teamId ? { teamId: projection.teamId } : {}),
+    ...(conversation.contextBoardId
+      ? {
+          context: {
+            entityType: "board" as const,
+            entityId: conversation.contextBoardId,
+          },
+        }
+      : conversation.contextWorkItemId
+        ? {
+            context: {
+              entityType: "work_item" as const,
+              entityId: conversation.contextWorkItemId,
+            },
+          }
+        : {}),
     title: conversation.title,
     purpose: conversation.purpose,
     kind: conversationKind(conversation.kind),

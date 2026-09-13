@@ -1364,3 +1364,13 @@
     scroll-behavior: auto;
   }
 }
+.messagePage.embeddedContent {
+  width: 100%;
+  height: min(52rem, 100dvh);
+  min-height: 38rem;
+  padding: 0;
+}
+.embeddedContent .pageHeader h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}

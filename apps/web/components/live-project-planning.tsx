@@ -1,6 +1,12 @@
 "use client";
+import { PlanningPeopleFields } from "./planning-people-fields";
+import {
+  emptyPeopleChoice,
+  usePlanningSharing,
+  type PeopleChoice,
+} from "@/lib/planning-sharing";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type RefObject } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BoardDto } from "@founderhq/api-contract";
 import { TrevvApiError } from "@founderhq/api-client";
@@ -308,6 +314,7 @@ export function PlanEditor({
   board,
   onClose,
   onSaved,
+  returnFocusRef,
 }: {
   workspaceId: string;
   boards: BoardDto[];
@@ -317,9 +324,12 @@ export function PlanEditor({
   board?: BoardDto;
   onClose: () => void;
   onSaved: (board: BoardDto) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const { client } = useLiveAppRecords();
-  const dialog = useAccessibleDialog<HTMLFormElement>(onClose);
+  const shareResource = usePlanningSharing();
+  const [people, setPeople] = useState<PeopleChoice>(emptyPeopleChoice);
+  const dialog = useAccessibleDialog<HTMLFormElement>(onClose, returnFocusRef);
   const [name, setName] = useState(board?.name ?? "");
   const [description, setDescription] = useState(board?.description ?? "");
   const [kind, setKind] = useState<PlanKind>(
@@ -343,7 +353,12 @@ export function PlanEditor({
   const selectedTeam = teams.find((entry) => entry.id === teamId);
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (pending || !name.trim()) return;
+    if (
+      pending ||
+      !name.trim() ||
+      (people.enabled && !people.participantIds.length)
+    )
+      return;
     setPending(true);
     setError(null);
     const planning = {
@@ -387,6 +402,17 @@ export function PlanEditor({
             key,
           );
       keys.current.delete(fingerprint);
+      shareResource(
+        {
+          entityType: "board",
+          entityId: result.data.id,
+          title: result.data.name,
+          description: result.data.description,
+          workspaceId,
+        },
+        people,
+        key,
+      );
       onSaved(result.data);
     } catch (reason) {
       setError(reason);
@@ -452,7 +478,10 @@ export function PlanEditor({
             <select
               aria-label="Team"
               value={teamId}
-              onChange={(event) => setTeamId(event.target.value)}
+              onChange={(event) => {
+                setTeamId(event.target.value);
+                setPeople((current) => ({ ...current, participantIds: [] }));
+              }}
             >
               <option value="">No team yet</option>
               {teams.map((team) => (
@@ -593,6 +622,14 @@ export function PlanEditor({
               />
             </label>
           </div>
+          <PlanningPeopleFields
+            workspaceId={workspaceId}
+            teamId={teamId}
+            onTeamChange={setTeamId}
+            showTeam={false}
+            value={people}
+            onChange={setPeople}
+          />
           {state === "completed" ? (
             <p>
               Completing a cycle keeps unfinished tasks visible. Move them to
@@ -613,7 +650,11 @@ export function PlanEditor({
             <button
               type="submit"
               className="primary-button"
-              disabled={pending || !name.trim()}
+              disabled={
+                pending ||
+                !name.trim() ||
+                (people.enabled && !people.participantIds.length)
+              }
             >
               {pending ? "Saving…" : board ? "Save plan" : "Create plan"}
             </button>

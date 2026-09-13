@@ -1,0 +1,342 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  padding: 1.25rem;
+  display: grid;
+  place-items: center;
+  background: rgb(14 19 35 / 48%);
+  backdrop-filter: blur(4px);
+}
+.dialog {
+  width: min(72rem, 100%);
+  max-height: calc(100dvh - 2.5rem);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 25%);
+}
+.dialog [hidden] {
+  display: none !important;
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.4rem 1.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.header > div {
+  min-width: 0;
+}
+.header p {
+  margin: 0 0 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+.dialog .header h2 {
+  margin: 0 0 0.7rem;
+  font-size: clamp(1.25rem, 2.5vw, 1.7rem);
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.severity {
+  display: inline-block;
+  padding: 0.3rem 0.6rem;
+  border-radius: 7px;
+  background: var(--fh-primary-soft);
+  color: var(--fh-primary-strong);
+  text-transform: capitalize;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.severity[data-severity="critical"],
+.severity[data-severity="high"] {
+  color: var(--fh-danger);
+  background: var(--fh-danger-soft);
+}
+.tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  padding: 0.65rem 1.5rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+.dialog button,
+.dialog a:not(.sourceLink) {
+  cursor: pointer;
+}
+.tabs button,
+.actions button,
+.form button,
+.form > a,
+.header > button,
+.footer > button,
+.sourceLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.6rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+.tabs button {
+  flex-shrink: 0;
+  border-color: transparent;
+}
+.tabs button[aria-current="page"],
+.tabs button[aria-pressed="true"] {
+  color: var(--fh-primary-strong);
+  background: var(--fh-primary-soft);
+}
+.dialog .primary {
+  color: var(--fh-on-primary);
+  background: var(--fh-primary);
+  border-color: var(--fh-primary);
+}
+.dialog button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.dialog :is(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 3px;
+}
+.body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.5rem;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+.section,
+.form,
+.form fieldset {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.section h3,
+.panel h3 {
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 650;
+}
+.section p,
+.panel p {
+  margin: 0;
+  line-height: 1.6;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  min-width: 0;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+.dialog .sourceLink {
+  justify-content: flex-start;
+  text-align: left;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+.dialog dt {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  margin-bottom: 0.3rem;
+}
+.dialog dd {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.dialog summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.dialog details > :not(summary) {
+  margin-top: 0.8rem;
+}
+.dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+}
+.evidence {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.evidence li {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+.evidence time {
+  color: var(--text-secondary);
+  font-size: 0.73rem;
+}
+.form fieldset {
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+.form label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.form :is(input, select, textarea) {
+  min-width: 0;
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+}
+.form textarea {
+  resize: vertical;
+}
+.form button,
+.form > a {
+  justify-self: start;
+}
+.form small {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.85rem 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.footer span,
+.footer a {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.card {
+  cursor: pointer;
+}
+.card:hover {
+  border-color: var(--fh-primary);
+}
+.openIssue {
+  display: block;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+  text-align: left;
+  padding: 0.2rem 0;
+  cursor: pointer;
+}
+.openIssue:hover {
+  color: var(--fh-primary);
+  text-decoration: underline;
+}
+.openIssue:focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 3px;
+}
+.cardHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--fh-primary);
+  font-size: 0.75rem;
+}
+@media (max-width: 650px) {
+  .backdrop {
+    padding: 0.5rem;
+  }
+  .dialog {
+    max-height: calc(100dvh - 1rem);
+    border-radius: 14px;
+  }
+  .header,
+  .body {
+    padding: 1rem;
+  }
+  .header > button {
+    flex-shrink: 0;
+  }
+  .tabs {
+    padding: 0.5rem 0.75rem;
+  }
+  .facts,
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+  .footer {
+    padding: 0.75rem 1rem;
+  }
+  .footer span {
+    display: none;
+  }
+  .actions > button {
+    flex: 1 1 auto;
+  }
+}

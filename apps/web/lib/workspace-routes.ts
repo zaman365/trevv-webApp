@@ -48,3 +48,12 @@ export function workspaceScopeHref(
     ? workspaceHref(workspaceSlug, view, hash)
     : portfolioHref;
 }
+
+export function teamHref(
+  workspaceSlug: string,
+  teamId: string,
+  section?: string,
+) {
+  const path = `${workspaceHref(workspaceSlug, "teams")}/${encodeURIComponent(teamId)}`;
+  return section ? `${path}#${encodeURIComponent(section)}` : path;
+}

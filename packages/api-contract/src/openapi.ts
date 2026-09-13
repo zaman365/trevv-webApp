@@ -4272,6 +4272,15 @@ export const openApiDocument = {
           joinedAt: { type: "string", format: "date-time" },
         },
       },
+      ConversationContext: {
+        type: "object",
+        required: ["entityType", "entityId"],
+        additionalProperties: false,
+        properties: {
+          entityType: { type: "string", enum: ["board", "work_item"] },
+          entityId: { type: "string", minLength: 3, maxLength: 128 },
+        },
+      },
       Conversation: {
         type: "object",
         required: [
@@ -4298,6 +4307,7 @@ export const openApiDocument = {
           portfolioId: { type: "string", minLength: 3, maxLength: 128 },
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           teamId: { type: "string", minLength: 3, maxLength: 128 },
+          context: { $ref: "#/components/schemas/ConversationContext" },
           title: { type: "string", minLength: 1, maxLength: 160 },
           purpose: { type: "string", maxLength: 1000 },
           kind: {
@@ -4336,6 +4346,8 @@ export const openApiDocument = {
       },
       CreateConversation: {
         type: "object",
+        description:
+          "Linked contexts require a private workspace room and a source in the same workspace. The optional opening announcement commits atomically with the room.",
         required: [
           "workspaceId",
           "title",
@@ -4345,6 +4357,8 @@ export const openApiDocument = {
         ],
         additionalProperties: false,
         properties: {
+          context: { $ref: "#/components/schemas/ConversationContext" },
+          openingMessage: { type: "string", minLength: 1, maxLength: 20000 },
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           title: { type: "string", minLength: 1, maxLength: 160 },
           purpose: { type: "string", maxLength: 1000, default: "" },

@@ -1777,7 +1777,7 @@ async function createDirectCapture(
   await expect(page).toHaveURL(new RegExp(`/app/workspaces/${workspaceSlug}$`));
   await expect(page.getByTestId("live-dashboard")).toBeVisible();
   const createWork = page.getByRole("button", {
-    name: "Create work",
+    name: "Quick capture",
     exact: true,
   });
   await expect(createWork).toBeVisible();
@@ -1791,7 +1791,12 @@ async function createDirectCapture(
   // Direct task creation is now the default; optional Inbox remains tested separately.
   await expect(dialog.getByLabel("Direct to board")).toBeChecked();
   await dialog.getByTestId("live-capture-title").fill(title);
-  await dialog.getByLabel("Work type").selectOption(type);
+  await dialog
+    .getByRole("tab", {
+      name: type === "decision" ? "Decision" : "Approval",
+      exact: true,
+    })
+    .click();
   await dialog.getByTestId("live-capture-submit").click();
   await expect(
     page.getByText(`Saved as a canonical board item.`),
@@ -1828,7 +1833,7 @@ async function assertInjectedCaptureFailure(
     });
   });
   const createWork = page.getByRole("button", {
-    name: "Create work",
+    name: "Quick capture",
     exact: true,
   });
   await expect(createWork).toBeVisible();
@@ -1860,7 +1865,7 @@ async function assertTimedOutCapture(page: Page, title: string) {
     await route.continue();
   });
   const createWork = page.getByRole("button", {
-    name: "Create work",
+    name: "Quick capture",
     exact: true,
   });
   await expect(createWork).toBeVisible();

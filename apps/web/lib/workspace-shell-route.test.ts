@@ -3,6 +3,18 @@ import { workspaceShellRoute } from "./workspace-shell-route";
 import { workspaceViews } from "./workspace-routes";
 
 describe("persistent shell route ownership", () => {
+  it("keeps team detail pages in the workspace shell with records available", () => {
+    expect(
+      workspaceShellRoute("/app/workspaces/launch/teams/team-one#people"),
+    ).toEqual({
+      active: "teams",
+      workspaceSlug: "launch",
+      requiresRecords: true,
+    });
+    expect(
+      workspaceShellRoute("/app/workspaces/launch/teams/team-one/unknown"),
+    ).toBeNull();
+  });
   it("selects Dashboard for both workspace home and the explicit dashboard route", () => {
     expect(workspaceShellRoute("/app/workspaces/launch")).toEqual({
       active: "dashboard",

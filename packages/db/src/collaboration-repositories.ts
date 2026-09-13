@@ -24,6 +24,7 @@ import type {
 import { RepositoryError } from "./repositories.js";
 import {
   auditLogs,
+  boards,
   collaborationEvents,
   conversationMessageMetadataQuarantine,
   conversationMessages,
@@ -42,6 +43,7 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  workItems,
 } from "./schema.js";
 
 export type TeamFeatureCapability =
@@ -159,6 +161,8 @@ export interface CreateConversationRepositoryInput {
   visibility: "organization" | "private" | "guest_scoped";
   participantIds: string[];
   retentionDays?: number;
+  context?: { entityType: "board" | "work_item"; entityId: string } | undefined;
+  openingMessage?: string | undefined;
 }
 
 export interface SendMessageRepositoryInput {
@@ -1506,6 +1510,30 @@ async function createConversation(
   const now = context.now ?? new Date();
   await ensureActorWorkspaceMembership(database, scope, workspace.id, now);
   assertConversationShape(input);
+  if (input.context) {
+    if (input.kind !== "workspace" || input.visibility !== "private")
+      throw conflict("Linked discussions must be private workspace rooms.");
+    const source = input.context.entityType === "board" ? boards : workItems;
+    const [record] = await database
+      .select({ id: source.id })
+      .from(source)
+      .where(
+        and(
+          eq(source.organizationId, scope.organizationId),
+          eq(source.workspaceId, workspace.id),
+          eq(source.id, input.context.entityId),
+          isNull(source.deletedAt),
+          isNull(source.archivedAt),
+        ),
+      )
+      .limit(1)
+      .for("key share");
+    if (!record) throw notFound();
+  }
+  if (input.openingMessage && !input.context)
+    throw conflict(
+      "An opening announcement requires a linked plan or work item.",
+    );
   const participantIds = [...new Set([scope.userId, ...input.participantIds])];
   if (participantIds.length > 250)
     throw conflict("A conversation can contain at most 250 participants.");
@@ -1551,6 +1579,14 @@ async function createConversation(
       kind: input.kind,
       visibility: input.visibility,
       directKey,
+      contextBoardId:
+        input.context?.entityType === "board"
+          ? input.context.entityId
+          : undefined,
+      contextWorkItemId:
+        input.context?.entityType === "work_item"
+          ? input.context.entityId
+          : undefined,
       createdBy: scope.userId,
       retentionDays: input.retentionDays ?? 365,
       lastMessageAt: now,
@@ -1592,6 +1628,26 @@ async function createConversation(
     },
     now,
   });
+  // The room and announcement commit together; replaying room creation cannot
+  // leave people in an empty room or deliver the announcement twice.
+  if (input.openingMessage) {
+    await sendMessage(
+      database,
+      scope,
+      conversation.id,
+      {
+        clientMessageId: randomUUID(),
+        body: input.openingMessage,
+        intent: "message",
+        metadata: {},
+      },
+      context,
+    );
+    return {
+      value: await getConversation(database, scope, conversation.id),
+      replayed: false,
+    };
+  }
   return {
     value: await hydrateConversation(database, scope, conversation),
     replayed: false,

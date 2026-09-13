@@ -1,6 +1,20 @@
 "use client";
+import { SharedPlanningHub } from "./shared-planning-hub";
+import { PlanningPeopleFields } from "./planning-people-fields";
+import {
+  emptyPeopleChoice,
+  usePlanningSharing,
+  type PeopleChoice,
+} from "@/lib/planning-sharing";
 
+import { useAccessibleDialog } from "@/lib/live-collaboration";
 import { LiveRefreshStatus } from "./live-refresh-status";
+import {
+  DashboardTabs,
+  DashboardPanel,
+  DashboardSectionContent,
+  useDashboardSections,
+} from "./live-dashboard-sections";
 
 import type { BoardDto } from "@founderhq/api-contract";
 import {
@@ -8,7 +22,6 @@ import {
   ClipboardCheck,
   Clock3,
   FileQuestion,
-  Inbox,
   LayoutList,
   Plus,
   Sparkles,
@@ -49,6 +62,7 @@ export function LiveWorkspaceDashboard({
 }: {
   workspaceSlug: string;
 }) {
+  const { section, visited, select } = useDashboardSections(workspaceSlug);
   const session = useAppSession();
   const timezone = session.organization.timezone ?? "UTC";
   const [today, setToday] = useState(() => taskToday(timezone));
@@ -99,6 +113,14 @@ export function LiveWorkspaceDashboard({
   const operationStatus = operationsQuery.data;
   const loadError = boardsQuery.error;
   const [createOpen, setCreateOpen] = useState(false);
+  const planDialog = useAccessibleDialog<HTMLFormElement>(
+    () => setCreateOpen(false),
+    undefined,
+    createOpen,
+  );
+  const shareResource = usePlanningSharing();
+  const [boardTeamId, setBoardTeamId] = useState("");
+  const [people, setPeople] = useState<PeopleChoice>(emptyPeopleChoice);
   const [boardName, setBoardName] = useState("");
   const [boardDescription, setBoardDescription] = useState("");
   const [boardStartDate, setBoardStartDate] = useState("");
@@ -195,7 +217,12 @@ export function LiveWorkspaceDashboard({
 
   async function createBoard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!boardName.trim() || pending) return;
+    if (
+      !boardName.trim() ||
+      pending ||
+      (people.enabled && !people.participantIds.length)
+    )
+      return;
     setPending(true);
     setMutationError(null);
     try {
@@ -203,6 +230,15 @@ export function LiveWorkspaceDashboard({
         {
           workspaceId,
           name: boardName.trim(),
+          ...(boardTeamId
+            ? {
+                planning: {
+                  kind: "project",
+                  state: "planned",
+                  teamId: boardTeamId,
+                },
+              }
+            : {}),
           description: boardDescription.trim(),
           visibility: "private",
           progressMode: "task_completion",
@@ -215,6 +251,19 @@ export function LiveWorkspaceDashboard({
         ...(current ?? []),
         result.data,
       ]);
+      shareResource(
+        {
+          entityType: "board",
+          entityId: result.data.id,
+          title: result.data.name,
+          description: result.data.description,
+          workspaceId,
+        },
+        people,
+        idempotencyKey,
+      );
+      setPeople(emptyPeopleChoice);
+      setBoardTeamId("");
       setConfirmedBoard(result.data);
       setCreateOpen(false);
       setBoardName("");
@@ -263,19 +312,7 @@ export function LiveWorkspaceDashboard({
             <LiveCreateTask workspaces={[workspace]} />
           </div>
         </header>
-        <nav
-          className={styles.workspaceShortcuts}
-          aria-label="Workspace shortcuts"
-        >
-          <Link href={workspaceHref(workspace.slug, "my-work")}>My Work</Link>
-          <Link href={workspaceHref(workspace.slug, "teams")}>
-            Teams and people
-          </Link>
-          <Link href={workspaceHref(workspace.slug, "messages")}>Messages</Link>
-          <Link href={workspaceHref(workspace.slug, "inbox")}>
-            <Inbox size={14} /> Open Inbox
-          </Link>
-        </nav>
+        <DashboardTabs value={section} onChange={select} />
 
         <LiveRefreshStatus />
         {presentedLoadError ? (
@@ -311,225 +348,260 @@ export function LiveWorkspaceDashboard({
           />
         ) : null}
 
-        <div
-          className={dashboardStyles.toolbar}
-          role="group"
-          aria-label="Dashboard filters"
+        <DashboardPanel
+          key={workspace.id}
+          section="summary"
+          active={section === "summary"}
+          workspaceSlug={workspaceSlug}
         >
-          <label>
-            Project or cycle
-            <select
-              aria-label="Dashboard project"
-              value={plan?.id ?? ""}
-              onChange={(event) => {
-                setSelectedPlan(event.target.value);
-                setFocus({ kind: "all", label: "All work in this scope" });
-              }}
-            >
-              <option value="">All projects</option>
-              {boards.map((board) => (
-                <option key={board.id} value={board.id}>
-                  {board.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            People
-            <select
-              aria-label="Dashboard people"
-              value={ownership}
-              onChange={(event) => {
-                setOwnership(event.target.value);
-                setFocus({ kind: "all", label: "All work in this scope" });
-              }}
-            >
-              <option value="all">Everyone</option>
-              <option value="mine">Assigned to me</option>
-            </select>
-          </label>
-          <label>
-            Deadline window
-            <select
-              aria-label="Dashboard deadline window"
-              value={days}
-              onChange={(event) => setDays(Number(event.target.value))}
-            >
-              <option value={7}>Next 7 days</option>
-              <option value={14}>Next 14 days</option>
-              <option value={30}>Next 30 days</option>
-            </select>
-          </label>
-          <span data-stale={liveData.stale}>
-            {liveData.stale
-              ? "Showing saved data"
-              : "Connected to your workspace"}
-          </span>
-        </div>
-        {loadingBoards && (
-          <LiveStateNotice kind="loading" title="Loading project plans" />
-        )}
-        {liveData.recordsReady ? (
-          <WorkspaceDashboardWidgets
-            items={scopeItems}
-            boards={plan ? [plan] : boards}
-            workspaceSlug={workspaceSlug}
-            timezone={timezone}
-            today={today}
-            days={days}
-            complete={liveData.recordsComplete && boardsQuery.isSuccess}
-            plansLoaded={boardsQuery.data !== undefined}
-            onFocus={focusWork}
-          />
-        ) : (
-          <LiveStateNotice kind="loading" title="Loading dashboard work" />
-        )}
-        <section className={styles.panel} aria-labelledby="live-loop-title">
-          <header>
-            <div>
-              <p>Keep work moving</p>
-              <h2 id="live-loop-title">What needs movement</h2>
-            </div>
-          </header>
-          <nav className={styles.actionList} aria-label="Operating loop views">
-            <Link href={workspaceHref(workspace.slug, "attention")}>
-              <Sparkles size={16} />
-              <span>
-                <strong>Attention</strong>
-                <small>
-                  {countLabel(attention.length)} items need attention
-                </small>
-              </span>
-            </Link>
-            <Link href={workspaceHref(workspace.slug, "decisions")}>
-              <FileQuestion size={16} />
-              <span>
-                <strong>Decisions</strong>
-                <small>{countLabel(itemTotals?.decisions ?? 0)} open</small>
-              </span>
-            </Link>
-            <Link href={workspaceHref(workspace.slug, "approvals")}>
-              <ClipboardCheck size={16} />
-              <span>
-                <strong>Approvals</strong>
-                <small>{countLabel(itemTotals?.approvals ?? 0)} open</small>
-              </span>
-            </Link>
-            <Link href={workspaceHref(workspace.slug, "waiting")}>
-              <Clock3 size={16} />
-              <span>
-                <strong>Waiting</strong>
-                <small>{countLabel(waiting.length)} active follow-ups</small>
-              </span>
-            </Link>
-          </nav>
-        </section>
-
-        <div
-          id="dashboard-source-work"
-          tabIndex={-1}
-          className={dashboardStyles.source}
-        >
-          <div className={dashboardStyles.sourceHeader}>
-            <p>
-              <strong>{focus.label}</strong> · {sourceItems.length} items
-              {!liveData.recordsComplete ? " loaded" : ""}
-            </p>
-            {focus.kind !== "all" && (
-              <button
-                type="button"
-                onClick={() =>
-                  setFocus({ kind: "all", label: "All work in this scope" })
-                }
+          <div
+            className={dashboardStyles.toolbar}
+            role="group"
+            aria-label="Dashboard filters"
+          >
+            <label>
+              Project or cycle
+              <select
+                aria-label="Dashboard project"
+                value={plan?.id ?? ""}
+                onChange={(event) => {
+                  setSelectedPlan(event.target.value);
+                  setFocus({ kind: "all", label: "All work in this scope" });
+                }}
               >
-                Clear chart filter
-              </button>
-            )}
+                <option value="">All projects</option>
+                {boards.map((board) => (
+                  <option key={board.id} value={board.id}>
+                    {board.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              People
+              <select
+                aria-label="Dashboard people"
+                value={ownership}
+                onChange={(event) => {
+                  setOwnership(event.target.value);
+                  setFocus({ kind: "all", label: "All work in this scope" });
+                }}
+              >
+                <option value="all">Everyone</option>
+                <option value="mine">Assigned to me</option>
+              </select>
+            </label>
+            <label>
+              Deadline window
+              <select
+                aria-label="Dashboard deadline window"
+                value={days}
+                onChange={(event) => setDays(Number(event.target.value))}
+              >
+                <option value={7}>Next 7 days</option>
+                <option value={14}>Next 14 days</option>
+                <option value={30}>Next 30 days</option>
+              </select>
+            </label>
+            <span data-stale={liveData.stale}>
+              {liveData.stale
+                ? "Showing saved data"
+                : "Connected to your workspace"}
+            </span>
           </div>
-          <LiveMyWork
-            key={`${plan?.id ?? "all"}:${ownership}:${focus.kind}:${"key" in focus ? focus.key : ""}`}
-            items={sourceItems}
-            workspaceSlug={workspaceSlug}
-            assignedToMe={false}
-            title="Workspace tasks"
-            initialPeriod="all"
-          />
-        </div>
-
-        <section
-          className={styles.panel}
-          aria-labelledby="live-operations-title"
-        >
-          <header>
-            <div>
-              <p>Background updates</p>
-              <h2 id="live-operations-title">Update delivery</h2>
-            </div>
-          </header>
-          {operationStatus ? (
-            <div className={styles.operationsRow}>
-              <span>
-                <strong>{operationStatus.pendingOutbox}</strong>
-                Updates waiting
-              </span>
-              <span>
-                <strong>{operationStatus.failedCount}</strong>
-                Failed deliveries
-              </span>
-              <span>
-                <strong>
-                  {operationStatus.lastProcessedAt
-                    ? formatLiveDate(operationStatus.lastProcessedAt, timezone)
-                    : "Not yet"}
-                </strong>
-                Last processed
-              </span>
-            </div>
-          ) : (
-            <LiveStateNotice
-              kind={operationsQuery.isPending ? "loading" : "failed"}
-              title={
-                operationsQuery.isPending
-                  ? "Loading worker status"
-                  : "Worker status is unavailable"
-              }
-              {...(operationsQuery.isError
-                ? {
-                    description:
-                      "TREVV could not load the background processing status. Try again to check it.",
-                  }
-                : {})}
-              actions={
-                operationsQuery.isError ? (
-                  <button
-                    type="button"
-                    onClick={() => void operationsQuery.refetch()}
-                  >
-                    Retry worker status
-                  </button>
-                ) : undefined
-              }
-            />
+          {loadingBoards && (
+            <LiveStateNotice kind="loading" title="Loading project plans" />
           )}
-          <small className={styles.timestampLine}>
-            Workspace updated {formatLiveDate(workspace.updatedAt, timezone)}
-            {workspace.nextMilestone
-              ? ` · Next milestone ${workspace.nextMilestone.title} on ${formatLiveDateOnly(workspace.nextMilestone.date, timezone)}`
-              : ""}
-          </small>
-        </section>
+          {liveData.recordsReady ? (
+            <WorkspaceDashboardWidgets
+              items={scopeItems}
+              boards={plan ? [plan] : boards}
+              workspaceSlug={workspaceSlug}
+              timezone={timezone}
+              today={today}
+              days={days}
+              complete={liveData.recordsComplete && boardsQuery.isSuccess}
+              plansLoaded={boardsQuery.data !== undefined}
+              onFocus={focusWork}
+            />
+          ) : (
+            <LiveStateNotice kind="loading" title="Loading dashboard work" />
+          )}
+          <SharedPlanningHub
+            workspaceId={workspaceId}
+            workspaceSlug={workspaceSlug}
+            compact
+          />
+          <section className={styles.panel} aria-labelledby="live-loop-title">
+            <header>
+              <div>
+                <p>Keep work moving</p>
+                <h2 id="live-loop-title">What needs movement</h2>
+              </div>
+            </header>
+            <nav
+              className={`${styles.actionList} ${dashboardStyles.sectionActions}`}
+              aria-label="Operating loop views"
+            >
+              <button type="button" onClick={() => select("attention")}>
+                <Sparkles size={16} />
+                <span>
+                  <strong>Attention</strong>
+                  <small>
+                    {countLabel(attention.length)} items need attention
+                  </small>
+                </span>
+              </button>
+              <button type="button" onClick={() => select("decisions")}>
+                <FileQuestion size={16} />
+                <span>
+                  <strong>Decisions</strong>
+                  <small>{countLabel(itemTotals?.decisions ?? 0)} open</small>
+                </span>
+              </button>
+              <button type="button" onClick={() => select("approvals")}>
+                <ClipboardCheck size={16} />
+                <span>
+                  <strong>Approvals</strong>
+                  <small>{countLabel(itemTotals?.approvals ?? 0)} open</small>
+                </span>
+              </button>
+              <button type="button" onClick={() => select("waiting")}>
+                <Clock3 size={16} />
+                <span>
+                  <strong>Waiting</strong>
+                  <small>{countLabel(waiting.length)} active follow-ups</small>
+                </span>
+              </button>
+            </nav>
+          </section>
+
+          <div
+            id="dashboard-source-work"
+            tabIndex={-1}
+            className={dashboardStyles.source}
+          >
+            <div className={dashboardStyles.sourceHeader}>
+              <p>
+                <strong>{focus.label}</strong> · {sourceItems.length} items
+                {!liveData.recordsComplete ? " loaded" : ""}
+              </p>
+              {focus.kind !== "all" && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFocus({ kind: "all", label: "All work in this scope" })
+                  }
+                >
+                  Clear chart filter
+                </button>
+              )}
+            </div>
+            <LiveMyWork
+              key={`${plan?.id ?? "all"}:${ownership}:${focus.kind}:${"key" in focus ? focus.key : ""}`}
+              items={sourceItems}
+              workspaceSlug={workspaceSlug}
+              assignedToMe={false}
+              title="Workspace tasks"
+              initialPeriod="all"
+            />
+          </div>
+
+          <section
+            className={styles.panel}
+            aria-labelledby="live-operations-title"
+          >
+            <header>
+              <div>
+                <p>Background updates</p>
+                <h2 id="live-operations-title">Update delivery</h2>
+              </div>
+            </header>
+            {operationStatus ? (
+              <div className={styles.operationsRow}>
+                <span>
+                  <strong>{operationStatus.pendingOutbox}</strong>
+                  Updates waiting
+                </span>
+                <span>
+                  <strong>{operationStatus.failedCount}</strong>
+                  Failed deliveries
+                </span>
+                <span>
+                  <strong>
+                    {operationStatus.lastProcessedAt
+                      ? formatLiveDate(
+                          operationStatus.lastProcessedAt,
+                          timezone,
+                        )
+                      : "Not yet"}
+                  </strong>
+                  Last processed
+                </span>
+              </div>
+            ) : (
+              <LiveStateNotice
+                kind={operationsQuery.isPending ? "loading" : "failed"}
+                title={
+                  operationsQuery.isPending
+                    ? "Loading worker status"
+                    : "Worker status is unavailable"
+                }
+                {...(operationsQuery.isError
+                  ? {
+                      description:
+                        "TREVV could not load the background processing status. Try again to check it.",
+                    }
+                  : {})}
+                actions={
+                  operationsQuery.isError ? (
+                    <button
+                      type="button"
+                      onClick={() => void operationsQuery.refetch()}
+                    >
+                      Retry worker status
+                    </button>
+                  ) : undefined
+                }
+              />
+            )}
+            <small className={styles.timestampLine}>
+              Workspace updated {formatLiveDate(workspace.updatedAt, timezone)}
+              {workspace.nextMilestone
+                ? ` · Next milestone ${workspace.nextMilestone.title} on ${formatLiveDateOnly(workspace.nextMilestone.date, timezone)}`
+                : ""}
+            </small>
+          </section>
+        </DashboardPanel>
+        {visited
+          .filter((id) => id !== "summary")
+          .map((id) => (
+            <DashboardPanel
+              key={`${workspace.id}:${id}`}
+              section={id}
+              active={section === id}
+              workspaceSlug={workspaceSlug}
+            >
+              <DashboardSectionContent
+                section={id}
+                workspaceId={workspace.id}
+                workspaceSlug={workspaceSlug}
+              />
+            </DashboardPanel>
+          ))}
 
         {createOpen ? (
           <div
-            className="dialog-layer"
+            className={`dialog-layer ${styles.dialogLayer}`}
             onMouseDown={() => setCreateOpen(false)}
             role="presentation"
           >
             <form
               aria-labelledby="live-board-create-title"
               aria-modal="true"
-              className={`capture-dialog ${styles.smallDialog}`}
+              className={`capture-dialog ${styles.captureDialog} ${styles.smallDialog}`}
               data-testid="create-board-dialog"
+              ref={planDialog}
               onMouseDown={(event) => event.stopPropagation()}
               onSubmit={createBoard}
               role="dialog"
@@ -625,16 +697,42 @@ export function LiveWorkspaceDashboard({
                     />
                   </label>
                 </div>
+                <PlanningPeopleFields
+                  workspaceId={workspaceId}
+                  teamId={boardTeamId}
+                  onTeamChange={(id) => {
+                    setBoardTeamId(id);
+                    setPeople((current) => ({
+                      ...current,
+                      participantIds: [],
+                    }));
+                    if (mutationError) {
+                      setMutationError(null);
+                      setIdempotencyKey(crypto.randomUUID());
+                    }
+                  }}
+                  value={people}
+                  onChange={setPeople}
+                  disabled={pending}
+                />
               </div>
               <footer>
-                <span>Private to authorized organization members.</span>
+                <span>
+                  {people.enabled
+                    ? "Selected people will receive a shared discussion."
+                    : "Create now. Invite collaborators whenever you are ready."}
+                </span>
                 <div>
                   <button onClick={() => setCreateOpen(false)} type="button">
                     Cancel
                   </button>
                   <button
                     className="primary-button"
-                    disabled={pending || !boardName.trim()}
+                    disabled={
+                      pending ||
+                      !boardName.trim() ||
+                      (people.enabled && !people.participantIds.length)
+                    }
                     type="submit"
                   >
                     {pending ? (

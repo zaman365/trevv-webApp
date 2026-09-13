@@ -69,9 +69,7 @@ function LoadingDialog({
 export function UniversalCreateDialog(props: ComponentProps<typeof Universal>) {
   return (
     <Suspense
-      fallback={
-        <LoadingDialog onClose={props.onClose} title="Create in TREVV" />
-      }
+      fallback={<LoadingDialog onClose={props.onClose} title="Quick capture" />}
     >
       <Universal {...props} />
     </Suspense>

@@ -782,7 +782,7 @@ function CreateWorkItemDialog({
   );
 }
 
-function WorkItemDetail({
+export function WorkItemDetail({
   item,
   history,
   evidence,
@@ -790,6 +790,7 @@ function WorkItemDetail({
   timezone,
   onClose,
   onConfirmed,
+  embedded = false,
 }: {
   item: WorkItemDto;
   history: WorkItemHistoryEntryDto[];
@@ -798,6 +799,7 @@ function WorkItemDetail({
   timezone: string;
   onClose: () => void;
   onConfirmed: (item: WorkItemDto, confirmation: string) => Promise<void>;
+  embedded?: boolean;
 }) {
   const session = useAppSession();
   const liveData = useLiveAppData();
@@ -811,7 +813,11 @@ function WorkItemDetail({
   const [editPriority, setEditPriority] = useState(item.priority);
   const [editDueDate, setEditDueDate] = useState(item.dueDate ?? "");
   const [editVersion, setEditVersion] = useState(item.version);
-  const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
+  const dialogRef = useAccessibleDialog<HTMLElement>(
+    onClose,
+    undefined,
+    !embedded,
+  );
   const [waitingDate, setWaitingDate] = useState(() =>
     tomorrowInTimeZone(timezone, new Date().toISOString()),
   );
@@ -870,17 +876,17 @@ function WorkItemDetail({
   const presented = error ? presentLiveError(error) : null;
   return (
     <div
-      className={styles.drawerLayer}
+      className={embedded ? styles.embeddedDetail : styles.drawerLayer}
       role="presentation"
-      onMouseDown={onClose}
+      onMouseDown={embedded ? undefined : onClose}
     >
       <aside
         aria-labelledby="live-item-detail-title"
-        aria-modal="true"
-        className={styles.drawer}
+        aria-modal={embedded ? undefined : true}
+        className={embedded ? styles.embeddedDetailContent : styles.drawer}
         data-testid="work-item-detail"
         onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
+        role={embedded ? "region" : "dialog"}
         ref={dialogRef}
       >
         <header>
@@ -890,13 +896,15 @@ function WorkItemDetail({
             </p>
             <h2 id="live-item-detail-title">{item.title}</h2>
           </div>
-          <button
-            aria-label="Close work item details"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
+          {!embedded ? (
+            <button
+              aria-label="Close work item details"
+              onClick={onClose}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          ) : null}
         </header>
         <div className={styles.drawerBody}>
           {presented ? (

@@ -5132,18 +5132,14 @@
   gap: 3px;
 }
 .topbar-actions .topbar-create-button {
-  position: relative;
-  min-width: 44px;
-  width: 44px;
-  height: 44px;
-  justify-content: center;
-  gap: 7px;
-  margin-right: 4px;
+  min-width: 38px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   color: var(--fh-on-primary);
   background: var(--fh-primary);
   border-color: var(--fh-primary);
-  box-shadow: 0 5px 13px color-mix(in srgb, var(--fh-primary) 22%, transparent);
+  box-shadow: none;
 }
 .topbar-actions .topbar-create-button:hover {
   color: var(--fh-on-primary);

@@ -1277,12 +1277,20 @@ export const messageReactionSchema = z.object({
   reactedByCurrentUser: z.boolean(),
 });
 
+export const conversationContextSchema = z
+  .object({
+    entityType: z.enum(["board", "work_item"]),
+    entityId: idSchema,
+  })
+  .strict();
+
 export const conversationSchema = z.object({
   id: idSchema,
   organizationId: idSchema,
   portfolioId: idSchema,
   workspaceId: idSchema,
   teamId: idSchema.optional(),
+  context: conversationContextSchema.optional(),
   title: z.string().trim().min(1).max(160),
   purpose: z.string().trim().max(1_000),
   kind: conversationKindSchema,
@@ -1338,10 +1346,27 @@ export const createConversationSchema = z
     kind: conversationKindSchema.exclude(["team"]),
     visibility: conversationVisibilitySchema,
     participantIds: z.array(idSchema).min(1).max(250),
+    context: conversationContextSchema.optional(),
+    openingMessage: z.string().trim().min(1).max(20_000).optional(),
     retentionDays: z.number().int().min(1).max(3_650).default(365),
   })
   .strict()
   .superRefine((value, context) => {
+    if (
+      value.context &&
+      (value.kind !== "workspace" || value.visibility !== "private")
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["context"],
+        message: "Linked discussions must be private workspace rooms.",
+      });
+    if (value.openingMessage && !value.context)
+      context.addIssue({
+        code: "custom",
+        path: ["openingMessage"],
+        message: "An opening announcement requires a linked plan or work item.",
+      });
     if (value.kind === "direct" && value.participantIds.length !== 2)
       context.addIssue({
         code: "custom",

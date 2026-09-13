@@ -17,6 +17,28 @@ vi.mock("../components/workspace-module-loader", () => {
 });
 
 describe("static route warming", () => {
+  it("opens live planning collaboration while retaining the full demo Ideas workflow", () => {
+    expect(routeCodeModules("/app/workspaces/launch/ideas", "live")).toEqual([
+      "moduleLoader",
+      "liveWork",
+    ]);
+    expect(routeCodeModules("/app/workspaces/launch/ideas", "demo")).toEqual([
+      "moduleLoader",
+      "management",
+    ]);
+  });
+  it("warms the full team page while preserving demo directory behavior", () => {
+    expect(
+      routeCodeModules("/app/workspaces/launch/teams/team-one#tasks", "live"),
+    ).toEqual(["liveTeamPage"]);
+    expect(
+      routeCodeModules("/app/workspaces/launch/teams/team-one", "demo"),
+    ).toEqual(["moduleLoader", "management"]);
+    expect(routeCodeModules("/app/workspaces/launch/teams", "live")).toEqual([
+      "moduleLoader",
+      "liveTeams",
+    ]);
+  });
   it("supports every existing workspace view in both runtime modes", () => {
     for (const mode of ["demo", "live"] as const)
       for (const view of workspaceViews)

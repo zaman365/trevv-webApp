@@ -1,4 +1,5 @@
 "use client";
+import { PlanningContextLink } from "./planning-context-link";
 
 import { dateTimeFormatter } from "@/lib/date-format";
 
@@ -134,6 +135,22 @@ export function LiveMessagingWorkspace({
 }: {
   workspaceSlug: string;
 }) {
+  return (
+    <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
+      <LiveMessagingContent workspaceSlug={workspaceSlug} />
+    </WorkspaceFrame>
+  );
+}
+
+export function LiveMessagingContent({
+  workspaceSlug,
+  embedded = false,
+}: {
+  workspaceSlug: string;
+  embedded?: boolean;
+}) {
+  const Content = embedded ? "div" : "main";
+  const Heading = embedded ? "h3" : "h1";
   const session = useAppSession();
   const liveData = useLiveAppData();
   const queryClient = useQueryClient();
@@ -981,15 +998,17 @@ export function LiveMessagingWorkspace({
 
   if (!workspace) {
     return (
-      <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
-        <main className={styles.routeMain}>
+      <>
+        <Content
+          className={embedded ? styles.embeddedContent : styles.routeMain}
+        >
           <LiveStateNotice
             kind="permission-loss"
             title="Workspace not available"
             description="This workspace is outside your current access or no longer exists."
           />
-        </main>
-      </WorkspaceFrame>
+        </Content>
+      </>
     );
   }
 
@@ -1005,12 +1024,15 @@ export function LiveMessagingWorkspace({
   )?.key;
 
   return (
-    <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
-      <main className={styles.messagePage} data-testid="live-messages">
+    <>
+      <Content
+        className={`${styles.messagePage} ${embedded ? styles.embeddedContent : ""}`}
+        data-testid="live-messages"
+      >
         <header className={styles.pageHeader}>
           <div>
             <p>{workspace.name} / Collaboration</p>
-            <h1>Messages</h1>
+            <Heading>Messages</Heading>
             <span>
               Contextual Team rooms, work rooms, and direct conversations.
             </span>
@@ -1307,6 +1329,12 @@ export function LiveMessagingWorkspace({
                   <div>
                     <span>{conversationKindLabel(selectedConversation)}</span>
                     <h2 id="live-thread-title">{selectedConversation.title}</h2>
+                    {selectedConversation.context ? (
+                      <PlanningContextLink
+                        conversation={selectedConversation}
+                        workspaceSlug={workspaceSlug}
+                      />
+                    ) : null}
                     <small>
                       {selectedConversation.participants.length} participants ·{" "}
                       {selectedConversation.retentionDays}-day retention
@@ -1547,7 +1575,7 @@ export function LiveMessagingWorkspace({
             />
           ) : null}
         </section>
-      </main>
+      </Content>
 
       {createOpen && directoryQuery.data ? (
         <CreateConversationDialog
@@ -1578,7 +1606,7 @@ export function LiveMessagingWorkspace({
           onTransferOwnership={transferConversationOwnership}
         />
       ) : null}
-    </WorkspaceFrame>
+    </>
   );
 }
 

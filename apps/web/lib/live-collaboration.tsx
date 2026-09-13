@@ -508,6 +508,7 @@ export function LiveUnreadBadge({ workspaceId }: { workspaceId: string }) {
 export function useAccessibleDialog<T extends HTMLElement = HTMLDivElement>(
   onClose: () => void,
   returnFocusRef?: RefObject<HTMLElement | null>,
+  enabled = true,
 ): RefObject<T | null> {
   const dialogRef = useRef<T>(null);
   const closeRef = useRef(onClose);
@@ -519,6 +520,7 @@ export function useAccessibleDialog<T extends HTMLElement = HTMLDivElement>(
   // Install keyboard handling and move focus before the open dialog paints.
   // A fast Escape in WebKit can otherwise arrive before the passive effect.
   useLayoutEffect(() => {
+    if (!enabled) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -559,7 +561,7 @@ export function useAccessibleDialog<T extends HTMLElement = HTMLDivElement>(
       // callers with a known trigger must not rely on activeElement alone.
       returnFocusTarget?.focus();
     };
-  }, [returnFocusRef]);
+  }, [returnFocusRef, enabled]);
 
   return dialogRef;
 }

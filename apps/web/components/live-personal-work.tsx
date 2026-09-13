@@ -1,4 +1,5 @@
 "use client";
+import { SharedPlanningHub } from "./shared-planning-hub";
 
 import { LiveRefreshStatus } from "./live-refresh-status";
 import { AppLink as Link } from "@/components/navigation-link";
@@ -38,6 +39,15 @@ export function LivePersonalWork() {
         ) : (
           <LiveMyWork items={data.items} />
         )}
+        {data.workspaces.map((workspace) => (
+          <SharedPlanningHub
+            key={workspace.id}
+            workspaceId={workspace.id}
+            workspaceSlug={workspace.slug}
+            personal
+            compact
+          />
+        ))}
       </main>
     </WorkspaceFrame>
   );

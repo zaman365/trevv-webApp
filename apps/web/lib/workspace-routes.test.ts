@@ -3,9 +3,18 @@ import {
   isWorkspaceView,
   workspaceHref,
   workspaceScopeHref,
+  teamHref,
 } from "./workspace-routes";
 
 describe("workspace routes", () => {
+  it("addresses a team and its sections without changing the directory URL", () => {
+    expect(teamHref("team workspace", "team/one", "people")).toBe(
+      "/app/workspaces/team%20workspace/teams/team%2Fone#people",
+    );
+    expect(workspaceHref("team workspace", "teams")).toBe(
+      "/app/workspaces/team%20workspace/teams",
+    );
+  });
   it("builds workspace home and module URLs", () => {
     expect(workspaceHref("northstar-apparel")).toBe(
       "/app/workspaces/northstar-apparel",

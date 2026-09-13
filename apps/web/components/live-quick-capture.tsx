@@ -1,4 +1,10 @@
 "use client";
+import { PlanningPeopleFields } from "./planning-people-fields";
+import {
+  emptyPeopleChoice,
+  usePlanningSharing,
+  type PeopleChoice,
+} from "@/lib/planning-sharing";
 
 import {
   workItemPlanningSchema,
@@ -6,7 +12,13 @@ import {
   type WorkItemDto,
 } from "@founderhq/api-contract";
 import { CheckCircle2, Inbox, LayoutList, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
@@ -24,6 +36,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
 import { applyConfirmedInboxItem } from "@/lib/live-app-mutations";
 import styles from "./live-operating-loop.module.css";
+import { captureTypes, QuickCaptureTypes } from "./quick-capture-types";
 
 type CaptureType = WorkItemDto["type"];
 type CapturePriority = WorkItemDto["priority"];
@@ -39,6 +52,7 @@ interface LiveCaptureDraft {
   assigneeId?: string;
   attemptedFingerprint: string;
   planning?: WorkItemDto["planning"];
+  people?: PeopleChoice;
 }
 
 export interface LiveCaptureSuccess {
@@ -69,6 +83,14 @@ export function LiveQuickCaptureDialog({
   onConfirmed,
   defaultDestination = "board",
   defaultAssigneeId = "",
+  defaultTeamId,
+  defaultBoardId,
+  defaultType = "task",
+  returnFocusRef,
+  embedded = false,
+  draftScope,
+  initialTitle = "",
+  initialDescription = "",
 }: {
   workspaceId: string;
   workspaceSlug: string;
@@ -76,20 +98,42 @@ export function LiveQuickCaptureDialog({
   onConfirmed: (result: LiveCaptureSuccess) => void;
   defaultDestination?: "inbox" | "board";
   defaultAssigneeId?: string;
+  defaultTeamId?: string;
+  defaultBoardId?: string;
+  defaultType?: CaptureType;
+  returnFocusRef?: RefObject<HTMLElement | null>;
+  embedded?: boolean;
+  draftScope?: string;
+  initialTitle?: string;
+  initialDescription?: string;
 }) {
   const session = useAppSession();
+  const shareResource = usePlanningSharing();
   const queryClient = useQueryClient();
   const liveData = useLiveAppData();
   const storageKey = liveDraftStorageKey({
     organizationId: session.organization.id,
     userId: session.user.id,
-    scope: `quick-capture:${workspaceId}`,
+    scope:
+      draftScope ??
+      (defaultTeamId
+        ? `team-capture:${workspaceId}:${defaultTeamId}`
+        : `quick-capture:${workspaceId}`),
   });
-  const dialogRef = useAccessibleDialog<HTMLFormElement>(onClose);
+  const dialogRef = useAccessibleDialog<HTMLFormElement>(
+    onClose,
+    returnFocusRef,
+    !embedded,
+  );
   const [draft, setDraft] = useState<LiveCaptureDraft>(() => ({
     ...emptyDraft,
     destination: defaultDestination,
     assigneeId: defaultAssigneeId,
+    boardId: defaultBoardId ?? "",
+    type: defaultType,
+    title: initialTitle,
+    description: initialDescription,
+    ...(defaultTeamId ? { planning: { teamId: defaultTeamId } } : {}),
   }));
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID(),
@@ -150,11 +194,25 @@ export function LiveQuickCaptureDialog({
       .boards(workspaceId)
       .then((records) => {
         if (!active) return;
-        setBoards(records);
+        const scopedRecords = defaultTeamId
+          ? records.filter(
+              (board) =>
+                !board.planning?.teamId ||
+                board.planning.teamId === defaultTeamId,
+            )
+          : records;
+        setBoards(scopedRecords);
         setDraft((current) =>
-          current.boardId || current.attemptedFingerprint || !records[0]
+          current.boardId || current.attemptedFingerprint || !scopedRecords[0]
             ? current
-            : { ...current, boardId: records[0].id },
+            : {
+                ...current,
+                boardId: (
+                  scopedRecords.find(
+                    (board) => board.planning?.teamId === defaultTeamId,
+                  ) ?? scopedRecords[0]
+                ).id,
+              },
         );
       })
       .catch((reason: unknown) => {
@@ -166,7 +224,7 @@ export function LiveQuickCaptureDialog({
     return () => {
       active = false;
     };
-  }, [liveData.client, workspaceId]);
+  }, [liveData.client, workspaceId, defaultTeamId]);
 
   const selectedBoard = useMemo(
     () => boards.find((board) => board.id === draft.boardId) ?? boards[0],
@@ -192,12 +250,19 @@ export function LiveQuickCaptureDialog({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!hydrated || !draft.title.trim() || pending) return;
+    if (
+      draft.type === "idea" &&
+      draft.destination === "board" &&
+      draft.people?.enabled &&
+      !draft.people.participantIds.length
+    )
+      return;
     if (draft.destination === "board" && !selectedBoard) return;
     const normalizedDraft = selectedBoard
       ? {
           ...draft,
           boardId: selectedBoard.id,
-          planning: draft.planning ?? planningForBoard(selectedBoard),
+          planning: planningForBoard(selectedBoard, draft.planning),
         }
       : draft;
     const attemptedFingerprint = captureFingerprint(normalizedDraft);
@@ -272,6 +337,18 @@ export function LiveQuickCaptureDialog({
         },
         idempotencyKey,
       );
+      if (attemptedDraft.type === "idea")
+        shareResource(
+          {
+            entityType: "work_item",
+            entityId: result.data.id,
+            title: result.data.title,
+            description: result.data.description,
+            workspaceId,
+          },
+          attemptedDraft.people ?? emptyPeopleChoice,
+          idempotencyKey,
+        );
       await liveData.applyConfirmedItem(result.data);
       void liveData.refresh();
       clearDraft(storageKey);
@@ -300,35 +377,42 @@ export function LiveQuickCaptureDialog({
 
   return (
     <div
-      className={`dialog-layer ${styles.dialogLayer}`}
+      className={
+        embedded ? styles.embeddedDetail : `dialog-layer ${styles.dialogLayer}`
+      }
       role="presentation"
-      onMouseDown={onClose}
+      onMouseDown={embedded ? undefined : onClose}
     >
       <form
         aria-labelledby="live-capture-title"
-        aria-modal="true"
-        className={`capture-dialog ${styles.captureDialog}`}
+        aria-modal={embedded ? undefined : true}
+        className={
+          embedded
+            ? styles.embeddedCapture
+            : `capture-dialog ${styles.captureDialog}`
+        }
         data-testid="live-quick-capture"
         ref={dialogRef}
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={submit}
-        role="dialog"
+        role={embedded ? "region" : "dialog"}
       >
         <header>
           <span className="attention-icon" aria-hidden="true">
             <Plus size={18} />
           </span>
           <div>
-            <h2 id="live-capture-title">
-              {draft.destination === "board"
-                ? "Create a task"
-                : "Save for later"}
-            </h2>
-            <p>Choose a project, an owner and a due date.</p>
+            <h2 id="live-capture-title">Quick capture</h2>
+            <p>
+              Capture work, an idea or a request. Organize it now or save it for
+              later.
+            </p>
           </div>
-          <button aria-label="Close capture" onClick={onClose} type="button">
-            <X size={17} />
-          </button>
+          {!embedded ? (
+            <button aria-label="Close capture" onClick={onClose} type="button">
+              <X size={17} />
+            </button>
+          ) : null}
         </header>
 
         <fieldset
@@ -350,191 +434,223 @@ export function LiveQuickCaptureDialog({
             <LiveStateNotice
               kind="pending"
               title="Waiting for server confirmation"
-              description="Saving your task and assignment."
+              description={`Saving your ${draft.type} and its details.`}
             />
           ) : null}
 
-          <details open={draft.destination === "inbox"}>
-            <summary>Optional: save to Inbox for later</summary>
-            <fieldset className={styles.choiceGrid}>
-              <legend>Destination</legend>
-              <label>
-                <input
-                  checked={draft.destination === "inbox"}
-                  name="capture-destination"
-                  onChange={() => changeDraft({ destination: "inbox" })}
-                  type="radio"
-                />
-                <Inbox size={17} />
-                <span>
-                  <strong>Inbox first</strong>
-                  <small>Organize it into a board when ready.</small>
-                </span>
-              </label>
-              <label>
-                <input
-                  checked={draft.destination === "board"}
-                  name="capture-destination"
-                  onChange={() => changeDraft({ destination: "board" })}
-                  type="radio"
-                />
-                <LayoutList size={17} />
-                <span>
-                  <strong>Direct to board</strong>
-                  <small>Assign and track this work immediately.</small>
-                </span>
-              </label>
-            </fieldset>
-          </details>
+          <QuickCaptureTypes
+            value={draft.type}
+            onChange={(type) => changeDraft({ type })}
+          >
+            <details open={draft.destination === "inbox"}>
+              <summary>Optional: save to Inbox for later</summary>
+              <fieldset className={styles.choiceGrid}>
+                <legend>Destination</legend>
+                <label>
+                  <input
+                    checked={draft.destination === "inbox"}
+                    name="capture-destination"
+                    onChange={() => changeDraft({ destination: "inbox" })}
+                    type="radio"
+                  />
+                  <Inbox size={17} />
+                  <span>
+                    <strong>Inbox first</strong>
+                    <small>Organize it into a board when ready.</small>
+                  </span>
+                </label>
+                <label>
+                  <input
+                    checked={draft.destination === "board"}
+                    name="capture-destination"
+                    onChange={() => changeDraft({ destination: "board" })}
+                    type="radio"
+                  />
+                  <LayoutList size={17} />
+                  <span>
+                    <strong>Direct to board</strong>
+                    <small>Assign and track this work immediately.</small>
+                  </span>
+                </label>
+              </fieldset>
+            </details>
 
-          <label className={styles.field}>
-            <span>Title</span>
-            <input
-              autoFocus
-              data-testid="live-capture-title"
-              maxLength={500}
-              onChange={(event) => changeDraft({ title: event.target.value })}
-              placeholder="What needs to move?"
-              required
-              value={draft.title}
-            />
-          </label>
-
-          <div className={styles.formGrid}>
             <label className={styles.field}>
-              <span>Type</span>
-              <select
-                aria-label="Work type"
-                onChange={(event) =>
-                  changeDraft({ type: event.target.value as CaptureType })
-                }
-                value={draft.type}
-              >
-                {(
-                  [
-                    "task",
-                    "decision",
-                    "approval",
-                    "milestone",
-                    "idea",
-                    "request",
-                  ] as const
-                ).map((type) => (
-                  <option key={type} value={type}>
-                    {labelFor(type)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>Priority</span>
-              <select
-                aria-label="Priority"
-                onChange={(event) =>
-                  changeDraft({
-                    priority: event.target.value as CapturePriority,
-                  })
-                }
-                value={draft.priority}
-              >
-                {(["urgent", "high", "normal", "low", "none"] as const).map(
-                  (priority) => (
-                    <option key={priority} value={priority}>
-                      {labelFor(priority)}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>
-                Board {draft.destination === "inbox" ? "suggestion" : ""}
-              </span>
-              <span className={styles.selectShell}>
-                <select
-                  aria-label="Destination board"
-                  disabled={boardsLoading || boards.length === 0}
-                  onChange={(event) => {
-                    const nextBoard = boards.find(
-                      (board) => board.id === event.target.value,
-                    );
-                    if (nextBoard)
-                      changeDraft({
-                        boardId: nextBoard.id,
-                        planning: planningForBoard(
-                          nextBoard,
-                          draft.planning,
-                          selectedBoard,
-                        ),
-                      });
-                  }}
-                  required={draft.destination === "board"}
-                  value={selectedBoard?.id ?? ""}
-                >
-                  {boards.length === 0 ? (
-                    <option value="">No board available</option>
-                  ) : null}
-                  {boards.map((board) => (
-                    <option key={board.id} value={board.id}>
-                      {board.name}
-                    </option>
-                  ))}
-                </select>
-              </span>
-            </label>
-            <label className={styles.field}>
-              <span>Due date · Optional</span>
+              <span>Title</span>
               <input
-                onChange={(event) =>
-                  changeDraft({ dueDate: event.target.value })
-                }
-                type="date"
-                value={draft.dueDate}
+                autoFocus
+                data-testid="live-capture-title"
+                maxLength={500}
+                onChange={(event) => changeDraft({ title: event.target.value })}
+                placeholder={captureTypes[draft.type].placeholder}
+                required
+                value={draft.title}
               />
             </label>
-          </div>
 
-          <LiveAssigneeField
-            workspaceId={workspaceId}
-            value={draft.assigneeId ?? ""}
-            onChange={(assigneeId) => changeDraft({ assigneeId })}
-          />
-          {draft.destination === "board" && selectedBoard ? (
-            <LiveTaskPlanningFields
+            <div className={styles.formGrid}>
+              <label className={`${styles.field} ${styles.captureBoardField}`}>
+                <span>
+                  Board {draft.destination === "inbox" ? "suggestion" : ""}
+                </span>
+                <span className={styles.selectShell}>
+                  <select
+                    aria-label="Destination board"
+                    disabled={boardsLoading || boards.length === 0}
+                    onChange={(event) => {
+                      const nextBoard = boards.find(
+                        (board) => board.id === event.target.value,
+                      );
+                      if (nextBoard)
+                        changeDraft({
+                          people: {
+                            ...(draft.people ?? emptyPeopleChoice),
+                            participantIds: [],
+                          },
+                          boardId: nextBoard.id,
+                          planning: {
+                            ...(defaultTeamId ? { teamId: defaultTeamId } : {}),
+                            ...planningForBoard(
+                              nextBoard,
+                              draft.planning,
+                              selectedBoard,
+                            ),
+                          },
+                        });
+                    }}
+                    required={draft.destination === "board"}
+                    value={selectedBoard?.id ?? ""}
+                  >
+                    {boards.length === 0 ? (
+                      <option value="">No board available</option>
+                    ) : null}
+                    {boards.map((board) => (
+                      <option key={board.id} value={board.id}>
+                        {board.name}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              </label>
+              <label className={styles.field}>
+                <span>Priority</span>
+                <select
+                  aria-label="Priority"
+                  onChange={(event) =>
+                    changeDraft({
+                      priority: event.target.value as CapturePriority,
+                    })
+                  }
+                  value={draft.priority}
+                >
+                  {(["urgent", "high", "normal", "low", "none"] as const).map(
+                    (priority) => (
+                      <option key={priority} value={priority}>
+                        {labelFor(priority)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className={styles.field}>
+                <span>Due date · Optional</span>
+                <input
+                  onChange={(event) =>
+                    changeDraft({ dueDate: event.target.value })
+                  }
+                  type="date"
+                  value={draft.dueDate}
+                />
+              </label>
+            </div>
+
+            <LiveAssigneeField
               workspaceId={workspaceId}
-              boardId={selectedBoard.id}
-              value={
-                draft.planning ?? {
-                  ...(selectedBoard.planning?.teamId
-                    ? { teamId: selectedBoard.planning.teamId }
-                    : {}),
-                  ...(selectedBoard.planning?.parentBoardId
-                    ? { cycleId: selectedBoard.id }
-                    : {}),
+              value={draft.assigneeId ?? ""}
+              onChange={(assigneeId) => changeDraft({ assigneeId })}
+            />
+            {draft.destination === "board" && selectedBoard ? (
+              <LiveTaskPlanningFields
+                workspaceId={workspaceId}
+                boardId={selectedBoard.id}
+                value={
+                  draft.planning ?? {
+                    ...(selectedBoard.planning?.teamId
+                      ? { teamId: selectedBoard.planning.teamId }
+                      : {}),
+                    ...(selectedBoard.planning?.parentBoardId
+                      ? { cycleId: selectedBoard.id }
+                      : {}),
+                  }
                 }
-              }
-              onChange={(planning) => changeDraft({ planning })}
-            />
-          ) : null}
-          {draft.destination === "inbox" && draft.assigneeId ? (
-            <small>
-              The assignee will be applied when this capture becomes a board
-              item.
-            </small>
-          ) : null}
+                onChange={(planning) =>
+                  changeDraft({
+                    planning,
+                    ...(planning.teamId !== draft.planning?.teamId
+                      ? {
+                          people: {
+                            ...(draft.people ?? emptyPeopleChoice),
+                            participantIds: [],
+                          },
+                        }
+                      : {}),
+                  })
+                }
+              />
+            ) : null}
+            {draft.destination === "inbox" && draft.assigneeId ? (
+              <small>
+                The assignee will be applied when this capture becomes a board
+                item.
+              </small>
+            ) : null}
 
-          <label className={styles.field}>
-            <span>Context · Optional</span>
-            <textarea
-              maxLength={20_000}
-              onChange={(event) =>
-                changeDraft({ description: event.target.value })
-              }
-              placeholder="Outcome, constraints, or supporting context"
-              rows={4}
-              value={draft.description}
-            />
-          </label>
+            {draft.type === "idea" ? (
+              draft.destination === "board" ? (
+                <PlanningPeopleFields
+                  workspaceId={workspaceId}
+                  teamId={
+                    draft.planning?.teamId ??
+                    selectedBoard?.planning?.teamId ??
+                    ""
+                  }
+                  onTeamChange={(teamId) =>
+                    changeDraft({
+                      people: {
+                        ...(draft.people ?? emptyPeopleChoice),
+                        participantIds: [],
+                      },
+                      planning: {
+                        ...draft.planning,
+                        teamId: teamId || undefined,
+                      },
+                    })
+                  }
+                  value={draft.people ?? emptyPeopleChoice}
+                  onChange={(people) => changeDraft({ people })}
+                />
+              ) : (
+                <p>
+                  Inbox keeps this capture for later. Choose Direct to board to
+                  invite collaborators and start a shared discussion now.
+                </p>
+              )
+            ) : null}
+
+            <label className={styles.field}>
+              <span>Context · Optional</span>
+              <textarea
+                aria-label="Context · Optional"
+                maxLength={20_000}
+                onChange={(event) =>
+                  changeDraft({ description: event.target.value })
+                }
+                placeholder="Outcome, constraints, or supporting context"
+                rows={4}
+                value={draft.description}
+              />
+            </label>
+          </QuickCaptureTypes>
         </fieldset>
 
         <footer>
@@ -554,6 +670,10 @@ export function LiveQuickCaptureDialog({
                 !hydrated ||
                 pending ||
                 !draft.title.trim() ||
+                (draft.type === "idea" &&
+                  draft.destination === "board" &&
+                  Boolean(draft.people?.enabled) &&
+                  !draft.people?.participantIds.length) ||
                 (draft.destination === "board" && !selectedBoard)
               }
               type="submit"
@@ -566,7 +686,7 @@ export function LiveQuickCaptureDialog({
                   {error
                     ? "Retry save"
                     : draft.destination === "board"
-                      ? "Create task"
+                      ? `Create ${draft.type}`
                       : "Save to Inbox"}
                 </>
               )}
@@ -596,6 +716,15 @@ function isCaptureDraft(value: unknown): value is LiveCaptureDraft {
     (draft.assigneeId === undefined || typeof draft.assigneeId === "string") &&
     (draft.planning === undefined ||
       workItemPlanningSchema.safeParse(draft.planning).success) &&
+    (draft.people === undefined ||
+      (typeof draft.people.enabled === "boolean" &&
+        typeof draft.people.note === "string" &&
+        draft.people.note.length <= 2000 &&
+        Array.isArray(draft.people.participantIds) &&
+        draft.people.participantIds.length <= 249 &&
+        draft.people.participantIds.every(
+          (id) => typeof id === "string" && id.length <= 128,
+        ))) &&
     typeof draft.attemptedFingerprint === "string"
   );
 }

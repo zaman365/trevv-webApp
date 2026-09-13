@@ -6,3 +6,6 @@ export function AppLink(props: ComponentProps<"a">) {
   return <a {...props} />;
 }
 export function useReportRouteReady() {}
+export function useRouter() {
+  return { push: (href: string) => window.location.assign(href) };
+}

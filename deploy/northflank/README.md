@@ -8,13 +8,13 @@ and isolated staging deployment options remain available.
 
 Use a Northflank **free project in Developer Sandbox**. The deployment uses:
 
-| Resource | Configuration |
-| --- | --- |
-| `trevv-api` | API image pinned by digest; one `nf-compute-20` instance; HTTP port 8787 |
-| `trevv-worker` | Worker image pinned by digest; one `nf-compute-20` instance; private port 9090 |
-| `trevv-postgres` | PostgreSQL 17; `nf-compute-20`; one replica; 6 GB; private networking and TLS |
-| `trevv-migrate` | Manual migration job; pinned migration image; no schedule; no automatic image-change runs |
-| Web | Cloudflare Workers for `trevv.de` and `alpha.trevv.de` |
+| Resource         | Configuration                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `trevv-api`      | API image pinned by digest; one `nf-compute-20` instance; HTTP port 8787                  |
+| `trevv-worker`   | Worker image pinned by digest; one `nf-compute-20` instance; private port 9090            |
+| `trevv-postgres` | PostgreSQL 17; `nf-compute-20`; one replica; 6 GB; private networking and TLS             |
+| `trevv-migrate`  | Manual migration job; pinned migration image; no schedule; no automatic image-change runs |
+| Web              | Cloudflare Workers for `trevv.de` and `alpha.trevv.de`                                    |
 
 The selected Sandbox plan allows two services, two jobs, and one addon. Do not
 upgrade the project, add paid storage, or enable paid features without the

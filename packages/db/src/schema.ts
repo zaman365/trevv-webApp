@@ -2739,6 +2739,8 @@ export const conversations = pgTable(
     kind: conversationKindEnum("kind").notNull(),
     visibility: conversationVisibilityEnum("visibility").notNull(),
     directKey: text("direct_key"),
+    contextBoardId: text("context_board_id"),
+    contextWorkItemId: text("context_work_item_id"),
     createdBy: text("created_by")
       .notNull()
       .references(() => users.id),
@@ -2753,6 +2755,32 @@ export const conversations = pgTable(
     uniqueIndex("conversations_org_id_unique").on(
       table.organizationId,
       table.id,
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId, table.contextBoardId],
+      foreignColumns: [boards.organizationId, boards.workspaceId, boards.id],
+      name: "conversations_context_board_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [
+        table.organizationId,
+        table.workspaceId,
+        table.contextWorkItemId,
+      ],
+      foreignColumns: [
+        workItems.organizationId,
+        workItems.workspaceId,
+        workItems.id,
+      ],
+      name: "conversations_context_work_item_fk",
+    }).onDelete("cascade"),
+    check(
+      "conversations_context_shape_check",
+      sql`
+      (${table.contextBoardId} is null or ${table.contextWorkItemId} is null)
+      and ((${table.contextBoardId} is null and ${table.contextWorkItemId} is null)
+        or (${table.kind} = 'workspace' and ${table.visibility} = 'private'))
+    `,
     ),
     uniqueIndex("conversations_org_workspace_id_unique").on(
       table.organizationId,

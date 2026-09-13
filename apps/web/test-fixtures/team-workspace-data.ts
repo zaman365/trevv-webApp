@@ -1,0 +1,111 @@
+import type {
+  BoardDto,
+  ConversationDto,
+  ConversationMessageDto,
+  WorkItemDto,
+} from "@founderhq/api-contract";
+import {
+  board,
+  item,
+  members,
+  session,
+  teams,
+  timestamp,
+} from "./live-workflow-data";
+
+export const teamBoards: BoardDto[] = [
+  {
+    ...board,
+    name: "Launch campaign",
+    planning: { kind: "project", state: "active", teamId: teams[0]!.id },
+    startDate: "2026-09-01",
+    endDate: "2026-10-01",
+  },
+  {
+    ...board,
+    id: "board-other",
+    name: "Operations project",
+    planning: { kind: "project", state: "active", teamId: teams[1]!.id },
+  },
+  { ...board, id: "board-shared", name: "Shared work" },
+];
+export const teamItems: WorkItemDto[] = [
+  {
+    ...item,
+    id: "launch-brief",
+    title: "Review launch brief",
+    assignees: [{ id: "user-one", name: "Owner" }],
+    priority: "high",
+    dueDate: "2020-09-01",
+  },
+  {
+    ...item,
+    id: "launch-blocked",
+    title: "Unblock creative review",
+    planning: { teamId: "team-launch" },
+    status: "blocked",
+    assignees: [{ id: "user-two", name: "Teammate" }],
+  },
+  { ...item, id: "launch-done", title: "Publish positioning", status: "done" },
+  {
+    ...item,
+    id: "launch-milestone",
+    title: "Campaign ready",
+    type: "milestone",
+    dueDate: "2099-10-01",
+    planning: { teamId: "team-launch" },
+  },
+  {
+    ...item,
+    id: "shared-work",
+    boardId: "board-shared",
+    title: "Prepare customer notes",
+    assignees: [{ id: "user-one", name: "Owner" }],
+  },
+  {
+    ...item,
+    id: "other-work",
+    boardId: "board-other",
+    title: "Other team private plan",
+    assignees: [{ id: "user-one", name: "Owner" }],
+  },
+];
+export const teamConversation: ConversationDto = {
+  id: "room-launch",
+  organizationId: session.organization.id,
+  portfolioId: "portfolio-one",
+  workspaceId: board.workspaceId,
+  teamId: "team-launch",
+  title: "Launch team",
+  purpose: "Launch updates",
+  kind: "team",
+  visibility: "private",
+  participants: members.map((member) => ({
+    user: { ...member.user, organizationRole: "member" },
+    participantRole: "member",
+    notificationLevel: "all",
+    joinedAt: timestamp,
+  })),
+  unreadCount: 1,
+  needsResponseCount: 0,
+  retentionDays: 365,
+  version: 1,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+};
+export const teamMessage: ConversationMessageDto = {
+  id: "message-one",
+  sequence: 1,
+  clientMessageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  organizationId: session.organization.id,
+  conversationId: teamConversation.id,
+  senderId: "user-two",
+  sender: { ...members[1]!.user, organizationRole: "member" },
+  body: "The launch brief is ready for review.",
+  intent: "message",
+  metadata: {},
+  reactions: [],
+  retainedUntil: "2099-09-07T10:00:00.000Z",
+  version: 1,
+  createdAt: timestamp,
+};

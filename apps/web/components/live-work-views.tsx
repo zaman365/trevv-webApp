@@ -1,4 +1,5 @@
 "use client";
+import { SharedPlanningHub } from "./shared-planning-hub";
 
 import { LiveRefreshStatus } from "./live-refresh-status";
 
@@ -77,7 +78,8 @@ const viewCopy: Record<
 > = {
   attention: {
     title: "Attention",
-    subtitle: "Deterministic signals with source evidence and reason codes.",
+    subtitle:
+      "Understand what needs attention, agree on a next step, and move the work forward.",
     active: "attention",
   },
   "my-work": {
@@ -128,7 +130,8 @@ const viewCopy: Record<
   },
   ideas: {
     title: "Ideas",
-    subtitle: "Use an Idea WorkItem until a dedicated live surface is ready.",
+    subtitle:
+      "Explore plans and ideas, invite collaborators and discuss the next steps.",
     active: "ideas",
   },
   blueprints: {
@@ -151,6 +154,7 @@ const viewCopy: Record<
 };
 
 const supportedViews = new Set<LiveWorkViewKind>([
+  "ideas",
   "attention",
   "my-work",
   "inbox",
@@ -231,8 +235,21 @@ export function LiveWorkView({
             workspaceId={workspace.id}
             workspaceSlug={workspaceSlug}
           />
+        ) : view === "ideas" ? (
+          <SharedPlanningHub
+            workspaceId={workspace.id}
+            workspaceSlug={workspaceSlug}
+          />
         ) : view === "my-work" ? (
-          <LiveMyWork items={items} workspaceSlug={workspaceSlug} />
+          <>
+            <SharedPlanningHub
+              workspaceId={workspace.id}
+              workspaceSlug={workspaceSlug}
+              personal
+              compact
+            />
+            <LiveMyWork items={items} workspaceSlug={workspaceSlug} />
+          </>
         ) : view === "attention" ? (
           <LiveAttention
             signals={liveData.attention.filter(

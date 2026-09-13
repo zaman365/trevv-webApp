@@ -33,6 +33,77 @@ test.afterAll(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
+test("demo Quick capture retains every type, date, evidence, and Inbox option across tabs", async ({
+  page,
+}) => {
+  await page.route("https://trevv.test/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/")
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<div id="root"></div><script type="module" src="/harness.js"></script>',
+      });
+    const body = assets.get(path);
+    return body
+      ? route.fulfill({
+          contentType:
+            extname(path) === ".css" ? "text/css" : "text/javascript",
+          body,
+        })
+      : route.abort();
+  });
+  await page.goto("https://trevv.test/");
+  for (const type of [
+    "Task",
+    "Idea",
+    "Decision",
+    "Approval",
+    "Milestone",
+    "Request",
+  ]) {
+    await page
+      .getByRole("button", { name: "Open capture", exact: true })
+      .click();
+    const form = page.getByRole("dialog", { name: "Quick capture" });
+    await form
+      .getByRole("button", {
+        name: "Add priority, date, context, or evidence",
+        exact: true,
+      })
+      .click();
+    await form.getByLabel("Due date").fill("2026-10-15");
+    await form.locator(".create-title-field input").fill(`Demo ${type}`);
+    await form
+      .getByLabel("Evidence or source link")
+      .fill("https://example.test/evidence");
+    await form.getByLabel("Also add to my Inbox").check();
+    if (type === "Milestone" || type === "Request") {
+      await form.getByRole("tab", { name: "Other items" }).click();
+      await form.getByRole("radio", { name: new RegExp(type) }).check();
+    } else {
+      await form.getByRole("tab", { name: type, exact: true }).click();
+    }
+    await expect(form.getByLabel("Due date")).toHaveValue("2026-10-15");
+    await form
+      .getByRole("button", {
+        name: `Create ${type.toLowerCase()}`,
+        exact: true,
+      })
+      .click();
+    await expect(form).toHaveCount(0);
+    const captures = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("trevv:captured-work") ?? "[]"),
+    );
+    expect(captures[0]).toMatchObject({
+      title: `Demo ${type}`,
+      type: type.toLowerCase(),
+      dueDate: "2026-10-15",
+      evidenceUrl: "https://example.test/evidence",
+      sendToInbox: true,
+    });
+  }
+});
+
 test("creation modules are lazy, closable while loading, and preserve captured work and retry inputs", async ({
   page,
 }) => {
@@ -78,7 +149,7 @@ test("creation modules are lazy, closable while loading, and preserve captured w
   await expect(page.getByRole("dialog")).toHaveCount(0);
   releaseCapture();
   await page.getByRole("button", { name: "Open capture", exact: true }).click();
-  const capture = page.getByRole("dialog", { name: "Create in TREVV" });
+  const capture = page.getByRole("dialog", { name: "Quick capture" });
   await capture
     .getByLabel("Task title", { exact: true })
     .fill("Preserved capture");
