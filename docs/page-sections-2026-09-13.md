@@ -112,3 +112,12 @@ labels so long names cannot overlap the message type at medium widths.
 The local preview uses sample data at `http://127.0.0.1:4179/?view=portfolio`.
 Production publication remains a separate release step; passing local checks is
 not evidence of a completed deployment or a successful remote CI run.
+
+## Teams directory release correction
+
+The Teams route composes its page tabs below the existing workspace heading and
+actions. It uses one heading area, retains Create Team, People directory and
+invitations, and keeps the same summary dialogs, cards, workload and management
+flows. Feature labels use the full card width. A six-team browser regression
+includes the production sidebar/topbar space and owner actions so extra header
+height cannot silently push the second row off screen again.

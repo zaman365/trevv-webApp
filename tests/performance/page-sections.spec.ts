@@ -130,6 +130,62 @@ test("Attention keeps issues and embeds decisions with drafts, history and reloa
   ).toBeVisible();
 });
 
+test("Teams keeps six cards in view below one heading and the shared tabs", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1_280, height: 900 });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__workflowManagedWorkspaceIds", {
+      value: ["workspace-one"],
+    });
+  });
+  const fixture = teamWorkspaceApi();
+  const original = fixture.state.teams[0]!;
+  fixture.state.teams = [
+    "Customer Success",
+    "Launch Team",
+    "Marketing",
+    "Operations",
+    "Sales",
+    "Technology",
+  ].map((name, index) => ({
+    ...structuredClone(original),
+    id: `directory-team-${index}`,
+    name: `${name} 9d341211`,
+    purpose: `${name} coordination for the founder operating loop.`,
+  }));
+  await setup(page, "", {
+    view: "teams",
+    styled: true,
+    api: fixture.api,
+    workspaces: snapshot.workspaces.map((workspace) => ({
+      ...workspace,
+      name: "Operating Loop 9d341211",
+    })),
+  });
+  // Match the production sidebar and topbar space; a full-width fixture alone
+  // misses duplicated headers that push the second row below the fold.
+  await page.addStyleTag({
+    content: "body { padding: 68px 0 0 248px; }",
+  });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Teams");
+  await expect(page.getByRole("tablist")).toHaveCount(1);
+  const cards = page.locator('[data-testid^="team-card-"]');
+  await expect(cards).toHaveCount(6);
+  for (const card of await cards.all()) await expect(card).toBeInViewport();
+  await expect(cards.getByRole("button", { name: /^Manage / })).toHaveCount(6);
+  await expect(page.getByTestId("create-team-open")).toBeInViewport();
+  await expect(
+    page.getByRole("link", { name: "People directory", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", {
+      name: "Invite people to Operating Loop 9d341211",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
 test("Teams embeds actionable People cards, projects and messages without nested page navigation", async ({
   page,
 }) => {

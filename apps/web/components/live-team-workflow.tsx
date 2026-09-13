@@ -21,7 +21,13 @@ import {
   X,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useRef, useState, type FormEvent, type RefObject } from "react";
+import {
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useLiveTeamActions } from "@/lib/use-live-team-actions";
 import { useAppSession } from "@/lib/app-session-context";
 import {
@@ -69,22 +75,26 @@ import { taskToday, taskBelongsToTeam } from "@/lib/task-views";
 export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
   return (
     <WorkspaceFrame active="teams" workspaceSlug={workspaceSlug}>
-      <main className={styles.routeMain}>
-        <header className={styles.pageHeader}>
-          <div>
-            <h1>Teams</h1>
-            <span>People, conversations and shared work in one place.</span>
-          </div>
-        </header>
-        <WorkspacePageSections page="teams" workspaceSlug={workspaceSlug}>
-          <LiveTeamWorkflowContent
-            workspaceSlug={workspaceSlug}
-            embedded
-            heading="Team directory"
-          />
-        </WorkspacePageSections>
-      </main>
+      <LiveTeamWorkflowContent workspaceSlug={workspaceSlug} />
     </WorkspaceFrame>
+  );
+}
+
+function TeamDirectorySections({
+  embedded,
+  workspaceSlug,
+  children,
+}: {
+  embedded: boolean;
+  workspaceSlug: string;
+  children: ReactNode;
+}) {
+  return embedded ? (
+    children
+  ) : (
+    <WorkspacePageSections page="teams" workspaceSlug={workspaceSlug}>
+      {children}
+    </WorkspacePageSections>
   );
 }
 
@@ -186,7 +196,9 @@ export function LiveTeamWorkflowContent({
         className={`${styles.routeMain} ${embedded ? styles.embeddedContent : ""}`}
         data-testid="live-teams"
       >
-        <header className={styles.pageHeader}>
+        <header
+          className={`${styles.pageHeader} ${styles.teamDirectoryHeader}`}
+        >
           <div>
             <p>{workspace.name} / Collaboration</p>
             <Heading>{heading}</Heading>
@@ -195,7 +207,9 @@ export function LiveTeamWorkflowContent({
               connected.
             </span>
           </div>
-          <div className={styles.headerActions}>
+          <div
+            className={`${styles.headerActions} ${styles.teamHeaderActions}`}
+          >
             <Link href={personHref(workspaceSlug)}>
               <Users size={16} />
               People directory
@@ -231,183 +245,192 @@ export function LiveTeamWorkflowContent({
           </div>
         </header>
 
-        {directory.isLoading ? (
-          <LiveStateNotice kind="loading" title="Loading Teams" />
-        ) : null}
-        {presentedError ? (
-          <LiveStateNotice
-            {...presentedError}
-            {...(directory.dataUpdatedAt > 0
-              ? { lastSyncedAt: new Date(directory.dataUpdatedAt) }
-              : {})}
-            actions={
-              <button onClick={() => void directory.refetch()} type="button">
-                Retry
-              </button>
-            }
-          />
-        ) : null}
-        {savedMessage ? (
-          <LiveStateNotice kind="saved" title={savedMessage} />
-        ) : null}
-
-        <section className={styles.summaryGrid} aria-label="Team summary">
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            disabled={!visibleDirectory}
-            onClick={(event) => {
-              summaryTriggerRef.current = event.currentTarget;
-              setSummaryView("teams");
-            }}
-          >
-            <Users size={18} aria-hidden="true" />
-            <strong>{visibleDirectory?.teams.length ?? 0}</strong>
-            <span>Teams</span>
-            <small>
-              View teams <ChevronRight size={14} aria-hidden="true" />
-            </small>
-          </button>
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            disabled={!visibleDirectory}
-            onClick={(event) => {
-              summaryTriggerRef.current = event.currentTarget;
-              setSummaryView("people");
-            }}
-          >
-            <ShieldCheck size={18} aria-hidden="true" />
-            <strong>{uniqueMemberCount(visibleDirectory?.teams ?? [])}</strong>
-            <span>Assigned people</span>
-            <small>
-              View people <ChevronRight size={14} aria-hidden="true" />
-            </small>
-          </button>
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            disabled={!visibleDirectory}
-            onClick={(event) => {
-              summaryTriggerRef.current = event.currentTarget;
-              setSummaryView("rooms");
-            }}
-          >
-            <MessageCircleMore size={18} aria-hidden="true" />
-            <strong>{visibleDirectory?.teams.length ?? 0}</strong>
-            <span>Synchronized rooms</span>
-            <small>
-              View rooms <ChevronRight size={14} aria-hidden="true" />
-            </small>
-          </button>
-        </section>
-
-        <section className={styles.surface} aria-labelledby="team-list-title">
-          <header className={styles.surfaceHeader}>
-            <div>
-              <p>Workspace structure</p>
-              <h2 id="team-list-title">Your teams</h2>
-            </div>
-            <Link href={workspaceHref(workspaceSlug, "messages")}>
-              Open Messages <ChevronRight size={15} />
-            </Link>
-          </header>
-
-          {!directory.isLoading && visibleDirectory?.teams.length === 0 ? (
-            <div className={styles.emptyState}>
-              <Users size={25} aria-hidden="true" />
-              <h3>No Teams yet</h3>
-              <p>
-                Create a team, add people, and start a conversation. Each team
-                has its own shared room and work view.
-              </p>
-              {canCreate ? (
-                <button
-                  onClick={(event) => {
-                    teamTriggerRef.current = event.currentTarget;
-                    setError(null);
-                    setSavedMessage("");
-                    setCreateOpen(true);
-                  }}
-                  type="button"
-                >
-                  <Plus size={15} /> Create Team
+        <TeamDirectorySections
+          embedded={embedded}
+          workspaceSlug={workspaceSlug}
+        >
+          {directory.isLoading ? (
+            <LiveStateNotice kind="loading" title="Loading Teams" />
+          ) : null}
+          {presentedError ? (
+            <LiveStateNotice
+              {...presentedError}
+              {...(directory.dataUpdatedAt > 0
+                ? { lastSyncedAt: new Date(directory.dataUpdatedAt) }
+                : {})}
+              actions={
+                <button onClick={() => void directory.refetch()} type="button">
+                  Retry
                 </button>
-              ) : null}
-            </div>
-          ) : (
-            <div className={styles.teamGrid}>
-              {(visibleDirectory?.teams ?? []).map((team) => {
-                const lead = team.members.find(
-                  (member) => member.role === "lead",
-                );
-                const tasks = liveData.items.filter(
-                  (item) =>
-                    taskBelongsToTeam(item, team, boardsQuery.data ?? []) &&
-                    item.status !== "done",
-                );
-                const today = taskToday(session.organization.timezone ?? "UTC");
-                const canManage = canManageTeam(
-                  team,
-                  session.user.id,
-                  session.managedWorkspaceIds,
-                );
-                return (
-                  <article
-                    className={styles.teamCard}
-                    data-testid={`team-card-${team.id}`}
-                    key={team.id}
+              }
+            />
+          ) : null}
+          {savedMessage ? (
+            <LiveStateNotice kind="saved" title={savedMessage} />
+          ) : null}
+
+          <section className={styles.summaryGrid} aria-label="Team summary">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              disabled={!visibleDirectory}
+              onClick={(event) => {
+                summaryTriggerRef.current = event.currentTarget;
+                setSummaryView("teams");
+              }}
+            >
+              <Users size={18} aria-hidden="true" />
+              <strong>{visibleDirectory?.teams.length ?? 0}</strong>
+              <span>Teams</span>
+              <small>
+                View teams <ChevronRight size={14} aria-hidden="true" />
+              </small>
+            </button>
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              disabled={!visibleDirectory}
+              onClick={(event) => {
+                summaryTriggerRef.current = event.currentTarget;
+                setSummaryView("people");
+              }}
+            >
+              <ShieldCheck size={18} aria-hidden="true" />
+              <strong>
+                {uniqueMemberCount(visibleDirectory?.teams ?? [])}
+              </strong>
+              <span>Assigned people</span>
+              <small>
+                View people <ChevronRight size={14} aria-hidden="true" />
+              </small>
+            </button>
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              disabled={!visibleDirectory}
+              onClick={(event) => {
+                summaryTriggerRef.current = event.currentTarget;
+                setSummaryView("rooms");
+              }}
+            >
+              <MessageCircleMore size={18} aria-hidden="true" />
+              <strong>{visibleDirectory?.teams.length ?? 0}</strong>
+              <span>Synchronized rooms</span>
+              <small>
+                View rooms <ChevronRight size={14} aria-hidden="true" />
+              </small>
+            </button>
+          </section>
+
+          <section className={styles.surface} aria-labelledby="team-list-title">
+            <header className={styles.surfaceHeader}>
+              <div>
+                <p>Workspace structure</p>
+                <h2 id="team-list-title">Your teams</h2>
+              </div>
+              <Link href={workspaceHref(workspaceSlug, "messages")}>
+                Open Messages <ChevronRight size={15} />
+              </Link>
+            </header>
+
+            {!directory.isLoading && visibleDirectory?.teams.length === 0 ? (
+              <div className={styles.emptyState}>
+                <Users size={25} aria-hidden="true" />
+                <h3>No Teams yet</h3>
+                <p>
+                  Create a team, add people, and start a conversation. Each team
+                  has its own shared room and work view.
+                </p>
+                {canCreate ? (
+                  <button
+                    onClick={(event) => {
+                      teamTriggerRef.current = event.currentTarget;
+                      setError(null);
+                      setSavedMessage("");
+                      setCreateOpen(true);
+                    }}
+                    type="button"
                   >
-                    <div className={styles.teamMark} aria-hidden="true">
-                      {team.name.slice(0, 1).toLocaleUpperCase()}
-                    </div>
-                    <div className={styles.teamCardBody}>
-                      <div className={styles.teamTitleRow}>
-                        <div>
-                          <span>{presetLabels[team.preset]} preset</span>
-                          <h3>
-                            <Link href={teamHref(workspaceSlug, team.id)}>
-                              {team.name}
-                            </Link>
-                          </h3>
-                        </div>
-                        <span className={styles.memberCount}>
-                          <Users size={13} /> {team.members.length}
-                        </span>
+                    <Plus size={15} /> Create Team
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <div className={styles.teamGrid}>
+                {(visibleDirectory?.teams ?? []).map((team) => {
+                  const lead = team.members.find(
+                    (member) => member.role === "lead",
+                  );
+                  const tasks = liveData.items.filter(
+                    (item) =>
+                      taskBelongsToTeam(item, team, boardsQuery.data ?? []) &&
+                      item.status !== "done",
+                  );
+                  const today = taskToday(
+                    session.organization.timezone ?? "UTC",
+                  );
+                  const canManage = canManageTeam(
+                    team,
+                    session.user.id,
+                    session.managedWorkspaceIds,
+                  );
+                  return (
+                    <article
+                      className={styles.teamCard}
+                      data-testid={`team-card-${team.id}`}
+                      key={team.id}
+                    >
+                      <div className={styles.teamMark} aria-hidden="true">
+                        {team.name.slice(0, 1).toLocaleUpperCase()}
                       </div>
-                      <p>
-                        {team.purpose || teamPlaybooks[team.preset].outcome}
-                      </p>
-                      <dl className={styles.teamFacts}>
-                        <div>
-                          <dt>Lead</dt>
-                          <dd>{lead?.user.name ?? "Not assigned"}</dd>
+                      <div className={styles.teamCardBody}>
+                        <div className={styles.teamTitleRow}>
+                          <div>
+                            <span>{presetLabels[team.preset]} preset</span>
+                            <h3>
+                              <Link href={teamHref(workspaceSlug, team.id)}>
+                                {team.name}
+                              </Link>
+                            </h3>
+                          </div>
+                          <span className={styles.memberCount}>
+                            <Users size={13} /> {team.members.length}
+                          </span>
                         </div>
-                        <div>
-                          <dt>Room</dt>
-                          <dd>
-                            {team.room
-                              ? team.room.unreadCount > 0
-                                ? `${team.room.unreadCount} unread`
-                                : "Up to date"
-                              : "Private to members"}
-                          </dd>
-                        </div>
-                      </dl>
-                      <p>
-                        {tasks.length} open tasks ·{" "}
-                        {
-                          tasks.filter(
-                            (item) => item.dueDate && item.dueDate < today,
-                          ).length
-                        }{" "}
-                        overdue ·{" "}
-                        {
-                          tasks.filter((item) => item.status === "blocked")
-                            .length
-                        }{" "}
-                        blocked{liveData.recordsComplete ? "" : " · Loading…"}
-                      </p>
+                        <p>
+                          {team.purpose || teamPlaybooks[team.preset].outcome}
+                        </p>
+                        <dl className={styles.teamFacts}>
+                          <div>
+                            <dt>Lead</dt>
+                            <dd>{lead?.user.name ?? "Not assigned"}</dd>
+                          </div>
+                          <div>
+                            <dt>Room</dt>
+                            <dd>
+                              {team.room
+                                ? team.room.unreadCount > 0
+                                  ? `${team.room.unreadCount} unread`
+                                  : "Up to date"
+                                : "Private to members"}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className={styles.teamTaskSummary}>
+                          {tasks.length} open tasks ·{" "}
+                          {
+                            tasks.filter(
+                              (item) => item.dueDate && item.dueDate < today,
+                            ).length
+                          }{" "}
+                          overdue ·{" "}
+                          {
+                            tasks.filter((item) => item.status === "blocked")
+                              .length
+                          }{" "}
+                          blocked{liveData.recordsComplete ? "" : " · Loading…"}
+                        </p>
+                      </div>
                       <div
                         className={styles.featureChips}
                         aria-label={`${team.name} interface options`}
@@ -422,90 +445,91 @@ export function LiveTeamWorkflowContent({
                           <span>No feature preset</span>
                         ) : null}
                       </div>
-                    </div>
-                    <div className={styles.teamWorkActions}>
-                      <Link href={teamHref(workspaceSlug, team.id)}>
-                        Open team <ChevronRight size={14} aria-hidden="true" />
-                      </Link>
-                      <button
-                        type="button"
-                        aria-label="View member workload"
-                        onClick={() => setWorkTeamId(team.id)}
-                      >
-                        Workload
-                      </button>
-                      {team.room ? (
-                        <Link
-                          aria-label="Open team room"
-                          href={`${workspaceHref(workspaceSlug, "messages")}#${encodeURIComponent(team.room.conversationId)}`}
-                        >
-                          Team room
+                      <div className={styles.teamWorkActions}>
+                        <Link href={teamHref(workspaceSlug, team.id)}>
+                          Open team{" "}
+                          <ChevronRight size={14} aria-hidden="true" />
                         </Link>
-                      ) : null}
-                    </div>
-                    <footer className={styles.teamCardFooter}>
-                      <small>{teamFeatureAvailability(team)}</small>
-                      {canManage ? (
                         <button
-                          aria-label={`Manage ${team.name}`}
-                          onClick={(event) => {
-                            teamTriggerRef.current = event.currentTarget;
-                            setSelectedTeamId(team.id);
-                          }}
                           type="button"
+                          aria-label="View member workload"
+                          onClick={() => setWorkTeamId(team.id)}
                         >
-                          <Settings2 size={14} /> Manage
+                          Workload
                         </button>
-                      ) : (
-                        <button
-                          onClick={(event) => {
-                            teamTriggerRef.current = event.currentTarget;
-                            setSelectedTeamId(team.id);
-                          }}
-                          type="button"
-                        >
-                          View details
-                        </button>
-                      )}
-                    </footer>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-        <section className={styles.surface} aria-label="Team workload">
-          <label>
-            Show workload for{" "}
-            <select
-              value={workTeamId}
-              onChange={(event) => setWorkTeamId(event.target.value)}
-            >
-              <option value="">Everyone in this workspace</option>
-              {(visibleDirectory?.teams ?? []).map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <LiveMyWork
-            key={workTeamId}
-            workspaceSlug={workspaceSlug}
-            assignedToMe={false}
-            title="Member workload"
-            items={liveData.items.filter(
-              (item) =>
-                item.workspaceId === workspace.id &&
-                (!workTeamId ||
-                  visibleDirectory?.teams.some(
-                    (team) =>
-                      team.id === workTeamId &&
-                      taskBelongsToTeam(item, team, boardsQuery.data ?? []),
-                  )),
+                        {team.room ? (
+                          <Link
+                            aria-label="Open team room"
+                            href={`${workspaceHref(workspaceSlug, "messages")}#${encodeURIComponent(team.room.conversationId)}`}
+                          >
+                            Team room
+                          </Link>
+                        ) : null}
+                      </div>
+                      <footer className={styles.teamCardFooter}>
+                        <small>{teamFeatureAvailability(team)}</small>
+                        {canManage ? (
+                          <button
+                            aria-label={`Manage ${team.name}`}
+                            onClick={(event) => {
+                              teamTriggerRef.current = event.currentTarget;
+                              setSelectedTeamId(team.id);
+                            }}
+                            type="button"
+                          >
+                            <Settings2 size={14} /> Manage
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(event) => {
+                              teamTriggerRef.current = event.currentTarget;
+                              setSelectedTeamId(team.id);
+                            }}
+                            type="button"
+                          >
+                            View details
+                          </button>
+                        )}
+                      </footer>
+                    </article>
+                  );
+                })}
+              </div>
             )}
-          />
-        </section>
+          </section>
+          <section className={styles.surface} aria-label="Team workload">
+            <label>
+              Show workload for{" "}
+              <select
+                value={workTeamId}
+                onChange={(event) => setWorkTeamId(event.target.value)}
+              >
+                <option value="">Everyone in this workspace</option>
+                {(visibleDirectory?.teams ?? []).map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <LiveMyWork
+              key={workTeamId}
+              workspaceSlug={workspaceSlug}
+              assignedToMe={false}
+              title="Member workload"
+              items={liveData.items.filter(
+                (item) =>
+                  item.workspaceId === workspace.id &&
+                  (!workTeamId ||
+                    visibleDirectory?.teams.some(
+                      (team) =>
+                        team.id === workTeamId &&
+                        taskBelongsToTeam(item, team, boardsQuery.data ?? []),
+                    )),
+              )}
+            />
+          </section>
+        </TeamDirectorySections>
       </Content>
 
       {summaryView && visibleDirectory ? (

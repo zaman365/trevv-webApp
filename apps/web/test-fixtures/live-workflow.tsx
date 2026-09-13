@@ -179,7 +179,14 @@ function Workflow() {
   );
 }
 createRoot(document.getElementById("root")!).render(
-  <AppSessionProvider session={session}>
+  <AppSessionProvider
+    session={{
+      ...session,
+      managedWorkspaceIds:
+        (window as Window & { __workflowManagedWorkspaceIds?: string[] })
+          .__workflowManagedWorkspaceIds ?? session.managedWorkspaceIds,
+    }}
+  >
     <LiveAppDataProvider
       initialData={{
         ...snapshot,

@@ -113,6 +113,24 @@
   align-items: center;
 }
 
+.pageHeader .teamHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  max-width: 26rem;
+}
+
+.teamDirectoryHeader {
+  padding: 1rem;
+}
+
+.teamHeaderActions .syncStatus {
+  flex-basis: 100%;
+  text-align: right;
+}
+
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -381,6 +399,14 @@
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.teamCardBody > .teamTaskSummary {
+  min-height: 0;
+}
+
+.teamCard > .featureChips {
+  grid-column: 1 / -1;
 }
 
 .teamFacts {
