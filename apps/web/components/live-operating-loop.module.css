@@ -217,29 +217,12 @@
   font-size: 0.76rem;
 }
 
-.panel button,
-.panel select,
-.panel input,
-.panel textarea,
-.drawer button,
-.drawer select,
-.drawer input,
-.drawer textarea,
-.smallDialog button,
-.smallDialog select,
-.smallDialog input,
-.smallDialog textarea,
-.captureDialog button,
-.captureDialog select,
-.captureDialog input,
-.captureDialog textarea {
+:is(.panel, .drawer, .smallDialog, .captureDialog)
+  :is(button, select, input, textarea) {
   font: inherit;
 }
 
-.panel button,
-.rowActions button,
-.buttonGrid button,
-.searchForm button {
+:is(.panel, .rowActions, .buttonGrid, .searchForm) button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -255,9 +238,7 @@
   cursor: pointer;
 }
 
-.panel button:hover:not(:disabled),
-.rowActions button:hover:not(:disabled),
-.buttonGrid button:hover:not(:disabled) {
+:is(.panel, .rowActions, .buttonGrid) button:hover:not(:disabled) {
   border-color: var(--fh-primary, #5b56db);
   color: var(--fh-primary, #5b56db);
 }
@@ -274,9 +255,7 @@
   border-color: transparent;
 }
 
-.panel button:disabled,
-.rowActions button:disabled,
-.buttonGrid button:disabled {
+:is(.panel, .rowActions, .buttonGrid) button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
