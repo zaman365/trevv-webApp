@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import reviewPolicy from "../../config/live-axe-incomplete-reviews.json";
 
@@ -67,5 +67,17 @@ export async function expectNoLiveWcagFindings(page: Page, surface: string) {
         candidate.sha256 === fingerprint,
     );
   });
+  if (unreviewed.length > 0) {
+    await test.info().attach(`${surface}-unreviewed-accessibility`, {
+      body: Buffer.from(JSON.stringify(unreviewed, null, 2)),
+      contentType: "application/json",
+    });
+    const screenshotPath = test.info().outputPath(`${surface}-full-page.png`);
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await test.info().attach(`${surface}-full-page`, {
+      path: screenshotPath,
+      contentType: "image/png",
+    });
+  }
   expect(summarizeFindings(unreviewed)).toEqual([]);
 }

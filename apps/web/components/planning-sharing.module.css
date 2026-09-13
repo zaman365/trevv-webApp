@@ -151,7 +151,7 @@
 }
 .card p {
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
+  white-space: break-spaces;
 }
 .badge {
   display: inline-flex;

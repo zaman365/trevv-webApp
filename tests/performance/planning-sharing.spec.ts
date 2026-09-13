@@ -199,7 +199,7 @@ test("planning cards keep wrapped descriptions and actions readable across multi
     exact: true,
   });
   await expect(hub.locator("article")).toHaveCount(4);
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 1192, 390]) {
     await page.setViewportSize({ width, height: 1050 });
     for (const card of await hub.locator("article").all()) {
       await card.scrollIntoViewIfNeeded();
@@ -213,6 +213,19 @@ test("planning cards keep wrapped descriptions and actions readable across multi
               index === 0 || rect.top >= children[index - 1]!.bottom - 1,
           );
         }),
+      ).toBe(true);
+      expect(
+        await card.locator("p").evaluateAll((paragraphs) =>
+          paragraphs.every((paragraph) => {
+            const bounds = paragraph.getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(paragraph);
+            return [...range.getClientRects()].every(
+              (rect) =>
+                rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1,
+            );
+          }),
+        ),
       ).toBe(true);
       await expect(card.getByRole("link", { name: "Open plan" })).toBeVisible();
     }
