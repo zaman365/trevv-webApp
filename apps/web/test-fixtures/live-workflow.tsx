@@ -1,3 +1,9 @@
+import { LivePortfolioExperience } from "../components/live-portfolio-experience";
+import { LivePersonalWork } from "../components/live-personal-work";
+import { CalendarExperience } from "../components/calendar-experience";
+import { LiveWorkView } from "../components/live-work-views";
+import { LiveProjectPlanning } from "../components/live-project-planning";
+import { WorkspaceProvider } from "../lib/workspace-context";
 import "@founderhq/design-tokens/css";
 import "../app/globals.css";
 import "../app/workspace.css";
@@ -30,9 +36,50 @@ import type { WorkItemDto } from "@founderhq/api-contract";
 
 function Workflow() {
   const data = useLiveAppRecords();
+  const view = new URLSearchParams(window.location.search).get("view");
   const queryClient = useQueryClient();
   const [capture, setCapture] = useState(false);
   const [confirmed, setConfirmed] = useState<LiveCaptureSuccess | null>(null);
+  if (view === "personal") return <LivePersonalWork />;
+  if (view === "calendar")
+    return (
+      <WorkspaceProvider
+        portfolioScoped
+        liveSource={{
+          portfolios: data.portfolios,
+          workspaces: data.workspaces.map((workspace) => ({
+            ...workspace,
+            lead: workspace.lead ?? {
+              name: "Owner",
+              initials: "OW",
+              color: workspace.accent,
+            },
+            nextMilestone: workspace.nextMilestone ?? { title: "", date: "" },
+            latestUpdate: workspace.latestUpdate ?? { text: "", date: "" },
+          })),
+          items: [],
+          waiting: [],
+          attention: [],
+        }}
+      >
+        <CalendarExperience workspaceSlug="launch" />
+      </WorkspaceProvider>
+    );
+  if (view === "portfolio")
+    return (
+      <WorkspaceProvider portfolioScoped>
+        <LivePortfolioExperience />
+      </WorkspaceProvider>
+    );
+  if (view === "planning")
+    return <LiveProjectPlanning workspaceSlug="launch" />;
+  if (view?.startsWith("page-"))
+    return (
+      <LiveWorkView
+        workspaceSlug="launch"
+        view={view.slice(5) as Parameters<typeof LiveWorkView>[0]["view"]}
+      />
+    );
   if (new URLSearchParams(window.location.search).get("view") === "people")
     return <LivePeoplePage workspaceSlug="launch" />;
   if (new URLSearchParams(window.location.search).get("view") === "person")
@@ -136,6 +183,12 @@ createRoot(document.getElementById("root")!).render(
     <LiveAppDataProvider
       initialData={{
         ...snapshot,
+        workspaces:
+          (
+            window as Window & {
+              __workflowWorkspaces?: import("@founderhq/api-contract").WorkspaceDto[];
+            }
+          ).__workflowWorkspaces ?? snapshot.workspaces,
         attention:
           (
             window as Window & {

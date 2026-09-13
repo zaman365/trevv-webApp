@@ -1,4 +1,5 @@
 "use client";
+import sectionStyles from "./page-sections.module.css";
 import { PersonIdentity } from "./person-identity";
 import { SharedPlanningHub } from "./shared-planning-hub";
 
@@ -395,7 +396,7 @@ export function LiveTeamPage({
             )}
           </div>
         </header>
-        <nav className={styles.navigation} aria-label="Team page sections">
+        <nav className={sectionStyles.tabs} aria-label="Team page sections">
           {teamSections.map((key) => (
             <Link
               key={key}

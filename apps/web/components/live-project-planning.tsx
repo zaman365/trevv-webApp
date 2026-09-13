@@ -1,4 +1,9 @@
 "use client";
+const WorkspacePageSections = dynamic(() =>
+  import("./workspace-page-sections").then(
+    (module) => module.WorkspacePageSections,
+  ),
+);
 import dynamic from "next/dynamic";
 const PlanningPeopleFields = dynamic(
   () => import("./planning-people-fields").then((m) => m.PlanningPeopleFields),
@@ -66,17 +71,19 @@ export function LiveProjectPlanning({
             Step-by-step guide
           </Link>
         </header>
-        {workspace ? (
-          <ProjectPlanningContent
-            workspaceId={workspace.id}
-            workspaceSlug={workspaceSlug}
-          />
-        ) : (
-          <LiveStateNotice
-            kind="permission-loss"
-            title="Workspace not available"
-          />
-        )}
+        <WorkspacePageSections page={"planning"} workspaceSlug={workspaceSlug}>
+          {workspace ? (
+            <ProjectPlanningContent
+              workspaceId={workspace.id}
+              workspaceSlug={workspaceSlug}
+            />
+          ) : (
+            <LiveStateNotice
+              kind="permission-loss"
+              title="Workspace not available"
+            />
+          )}
+        </WorkspacePageSections>
       </main>
     </WorkspaceFrame>
   );

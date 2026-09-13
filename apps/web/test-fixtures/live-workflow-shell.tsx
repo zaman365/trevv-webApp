@@ -9,3 +9,7 @@ export function useReportRouteReady() {}
 export function useRouter() {
   return { push: (href: string) => window.location.assign(href) };
 }
+
+export function usePathname() {
+  return window.location.pathname;
+}

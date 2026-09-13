@@ -1,4 +1,5 @@
 "use client";
+import { WorkspacePageSections } from "./workspace-page-sections";
 import { personHref } from "@/lib/people-routes";
 
 import {
@@ -34,7 +35,13 @@ import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-collaboration.module.css";
 import { teamPlaybooks } from "@/lib/team-playbooks";
-import { TeamSummaryDialog, type TeamSummaryView } from "./live-team-summary";
+import dynamic from "next/dynamic";
+import type { TeamSummaryView } from "./live-team-summary";
+const TeamSummaryDialog = dynamic(
+  () =>
+    import("./live-team-summary").then((module) => module.TeamSummaryDialog),
+  { loading: () => <p role="status">Opening team summary…</p> },
+);
 import {
   featureLabels,
   presetLabels,
@@ -43,11 +50,18 @@ import {
   canManageTeam,
   canManageTeams,
 } from "@/lib/team-workspace";
-import {
-  TeamManagementContent,
-  type TeamManagementProps,
-} from "./live-team-management";
-import { LiveMyWork } from "./live-work-my-work";
+import type { TeamManagementProps } from "./live-team-management";
+const TeamManagementContent = dynamic(
+  () =>
+    import("./live-team-management").then(
+      (module) => module.TeamManagementContent,
+    ),
+  { loading: () => <p role="status">Opening team management…</p> },
+);
+const LiveMyWork = dynamic(
+  () => import("./live-work-my-work").then((module) => module.LiveMyWork),
+  { loading: () => <p role="status">Loading team workload…</p> },
+);
 import { retainedKey } from "@/lib/live-work-view-helpers";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
 import { taskToday, taskBelongsToTeam } from "@/lib/task-views";
@@ -55,7 +69,21 @@ import { taskToday, taskBelongsToTeam } from "@/lib/task-views";
 export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
   return (
     <WorkspaceFrame active="teams" workspaceSlug={workspaceSlug}>
-      <LiveTeamWorkflowContent workspaceSlug={workspaceSlug} />
+      <main className={styles.routeMain}>
+        <header className={styles.pageHeader}>
+          <div>
+            <h1>Teams</h1>
+            <span>People, conversations and shared work in one place.</span>
+          </div>
+        </header>
+        <WorkspacePageSections page="teams" workspaceSlug={workspaceSlug}>
+          <LiveTeamWorkflowContent
+            workspaceSlug={workspaceSlug}
+            embedded
+            heading="Team directory"
+          />
+        </WorkspacePageSections>
+      </main>
     </WorkspaceFrame>
   );
 }
@@ -63,9 +91,11 @@ export function LiveTeamWorkflow({ workspaceSlug }: { workspaceSlug: string }) {
 export function LiveTeamWorkflowContent({
   workspaceSlug,
   embedded = false,
+  heading = "Teams",
 }: {
   workspaceSlug: string;
   embedded?: boolean;
+  heading?: string;
 }) {
   const Content = embedded ? "div" : "main";
   const Heading = embedded ? "h3" : "h1";
@@ -159,7 +189,7 @@ export function LiveTeamWorkflowContent({
         <header className={styles.pageHeader}>
           <div>
             <p>{workspace.name} / Collaboration</p>
-            <Heading>Teams</Heading>
+            <Heading>{heading}</Heading>
             <span>
               Bring people together, balance their work, and keep conversations
               connected.

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve, extname } from "node:path";
 import type {
   InboxItemDto,
+  WorkspaceDto,
   TeamDto,
   WorkItemDto,
   WorkItemEvidenceDto,
@@ -31,7 +32,7 @@ test.beforeAll(async () => {
     resolve: {
       alias: [
         {
-          find: "@founderhq/api-contract",
+          find: /^@founderhq\/api-contract$/,
           replacement: resolve("packages/api-contract/src/index.ts"),
         },
         { find: "next/navigation", replacement: shell },
@@ -66,6 +67,11 @@ export async function setup(
     dashboard?: boolean;
     styled?: boolean;
     view?:
+      | "portfolio"
+      | "personal"
+      | "calendar"
+      | "planning"
+      | `page-${string}`
       | "teams"
       | "team"
       | "attention"
@@ -79,6 +85,7 @@ export async function setup(
     api?: (route: Route) => Promise<boolean>;
     teams?: TeamDto[];
     records?: WorkItemDto[];
+    workspaces?: WorkspaceDto[];
     operations?: (route: Route) => Promise<void>;
   } = {},
 ) {
@@ -96,6 +103,10 @@ export async function setup(
   const creations: Array<Record<string, unknown>> = [];
   if (
     options.dashboard ||
+    options.view === "portfolio" ||
+    options.view === "personal" ||
+    options.view === "calendar" ||
+    options.view?.startsWith("page-") ||
     options.view === "team" ||
     options.view === "attention" ||
     options.view === "person" ||
@@ -105,6 +116,10 @@ export async function setup(
       Object.defineProperty(window, "__workflowInitialItems", { value: items });
     }, records);
   }
+  if (options.workspaces)
+    await page.addInitScript((records) => {
+      Object.defineProperty(window, "__workflowWorkspaces", { value: records });
+    }, options.workspaces);
   if (options.attention)
     await page.addInitScript((signals) => {
       Object.defineProperty(window, "__workflowAttention", { value: signals });
@@ -283,7 +298,7 @@ export async function setup(
           : path === "/api/v1/portfolios"
             ? snapshot.portfolios
             : path === "/api/v1/workspaces"
-              ? snapshot.workspaces
+              ? (options.workspaces ?? snapshot.workspaces)
               : path === "/api/v1/items"
                 ? { data: records, nextCursor: null }
                 : path === "/api/v1/boards"
@@ -336,6 +351,22 @@ export async function setup(
   } else if (options.view === "messages") {
     await expect(
       page.getByRole("heading", { name: "Messages", exact: true }),
+    ).toBeVisible();
+  } else if (options.view === "portfolio") {
+    await expect(page.getByTestId("live-portfolio")).toBeVisible();
+  } else if (options.view === "personal") {
+    await expect(page.getByTestId("live-personal-work")).toBeVisible();
+  } else if (options.view === "calendar") {
+    await expect(
+      page.getByRole("heading", { name: "Calendar", exact: true }),
+    ).toBeVisible();
+  } else if (options.view?.startsWith("page-")) {
+    await expect(
+      page.getByTestId(`live-${options.view.slice(5)}`),
+    ).toBeVisible();
+  } else if (options.view === "planning") {
+    await expect(
+      page.getByRole("heading", { name: "Projects and sprints", level: 1 }),
     ).toBeVisible();
   } else if (options.view === "capture") {
     await expect(

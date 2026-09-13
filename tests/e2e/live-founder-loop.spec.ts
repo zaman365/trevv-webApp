@@ -653,7 +653,12 @@ test.describe.serial("live founder operating loop", () => {
       name: "Open conversation context",
     });
     await contextToggle.click();
-    await expect(ownerPage.getByRole("dialog")).toBeVisible();
+    await expect(
+      ownerPage.getByRole("dialog", {
+        name: `${teamName} context`,
+        exact: true,
+      }),
+    ).toBeVisible();
     await ownerPage.keyboard.press("Escape");
     await expect(contextToggle).toBeFocused();
 

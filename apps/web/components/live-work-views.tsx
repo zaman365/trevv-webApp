@@ -1,4 +1,5 @@
 "use client";
+import { WorkspacePageSections } from "./workspace-page-sections";
 
 import { LiveRefreshStatus } from "./live-refresh-status";
 
@@ -226,66 +227,68 @@ export function LiveWorkView({
             </small>
           </header>
         )}
-        <LiveRefreshStatus />
-        {view === "settings" ? (
-          <LiveSettingsFeature workspace={workspace} />
-        ) : !supportedViews.has(view) ? (
-          <UnavailableLiveSurface
-            title={copy.title}
-            workspaceSlug={workspaceSlug}
-          />
-        ) : view === "inbox" ? (
-          <LiveInboxFeature
-            workspaceId={workspace.id}
-            workspaceSlug={workspaceSlug}
-          />
-        ) : view === "ideas" ? (
-          <SharedPlanningHub
-            workspaceId={workspace.id}
-            workspaceSlug={workspaceSlug}
-          />
-        ) : view === "my-work" ? (
-          <>
+        <WorkspacePageSections page={view} workspaceSlug={workspaceSlug}>
+          <LiveRefreshStatus />
+          {view === "settings" ? (
+            <LiveSettingsFeature workspace={workspace} />
+          ) : !supportedViews.has(view) ? (
+            <UnavailableLiveSurface
+              title={copy.title}
+              workspaceSlug={workspaceSlug}
+            />
+          ) : view === "inbox" ? (
+            <LiveInboxFeature
+              workspaceId={workspace.id}
+              workspaceSlug={workspaceSlug}
+            />
+          ) : view === "ideas" ? (
             <SharedPlanningHub
               workspaceId={workspace.id}
               workspaceSlug={workspaceSlug}
-              personal
-              compact
             />
-            <LiveMyWork items={items} workspaceSlug={workspaceSlug} />
-          </>
-        ) : view === "attention" ? (
-          <LiveAttention
-            signals={liveData.attention.filter(
-              (signal) => signal.workspaceId === workspace.id,
-            )}
-          />
-        ) : view === "waiting" ? (
-          <LiveWaiting
-            records={liveData.waiting.filter(
-              (record) => record.workspaceId === workspace.id,
-            )}
-          />
-        ) : view === "decisions" ? (
-          <LiveTransitions
-            items={items.filter((item) => item.type === "decision")}
-            kind="decision"
-            workspaceId={workspace.id}
-          />
-        ) : view === "approvals" ? (
-          <LiveTransitions
-            items={items.filter((item) => item.type === "approval")}
-            kind="approval"
-            workspaceId={workspace.id}
-          />
-        ) : view === "reviews" ? (
-          <LiveWeeklyReview workspaceId={workspace.id} />
-        ) : view === "search" ? (
-          <LiveSearch
-            workspaceId={workspace.id}
-            workspaceSlug={workspaceSlug}
-          />
-        ) : null}
+          ) : view === "my-work" ? (
+            <>
+              <SharedPlanningHub
+                workspaceId={workspace.id}
+                workspaceSlug={workspaceSlug}
+                personal
+                compact
+              />
+              <LiveMyWork items={items} workspaceSlug={workspaceSlug} />
+            </>
+          ) : view === "attention" ? (
+            <LiveAttention
+              signals={liveData.attention.filter(
+                (signal) => signal.workspaceId === workspace.id,
+              )}
+            />
+          ) : view === "waiting" ? (
+            <LiveWaiting
+              records={liveData.waiting.filter(
+                (record) => record.workspaceId === workspace.id,
+              )}
+            />
+          ) : view === "decisions" ? (
+            <LiveTransitions
+              items={items.filter((item) => item.type === "decision")}
+              kind="decision"
+              workspaceId={workspace.id}
+            />
+          ) : view === "approvals" ? (
+            <LiveTransitions
+              items={items.filter((item) => item.type === "approval")}
+              kind="approval"
+              workspaceId={workspace.id}
+            />
+          ) : view === "reviews" ? (
+            <LiveWeeklyReview workspaceId={workspace.id} />
+          ) : view === "search" ? (
+            <LiveSearch
+              workspaceId={workspace.id}
+              workspaceSlug={workspaceSlug}
+            />
+          ) : null}
+        </WorkspacePageSections>
       </main>
     </WorkspaceFrame>
   );

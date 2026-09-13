@@ -4,18 +4,19 @@ const SharedPlanningHub = dynamic(
   { loading: () => <p>Loading plans and ideas…</p> },
 );
 import dynamic from "next/dynamic";
-const LiveDashboardPlanDialog = dynamic(() =>
-  import("./live-dashboard-plan-dialog").then(
-    (module) => module.LiveDashboardPlanDialog,
-  ),
+const LiveDashboardPlanCreator = dynamic(
+  () =>
+    import("./live-dashboard-plan-creator").then(
+      (module) => module.LiveDashboardPlanCreator,
+    ),
+  { loading: () => <p role="status">Loading plan editor…</p> },
 );
-import {
-  emptyPeopleChoice,
-  usePlanningSharing,
-  type PeopleChoice,
-} from "@/lib/planning-sharing";
 
-import { LiveRefreshStatus } from "./live-refresh-status";
+const LiveRefreshStatus = dynamic(
+  () =>
+    import("./live-refresh-status").then((module) => module.LiveRefreshStatus),
+  { loading: () => <p role="status">Checking workspace connection…</p> },
+);
 import {
   DashboardTabs,
   DashboardPanel,
@@ -32,8 +33,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
 import { workspaceRollups } from "@/lib/collection-index";
 import { useReportRouteReady } from "@/lib/navigation-performance";
@@ -108,7 +109,6 @@ export function LiveWorkspaceDashboard({
   const workspace = liveData.workspaces.find(
     (record) => record.slug === workspaceSlug,
   );
-  const queryClient = useQueryClient();
   const boardsKey = workspaceResourceKeys.boards(
     session.organization.id,
     workspace?.id ?? "",
@@ -133,18 +133,7 @@ export function LiveWorkspaceDashboard({
   const operationStatus = operationsQuery.data;
   const loadError = boardsQuery.error;
   const [createOpen, setCreateOpen] = useState(false);
-  const shareResource = usePlanningSharing();
-  const [boardTeamId, setBoardTeamId] = useState("");
-  const [people, setPeople] = useState<PeopleChoice>(emptyPeopleChoice);
-  const [boardName, setBoardName] = useState("");
-  const [boardDescription, setBoardDescription] = useState("");
-  const [boardStartDate, setBoardStartDate] = useState("");
-  const [boardEndDate, setBoardEndDate] = useState("");
-  const [pending, setPending] = useState(false);
-  const [mutationError, setMutationError] = useState<unknown>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState(() =>
-    crypto.randomUUID(),
-  );
+  const [planEditorLoaded, setPlanEditorLoaded] = useState(false);
   const [confirmedBoard, setConfirmedBoard] = useState<BoardDto | null>(null);
 
   const items = useMemo(
@@ -230,70 +219,6 @@ export function LiveWorkspaceDashboard({
     (record) => record.workspaceId === workspaceId && !record.resolvedAt,
   );
 
-  async function createBoard(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (
-      !boardName.trim() ||
-      pending ||
-      (people.enabled && !people.participantIds.length)
-    )
-      return;
-    setPending(true);
-    setMutationError(null);
-    try {
-      const result = await liveData.client.createBoard(
-        {
-          workspaceId,
-          name: boardName.trim(),
-          ...(boardTeamId
-            ? {
-                planning: {
-                  kind: "project",
-                  state: "planned",
-                  teamId: boardTeamId,
-                },
-              }
-            : {}),
-          description: boardDescription.trim(),
-          visibility: "private",
-          progressMode: "task_completion",
-          ...(boardStartDate ? { startDate: boardStartDate } : {}),
-          ...(boardEndDate ? { endDate: boardEndDate } : {}),
-        },
-        idempotencyKey,
-      );
-      queryClient.setQueryData<BoardDto[]>(boardsKey, (current) => [
-        ...(current ?? []),
-        result.data,
-      ]);
-      shareResource(
-        {
-          entityType: "board",
-          entityId: result.data.id,
-          title: result.data.name,
-          description: result.data.description,
-          workspaceId,
-        },
-        people,
-        idempotencyKey,
-      );
-      setPeople(emptyPeopleChoice);
-      setBoardTeamId("");
-      setConfirmedBoard(result.data);
-      setCreateOpen(false);
-      setBoardName("");
-      setBoardDescription("");
-      setBoardStartDate("");
-      setBoardEndDate("");
-      setIdempotencyKey(crypto.randomUUID());
-      void liveData.refresh();
-    } catch (reason) {
-      setMutationError(reason);
-    } finally {
-      setPending(false);
-    }
-  }
-
   const presentedLoadError = loadError ? presentLiveError(loadError) : null;
 
   return (
@@ -317,7 +242,10 @@ export function LiveWorkspaceDashboard({
               className="quiet-button"
               data-testid="create-board-open"
               type="button"
-              onClick={() => setCreateOpen(true)}
+              onClick={() => {
+                setPlanEditorLoaded(true);
+                setCreateOpen(true);
+              }}
             >
               <Plus size={15} /> New plan
             </button>
@@ -602,35 +530,13 @@ export function LiveWorkspaceDashboard({
             </DashboardPanel>
           ))}
 
-        {createOpen ? (
-          <LiveDashboardPlanDialog
+        {planEditorLoaded ? (
+          <LiveDashboardPlanCreator
+            key={workspaceId}
+            open={createOpen}
             workspaceId={workspaceId}
             workspaceName={workspace.name}
-            draft={{
-              name: boardName,
-              description: boardDescription,
-              startDate: boardStartDate,
-              endDate: boardEndDate,
-              teamId: boardTeamId,
-              people,
-            }}
-            onChange={(next) => {
-              if (mutationError) {
-                setMutationError(null);
-                setIdempotencyKey(crypto.randomUUID());
-              }
-              if (next.name !== undefined) setBoardName(next.name);
-              if (next.description !== undefined)
-                setBoardDescription(next.description);
-              if (next.startDate !== undefined)
-                setBoardStartDate(next.startDate);
-              if (next.endDate !== undefined) setBoardEndDate(next.endDate);
-              if (next.teamId !== undefined) setBoardTeamId(next.teamId);
-              if (next.people !== undefined) setPeople(next.people);
-            }}
-            pending={pending}
-            error={mutationError}
-            onSubmit={createBoard}
+            onCreated={setConfirmedBoard}
             onClose={() => setCreateOpen(false)}
           />
         ) : null}

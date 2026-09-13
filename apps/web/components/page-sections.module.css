@@ -1,0 +1,87 @@
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--fh-border);
+  border-radius: 14px;
+  background: var(--fh-surface);
+  min-width: 0;
+}
+.tabs > button,
+.tabs > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 13px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fh-ink-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.tabs > [aria-selected="true"],
+.tabs > [aria-current] {
+  border-color: var(--fh-primary);
+  background: var(--fh-primary-soft);
+  color: var(--fh-primary-strong);
+}
+.tabs > :hover {
+  background: var(--fh-primary-soft);
+}
+.tabs > :focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .tabs {
+    gap: 4px;
+  }
+  .tabs > button,
+  .tabs > a {
+    padding: 9px;
+    font-size: 12px;
+    flex: 1 1 auto;
+  }
+}
+
+.panel {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.heading h2 {
+  margin: 0 0 5px;
+  font-size: 20px;
+}
+.heading p {
+  margin: 0;
+  color: var(--fh-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.heading a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--fh-border);
+  border-radius: 9px;
+  color: var(--fh-primary-strong);
+  background: var(--fh-surface);
+  font-size: 13px;
+  text-decoration: none;
+}

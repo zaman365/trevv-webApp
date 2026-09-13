@@ -1,4 +1,5 @@
 "use client";
+import { PortfolioPageSections } from "./portfolio-page-sections";
 import { SharedPlanningHub } from "./shared-planning-hub";
 
 import { LiveRefreshStatus } from "./live-refresh-status";
@@ -28,26 +29,28 @@ export function LivePersonalWork() {
           </div>
           <LiveCreateTask workspaces={data.workspaces} />
         </header>
-        <LiveRefreshStatus />
-        {!data.workspaces.length ? (
-          <LiveStateNotice
-            kind="empty"
-            title="Start with a workspace"
-            description="Keep each startup, client, or business in its own workspace, then organize its projects on boards."
-            actions={<Link href="/app/portfolio">Open Portfolio</Link>}
-          />
-        ) : (
-          <LiveMyWork items={data.items} />
-        )}
-        {data.workspaces.map((workspace) => (
-          <SharedPlanningHub
-            key={workspace.id}
-            workspaceId={workspace.id}
-            workspaceSlug={workspace.slug}
-            personal
-            compact
-          />
-        ))}
+        <PortfolioPageSections portfolioId="" personal>
+          <LiveRefreshStatus />
+          {!data.workspaces.length ? (
+            <LiveStateNotice
+              kind="empty"
+              title="Start with a workspace"
+              description="Keep each startup, client, or business in its own workspace, then organize its projects on boards."
+              actions={<Link href="/app/portfolio">Open Portfolio</Link>}
+            />
+          ) : (
+            <LiveMyWork items={data.items} />
+          )}
+          {data.workspaces.map((workspace) => (
+            <SharedPlanningHub
+              key={workspace.id}
+              workspaceId={workspace.id}
+              workspaceSlug={workspace.slug}
+              personal
+              compact
+            />
+          ))}
+        </PortfolioPageSections>
       </main>
     </WorkspaceFrame>
   );

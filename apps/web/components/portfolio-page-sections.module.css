@@ -1,0 +1,91 @@
+.stack {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.toolbar > a {
+  color: var(--fh-primary-strong);
+  font-size: 13px;
+  text-decoration: none;
+}
+.toolbar {
+  padding: 16px;
+  border: 1px solid var(--fh-border);
+  border-radius: 12px;
+  background: var(--fh-surface);
+  justify-content: flex-start;
+}
+.toolbar label {
+  display: grid;
+  gap: 6px;
+  color: var(--fh-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.toolbar input,
+.toolbar select {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--fh-border);
+  border-radius: 8px;
+  background: var(--fh-surface);
+  color: var(--fh-ink);
+  font: inherit;
+  max-width: 100%;
+}
+.toolbar input {
+  min-width: min(260px, 65vw);
+}
+.toolbar p {
+  margin: 0;
+  color: var(--fh-muted);
+  font-size: 13px;
+}
+.cardList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 16px;
+}
+.card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--fh-border);
+  border-radius: 14px;
+  background: var(--fh-surface);
+  min-width: 0;
+}
+.card h3,
+.card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.card p,
+.card small {
+  color: var(--fh-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.card a {
+  color: var(--fh-primary-strong);
+  text-decoration: none;
+  font-weight: 600;
+}
+.card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .toolbar label {
+    flex: 1 1 170px;
+    min-width: 0;
+  }
+}

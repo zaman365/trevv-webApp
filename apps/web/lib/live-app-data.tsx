@@ -69,7 +69,7 @@ export type LiveAppRecords = Omit<
   LiveAppDataSnapshot,
   "refreshedAt" | "revision"
 >;
-interface LiveAppRecordsContextValue extends LiveAppRecords {
+export interface LiveAppRecordsContextValue extends LiveAppRecords {
   client: TrevvApiClient;
   error: unknown;
   refreshing: boolean;
@@ -84,9 +84,8 @@ interface LiveAppRecordsContextValue extends LiveAppRecords {
   removeConfirmedItem(workspaceId: string, itemId: string): Promise<void>;
   refresh(options?: { backgroundRecords?: boolean }): Promise<void>;
 }
-const LiveAppDataContext = createContext<LiveAppRecordsContextValue | null>(
-  null,
-);
+export const LiveAppDataContext =
+  createContext<LiveAppRecordsContextValue | null>(null);
 const LiveAppAccessContext = createContext<LiveAppAccessSnapshot | undefined>(
   undefined,
 );
@@ -640,6 +639,7 @@ export function useLiveAppRecords(): LiveAppRecordsContextValue {
 export function useOptionalLiveAppRecords() {
   return useContext(LiveAppDataContext);
 }
+
 export function useLiveAppData() {
   const records = useLiveAppRecords();
   const refreshedAt = useLiveAppRefreshedAt()!;

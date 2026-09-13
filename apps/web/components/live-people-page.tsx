@@ -1,6 +1,15 @@
 "use client";
+import { WorkspacePageSections } from "./workspace-page-sections";
+import sectionStyles from "./page-sections.module.css";
 
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { WorkItemDto } from "@founderhq/api-contract";
 import {
@@ -52,10 +61,15 @@ type WorkFilter = "all" | "open" | "overdue" | "blocked" | "done";
 export function LivePeoplePage({
   workspaceSlug,
   userId,
+  embedded = false,
 }: {
   workspaceSlug: string;
   userId?: string;
+  embedded?: boolean;
 }) {
+  const Frame = embedded ? EmbeddedPeopleFrame : WorkspaceFrame;
+  const Content = embedded ? "div" : "main";
+  const Heading = embedded ? "h3" : "h1";
   const session = useAppSession();
   const data = useLiveAppRecords();
   const chat = useFloatingChat();
@@ -190,8 +204,8 @@ export function LivePeoplePage({
   }
 
   return (
-    <WorkspaceFrame active="teams" workspaceSlug={workspaceSlug}>
-      <main className={styles.main}>
+    <Frame active="teams" workspaceSlug={workspaceSlug}>
+      <Content className={styles.main}>
         <div className={styles.actions}>
           <Link
             href={
@@ -234,10 +248,10 @@ export function LivePeoplePage({
                     <span className={styles.eyebrow}>
                       {workspace.name} · Person
                     </span>
-                    <h1>
+                    <Heading>
                       {person.name}
                       {person.id === session.user.id ? " (you)" : ""}
-                    </h1>
+                    </Heading>
                     <p>
                       {person.organizationRole.replaceAll("_", " ")} ·{" "}
                       {records.memberships.length}{" "}
@@ -307,7 +321,7 @@ export function LivePeoplePage({
                   </button>
                 </div>
               </header>
-              <nav className={styles.tabs} aria-label="Person sections">
+              <nav className={sectionStyles.tabs} aria-label="Person sections">
                 {sections.map((entry) => (
                   <a
                     key={entry}
@@ -746,7 +760,7 @@ export function LivePeoplePage({
             </>
           ) : !directory.isLoading ? (
             <section className={styles.panel}>
-              <h1>Person unavailable</h1>
+              <Heading>Person unavailable</Heading>
               <p>This person is not available in this workspace directory.</p>
             </section>
           ) : null
@@ -757,7 +771,7 @@ export function LivePeoplePage({
                 <span className={styles.eyebrow}>
                   {workspace?.name} · Directory
                 </span>
-                <h1>People</h1>
+                <Heading>People</Heading>
                 <p>
                   Find a teammate, see their work, and start a conversation.
                 </p>
@@ -778,105 +792,111 @@ export function LivePeoplePage({
                 ) : null}
               </div>
             </header>
-            <div className={styles.filters}>
-              <label>
-                Search people
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Name or email"
-                />
-              </label>
-              <label>
-                Team
-                <select
-                  value={teamFilter}
-                  onChange={(event) => setTeamFilter(event.target.value)}
-                >
-                  <option value="">All teams</option>
-                  <option value="unassigned">No team assigned</option>
-                  {teams.map((team) => (
-                    <option value={team.id} key={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className={styles.directory}>
-              {visibleMembers.map((entry) => (
-                <article key={entry.id} className={styles.panel}>
-                  <header className={styles.cardHeader}>
-                    <span className={styles.avatar}>
-                      {initials(entry.name)}
-                    </span>
-                    <div>
-                      <strong>
-                        <PersonIdentity
-                          workspaceSlug={workspaceSlug}
-                          userId={entry.id}
-                          name={entry.name}
-                        />
-                      </strong>
-                      <small>
-                        {entry.organizationRole.replaceAll("_", " ")}
-                        {entry.id === session.user.id ? " · You" : ""}
-                      </small>
-                    </div>
-                  </header>
-                  <a
-                    className={styles.contact}
-                    href={personEmailHref(entry.email)}
+            <WorkspacePageSections page="people" workspaceSlug={workspaceSlug}>
+              <div className={styles.filters}>
+                <label>
+                  Search people
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Name or email"
+                  />
+                </label>
+                <label>
+                  Team
+                  <select
+                    value={teamFilter}
+                    onChange={(event) => setTeamFilter(event.target.value)}
                   >
-                    <Mail size={14} />
-                    {entry.email}
-                  </a>
-                  <div className={styles.pills}>
-                    {teams
-                      .filter((team) =>
-                        team.members.some(
-                          (member) => member.user.id === entry.id,
-                        ),
-                      )
-                      .map((team) => (
-                        <Link
-                          key={team.id}
-                          href={teamHref(workspaceSlug, team.id)}
-                        >
-                          {team.name}
-                        </Link>
-                      ))}
-                  </div>
-                  <div className={styles.actions}>
-                    <Link href={personHref(workspaceSlug, entry.id)}>
-                      View profile
-                      <ArrowUpRight size={15} />
-                    </Link>
-                    {entry.id !== session.user.id && chat ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          chat.openChat({ workspaceSlug, personId: entry.id })
-                        }
-                      >
-                        <MessageCircleMore size={15} />
-                        Chat
-                      </button>
-                    ) : null}
-                    <a href={personEmailHref(entry.email)}>
-                      <Mail size={15} />
-                      Email
+                    <option value="">All teams</option>
+                    <option value="unassigned">No team assigned</option>
+                    {teams.map((team) => (
+                      <option value={team.id} key={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className={styles.directory}>
+                {visibleMembers.map((entry) => (
+                  <article key={entry.id} className={styles.panel}>
+                    <header className={styles.cardHeader}>
+                      <span className={styles.avatar}>
+                        {initials(entry.name)}
+                      </span>
+                      <div>
+                        <strong>
+                          <PersonIdentity
+                            workspaceSlug={workspaceSlug}
+                            userId={entry.id}
+                            name={entry.name}
+                          />
+                        </strong>
+                        <small>
+                          {entry.organizationRole.replaceAll("_", " ")}
+                          {entry.id === session.user.id ? " · You" : ""}
+                        </small>
+                      </div>
+                    </header>
+                    <a
+                      className={styles.contact}
+                      href={personEmailHref(entry.email)}
+                    >
+                      <Mail size={14} />
+                      {entry.email}
                     </a>
-                  </div>
-                </article>
-              ))}
-            </div>
-            {!directory.isLoading && visibleMembers.length === 0 ? (
-              <p>No people match your search.</p>
-            ) : null}
+                    <div className={styles.pills}>
+                      {teams
+                        .filter((team) =>
+                          team.members.some(
+                            (member) => member.user.id === entry.id,
+                          ),
+                        )
+                        .map((team) => (
+                          <Link
+                            key={team.id}
+                            href={teamHref(workspaceSlug, team.id)}
+                          >
+                            {team.name}
+                          </Link>
+                        ))}
+                    </div>
+                    <div className={styles.actions}>
+                      <Link href={personHref(workspaceSlug, entry.id)}>
+                        View profile
+                        <ArrowUpRight size={15} />
+                      </Link>
+                      {entry.id !== session.user.id && chat ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            chat.openChat({ workspaceSlug, personId: entry.id })
+                          }
+                        >
+                          <MessageCircleMore size={15} />
+                          Chat
+                        </button>
+                      ) : null}
+                      <a href={personEmailHref(entry.email)}>
+                        <Mail size={15} />
+                        Email
+                      </a>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              {!directory.isLoading && visibleMembers.length === 0 ? (
+                <p>No people match your search.</p>
+              ) : null}
+            </WorkspacePageSections>
           </>
         )}
-      </main>
-    </WorkspaceFrame>
+      </Content>
+    </Frame>
   );
+}
+
+function EmbeddedPeopleFrame({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }

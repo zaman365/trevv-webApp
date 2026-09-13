@@ -1,4 +1,5 @@
 "use client";
+import { WorkspacePageSections } from "./workspace-page-sections";
 import { PlanningContextLink } from "./planning-context-link";
 import { useFloatingChat } from "@/lib/floating-chat-context";
 import { PersonIdentity } from "./person-identity";
@@ -140,7 +141,21 @@ export function LiveMessagingWorkspace({
 }) {
   return (
     <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
-      <LiveMessagingContent workspaceSlug={workspaceSlug} />
+      <main className={styles.routeMain}>
+        <header className={styles.pageHeader}>
+          <div>
+            <h1>Messages</h1>
+            <span>Stay connected to people, teams and the work you share.</span>
+          </div>
+        </header>
+        <WorkspacePageSections page="messages" workspaceSlug={workspaceSlug}>
+          <LiveMessagingContent
+            workspaceSlug={workspaceSlug}
+            embedded
+            heading="Conversations"
+          />
+        </WorkspacePageSections>
+      </main>
     </WorkspaceFrame>
   );
 }
@@ -149,6 +164,7 @@ export function LiveMessagingContent({
   workspaceSlug,
   embedded = false,
   floating = false,
+  heading = "Messages",
   conversationId,
   onConversationSelected,
   onBusyChange,
@@ -156,6 +172,7 @@ export function LiveMessagingContent({
   workspaceSlug: string;
   embedded?: boolean;
   floating?: boolean;
+  heading?: string;
   conversationId?: string;
   onConversationSelected?: (conversation: ConversationDto) => void;
   onBusyChange?: (busy: boolean) => void;
@@ -1080,7 +1097,7 @@ export function LiveMessagingContent({
           <header className={styles.pageHeader}>
             <div>
               <p>{workspace.name} / Collaboration</p>
-              <Heading>Messages</Heading>
+              <Heading>{heading}</Heading>
               <span>
                 Contextual Team rooms, work rooms, and direct conversations.
               </span>

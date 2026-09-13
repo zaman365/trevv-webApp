@@ -1,4 +1,5 @@
 "use client";
+import { OptionalWorkspacePageSections } from "./workspace-page-sections";
 
 import { dateTimeFormatter } from "@/lib/date-format";
 
@@ -221,186 +222,191 @@ export function CalendarExperience({
           </div>
         </header>
 
-        {error ? (
-          <div className={styles.notice}>
-            <LiveStateNotice
-              kind="failed"
-              title="Calendar could not be loaded"
-              description={error}
-              actions={
-                <button
-                  type="button"
-                  onClick={() => {
-                    void calendarQuery.refetch();
-                    void boardsQuery.refetch();
-                  }}
-                >
-                  <RefreshCw size={15} /> Try again
-                </button>
-              }
-            />
-          </div>
-        ) : null}
-
-        <section className={styles.toolbar} aria-label="Calendar controls">
-          <div className={styles.navigation}>
-            <button
-              type="button"
-              onClick={() => setAnchor(startOfLocalDay(new Date()))}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              aria-label="Previous period"
-              onClick={() => navigate(-1)}
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              type="button"
-              aria-label="Next period"
-              onClick={() => navigate(1)}
-            >
-              <ChevronRight size={18} />
-            </button>
-            <h2>{rangeLabel(anchor, view)}</h2>
-          </div>
-          <div className={styles.viewPicker} aria-label="Calendar view">
-            {(["day", "week", "month"] as const).map((candidate) => (
-              <button
-                type="button"
-                key={candidate}
-                className={view === candidate ? styles.active : ""}
-                aria-pressed={view === candidate}
-                onClick={() => setView(candidate)}
-              >
-                {capitalize(candidate)}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <div className={styles.layout}>
-          <aside className={styles.sources} aria-label="Calendar sources">
-            <section>
-              <div className={styles.sourceHeading}>
-                <h2>My calendars</h2>
-                <button
-                  type="button"
-                  aria-label="Manage calendar connections"
-                  onClick={() => setConnectionOpen(true)}
-                >
-                  <Settings2 size={15} />
-                </button>
-              </div>
-              <SourceToggle
-                checked={allSelected}
-                color="#24243a"
-                label="Combined view"
-                detail={`${snapshot?.calendars.length ?? 0} calendars`}
-                onChange={() =>
-                  setSelectedSources(
-                    allSelected
-                      ? new Set()
-                      : new Set(
-                          snapshot?.calendars.map((calendar) => calendar.id),
-                        ),
-                  )
+        <OptionalWorkspacePageSections
+          page={"calendar"}
+          workspaceSlug={workspaceSlug}
+        >
+          {error ? (
+            <div className={styles.notice}>
+              <LiveStateNotice
+                kind="failed"
+                title="Calendar could not be loaded"
+                description={error}
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void calendarQuery.refetch();
+                      void boardsQuery.refetch();
+                    }}
+                  >
+                    <RefreshCw size={15} /> Try again
+                  </button>
                 }
               />
-              {(snapshot?.calendars ?? []).map((calendar) => (
+            </div>
+          ) : null}
+
+          <section className={styles.toolbar} aria-label="Calendar controls">
+            <div className={styles.navigation}>
+              <button
+                type="button"
+                onClick={() => setAnchor(startOfLocalDay(new Date()))}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                aria-label="Previous period"
+                onClick={() => navigate(-1)}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                type="button"
+                aria-label="Next period"
+                onClick={() => navigate(1)}
+              >
+                <ChevronRight size={18} />
+              </button>
+              <h2>{rangeLabel(anchor, view)}</h2>
+            </div>
+            <div className={styles.viewPicker} aria-label="Calendar view">
+              {(["day", "week", "month"] as const).map((candidate) => (
+                <button
+                  type="button"
+                  key={candidate}
+                  className={view === candidate ? styles.active : ""}
+                  aria-pressed={view === candidate}
+                  onClick={() => setView(candidate)}
+                >
+                  {capitalize(candidate)}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className={styles.layout}>
+            <aside className={styles.sources} aria-label="Calendar sources">
+              <section>
+                <div className={styles.sourceHeading}>
+                  <h2>My calendars</h2>
+                  <button
+                    type="button"
+                    aria-label="Manage calendar connections"
+                    onClick={() => setConnectionOpen(true)}
+                  >
+                    <Settings2 size={15} />
+                  </button>
+                </div>
                 <SourceToggle
-                  key={calendar.id}
-                  checked={selectedSources.has(calendar.id)}
-                  color={calendar.color}
-                  label={calendar.name}
-                  detail={
-                    calendar.isPrimary
-                      ? "Primary · TREVV"
-                      : providerLabel(calendar.provider)
-                  }
+                  checked={allSelected}
+                  color="#24243a"
+                  label="Combined view"
+                  detail={`${snapshot?.calendars.length ?? 0} calendars`}
                   onChange={() =>
-                    setSelectedSources((current) =>
-                      toggleSet(current, calendar.id),
+                    setSelectedSources(
+                      allSelected
+                        ? new Set()
+                        : new Set(
+                            snapshot?.calendars.map((calendar) => calendar.id),
+                          ),
                     )
                   }
                 />
-              ))}
-              <SourceToggle
-                checked={showTasks}
-                color="#d48535"
-                label="Tasks and deadlines"
-                detail={`${taskEntries.length} ${taskRecordsComplete ? "scheduled" : "loaded · more loading"}`}
-                onChange={() => setShowTasks((current) => !current)}
-              />
-            </section>
-
-            <section className={styles.providerSummary}>
-              <h2>Connected calendars</h2>
-              {(snapshot?.providerAvailability ?? []).map((provider) => (
-                <button
-                  type="button"
-                  key={provider.provider}
-                  onClick={() => setConnectionOpen(true)}
-                >
-                  <span
-                    className={
-                      provider.provider === "google_calendar"
-                        ? styles.google
-                        : styles.microsoft
+                {(snapshot?.calendars ?? []).map((calendar) => (
+                  <SourceToggle
+                    key={calendar.id}
+                    checked={selectedSources.has(calendar.id)}
+                    color={calendar.color}
+                    label={calendar.name}
+                    detail={
+                      calendar.isPrimary
+                        ? "Primary · TREVV"
+                        : providerLabel(calendar.provider)
                     }
-                  >
-                    {provider.provider === "google_calendar" ? "G" : "M"}
-                  </span>
-                  <span>
-                    <strong>{provider.label}</strong>
-                    <small>
-                      {provider.state === "connected"
-                        ? "Connected"
-                        : "Not connected"}
-                    </small>
-                  </span>
-                  <Plus size={15} />
-                </button>
-              ))}
-            </section>
-          </aside>
+                    onChange={() =>
+                      setSelectedSources((current) =>
+                        toggleSet(current, calendar.id),
+                      )
+                    }
+                  />
+                ))}
+                <SourceToggle
+                  checked={showTasks}
+                  color="#d48535"
+                  label="Tasks and deadlines"
+                  detail={`${taskEntries.length} ${taskRecordsComplete ? "scheduled" : "loaded · more loading"}`}
+                  onChange={() => setShowTasks((current) => !current)}
+                />
+              </section>
 
-          <section
-            className={styles.calendar}
-            aria-busy={loading || (showTasks && !taskRecordsComplete)}
-          >
-            {view === "month" ? (
-              <MonthGrid
-                days={days}
-                anchor={anchor}
-                events={visibleEvents}
-                tasks={showTasks ? taskEntries : []}
-                onCreate={(day) => {
-                  setAnchor(day);
-                  setComposerOpen(true);
-                }}
-                onEvent={setSelectedEvent}
-              />
-            ) : (
-              <AgendaGrid
-                tasksLoading={showTasks && !taskRecordsComplete}
-                days={days}
-                events={visibleEvents}
-                tasks={showTasks ? taskEntries : []}
-                onCreate={(day) => {
-                  setAnchor(day);
-                  setComposerOpen(true);
-                }}
-                onEvent={setSelectedEvent}
-              />
-            )}
-            {loading && !snapshot ? (
-              <div className={styles.loading}>Loading your schedule…</div>
-            ) : null}
-          </section>
-        </div>
+              <section className={styles.providerSummary}>
+                <h2>Connected calendars</h2>
+                {(snapshot?.providerAvailability ?? []).map((provider) => (
+                  <button
+                    type="button"
+                    key={provider.provider}
+                    onClick={() => setConnectionOpen(true)}
+                  >
+                    <span
+                      className={
+                        provider.provider === "google_calendar"
+                          ? styles.google
+                          : styles.microsoft
+                      }
+                    >
+                      {provider.provider === "google_calendar" ? "G" : "M"}
+                    </span>
+                    <span>
+                      <strong>{provider.label}</strong>
+                      <small>
+                        {provider.state === "connected"
+                          ? "Connected"
+                          : "Not connected"}
+                      </small>
+                    </span>
+                    <Plus size={15} />
+                  </button>
+                ))}
+              </section>
+            </aside>
+
+            <section
+              className={styles.calendar}
+              aria-busy={loading || (showTasks && !taskRecordsComplete)}
+            >
+              {view === "month" ? (
+                <MonthGrid
+                  days={days}
+                  anchor={anchor}
+                  events={visibleEvents}
+                  tasks={showTasks ? taskEntries : []}
+                  onCreate={(day) => {
+                    setAnchor(day);
+                    setComposerOpen(true);
+                  }}
+                  onEvent={setSelectedEvent}
+                />
+              ) : (
+                <AgendaGrid
+                  tasksLoading={showTasks && !taskRecordsComplete}
+                  days={days}
+                  events={visibleEvents}
+                  tasks={showTasks ? taskEntries : []}
+                  onCreate={(day) => {
+                    setAnchor(day);
+                    setComposerOpen(true);
+                  }}
+                  onEvent={setSelectedEvent}
+                />
+              )}
+              {loading && !snapshot ? (
+                <div className={styles.loading}>Loading your schedule…</div>
+              ) : null}
+            </section>
+          </div>
+        </OptionalWorkspacePageSections>
       </main>
 
       {composerOpen ? (

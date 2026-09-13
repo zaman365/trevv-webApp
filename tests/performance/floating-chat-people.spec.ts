@@ -243,6 +243,58 @@ test("full Messages and floating chats hand drafts over without overwriting each
   await expect(pageComposer).toHaveValue("Continued in the floating window");
 });
 
+test("Messages keep long sender names, context focus and medium-width labels accessible", async ({
+  page,
+}) => {
+  const fixture = teamWorkspaceApi();
+  fixture.state.messages[0]!.sender.name = "Founder Loop Collaborator";
+  await setup(page, "", { view: "messages", api: fixture.api });
+  await page.setViewportSize({ width: 1180, height: 820 });
+  const trigger = page.getByRole("button", {
+    name: "Open conversation context",
+    exact: true,
+  });
+  await trigger.click();
+  const context = page.getByRole("dialog", {
+    name: "Launch team context",
+    exact: true,
+  });
+  await expect(context).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(context).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await page.setViewportSize({ width: 900, height: 820 });
+  await page
+    .getByRole("button", { name: "Collapse conversations", exact: true })
+    .click();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Show conversations", exact: true })
+    .click();
+  // Reserve the same sidebar width as the full application shell.
+  await page.addStyleTag({
+    content: "main { margin-left: 248px; width: calc(100% - 248px); }",
+  });
+  expect(
+    await page
+      .locator('[data-message-id="message-one"] header strong')
+      .evaluate((label) => {
+        const button = label.querySelector("button")!;
+        return (
+          button.getBoundingClientRect().width <=
+          label.getBoundingClientRect().width + 1
+        );
+      }),
+  ).toBe(true);
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+  expect(
+    results.incomplete.filter((finding) => finding.id === "color-contrast"),
+  ).toEqual([]);
+});
+
 test("new conversations open in a tab and revoked directory access removes personal details", async ({
   page,
 }) => {

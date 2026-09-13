@@ -1,28 +1,36 @@
 "use client";
 import dynamic from "next/dynamic";
+import { PageTabs } from "./page-tabs";
 
+import { Activity, Suspense, useEffect, useState, type ReactNode } from "react";
+import { ArrowUpRight } from "lucide-react";
+import sectionStyles from "./workspace-dashboard.module.css";
 import {
-  Activity,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  ArrowUpRight,
   ChartNoAxesCombined,
+  ListTodo,
+  FolderKanban,
+  Lightbulb,
+  Users,
+  MessageCircleMore,
+  Inbox,
+  Sparkles,
+  FileQuestion,
   ClipboardCheck,
   Clock3,
-  FileQuestion,
-  FolderKanban,
-  Inbox,
-  ListTodo,
-  Lightbulb,
-  MessageCircleMore,
-  Sparkles,
-  Users,
 } from "lucide-react";
+const icons = {
+  summary: ChartNoAxesCombined,
+  "my-work": ListTodo,
+  planning: FolderKanban,
+  ideas: Lightbulb,
+  teams: Users,
+  messages: MessageCircleMore,
+  inbox: Inbox,
+  attention: Sparkles,
+  decisions: FileQuestion,
+  approvals: ClipboardCheck,
+  waiting: Clock3,
+};
 import { AppLink as Link } from "@/components/navigation-link";
 import {
   dashboardSections,
@@ -32,21 +40,6 @@ import {
 } from "@/lib/dashboard-sections";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
-import styles from "./workspace-dashboard.module.css";
-
-const icons = {
-  summary: ChartNoAxesCombined,
-  ideas: Lightbulb,
-  "my-work": ListTodo,
-  planning: FolderKanban,
-  teams: Users,
-  messages: MessageCircleMore,
-  inbox: Inbox,
-  attention: Sparkles,
-  decisions: FileQuestion,
-  approvals: ClipboardCheck,
-  waiting: Clock3,
-};
 
 export function useDashboardSections(workspaceSlug: string) {
   const [section, setSection] = useState<DashboardSection>("summary");
@@ -85,52 +78,17 @@ export function DashboardTabs({
   value: DashboardSection;
   onChange: (section: DashboardSection) => void;
 }) {
-  const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   return (
-    <div
-      className={styles.sectionTabs}
-      role="tablist"
-      aria-label="Dashboard sections"
-    >
-      {dashboardSections.map(({ id, label }, index) => {
-        const Icon = icons[id];
-        return (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            id={`dashboard-tab-${id}`}
-            aria-controls={`dashboard-panel-${id}`}
-            aria-selected={value === id}
-            tabIndex={value === id ? 0 : -1}
-            ref={(element) => {
-              tabs.current[index] = element;
-            }}
-            onClick={() => onChange(id)}
-            onKeyDown={(event) => {
-              const next =
-                event.key === "ArrowRight"
-                  ? (index + 1) % dashboardSections.length
-                  : event.key === "ArrowLeft"
-                    ? (index + dashboardSections.length - 1) %
-                      dashboardSections.length
-                    : event.key === "Home"
-                      ? 0
-                      : event.key === "End"
-                        ? dashboardSections.length - 1
-                        : null;
-              if (next === null) return;
-              event.preventDefault();
-              tabs.current[next]?.focus();
-              onChange(dashboardSections[next]!.id);
-            }}
-          >
-            <Icon size={16} aria-hidden="true" />
-            {label}
-          </button>
-        );
+    <PageTabs
+      id="dashboard"
+      label="Dashboard sections"
+      value={value}
+      onChange={(id) => onChange(id as DashboardSection)}
+      sections={dashboardSections.map((section) => {
+        const Icon = icons[section.id];
+        return { ...section, icon: <Icon size={16} aria-hidden="true" /> };
       })}
-    </div>
+    />
   );
 }
 
@@ -152,9 +110,9 @@ export function DashboardPanel({
         id={`dashboard-panel-${section}`}
         role="tabpanel"
         aria-labelledby={`dashboard-tab-${section}`}
-        className={styles.sectionPanel}
+        className={sectionStyles.sectionPanel}
       >
-        <header className={styles.sectionHeading}>
+        <header className={sectionStyles.sectionHeading}>
           <div>
             <h2>{meta.title}</h2>
             <p>{meta.description}</p>

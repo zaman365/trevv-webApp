@@ -315,3 +315,35 @@ for (const theme of ["light", "dark"]) {
     ).toBeFocused();
   });
 }
+
+test("the on-demand plan editor retains dismissed drafts and creates the original plan", async ({
+  page,
+}) => {
+  const api = await dashboard(page);
+  const open = page.getByTestId("create-board-open");
+  await open.click();
+  const dialog = page.getByTestId("create-board-dialog");
+  await dialog
+    .getByLabel("Plan name", { exact: true })
+    .fill("Coordinate the launch");
+  await dialog
+    .getByLabel("Description · Optional", { exact: true })
+    .fill("Keep owners and dates together");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await open.click();
+  await expect(dialog.getByLabel("Plan name", { exact: true })).toHaveValue(
+    "Coordinate the launch",
+  );
+  await dialog
+    .getByRole("button", { name: "Create plan", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByText("Server confirmed “Coordinate the launch”", { exact: true }),
+  ).toBeVisible();
+  expect(api.state.plans.at(-1)).toMatchObject({
+    name: "Coordinate the launch",
+    description: "Keep owners and dates together",
+    visibility: "private",
+  });
+});

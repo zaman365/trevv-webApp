@@ -1,4 +1,5 @@
 "use client";
+import { PortfolioPageSections } from "./portfolio-page-sections";
 
 import { LiveRefreshStatus } from "./live-refresh-status";
 
@@ -24,7 +25,11 @@ import { workspaceSlugFromName } from "@/lib/live-workflow-ui";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
-import { LiveCreateTask } from "./live-create-task";
+import dynamic from "next/dynamic";
+const LiveCreateTask = dynamic(
+  () => import("./live-create-task").then((module) => module.LiveCreateTask),
+  { loading: () => <p role="status">Loading task actions…</p> },
+);
 import styles from "./live-operating-loop.module.css";
 
 type WorkspaceType = WorkspaceDto["type"];
@@ -160,151 +165,156 @@ export function LivePortfolioExperience() {
           ) : null}
         </header>
 
-        <section className={styles.panel} aria-label="Start your day">
-          <header>
-            <div>
-              <p>Start here</p>
-              <h2>Turn plans into finished work</h2>
-            </div>
-            <Link href="/app/my-work">Open all my work →</Link>
-          </header>
-          <p>
-            Use a workspace for each startup, business, or client. Add project
-            boards, invite your team, and keep tasks and conversations together.
-          </p>
-          <LiveCreateTask workspaces={workspaces} />
-        </section>
+        <PortfolioPageSections portfolioId={portfolio?.id ?? ""}>
+          <section className={styles.panel} aria-label="Start your day">
+            <header>
+              <div>
+                <p>Start here</p>
+                <h2>Turn plans into finished work</h2>
+              </div>
+              <Link href="/app/my-work">Open all my work →</Link>
+            </header>
+            <p>
+              Use a workspace for each startup, business, or client. Add project
+              boards, invite your team, and keep tasks and conversations
+              together.
+            </p>
+            <LiveCreateTask workspaces={workspaces} />
+          </section>
 
-        <LiveRefreshStatus />
-        {confirmed ? (
-          <LiveStateNotice
-            actions={
-              <Link href={workspaceHref(confirmed.slug)}>Open workspace</Link>
-            }
-            description="The project or workspace and its first plan board are durable and available to authorized organization members."
-            kind="saved"
-            title={`Server confirmed “${confirmed.name}”`}
-          />
-        ) : null}
-
-        <section className={styles.statGrid} aria-label="Portfolio totals">
-          <article>
-            <FolderKanban size={18} />
-            <strong>{workspaces.length}</strong>
-            <span>Workspaces</span>
-          </article>
-          <article>
-            <Grid2X2 size={18} />
-            <strong>{openCount}</strong>
-            <span>Open work</span>
-          </article>
-          <article>
-            <Blocks size={18} />
-            <strong>{blockedCount}</strong>
-            <span>Blocked</span>
-          </article>
-          <article>
-            <Sparkles size={18} />
-            <strong>{attentionCount}</strong>
-            <span>Need attention</span>
-          </article>
-        </section>
-
-        <section
-          className={styles.panel}
-          aria-labelledby="live-workspaces-title"
-        >
-          <header>
-            <div>
-              <p>Startups, businesses, clients, and projects</p>
-              <h2 id="live-workspaces-title">Workspaces</h2>
-            </div>
-            <small>
-              Last synced{" "}
-              <LiveSyncedAt timezone={session.organization.timezone ?? "UTC"} />
-            </small>
-          </header>
-          {workspaces.length === 0 ? (
+          <LiveRefreshStatus />
+          {confirmed ? (
             <LiveStateNotice
               actions={
-                portfolio && canCreateWorkspace ? (
-                  <button onClick={() => setFormOpen(true)} type="button">
-                    Create the first workspace
-                  </button>
-                ) : null
+                <Link href={workspaceHref(confirmed.slug)}>Open workspace</Link>
               }
-              description={
-                canCreateWorkspace
-                  ? "Create a workspace to start the founder operating loop."
-                  : "You do not have access to a Workspace yet. Ask an organization owner or admin to assign one."
-              }
-              kind="empty"
-              title={
-                canCreateWorkspace
-                  ? "No workspaces yet"
-                  : "No Workspace access yet"
-              }
+              description="The project or workspace and its first plan board are durable and available to authorized organization members."
+              kind="saved"
+              title={`Server confirmed “${confirmed.name}”`}
             />
-          ) : (
-            <div className={styles.cardGrid}>
-              {workspaces.map((workspace) => {
-                const rollup = rollups.get(workspace.id) ?? {
-                  open: 0,
-                  blocked: 0,
-                  attention: 0,
-                };
-                return (
-                  <Link
-                    className={styles.workspaceCard}
-                    data-testid={`workspace-card-${workspace.slug}`}
-                    href={workspaceHref(workspace.slug)}
-                    key={workspace.id}
-                  >
-                    <span
-                      className={styles.workspaceMark}
-                      style={{
-                        background: `${workspace.accent}18`,
-                        color: workspace.accent,
-                      }}
+          ) : null}
+
+          <section className={styles.statGrid} aria-label="Portfolio totals">
+            <article>
+              <FolderKanban size={18} />
+              <strong>{workspaces.length}</strong>
+              <span>Workspaces</span>
+            </article>
+            <article>
+              <Grid2X2 size={18} />
+              <strong>{openCount}</strong>
+              <span>Open work</span>
+            </article>
+            <article>
+              <Blocks size={18} />
+              <strong>{blockedCount}</strong>
+              <span>Blocked</span>
+            </article>
+            <article>
+              <Sparkles size={18} />
+              <strong>{attentionCount}</strong>
+              <span>Need attention</span>
+            </article>
+          </section>
+
+          <section
+            className={styles.panel}
+            aria-labelledby="live-workspaces-title"
+          >
+            <header>
+              <div>
+                <p>Startups, businesses, clients, and projects</p>
+                <h2 id="live-workspaces-title">Workspaces</h2>
+              </div>
+              <small>
+                Last synced{" "}
+                <LiveSyncedAt
+                  timezone={session.organization.timezone ?? "UTC"}
+                />
+              </small>
+            </header>
+            {workspaces.length === 0 ? (
+              <LiveStateNotice
+                actions={
+                  portfolio && canCreateWorkspace ? (
+                    <button onClick={() => setFormOpen(true)} type="button">
+                      Create the first workspace
+                    </button>
+                  ) : null
+                }
+                description={
+                  canCreateWorkspace
+                    ? "Create a workspace to start the founder operating loop."
+                    : "You do not have access to a Workspace yet. Ask an organization owner or admin to assign one."
+                }
+                kind="empty"
+                title={
+                  canCreateWorkspace
+                    ? "No workspaces yet"
+                    : "No Workspace access yet"
+                }
+              />
+            ) : (
+              <div className={styles.cardGrid}>
+                {workspaces.map((workspace) => {
+                  const rollup = rollups.get(workspace.id) ?? {
+                    open: 0,
+                    blocked: 0,
+                    attention: 0,
+                  };
+                  return (
+                    <Link
+                      className={styles.workspaceCard}
+                      data-testid={`workspace-card-${workspace.slug}`}
+                      href={workspaceHref(workspace.slug)}
+                      key={workspace.id}
                     >
-                      {workspace.icon}
-                    </span>
-                    <div>
-                      <p>
-                        {workspace.type.replaceAll("_", " ")} ·{" "}
-                        {workspace.stage}
-                      </p>
-                      <h3>{workspace.name}</h3>
-                      <span>
-                        {workspace.priority || "No priority recorded"}
+                      <span
+                        className={styles.workspaceMark}
+                        style={{
+                          background: `${workspace.accent}18`,
+                          color: workspace.accent,
+                        }}
+                      >
+                        {workspace.icon}
                       </span>
-                    </div>
-                    <dl>
                       <div>
-                        <dt>Open</dt>
-                        <dd>{rollup.open}</dd>
+                        <p>
+                          {workspace.type.replaceAll("_", " ")} ·{" "}
+                          {workspace.stage}
+                        </p>
+                        <h3>{workspace.name}</h3>
+                        <span>
+                          {workspace.priority || "No priority recorded"}
+                        </span>
                       </div>
-                      <div>
-                        <dt>Blocked</dt>
-                        <dd>{rollup.blocked}</dd>
-                      </div>
-                      <div>
-                        <dt>Attention</dt>
-                        <dd>{rollup.attention}</dd>
-                      </div>
-                    </dl>
-                    {workspace.health !== "on_track" ? (
-                      <span className={styles.healthFlag}>
-                        <AlertTriangle size={13} />
-                        {workspace.health.replaceAll("_", " ")}
-                      </span>
-                    ) : null}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                      <dl>
+                        <div>
+                          <dt>Open</dt>
+                          <dd>{rollup.open}</dd>
+                        </div>
+                        <div>
+                          <dt>Blocked</dt>
+                          <dd>{rollup.blocked}</dd>
+                        </div>
+                        <div>
+                          <dt>Attention</dt>
+                          <dd>{rollup.attention}</dd>
+                        </div>
+                      </dl>
+                      {workspace.health !== "on_track" ? (
+                        <span className={styles.healthFlag}>
+                          <AlertTriangle size={13} />
+                          {workspace.health.replaceAll("_", " ")}
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </PortfolioPageSections>
 
         {formOpen && portfolio && canCreateWorkspace ? (
           <div

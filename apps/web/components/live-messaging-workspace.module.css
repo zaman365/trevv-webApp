@@ -784,6 +784,14 @@
   white-space: nowrap;
 }
 
+.messageRow header strong > button {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
 .messageRow header span {
   padding: 0.12rem 0.3rem;
   border-radius: 999px;

@@ -44,10 +44,15 @@ export function PersonIdentity({
         aria-expanded={Boolean(anchor)}
         aria-controls={anchor ? id : undefined}
         onMouseEnter={(event) => show(event.currentTarget)}
-        onFocus={(event) => show(event.currentTarget)}
+        onFocus={(event) => {
+          // Focus restoration after a pointer action must not reopen a card.
+          // Keyboard focus still reveals the same actionable preview.
+          if (event.currentTarget.matches(":focus-visible"))
+            show(event.currentTarget);
+        }}
         onClick={(event) => show(event.currentTarget)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          if (event.key === "Escape" && anchor) {
             event.stopPropagation();
             close();
           } else if (event.key === "ArrowDown") {
