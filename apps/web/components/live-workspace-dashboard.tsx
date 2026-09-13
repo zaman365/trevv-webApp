@@ -1,6 +1,13 @@
 "use client";
-import { SharedPlanningHub } from "./shared-planning-hub";
-import { PlanningPeopleFields } from "./planning-people-fields";
+const SharedPlanningHub = dynamic(
+  () => import("./shared-planning-hub").then((m) => m.SharedPlanningHub),
+  { loading: () => <p>Loading plans and ideas…</p> },
+);
+import dynamic from "next/dynamic";
+const PlanningPeopleFields = dynamic(
+  () => import("./planning-people-fields").then((m) => m.PlanningPeopleFields),
+  { loading: () => <p>Loading people…</p> },
+);
 import {
   emptyPeopleChoice,
   usePlanningSharing,
@@ -45,7 +52,10 @@ import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import { LiveCreateTask } from "./live-create-task";
-import { LiveMyWork } from "./live-work-my-work";
+const LiveMyWork = dynamic(
+  () => import("./live-work-my-work").then((m) => m.LiveMyWork),
+  { loading: () => <p>Loading workspace tasks…</p> },
+);
 import { TrevvApiError } from "@founderhq/api-client";
 import { taskToday } from "@/lib/task-views";
 import {

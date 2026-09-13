@@ -1,5 +1,9 @@
 "use client";
-import { SharedPlanningHub } from "./shared-planning-hub";
+import dynamic from "next/dynamic";
+const SharedPlanningHub = dynamic(
+  () => import("./shared-planning-hub").then((m) => m.SharedPlanningHub),
+  { loading: () => <p>Loading plans and ideas…</p> },
+);
 
 import {
   Activity,

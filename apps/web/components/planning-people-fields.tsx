@@ -6,7 +6,7 @@ import { useLiveTeamDirectory } from "@/lib/live-collaboration";
 import { isLiveAccessLoss, presentLiveError } from "@/lib/live-errors";
 import type { PeopleChoice } from "@/lib/planning-sharing";
 import { LiveStateNotice } from "./live-state";
-import styles from "./planning-sharing.module.css";
+import styles from "./planning-people-fields.module.css";
 
 export function PlanningPeopleFields({
   workspaceId,

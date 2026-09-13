@@ -1,5 +1,9 @@
 "use client";
-import { PlanningPeopleFields } from "./planning-people-fields";
+import dynamic from "next/dynamic";
+const PlanningPeopleFields = dynamic(
+  () => import("./planning-people-fields").then((m) => m.PlanningPeopleFields),
+  { loading: () => <p>Loading people…</p> },
+);
 import {
   emptyPeopleChoice,
   usePlanningSharing,

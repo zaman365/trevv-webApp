@@ -1,0 +1,50 @@
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.actions button,
+.actions a {
+  border: 1px solid #dce0eb;
+  border-radius: 9px;
+  background: var(--surface, #fff);
+  color: inherit;
+  padding: 8px 12px;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+}
+.actions button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.tray {
+  position: fixed;
+  right: 20px;
+  top: 80px;
+  pointer-events: none;
+  z-index: 70;
+  width: min(420px, calc(100vw - 40px));
+  max-height: 40vh;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+.shareStatus {
+  border: 1px solid #d9d5fa;
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 32px #2520571a;
+}
+.shareStatus p {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tray button,
+.tray a {
+  pointer-events: auto;
+}

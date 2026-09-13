@@ -8,10 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  createConversationSchema,
-  type CreateConversationInput,
-} from "@founderhq/api-contract";
+import type { CreateConversationInput } from "@founderhq/api-contract";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useAppSession } from "./app-session-context";
@@ -20,7 +17,7 @@ import { collaborationKeys } from "./live-collaboration";
 import { liveDraftStorageKey } from "./live-workflow-ui";
 import { presentLiveError } from "./live-errors";
 import { workspaceHref } from "./workspace-routes";
-import styles from "@/components/planning-sharing.module.css";
+import styles from "@/components/planning-sharing-status.module.css";
 
 export type PeopleChoice = {
   enabled: boolean;
@@ -39,7 +36,7 @@ export type SharedResource = {
   description: string;
   workspaceId: string;
 };
-type ShareJob = {
+export type ShareJob = {
   key: string;
   input: CreateConversationInput;
   title: string;
@@ -56,35 +53,6 @@ export function usePlanningSharing() {
   const value = useContext(SharingContext);
   if (!value) throw new Error("PlanningSharingProvider is required.");
   return value;
-}
-
-// This journal only recovers pending submissions. Rooms and membership are
-// canonical server records and are never inferred from the local journal.
-export function recoverShareJobs(value: unknown): ShareJob[] {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 50).flatMap((entry) => {
-    if (
-      !entry ||
-      typeof entry !== "object" ||
-      typeof entry.key !== "string" ||
-      !/^[a-f0-9-]{36}$/i.test(entry.key) ||
-      typeof entry.title !== "string" ||
-      entry.title.length > 500 ||
-      (entry.roomId !== undefined && typeof entry.roomId !== "string")
-    )
-      return [];
-    const parsed = createConversationSchema.safeParse(entry.input);
-    if (!parsed.success || !parsed.data.context || !parsed.data.openingMessage)
-      return [];
-    return [
-      {
-        key: entry.key,
-        title: entry.title,
-        input: parsed.data,
-        ...(entry.roomId ? { roomId: entry.roomId } : {}),
-      },
-    ];
-  });
 }
 
 export function PlanningSharingProvider({ children }: { children: ReactNode }) {
@@ -114,15 +82,33 @@ export function PlanningSharingProvider({ children }: { children: ReactNode }) {
     }
   }
   useEffect(() => {
-    try {
-      const recovered = recoverShareJobs(
-        JSON.parse(window.localStorage.getItem(storageKey) ?? "[]"),
-      ).filter((entry) => !entry.roomId);
-      journal.current = recovered;
-      setJobs(recovered);
-    } catch {
-      /* A damaged local journal never grants access or sends a message. */
+    let cancelled = false;
+    async function recover() {
+      try {
+        const saved = window.localStorage.getItem(storageKey);
+        if (!saved || saved === "[]") return;
+        const { recoverShareJobs } =
+          await import("./planning-sharing-recovery");
+        const recovered = recoverShareJobs(JSON.parse(saved)).filter(
+          (entry) => !entry.roomId,
+        );
+        if (cancelled) return;
+        // A newly submitted job wins if recovery finishes after creation.
+        const currentKeys = new Set(journal.current.map((entry) => entry.key));
+        const next = [
+          ...recovered.filter((entry) => !currentKeys.has(entry.key)),
+          ...journal.current,
+        ];
+        journal.current = next;
+        setJobs(next);
+      } catch {
+        /* A damaged local journal never grants access or sends a message. */
+      }
     }
+    void recover();
+    return () => {
+      cancelled = true;
+    };
   }, [storageKey]);
 
   async function send(job: ShareJob) {

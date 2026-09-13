@@ -120,3 +120,23 @@ Retain the source and verified backup until recovery and cutover are validated.
 Do not switch back to a stale database after new writes without an explicit data
 reconciliation decision. Revoke temporary deployment access and remove any
 temporary network probes when finished.
+
+## Publishing a release for the existing Northflank project
+
+The manual `Publish Northflank images` workflow builds Web, API, Worker and
+migration images from the selected commit only after a complete successful
+TREVV CI run for that exact commit. It retains the staging publisher's isolated
+registry credentials, SPDX SBOM, high/critical vulnerability scan and GitHub
+provenance checks. Its final artifact binds all four verified digests to one
+source and release ID. It publishes artifacts only; it does not change a service,
+run a database migration, alter secrets, or deploy Cloudflare.
+
+Use this workflow for the existing Northflank topology. The Render predecessor
+manifest and the older staging publisher remain intact and are not substituted
+with Northflank evidence. Before manually promoting an image, retain the current
+service and Cloudflare versions, take a current database backup, apply and verify
+the additive migration with the migration job, then update the API and Worker
+using their existing settings. Build the frontend for `https://trevv.de` with the
+live API origin and security settings. Verify readiness, authentication and the
+changed workflows after rollout. Retain deployment evidence separately from the
+publication artifact, whose `deploymentPerformed` field is always false.

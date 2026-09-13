@@ -20,7 +20,7 @@
     "test:performance": "playwright test --config=playwright.performance.config.ts",
     "test:worker-navigation": "node scripts/worker-navigation-test.mjs",
     "test:a11y": "playwright test tests/e2e/accessibility.spec.ts",
-    "test:phase6": "node --test scripts/phase6-readiness.test.mjs scripts/phase6-claims.test.mjs scripts/phase6-release-manifest.test.mjs scripts/nonproduction-release-input.test.mjs scripts/remote-staging-smoke.test.mjs scripts/staging-publication-predecessor.test.mjs scripts/publish-staging-images-workflow.test.mjs scripts/web-performance-budget.test.mjs deploy/render/materialize-staging-blueprint.test.mjs",
+    "test:phase6": "node --test scripts/phase6-readiness.test.mjs scripts/phase6-claims.test.mjs scripts/phase6-release-manifest.test.mjs scripts/nonproduction-release-input.test.mjs scripts/remote-staging-smoke.test.mjs scripts/staging-publication-predecessor.test.mjs scripts/publish-staging-images-workflow.test.mjs scripts/web-performance-budget.test.mjs deploy/render/materialize-staging-blueprint.test.mjs scripts/publish-northflank-images-workflow.test.mjs",
     "security:audit": "node scripts/audit.mjs",
     "phase6:readiness": "node scripts/phase6-readiness.mjs validate",
     "phase6:claims": "node scripts/phase6-claims.mjs validate",

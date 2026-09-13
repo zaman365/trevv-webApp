@@ -1,5 +1,4 @@
 "use client";
-import { SharedPlanningHub } from "./shared-planning-hub";
 
 import { LiveRefreshStatus } from "./live-refresh-status";
 
@@ -15,6 +14,11 @@ import dynamic from "next/dynamic";
 import { RouteLoadingState } from "./live-state";
 
 const loading = () => <RouteLoadingState label="Loading workspace view" />;
+const SharedPlanningHub = dynamic(
+  () =>
+    import("./shared-planning-hub").then((module) => module.SharedPlanningHub),
+  { loading },
+);
 const LiveMyWork = dynamic(
   () => import("./live-work-my-work").then((module) => module.LiveMyWork),
   { loading },
