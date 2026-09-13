@@ -10,7 +10,7 @@ import {
 } from "@founderhq/core";
 import { usePathname } from "next/navigation";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import { useCustomWorkspaces } from "@/lib/custom-workspaces";
 import { WorkspaceProvider } from "@/lib/workspace-context";
 import type { Theme } from "@/lib/display-preferences";
@@ -33,6 +33,7 @@ import { WorkspaceShell } from "./workspace-frame";
 import { workspaceShellRoute } from "@/lib/workspace-shell-route";
 import type { LiveAppAccessSnapshot } from "@/lib/live-app-sync";
 import { LiveStateNotice } from "./live-state";
+import { PlanningSharingProvider } from "@/lib/planning-sharing";
 
 const workspaceSlugFrom = (pathname: string) => {
   const match = /^\/app\/workspaces\/([^/]+)/.exec(pathname);
@@ -137,6 +138,9 @@ function AppShellProviderContent({
       effectiveSession.platformRole !== "owner") ||
     (pathname === "/app/account/invitations" &&
       !["owner", "admin"].includes(effectiveSession.organization.role));
+  const PlanningProvider = effectiveSession.demo
+    ? Fragment
+    : PlanningSharingProvider;
   const customWorkspaceRecords = useCustomWorkspaces();
   const availableLiveData = useOptionalLiveAppData();
   const liveData = session.demo ? null : availableLiveData;
@@ -185,30 +189,32 @@ function AppShellProviderContent({
         {...(liveSource ? { liveSource } : {})}
       >
         <LearningCenterProvider>
-          {route ? (
-            <WorkspaceShell
-              active={route.active}
-              {...(route.workspaceSlug
-                ? { workspaceSlug: route.workspaceSlug }
-                : {})}
-            >
-              <LiveAppRecordsBoundary
-                required={
-                  route.requiresRecords &&
-                  (!route.workspaceSlug ||
-                    !access ||
-                    !liveData ||
-                    liveData.workspaces.some(
-                      (workspace) => workspace.slug === route.workspaceSlug,
-                    ))
-                }
+          <PlanningProvider>
+            {route ? (
+              <WorkspaceShell
+                active={route.active}
+                {...(route.workspaceSlug
+                  ? { workspaceSlug: route.workspaceSlug }
+                  : {})}
               >
-                {children}
-              </LiveAppRecordsBoundary>
-            </WorkspaceShell>
-          ) : (
-            children
-          )}
+                <LiveAppRecordsBoundary
+                  required={
+                    route.requiresRecords &&
+                    (!route.workspaceSlug ||
+                      !access ||
+                      !liveData ||
+                      liveData.workspaces.some(
+                        (workspace) => workspace.slug === route.workspaceSlug,
+                      ))
+                  }
+                >
+                  {children}
+                </LiveAppRecordsBoundary>
+              </WorkspaceShell>
+            ) : (
+              children
+            )}
+          </PlanningProvider>
         </LearningCenterProvider>
       </WorkspaceProvider>
     </AppSessionProvider>

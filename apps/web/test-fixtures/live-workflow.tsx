@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { workspaceResourceKeys } from "../lib/workspace-resource-keys";
 import { createRoot } from "react-dom/client";
 import { AppSessionProvider } from "../lib/app-session-context";
+import { PlanningSharingProvider } from "../lib/planning-sharing";
 import { LiveAppDataProvider, useLiveAppRecords } from "../lib/live-app-data";
 import { LiveBoardExperience } from "../components/live-board-experience";
 import {
@@ -126,7 +127,9 @@ createRoot(document.getElementById("root")!).render(
         refreshedAt: new Date().toISOString(),
       }}
     >
-      <Workflow />
+      <PlanningSharingProvider>
+        <Workflow />
+      </PlanningSharingProvider>
     </LiveAppDataProvider>
   </AppSessionProvider>,
 );

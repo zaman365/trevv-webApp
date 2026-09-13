@@ -1,5 +1,4 @@
 "use client";
-import { PlanningSharingProvider } from "./planning-sharing";
 
 import {
   createApiClient,
@@ -534,7 +533,7 @@ function LiveAppDataQuery({
       <LiveAppAccessContext.Provider value={accessData}>
         <LiveAppFreshnessContext.Provider value={refreshedAt}>
           <LiveAppRecordsBoundary allowShell={allowShell}>
-            <PlanningSharingProvider>{children}</PlanningSharingProvider>
+            {children}
           </LiveAppRecordsBoundary>
         </LiveAppFreshnessContext.Provider>
       </LiveAppAccessContext.Provider>
