@@ -427,7 +427,9 @@ test("the mobile plan dialog scrolls while keeping its actions reachable", async
     .getByLabel("Plan name", { exact: true })
     .fill("Mobile shared plan");
   await includeTeam(page);
-  await page.screenshot({ path: "/private/tmp/trevv-planning-mobile.png" });
+  await page.screenshot({
+    path: test.info().outputPath("planning-mobile.png"),
+  });
   const dialog = page.getByTestId("create-board-dialog");
   expect(
     await dialog.evaluate(
