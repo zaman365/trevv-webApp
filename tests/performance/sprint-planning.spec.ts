@@ -540,12 +540,12 @@ test("sprint layout fits a narrow screen and board permission loss clears detail
     ),
   ).toBe(true);
   await page.screenshot({
-    path: "/private/tmp/trevv-sprints-mobile.png",
+    path: test.info().outputPath("trevv-sprints-mobile.png"),
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
-    path: "/private/tmp/trevv-sprints-desktop.png",
+    path: test.info().outputPath("trevv-sprints-desktop.png"),
     fullPage: true,
   });
   await page.route("**/api/v1/boards?**", (route) =>

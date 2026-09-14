@@ -594,6 +594,7 @@ test("the project editor shares its saved plan without losing project settings",
 }) => {
   const state = planningApi();
   await setup(page, "", { view: "planning", api: state.api });
+  await page.goto("https://trevv.test/?view=planning&mode=plans");
   await page
     .getByRole("button", { name: "New project / plan", exact: true })
     .click();
