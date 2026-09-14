@@ -1172,6 +1172,16 @@ function WorkspaceChrome({
                       </small>
                     </div>
                   </header>
+                  {!appSession.demo ? (
+                    <Link
+                      href="/app/account/profile"
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <Settings2 size={14} />
+                      Edit profile
+                    </Link>
+                  ) : null}
                   {contextProject && (
                     <>
                       {!appSession.demo ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Mail, MessageCircleMore, X } from "lucide-react";
+import { ArrowUpRight, Mail, MessageCircleMore, Pencil, X } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords } from "@/lib/live-app-data";
@@ -9,9 +9,9 @@ import { useFloatingChat } from "@/lib/floating-chat-context";
 import { isLiveAccessLoss, presentLiveError } from "@/lib/live-errors";
 import { personHref } from "@/lib/people-routes";
 import { personEmailHref } from "@/lib/people-workspace";
-import { initials } from "@/lib/team-workspace";
 import { teamHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
+import { PersonAvatar } from "./person-avatar";
 import styles from "./people-workspace.module.css";
 
 export function PersonCard({
@@ -65,10 +65,17 @@ export function PersonCard({
       {person ? (
         <>
           <header className={styles.cardHeader}>
-            <span className={styles.avatar}>{initials(person.name)}</span>
+            <PersonAvatar
+              className={styles.avatar}
+              name={person.name}
+              url={person.profile?.avatarUrl}
+            />
             <div>
               <strong>{person.name}</strong>
               <small>
+                {person.profile?.jobTitle
+                  ? `${person.profile.jobTitle} · `
+                  : ""}
                 {person.organizationRole.replaceAll("_", " ")}
                 {person.id === session.user.id ? " · You" : ""}
               </small>
@@ -98,16 +105,27 @@ export function PersonCard({
             )}
           </div>
           <div className={styles.actions}>
+            {person.id === session.user.id ? (
+              <Link
+                className={styles.primary}
+                href="/app/account/profile"
+                onClick={onClose}
+              >
+                <Pencil size={16} />
+                Edit profile
+              </Link>
+            ) : null}
             {chat && person.id !== session.user.id ? (
               <button
                 type="button"
+                className={styles.primary}
                 onClick={() => {
                   onClose();
                   chat.openChat({ workspaceSlug, personId: person.id });
                 }}
               >
                 <MessageCircleMore size={16} />
-                Start chat
+                Message
               </button>
             ) : null}
             <a href={personEmailHref(person.email)}>

@@ -3,6 +3,7 @@ import type { WebRuntimeMode } from "./web-runtime-config";
 
 // Static modules only: never prefetch an authenticated RSC response or API data.
 const modules = {
+  accountProfile: () => import("../components/account-profile"),
   task: () => import("../components/task-page"),
   portfolioLoader: () => import("../components/portfolio-loader"),
   portfolio: () => import("../components/portfolio-experience"),
@@ -59,6 +60,7 @@ export function routeCodeModules(
     "/app/guide": "guide",
     "/app/mail": "mail",
     "/app/account/sessions": "sessions",
+    "/app/account/profile": "accountProfile",
     "/app/account/privacy": "privacy",
     "/app/account/invitations": "invitations",
   };

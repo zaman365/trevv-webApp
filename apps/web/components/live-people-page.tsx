@@ -21,6 +21,7 @@ import {
   Mail,
   MessageCircleMore,
   Plus,
+  Pencil,
   Users,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
@@ -34,7 +35,6 @@ import {
   personHref,
   personWorkspaceRecords,
 } from "@/lib/people-workspace";
-import { initials } from "@/lib/team-workspace";
 import { taskToday } from "@/lib/task-views";
 import {
   formatLiveDateOnly,
@@ -46,6 +46,7 @@ import { teamHref, workspaceHref } from "@/lib/workspace-routes";
 import { WorkspaceFrame } from "./workspace-frame";
 import { LiveStateNotice } from "./live-state";
 import { PersonIdentity } from "./person-identity";
+import { PersonAvatar } from "./person-avatar";
 import { LiveQuickCaptureDialog } from "./lazy-create-dialogs";
 import styles from "./people-workspace.module.css";
 
@@ -243,7 +244,11 @@ export function LivePeoplePage({
             <>
               <header className={styles.hero}>
                 <div className={styles.heroIdentity}>
-                  <span className={styles.avatar}>{initials(person.name)}</span>
+                  <PersonAvatar
+                    className={styles.avatar}
+                    name={person.name}
+                    url={person.profile?.avatarUrl}
+                  />
                   <div>
                     <Heading>
                       {person.name}
@@ -264,6 +269,15 @@ export function LivePeoplePage({
                   </div>
                 </div>
                 <div className={styles.actions}>
+                  {person.id === session.user.id ? (
+                    <Link
+                      className={styles.primary}
+                      href="/app/account/profile"
+                    >
+                      <Pencil size={16} />
+                      Edit profile
+                    </Link>
+                  ) : null}
                   {person.id !== session.user.id && chat ? (
                     <button
                       type="button"
@@ -273,7 +287,7 @@ export function LivePeoplePage({
                       }
                     >
                       <MessageCircleMore size={16} />
-                      Start chat
+                      Message
                     </button>
                   ) : null}
                   <a
@@ -378,6 +392,60 @@ export function LivePeoplePage({
                       <h2>About this person</h2>
                     </header>
                     <dl className={styles.facts}>
+                      {person.profile?.jobTitle ? (
+                        <>
+                          <dt>Job title</dt>
+                          <dd>{person.profile.jobTitle}</dd>
+                        </>
+                      ) : null}
+                      {person.profile?.bio ? (
+                        <>
+                          <dt>About</dt>
+                          <dd style={{ whiteSpace: "pre-wrap" }}>
+                            {person.profile.bio}
+                          </dd>
+                        </>
+                      ) : null}
+                      {person.profile?.phone ? (
+                        <>
+                          <dt>Phone</dt>
+                          <dd>
+                            <a
+                              href={`tel:${encodeURIComponent(person.profile.phone)}`}
+                            >
+                              {person.profile.phone}
+                            </a>
+                          </dd>
+                        </>
+                      ) : null}
+                      {person.profile?.location ? (
+                        <>
+                          <dt>Location</dt>
+                          <dd>{person.profile.location}</dd>
+                        </>
+                      ) : null}
+                      {person.profile?.website?.startsWith("https://") ? (
+                        <>
+                          <dt>Website</dt>
+                          <dd>
+                            <a
+                              href={person.profile.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {person.profile.website}
+                            </a>
+                          </dd>
+                        </>
+                      ) : null}
+                      {person.profile?.timezone ? (
+                        <>
+                          <dt>Time zone</dt>
+                          <dd>
+                            {person.profile.timezone.replaceAll("_", " ")}
+                          </dd>
+                        </>
+                      ) : null}
                       <dt>Workspace</dt>
                       <dd>{workspace.name}</dd>
                       <dt>Role</dt>
@@ -811,11 +879,17 @@ export function LivePeoplePage({
               </div>
               <div className={styles.directory}>
                 {visibleMembers.map((entry) => (
-                  <article key={entry.id} className={styles.panel}>
+                  <article
+                    key={entry.id}
+                    className={`${styles.panel} ${styles.personCard}`}
+                    aria-label={`${entry.name} user card`}
+                  >
                     <header className={styles.cardHeader}>
-                      <span className={styles.avatar}>
-                        {initials(entry.name)}
-                      </span>
+                      <PersonAvatar
+                        className={styles.avatar}
+                        name={entry.name}
+                        url={entry.profile?.avatarUrl}
+                      />
                       <div>
                         <strong>
                           <PersonIdentity
@@ -825,6 +899,9 @@ export function LivePeoplePage({
                           />
                         </strong>
                         <small>
+                          {entry.profile?.jobTitle
+                            ? `${entry.profile.jobTitle} · `
+                            : ""}
                           {entry.organizationRole.replaceAll("_", " ")}
                           {entry.id === session.user.id ? " · You" : ""}
                         </small>
@@ -854,21 +931,31 @@ export function LivePeoplePage({
                         ))}
                     </div>
                     <div className={styles.actions}>
-                      <Link href={personHref(workspaceSlug, entry.id)}>
-                        View profile
-                        <ArrowUpRight size={15} />
-                      </Link>
+                      {entry.id === session.user.id ? (
+                        <Link
+                          className={styles.primary}
+                          href="/app/account/profile"
+                        >
+                          <Pencil size={15} />
+                          Edit profile
+                        </Link>
+                      ) : null}
                       {entry.id !== session.user.id && chat ? (
                         <button
                           type="button"
+                          className={styles.primary}
                           onClick={() =>
                             chat.openChat({ workspaceSlug, personId: entry.id })
                           }
                         >
                           <MessageCircleMore size={15} />
-                          Chat
+                          Message
                         </button>
                       ) : null}
+                      <Link href={personHref(workspaceSlug, entry.id)}>
+                        View profile
+                        <ArrowUpRight size={15} />
+                      </Link>
                       <a href={personEmailHref(entry.email)}>
                         <Mail size={15} />
                         Email

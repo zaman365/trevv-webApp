@@ -151,7 +151,11 @@ export function SessionManagement() {
             </span>
           </div>
         </div>
-        <Link href="/app/portfolio">Back to Portfolio</Link>
+        <div>
+          <Link href="/app/account/profile">Edit profile</Link>
+          {" · "}
+          <Link href="/app/portfolio">Back to Portfolio</Link>
+        </div>
       </header>
 
       {appSession.demo ? (

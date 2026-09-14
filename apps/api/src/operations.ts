@@ -272,6 +272,8 @@ export function rateLimitPolicy(
     return method === "GET"
       ? { bucket: "superadmin-read", limit: 120, windowMs: 60_000 }
       : { bucket: "superadmin-mutation", limit: 30, windowMs: 60_000 };
+  if (path === "/api/auth/profile" && method === "POST")
+    return { bucket: "profile-mutation", limit: 20, windowMs: 60_000 };
   if (path.startsWith("/api/auth/"))
     return method === "GET"
       ? { bucket: "auth-read", limit: 120, windowMs: 60_000 }

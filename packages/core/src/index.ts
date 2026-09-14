@@ -1,4 +1,5 @@
 import type { ProgressMode } from "./commercial.js";
+export * from "./user-profile.js";
 import { demoPortfolios } from "./commercial-demo.js";
 
 export type WorkspaceHealth = "on_track" | "watch" | "critical" | "parked";

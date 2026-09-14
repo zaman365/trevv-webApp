@@ -1,4 +1,4 @@
-import type { BoardPlanning } from "@founderhq/core";
+import type { BoardPlanning, UserProfileDetails } from "@founderhq/core";
 import {
   bigint,
   boolean,
@@ -261,6 +261,7 @@ export const users = pgTable(
     email: text("email").notNull(),
     name: text("name").notNull(),
     locale: text("locale").notNull().default("en"),
+    profile: jsonb("profile").$type<UserProfileDetails>().notNull().default({}),
     ...timestamps,
   },
   (table) => [

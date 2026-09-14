@@ -49,6 +49,12 @@ infer approval from the passage of time alone.
 
 ## Data-subject and organization requests
 
+The identity inventory also includes optional profile details (job title, bio,
+phone, location, website, photo URL and time zone) and expiring login-email
+change requests. These use the existing identity retention and privacy request
+workflow. Optional photo URLs load in the viewer's browser; the image host
+receives that request without a TREVV referrer.
+
 Durable requests support access, portability, erasure, rectification,
 restriction, and objection. They are tenant-scoped, idempotent, versioned, and
 journaled with an audit and outbox event in the same transaction. Individual

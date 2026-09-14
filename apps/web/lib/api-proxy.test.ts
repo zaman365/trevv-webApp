@@ -7,6 +7,46 @@ afterEach(() => {
 });
 
 describe("browser API proxy boundary", () => {
+  it("returns only profile fields through the account route and keeps identity secrets hidden", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const profile = {
+      id: "user-one",
+      name: "Owner",
+      email: "owner@example.test",
+      emailVerified: true,
+      details: { jobTitle: "Designer" },
+      version: "v1",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          ...profile,
+          token: "secret",
+          session: { token: "private" },
+          pendingEmail: {
+            email: "new@example.test",
+            stage: "confirm-current",
+            expiresAt: "2026-09-15T10:00:00Z",
+            token: "confirmation-secret",
+          },
+        }),
+      ),
+    );
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/auth/profile"),
+      ["auth", "profile"],
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ...profile,
+      pendingEmail: {
+        email: "new@example.test",
+        stage: "confirm-current",
+        expiresAt: "2026-09-15T10:00:00Z",
+      },
+    });
+  });
   it("preserves task save receipts, idempotency, and optimistic concurrency end to end", async () => {
     vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
     const upstream = vi.fn().mockResolvedValue(

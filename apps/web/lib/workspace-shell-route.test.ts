@@ -51,7 +51,7 @@ describe("persistent shell route ownership", () => {
       });
     },
   );
-  it.each(["sessions", "privacy", "invitations"])(
+  it.each(["sessions", "privacy", "invitations", "profile"])(
     "does not block account %s on item history",
     (page) => {
       expect(workspaceShellRoute(`/app/account/${page}`)).toEqual({

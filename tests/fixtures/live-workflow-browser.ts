@@ -81,6 +81,7 @@ export async function setup(
       | "capture"
       | "messages"
       | "people"
+      | "account-profile"
       | "person"
       | "chat";
     attention?: AttentionSignalDto[];
@@ -367,6 +368,10 @@ export async function setup(
     ).toBeVisible();
   } else if (options.view === "portfolio") {
     await expect(page.getByTestId("live-portfolio")).toBeVisible();
+  } else if (options.view === "account-profile") {
+    await expect(
+      page.getByRole("heading", { name: "Edit profile", exact: true }),
+    ).toBeVisible();
   } else if (options.view === "personal") {
     await expect(page.getByTestId("live-personal-work")).toBeVisible();
   } else if (options.view === "calendar") {

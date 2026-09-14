@@ -3,9 +3,14 @@ import { appendSetCookieHeaders } from "./response-cookies";
 import { webRequestId } from "./security-headers";
 import { readBoundedRequestBody } from "./bounded-request-body";
 import { authActionCookies } from "./auth-action-cookies";
+import { parseProfileUpdate } from "@founderhq/core";
 
 const allowedNamespaces = new Set(["auth", "v1", "superadmin"]);
 const browserAuthOperations = new Set([
+  "GET profile",
+  "POST profile",
+  "POST change-email",
+  "POST cancel-email-change",
   "POST request-password-reset",
   "POST send-verification-email",
   "POST sign-in/email",
@@ -166,7 +171,11 @@ export async function proxyApiRequest(
   try {
     responseBody =
       segments[0] === "auth"
-        ? await safeBrowserAuthBody(upstream, responseHeaders)
+        ? await safeBrowserAuthBody(
+            upstream,
+            responseHeaders,
+            segments[1] === "profile",
+          )
         : request.method === "HEAD" ||
             [101, 204, 205, 304].includes(upstream.status)
           ? null
@@ -279,9 +288,45 @@ export function browserApiOperationAllowed(
 async function safeBrowserAuthBody(
   upstream: Response,
   responseHeaders: Headers,
+  profile = false,
 ): Promise<string | null> {
   if ([101, 204, 205, 304].includes(upstream.status)) return null;
   responseHeaders.set("content-type", "application/json; charset=utf-8");
+  if (upstream.ok && profile) {
+    const value: unknown = await upstream.json();
+    if (
+      !isRecord(value) ||
+      typeof value.id !== "string" ||
+      typeof value.email !== "string" ||
+      typeof value.emailVerified !== "boolean"
+    )
+      throw new Error("The profile confirmation was invalid.");
+    const fields = parseProfileUpdate({
+      name: value.name,
+      details: value.details,
+      version: value.version,
+    });
+    const pending =
+      isRecord(value.pendingEmail) &&
+      typeof value.pendingEmail.email === "string" &&
+      typeof value.pendingEmail.expiresAt === "string" &&
+      ["confirm-current", "verify-new"].includes(
+        String(value.pendingEmail.stage),
+      )
+        ? {
+            email: value.pendingEmail.email,
+            stage: value.pendingEmail.stage,
+            expiresAt: value.pendingEmail.expiresAt,
+          }
+        : undefined;
+    return JSON.stringify({
+      id: value.id,
+      email: value.email,
+      emailVerified: value.emailVerified,
+      ...fields,
+      ...(pending ? { pendingEmail: pending } : {}),
+    });
+  }
   if (upstream.ok) return JSON.stringify({ ok: true });
 
   const value: unknown = await upstream.json().catch(() => null);

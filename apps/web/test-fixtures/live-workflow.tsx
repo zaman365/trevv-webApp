@@ -13,6 +13,7 @@ import "../app/workspace.css";
 import "../app/design-system.css";
 import { FloatingChatProvider } from "../lib/floating-chat-context";
 import { LivePeoplePage } from "../components/live-people-page";
+import { AccountProfileExperience } from "../components/account-profile";
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { QuickCaptureButton } from "../components/quick-capture-button";
@@ -108,6 +109,11 @@ function Workflow() {
         view={view.slice(5) as Parameters<typeof LiveWorkView>[0]["view"]}
       />
     );
+  if (
+    view === "account-profile" ||
+    window.location.pathname === "/app/account/profile"
+  )
+    return <AccountProfileExperience />;
   if (new URLSearchParams(window.location.search).get("view") === "people")
     return <LivePeoplePage workspaceSlug="launch" />;
   if (new URLSearchParams(window.location.search).get("view") === "person")

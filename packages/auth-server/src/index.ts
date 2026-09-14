@@ -3,6 +3,14 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Pool } from "pg";
 import type { MailDelivery } from "./mail.js";
+import {
+  cancelEmailChange,
+  emailChangeTokenOwner,
+  pendingEmailIdentifier,
+  readAccountProfile,
+  saveAccountProfile,
+  trustedProfileOrigin,
+} from "./profile.js";
 export * from "./superadmin.js";
 
 export {
@@ -175,9 +183,21 @@ function createTrevvAuthWithPool(
         let tokenRemembered = false;
         try {
           await faultInjection.beforeRememberVerificationToken?.();
+          const changingEmail =
+            generatedTokenRequestType(token) === "change-email-verification";
+          if (changingEmail) {
+            const pending = await pool.query(
+              `update verification set value = jsonb_set(value::jsonb, '{stage}', '"verify-new"')::text,
+               "expiresAt" = now() + ($3 * interval '1 second'), "updatedAt" = now()
+               where identifier = $1 and value::jsonb->>'email' = $2 and "expiresAt" > now() returning id`,
+              [pendingEmailIdentifier(user.id), user.email, verificationTtl],
+            );
+            if (!pending.rowCount)
+              throw new Error("The email change was cancelled or expired.");
+          }
           await rememberEmailVerificationToken(
             pool,
-            user.id,
+            changingEmail ? emailChangeTokenOwner(user.id) : user.id,
             token,
             verificationTtl,
           );
@@ -190,9 +210,11 @@ function createTrevvAuthWithPool(
           await environment.mailDelivery.deliver({
             from: environment.mailFrom,
             to: user.email,
-            subject: "Verify your TREVV email",
-            text: `Verify your TREVV email by opening this link:\n\n${deliveryUrl}\n\nIf you did not create this account, you can ignore this message.`,
-            html: `<p>Verify your TREVV email by opening the link below.</p><p><a href="${escapeHtml(deliveryUrl)}">Verify email</a></p><p>If you did not create this account, you can ignore this message.</p>`,
+            subject: changingEmail
+              ? "Verify your new TREVV login email"
+              : "Verify your TREVV email",
+            text: `Verify your TREVV email by opening this link:\n\n${deliveryUrl}\n\n${changingEmail ? "Your login address changes only after you verify this new address." : "If you did not create this account, you can ignore this message."}`,
+            html: `<p>Verify your TREVV email by opening the link below.</p><p><a href="${escapeHtml(deliveryUrl)}">Verify email</a></p><p>${changingEmail ? "Your login address changes only after you verify this new address." : "If you did not create this account, you can ignore this message."}</p>`,
           });
         } catch (error) {
           const outcome = verificationDelivery.getStore();
@@ -207,6 +229,20 @@ function createTrevvAuthWithPool(
             }
           throw error;
         }
+      },
+      async afterEmailVerification(user) {
+        const pending = await pool.query<{ value: string }>(
+          `select value from verification where identifier = $1`,
+          [pendingEmailIdentifier(user.id)],
+        );
+        if (
+          !pending.rows[0] ||
+          JSON.parse(pending.rows[0].value).email !== user.email
+        )
+          return;
+        // Verification changes both identities in one DB transaction via the
+        // trigger. Retire every older link once the new address is confirmed.
+        await cancelEmailChange(pool, user.id);
       },
     },
     emailAndPassword: {
@@ -232,6 +268,56 @@ function createTrevvAuthWithPool(
       },
     },
     user: {
+      changeEmail: {
+        enabled: true,
+        updateEmailWithoutVerification: false,
+        async sendChangeEmailConfirmation({ user, newEmail, url, token }) {
+          await cancelEmailChange(pool, user.id);
+          const pendingValue = JSON.stringify({
+            email: newEmail,
+            stage: "confirm-current",
+            tokenId: emailVerificationIdentifier(token),
+          });
+          await pool.query(
+            `insert into verification (id, identifier, value, "expiresAt", "createdAt", "updatedAt") values ($1, $2, $3, now() + ($4 * interval '1 second'), now(), now())`,
+            [
+              randomUUID(),
+              pendingEmailIdentifier(user.id),
+              pendingValue,
+              verificationTtl,
+            ],
+          );
+          await rememberEmailVerificationToken(
+            pool,
+            emailChangeTokenOwner(user.id),
+            token,
+            verificationTtl,
+          );
+          try {
+            const deliveryUrl = verificationDeliveryUrl(
+              url,
+              token,
+              environment.trustedOrigins,
+            );
+            await environment.mailDelivery.deliver({
+              from: environment.mailFrom,
+              to: user.email,
+              subject: "Confirm your TREVV login email change",
+              text: `A change of your TREVV login email to ${newEmail} was requested. Confirm using this one-time link:\n\n${deliveryUrl}\n\nThen verify the new inbox. Your current login address stays active until both steps finish. If this was not you, cancel the change in your profile and reset your password.`,
+              html: `<p>A change of your TREVV login email to <strong>${escapeHtml(newEmail)}</strong> was requested.</p><p><a href="${escapeHtml(deliveryUrl)}">Confirm email change</a></p><p>Then verify the new inbox. Your current login address stays active until both steps finish. If this was not you, cancel the change in your profile and reset your password.</p>`,
+            });
+          } catch (error) {
+            const outcome = verificationDelivery.getStore();
+            if (outcome) outcome.failed = true;
+            await forgetEmailVerificationToken(pool, token);
+            await pool.query(
+              `delete from verification where identifier = $1 and value = $2`,
+              [pendingEmailIdentifier(user.id), pendingValue],
+            );
+            throw error;
+          }
+        },
+      },
       additionalFields: {
         registrationInvitationTokenHash: {
           type: "string",
@@ -318,8 +404,161 @@ function createSingleUseVerificationHandler(
   environment: AuthEnvironment,
   verificationDelivery: AsyncLocalStorage<VerificationDeliveryOutcome>,
 ): (request: Request) => Promise<Response> {
-  return async (request) => {
+  const handle = async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
+    const operation = withoutTrailingSlash(url.pathname).slice(
+      AUTH_BASE_PATH.length,
+    );
+    if (
+      ["/profile", "/change-email", "/cancel-email-change"].includes(operation)
+    ) {
+      if (
+        request.method !== "GET" &&
+        !trustedProfileOrigin(request, environment.trustedOrigins)
+      )
+        return registrationFailure(
+          403,
+          "INVALID_ORIGIN",
+          "This request must come from TREVV.",
+        );
+      const session = await auth.api.getSession({
+        headers: request.headers,
+        query: { disableCookieCache: true },
+      });
+      if (!session?.user.emailVerified)
+        return registrationFailure(
+          401,
+          "UNAUTHORIZED",
+          "Sign in with a verified account to continue.",
+        );
+      const profile = await readAccountProfile(pool, session.user.id);
+      if (!profile)
+        return registrationFailure(
+          403,
+          "PROFILE_UNAVAILABLE",
+          "Your profile is unavailable.",
+        );
+      if (operation === "/profile") {
+        if (request.method === "GET")
+          return Response.json(profile, {
+            headers: { "cache-control": "private, no-store" },
+          });
+        if (request.method !== "POST")
+          return registrationFailure(
+            405,
+            "METHOD_NOT_ALLOWED",
+            "Use Save profile to update your details.",
+          );
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return registrationFailure(
+            400,
+            "INVALID_PROFILE",
+            "Enter valid profile details.",
+          );
+        }
+        try {
+          const saved = await saveAccountProfile(pool, session.user.id, body);
+          return Response.json(saved, {
+            headers: { "cache-control": "private, no-store" },
+          });
+        } catch (error) {
+          const status =
+            error && typeof error === "object" && "status" in error
+              ? Number(error.status)
+              : 400;
+          const databaseError =
+            error && typeof error === "object" && "code" in error;
+          return registrationFailure(
+            databaseError ? 503 : status,
+            "PROFILE_SAVE_FAILED",
+            databaseError
+              ? "Your profile could not be saved. Your draft is still available; try again."
+              : error instanceof Error
+                ? error.message
+                : "Your profile could not be saved.",
+          );
+        }
+      }
+      if (request.method !== "POST")
+        return registrationFailure(
+          405,
+          "METHOD_NOT_ALLOWED",
+          "Use the account form to make this change.",
+        );
+      if (operation === "/cancel-email-change") {
+        await cancelEmailChange(pool, session.user.id);
+        return Response.json(
+          { status: true },
+          { headers: { "cache-control": "private, no-store" } },
+        );
+      }
+      let body: { password?: unknown; newEmail?: unknown };
+      try {
+        body = await request.json();
+      } catch {
+        return registrationFailure(
+          400,
+          "INVALID_REQUEST",
+          "Enter your new email and current password.",
+        );
+      }
+      if (
+        !body ||
+        typeof body !== "object" ||
+        typeof body.password !== "string" ||
+        body.password.length > 128 ||
+        !body.password ||
+        typeof body.newEmail !== "string" ||
+        body.newEmail.length > 254 ||
+        !/^\S+@\S+\.\S+$/.test(body.newEmail.trim())
+      )
+        return registrationFailure(
+          400,
+          "INVALID_REQUEST",
+          "Enter your new email and current password.",
+        );
+      try {
+        await auth.api.verifyPassword({
+          headers: request.headers,
+          body: { password: body.password },
+        });
+      } catch {
+        return registrationFailure(
+          400,
+          "INVALID_PASSWORD",
+          "Your current password could not be confirmed.",
+        );
+      }
+      const newEmail = body.newEmail.trim().toLowerCase();
+      if (newEmail === profile.email.toLowerCase())
+        return registrationFailure(
+          400,
+          "EMAIL_UNCHANGED",
+          "Enter a different email address.",
+        );
+      // Product accounts may predate an auth mapping. Never merge identities
+      // based on a new email or expose whether another account owns it.
+      const occupied = await pool.query(
+        `select id from app_users where lower(email) = $1 and id <> $2 limit 1`,
+        [newEmail, profile.id],
+      );
+      if (occupied.rowCount)
+        return Response.json(
+          { status: true },
+          { headers: { "cache-control": "private, no-store" } },
+        );
+      request = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: JSON.stringify({
+          newEmail,
+          callbackURL: `${request.headers.get("origin")}/app/account/profile?emailChange=1`,
+        }),
+      });
+    }
     let admittedInvitation: InvitationRegistrationAdmission | null = null;
     if (
       request.method === "POST" &&
@@ -373,6 +612,12 @@ function createSingleUseVerificationHandler(
       auth.handler(request),
     );
     if (deliveryOutcome.failed) {
+      if (operation === "/change-email" || operation === "/verify-email")
+        return registrationFailure(
+          503,
+          "VERIFICATION_DELIVERY_FAILED",
+          "The verification email could not be delivered. Your login email has not changed. Start the email change again from your profile.",
+        );
       const signUp =
         request.method === "POST" &&
         withoutTrailingSlash(url.pathname) ===
@@ -422,6 +667,65 @@ function createSingleUseVerificationHandler(
     }
     return response;
   };
+  return async (request) => {
+    const operation = withoutTrailingSlash(new URL(request.url).pathname).slice(
+      AUTH_BASE_PATH.length,
+    );
+    let lockUserId: string | undefined;
+    if (["/change-email", "/cancel-email-change"].includes(operation)) {
+      const session = await auth.api.getSession({
+        headers: request.headers,
+        query: { disableCookieCache: true },
+      });
+      lockUserId = session?.user.id;
+    } else if (operation === "/verify-email") {
+      const token = new URL(request.url).searchParams.get("token");
+      if (token) {
+        const marker = await pool.query<{ value: string }>(
+          `select value from verification where identifier = $1`,
+          [emailVerificationIdentifier(token)],
+        );
+        if (marker.rows[0]?.value.startsWith("email-change:"))
+          lockUserId = marker.rows[0].value.slice("email-change:".length);
+      }
+    }
+    if (!lockUserId) return handle(request);
+    // Serialize starts, cancellation and link consumption across API replicas.
+    // The session-level advisory lock does not block Better Auth's own writes.
+    const client = await pool.connect();
+    let locked = false;
+    try {
+      const result = await client.query<{ locked: boolean }>(
+        `select pg_try_advisory_lock(hashtextextended($1, 0)) as locked`,
+        [`email-change:${lockUserId}`],
+      );
+      locked = result.rows[0]?.locked === true;
+      if (!locked)
+        return registrationFailure(
+          409,
+          "EMAIL_CHANGE_BUSY",
+          "An email change is already being processed. Try again in a moment.",
+        );
+      return await handle(request);
+    } finally {
+      try {
+        if (locked)
+          await client.query(
+            `select pg_advisory_unlock(hashtextextended($1, 0))`,
+            [`email-change:${lockUserId}`],
+          );
+      } finally {
+        client.release();
+      }
+    }
+  };
+}
+
+// Only used on tokens generated by Better Auth's own mail callbacks, never to
+// authorize an incoming token. Better Auth still verifies its signature.
+function generatedTokenRequestType(token: string): string | undefined {
+  return JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString())
+    .requestType;
 }
 
 function validTestRegistrationBootstrap(

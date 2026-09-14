@@ -7,12 +7,15 @@ import {
 } from "@founderhq/auth-server";
 import {
   authAccounts,
+  authUserMappings,
   authUsers,
   authVerifications,
   createDatabase,
   hashInvitationToken,
   invitations,
   organizations,
+  users,
+  memberships,
   registrationInvitationClaims,
 } from "@founderhq/db";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
@@ -22,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   createTemporaryDatabase,
   migrateCurrent,
+  sql,
   type TemporaryDatabase,
 } from "../../../packages/db/integration/database-test-helper.js";
 
@@ -47,6 +51,237 @@ afterAll(async () => {
 }, 120_000);
 
 describe("Better Auth live runtime", () => {
+  it("saves only your personal profile with version checks and keeps auth/product identities synchronized", async () => {
+    const mail = createMemoryMailSink();
+    const runtime = createAuthHarness(mail);
+    const database = createDatabase(temporary.url);
+    try {
+      const actor = await profileAccount(runtime.handler, mail, database);
+      const other = await profileAccount(runtime.handler, mail, database);
+      expect((await authRequest(runtime.handler, "/profile")).status).toBe(401);
+      const response = await authRequest(runtime.handler, "/profile", {
+        cookie: actor.cookie,
+      });
+      expect(response.status).toBe(200);
+      const profile = await response.json();
+      const input = {
+        name: "Updated profile name",
+        details: {
+          jobTitle: "Designer",
+          bio: "I help the team deliver.",
+          phone: "+49 1234567",
+          location: "Berlin",
+          website: "https://example.test/work",
+          avatarUrl: "https://example.test/avatar.png",
+          timezone: "Europe/Berlin",
+        },
+        version: profile.version,
+      };
+      for (const extra of [
+        { email: "bypass@example.test" },
+        { id: other.appUserId },
+        { role: "owner" },
+        { teamIds: ["private-team"] },
+      ]) {
+        expect(
+          (
+            await authRequest(runtime.handler, "/profile", {
+              method: "POST",
+              cookie: actor.cookie,
+              body: { ...input, ...extra },
+            })
+          ).status,
+        ).toBe(400);
+      }
+      expect(
+        (
+          await authRequest(runtime.handler, "/profile", {
+            method: "POST",
+            cookie: actor.cookie,
+            headers: { origin: "https://untrusted.test" },
+            body: input,
+          })
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await authRequest(runtime.handler, "/profile", {
+            method: "POST",
+            cookie: actor.cookie,
+            body: { ...input, details: { avatarUrl: "javascript:alert(1)" } },
+          })
+        ).status,
+      ).toBe(400);
+      const saved = await authRequest(runtime.handler, "/profile", {
+        method: "POST",
+        cookie: actor.cookie,
+        body: input,
+      });
+      expect(saved.status).toBe(200);
+      await expect(saved.json()).resolves.toMatchObject({
+        id: actor.appUserId,
+        name: input.name,
+        email: actor.email,
+        details: input.details,
+      });
+      expect(
+        (
+          await authRequest(runtime.handler, "/profile", {
+            method: "POST",
+            cookie: actor.cookie,
+            body: input,
+          })
+        ).status,
+      ).toBe(409);
+      const authRow = await database.db
+        .select()
+        .from(authUsers)
+        .where(sql`${authUsers.id} = ${actor.authUserId}`);
+      expect(authRow[0]?.name).toBe(input.name);
+      const otherProfile = await authRequest(runtime.handler, "/profile", {
+        cookie: other.cookie,
+      });
+      await expect(otherProfile.json()).resolves.toMatchObject({
+        name: "Profile test user",
+        details: {},
+      });
+    } finally {
+      await database.close();
+      await runtime.close();
+    }
+  });
+
+  it("changes login email only after password and both inbox confirmations, with cancellation, expiry, replay and membership protection", async () => {
+    const mail = createMemoryMailSink();
+    let failDelivery = false;
+    const runtime = createAuthHarness({
+      ...mail,
+      async deliver(message) {
+        if (failDelivery) throw new Error("Test mail unavailable");
+        await mail.deliver(message);
+      },
+    });
+    const database = createDatabase(temporary.url);
+    try {
+      const actor = await profileAccount(runtime.handler, mail, database);
+      const organizationId = crypto.randomUUID();
+      await database.db.insert(organizations).values({
+        id: organizationId,
+        name: "Profile test org",
+        slug: `profile-${organizationId}`,
+      });
+      await database.db
+        .insert(memberships)
+        .values({ organizationId, userId: actor.appUserId, role: "member" });
+      const newEmail = `changed-${crypto.randomUUID()}@example.test`;
+      const startChange = (password = originalPassword) =>
+        authRequest(runtime.handler, "/change-email", {
+          method: "POST",
+          cookie: actor.cookie,
+          body: { password, newEmail },
+        });
+      const lastLink = (subject: string) =>
+        verificationProviderUrl(
+          actionUrl(
+            mail,
+            subject,
+            mail.messages().filter((message) => message.subject === subject)
+              .length - 1,
+          ),
+        );
+      const read = async () =>
+        (
+          await authRequest(runtime.handler, "/profile", {
+            cookie: actor.cookie,
+          })
+        ).json();
+      expect((await startChange("wrong-password")).status).toBe(400);
+      expect((await startChange("")).status).toBe(400);
+      expect((await read()).email).toBe(actor.email);
+      failDelivery = true;
+      expect((await startChange()).status).toBe(503);
+      expect((await read()).pendingEmail).toBeUndefined();
+      failDelivery = false;
+      expect((await startChange()).status).toBe(200);
+      const cancelledLink = lastLink("Confirm your TREVV login email change");
+      expect(
+        (
+          await authRequest(runtime.handler, "/cancel-email-change", {
+            method: "POST",
+            cookie: actor.cookie,
+            body: {},
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (await runtime.handler(new Request(cancelledLink))).headers.get(
+          "location",
+        ),
+      ).toContain("INVALID_TOKEN");
+      expect((await startChange()).status).toBe(200);
+      const expiredLink = lastLink("Confirm your TREVV login email change");
+      await database.db.execute(
+        sql`update verification set "expiresAt" = now() - interval '1 second' where value = ${`email-change:${actor.authUserId}`}`,
+      );
+      expect(
+        (await runtime.handler(new Request(expiredLink))).headers.get(
+          "location",
+        ),
+      ).toContain("INVALID_TOKEN");
+      expect((await startChange()).status).toBe(200);
+      const oldInbox = lastLink("Confirm your TREVV login email change");
+      expect(await read()).toMatchObject({
+        email: actor.email,
+        pendingEmail: { email: newEmail, stage: "confirm-current" },
+      });
+      await database.db.execute(
+        sql`update verification set "expiresAt" = now() + interval '10 seconds' where identifier = ${`trevv-email-change:${actor.authUserId}`}`,
+      );
+      const currentInboxDeadline = (await read()).pendingEmail.expiresAt;
+      expect((await runtime.handler(new Request(oldInbox))).status).toBe(302);
+      expect(await read()).toMatchObject({
+        email: actor.email,
+        pendingEmail: { stage: "verify-new" },
+      });
+      expect(Date.parse((await read()).pendingEmail.expiresAt)).toBeGreaterThan(
+        Date.parse(currentInboxDeadline),
+      );
+      expect(
+        (await runtime.handler(new Request(oldInbox))).headers.get("location"),
+      ).toContain("INVALID_TOKEN");
+      const newInbox = lastLink("Verify your new TREVV login email");
+      expect((await runtime.handler(new Request(newInbox))).status).toBe(302);
+      expect(await read()).toMatchObject({
+        id: actor.appUserId,
+        email: newEmail,
+        emailVerified: true,
+      });
+      expect((await read()).pendingEmail).toBeUndefined();
+      expect(
+        (await runtime.handler(new Request(newInbox))).headers.get("location"),
+      ).toContain("INVALID_TOKEN");
+      expect(
+        (await signIn(runtime.handler, actor.email, originalPassword)).status,
+      ).toBe(401);
+      expect(
+        (await signIn(runtime.handler, newEmail, originalPassword)).status,
+      ).toBe(200);
+      const membership = await database.db
+        .select()
+        .from(memberships)
+        .where(sql`${memberships.userId} = ${actor.appUserId}`);
+      expect(membership).toHaveLength(1);
+      expect(membership[0]).toMatchObject({ organizationId, role: "member" });
+      const mapping = await database.db
+        .select()
+        .from(authUserMappings)
+        .where(sql`${authUserMappings.authUserId} = ${actor.authUserId}`);
+      expect(mapping[0]?.appUserId).toBe(actor.appUserId);
+    } finally {
+      await database.close();
+      await runtime.close();
+    }
+  });
   it("issues a host-only alpha session that is isolated from the predecessor namespace", async () => {
     const alphaWebOrigin = "https://alpha.trevv.de";
     const alphaAuthOrigin = "https://api.alpha.trevv.test";
@@ -1007,6 +1242,43 @@ describe("Better Auth live runtime", () => {
     }
   });
 });
+
+async function profileAccount(
+  handler: (request: Request) => Promise<Response>,
+  mail: MemoryMailSink,
+  database: ReturnType<typeof createDatabase>,
+) {
+  const email = `profile-${crypto.randomUUID()}@example.test`;
+  const signUp = await authRequest(handler, "/sign-up/email", {
+    method: "POST",
+    body: { name: "Profile test user", email, password: originalPassword },
+  });
+  expect(signUp.status).toBe(200);
+  const account = (await signUp.json()) as { user: { id: string } };
+  const delivery = mail
+    .messages()
+    .filter((message) => message.to === email)
+    .at(-1)!;
+  const verified = await handler(
+    new Request(
+      verificationProviderUrl(delivery.text.match(/https?:\/\/\S+/)![0]),
+    ),
+  );
+  expect(verified.status).toBe(302);
+  const appUserId = crypto.randomUUID();
+  await database.db
+    .insert(users)
+    .values({ id: appUserId, name: "Profile test user", email });
+  await database.db
+    .insert(authUserMappings)
+    .values({ authUserId: account.user.id, appUserId });
+  return {
+    appUserId,
+    authUserId: account.user.id,
+    email,
+    cookie: sessionCookie(await signIn(handler, email, originalPassword)),
+  };
+}
 
 function createAuthHarness(
   mailDelivery: MemoryMailSink,

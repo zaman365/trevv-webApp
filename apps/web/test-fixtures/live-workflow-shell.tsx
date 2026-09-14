@@ -12,6 +12,7 @@ export function AppLink(props: ComponentProps<"a">) {
 export function useReportRouteReady() {}
 export function useRouter() {
   return {
+    refresh: () => window.dispatchEvent(new Event("profile-refresh")),
     push: (href: string) => window.location.assign(href),
     replace: (href: string) => window.location.replace(href),
   };

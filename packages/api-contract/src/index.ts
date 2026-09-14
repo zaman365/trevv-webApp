@@ -1220,6 +1220,17 @@ export const collaborationUserSchema = z.object({
   email: z.email(),
   name: z.string().min(1).max(160),
   organizationRole: roleSchema,
+  profile: z
+    .object({
+      jobTitle: z.string().max(120).optional(),
+      bio: z.string().max(1200).optional(),
+      phone: z.string().max(40).optional(),
+      location: z.string().max(160).optional(),
+      website: z.string().max(2048).optional(),
+      avatarUrl: z.string().max(2048).optional(),
+      timezone: z.string().max(100).optional(),
+    })
+    .optional(),
 });
 export const teamMemberSchema = z.object({
   user: collaborationUserSchema,

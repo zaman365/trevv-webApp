@@ -63,6 +63,7 @@ export interface CollaborationUserProjection {
   id: string;
   email: string;
   name: string;
+  profile?: typeof users.$inferSelect.profile;
   organizationRole: (typeof memberships.$inferSelect)["role"];
 }
 
@@ -621,6 +622,7 @@ async function listWorkspaceUsers(
     id: user.id,
     email: user.email,
     name: user.name,
+    profile: user.profile,
     organizationRole: membership.role,
   }));
 }

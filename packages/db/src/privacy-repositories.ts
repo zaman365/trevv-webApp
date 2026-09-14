@@ -51,12 +51,20 @@ export interface RetentionPolicyProjection {
   enforcementStatus: "not_implemented";
 }
 
-export const privacyInventoryVersion = "2026-09-10.1";
+export const privacyInventoryVersion = "2026-09-14.1";
 export const privacyPolicyVersion = "2026-08-29.1";
 export const privacyDataInventory = [
   {
     category: "identity",
-    examples: ["name", "email", "membership", "session references"],
+    examples: [
+      "name",
+      "email",
+      "personal profile and contact details",
+      "profile photo URL",
+      "pending email changes",
+      "membership",
+      "session references",
+    ],
     purpose: "Account access, tenant membership, and security.",
     classification: "personal",
     defaultRetentionDays: 730,

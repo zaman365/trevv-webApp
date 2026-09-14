@@ -2033,6 +2033,7 @@ function toCollaborationUserDto(
     id: user.id,
     email: user.email,
     name: user.name,
+    ...(user.profile ? { profile: user.profile } : {}),
     organizationRole: user.organizationRole,
   };
 }

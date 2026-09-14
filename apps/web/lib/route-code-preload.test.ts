@@ -17,6 +17,11 @@ vi.mock("../components/workspace-module-loader", () => {
 });
 
 describe("static route warming", () => {
+  it("warms the account profile editor without fetching account data", () => {
+    expect(routeCodeModules("/app/account/profile", "live")).toEqual([
+      "accountProfile",
+    ]);
+  });
   it("opens live planning collaboration while retaining the full demo Ideas workflow", () => {
     expect(routeCodeModules("/app/workspaces/launch/ideas", "live")).toEqual([
       "moduleLoader",

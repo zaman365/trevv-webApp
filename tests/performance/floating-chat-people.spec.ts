@@ -217,6 +217,76 @@ test("people chats reuse existing conversations and support independent closable
   ).toHaveCount(0);
 });
 
+test("user cards stay compact and Message opens the right conversation", async ({
+  page,
+}, testInfo) => {
+  const fixture = await start(page, "people");
+  const ownCard = page.getByRole("article", { name: "Owner user card" });
+  const teammate = page.getByRole("article", { name: "Teammate user card" });
+  const search = page.getByRole("textbox", { name: "Search people" });
+  await expect(ownCard).toContainText("You");
+  await expect(
+    ownCard.getByRole("link", { name: "Edit profile" }),
+  ).toHaveAttribute("href", "/app/account/profile");
+  await expect(
+    teammate.getByRole("link", { name: "Edit profile" }),
+  ).toHaveCount(0);
+  await expect(
+    ownCard.getByRole("button", { name: "Message", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    teammate.getByRole("button", { name: "Message", exact: true }),
+  ).toBeVisible();
+  await expect(
+    teammate.getByRole("link", { name: "View profile" }),
+  ).toHaveAttribute("href", "/app/workspaces/launch/people/user-two");
+  await expect(
+    teammate.getByRole("link", { name: "Email", exact: true }),
+  ).toHaveAttribute("href", /^mailto:/);
+
+  for (const width of [1600, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await search.fill("Teammate");
+    await expect(ownCard).toHaveCount(0);
+    const bounds = (await teammate.boundingBox())!;
+    expect(bounds.width).toBeLessThanOrEqual(368);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    expect(
+      await teammate.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await expect(
+      teammate.getByRole("button", { name: "Message", exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`user-card-${width}.png`),
+      fullPage: true,
+    });
+  }
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await teammate.getByRole("button", { name: "Message", exact: true }).click();
+  const floating = chatWindow(page);
+  await expect(floating.getByLabel("Message", { exact: true })).toBeVisible();
+  await expect(floating.getByRole("tab", { name: /Teammate/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(fixture.state.conversationCreates).toBe(1);
+  expect(
+    fixture.state.conversations
+      .at(-1)
+      ?.participants.map((entry) => entry.user.id)
+      .sort(),
+  ).toEqual(["user-one", "user-two"]);
+  await floating.getByRole("button", { name: "Minimize chat window" }).click();
+  await teammate.getByRole("button", { name: "Message", exact: true }).click();
+  await expect(floating.getByLabel("Message", { exact: true })).toBeVisible();
+  expect(fixture.state.conversationCreates).toBe(1);
+  expect(fixture.state.messageKeys).toHaveLength(0);
+});
+
 test("profile scopes a person's work, opens task actions, assigns a task, and links communication", async ({
   page,
 }) => {
@@ -252,7 +322,7 @@ test("profile scopes a person's work, opens task actions, assigns a task, and li
     "href",
     /^mailto:/,
   );
-  await page.getByRole("button", { name: "Start chat", exact: true }).click();
+  await page.getByRole("button", { name: "Message", exact: true }).click();
   await expect(
     chatWindow(page).getByRole("tab", { name: /Teammate/ }),
   ).toHaveAttribute("aria-selected", "true");
@@ -499,7 +569,7 @@ test("chat opened from a person card in a team dialog stays above the dialog and
     name: "Teammate profile card",
     exact: true,
   });
-  await card.getByRole("button", { name: "Start chat", exact: true }).click();
+  await card.getByRole("button", { name: "Message", exact: true }).click();
   const floating = chatWindow(page);
   await expect(floating.getByLabel("Message", { exact: true })).toBeVisible();
   await floating

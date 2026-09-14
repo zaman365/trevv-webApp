@@ -47,6 +47,7 @@ export function workspaceShellRoute(
   if (
     [
       "/app/account/sessions",
+      "/app/account/profile",
       "/app/account/privacy",
       "/app/account/invitations",
     ].includes(path)

@@ -41,6 +41,13 @@ actions are in use, closes on Escape/outside interaction and fits the viewport.
 It provides contact, shared teams, role, a full-profile link and communication
 actions. Hovering never creates a conversation or sends a message.
 
+Directory cards use a consistent width of up to 368px, even with a single
+person or filtered result, and fit narrow screens. Contact details and team
+links sit above a separate action area. Message is the primary action for
+other people in the directory, hover cards and profiles; it opens or reuses
+their direct conversation in the floating messenger. Your own card is marked
+You and keeps profile/email actions; self-messaging is not supported.
+
 ## Scope and preservation
 
 - Use existing workspace-scoped directory, conversation, task and project APIs.
