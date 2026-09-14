@@ -22,7 +22,7 @@ export const openApiDocument = {
     { name: "Waiting" },
     { name: "Management Memory" },
     { name: "Reviews" },
-    { name: "Report and plan" },
+    { name: "Report & Log" },
     { name: "Insights" },
     { name: "Blueprints" },
     { name: "Commercial" },

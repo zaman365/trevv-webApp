@@ -77,7 +77,8 @@ export function routeCodeModules(
   if (view === "guide") component = "guide";
   else if (view === "planning") component = live ? "planning" : "guide";
   else if (view === "calendar") component = "calendar";
-  else if (view === "report-plan") component = "reportPlan";
+  else if (view === "report-plan" || view === "report-log")
+    component = "reportPlan";
   else if (live)
     component =
       view === "dashboard"

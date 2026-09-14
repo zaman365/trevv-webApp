@@ -22,13 +22,14 @@
   gap: 6px;
   padding: 9px 12px;
   border: 1px solid var(--fh-border);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   font-size: 13px;
   color: var(--fh-primary-strong);
   background: var(--fh-surface);
   text-decoration: none;
 }
 .card {
+  composes: box from "./box-surface.module.css";
   position: relative;
   display: flex;
   flex-direction: column;
@@ -36,7 +37,7 @@
   min-width: 0;
   padding: 20px;
   border: 1px solid var(--fh-border);
-  border-radius: 16px;
+  border-radius: var(--fh-radius-card);
   background: var(--fh-surface);
   color: var(--fh-ink);
 }
@@ -107,7 +108,7 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  border-radius: 16px;
+  border-radius: var(--fh-radius-card);
 }
 .primary:focus-visible {
   outline: none;
@@ -190,7 +191,7 @@
   z-index: 2;
   padding: 8px 10px;
   border: 1px solid var(--fh-border);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--fh-surface);
   color: inherit;
   font: inherit;

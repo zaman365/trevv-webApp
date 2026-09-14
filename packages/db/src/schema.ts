@@ -1182,6 +1182,23 @@ export interface MemberReportPlanContent {
   goals: string;
   successCriteria: string;
   dependencies: string;
+  results?: string | undefined;
+  progressPercent?: number | undefined;
+  templateId?: string | undefined;
+  resources?:
+    | Array<{ label: string; url: string; note?: string | undefined }>
+    | undefined;
+  timeEntries?:
+    | Array<{
+        date: string;
+        activity: string;
+        minutes: number;
+        breakMinutes?: number | undefined;
+        startTime?: string | undefined;
+        endTime?: string | undefined;
+        endsNextDay?: boolean | undefined;
+      }>
+    | undefined;
 }
 
 export const memberReportPlans = pgTable(
@@ -1195,7 +1212,7 @@ export const memberReportPlans = pgTable(
     authorId: text("author_id")
       .notNull()
       .references(() => users.id),
-    kind: text("kind", { enum: ["report", "plan"] }).notNull(),
+    kind: text("kind", { enum: ["report", "log", "plan"] }).notNull(),
     title: text("title").notNull(),
     period: text("period", {
       enum: ["day", "week", "month", "sprint", "custom"],
@@ -1240,7 +1257,7 @@ export const memberReportPlans = pgTable(
     ),
     check(
       "member_report_plans_kind_check",
-      sql`${table.kind} IN ('report', 'plan')`,
+      sql`${table.kind} IN ('report', 'log', 'plan')`,
     ),
     check(
       "member_report_plans_period_check",

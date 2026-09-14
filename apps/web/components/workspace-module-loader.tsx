@@ -144,7 +144,7 @@ export function WorkspaceModuleLoader({
     ) : (
       <TrevvGuide workspaceSlug={workspaceSlug} />
     );
-  if (view === "report-plan")
+  if (view === "report-plan" || view === "report-log")
     return <ReportPlanExperience workspaceSlug={workspaceSlug} />;
   if (view === "calendar") {
     return <CalendarExperience workspaceSlug={workspaceSlug} />;

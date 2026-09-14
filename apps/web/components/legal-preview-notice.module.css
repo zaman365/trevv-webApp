@@ -11,7 +11,7 @@
   padding: clamp(24px, 5vw, 48px);
   background: var(--fh-surface);
   border: 1px solid var(--fh-border);
-  border-radius: 20px;
+  border-radius: var(--fh-radius-card);
   box-shadow: var(--fh-shadow-md);
 }
 

@@ -25,7 +25,7 @@ export const dashboardSections = [
     id: "planning",
     label: "Sprints",
     title: "Sprints",
-    description: "Manage project goals, plans, cycles and delivery dates.",
+    description: "Plan sprints, review their work and track delivery dates.",
     view: "planning",
   },
   {
@@ -34,6 +34,13 @@ export const dashboardSections = [
     title: "Plans and ideas",
     description: "Invite input, explore ideas and discuss upcoming work.",
     view: "ideas",
+  },
+  {
+    id: "report-log",
+    label: "Report & Log",
+    title: "Report & Log",
+    description: "Report progress, log work and time, and link results.",
+    view: "report-log",
   },
   {
     id: "teams",

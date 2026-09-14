@@ -86,6 +86,7 @@ export function LiveQuickCaptureDialog({
   defaultTeamId,
   defaultBoardId,
   defaultType = "task",
+  creationIntent,
   returnFocusRef,
   embedded = false,
   draftScope,
@@ -101,6 +102,7 @@ export function LiveQuickCaptureDialog({
   defaultTeamId?: string;
   defaultBoardId?: string;
   defaultType?: CaptureType;
+  creationIntent?: "task";
   returnFocusRef?: RefObject<HTMLElement | null>;
   embedded?: boolean;
   draftScope?: string;
@@ -111,7 +113,7 @@ export function LiveQuickCaptureDialog({
   const shareResource = usePlanningSharing();
   const queryClient = useQueryClient();
   const liveData = useLiveAppData();
-  const storageKey = liveDraftStorageKey({
+  const baseStorageKey = liveDraftStorageKey({
     organizationId: session.organization.id,
     userId: session.user.id,
     scope:
@@ -120,6 +122,10 @@ export function LiveQuickCaptureDialog({
         ? `team-capture:${workspaceId}:${defaultTeamId}`
         : `quick-capture:${workspaceId}`),
   });
+  const initialStorageKey =
+    creationIntent === "task"
+      ? `${baseStorageKey}:create-task:task`
+      : baseStorageKey;
   const dialogRef = useAccessibleDialog<HTMLFormElement>(
     onClose,
     returnFocusRef,
@@ -130,11 +136,15 @@ export function LiveQuickCaptureDialog({
     destination: defaultDestination,
     assigneeId: defaultAssigneeId,
     boardId: defaultBoardId ?? "",
-    type: defaultType,
+    type: creationIntent === "task" ? "task" : defaultType,
     title: initialTitle,
     description: initialDescription,
     ...(defaultTeamId ? { planning: { teamId: defaultTeamId } } : {}),
   }));
+  const storageKey =
+    creationIntent === "task"
+      ? `${baseStorageKey}:create-task:${draft.type}`
+      : baseStorageKey;
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID(),
   );
@@ -146,18 +156,7 @@ export function LiveQuickCaptureDialog({
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    let recovered: LiveDraftEnvelope<LiveCaptureDraft> | null = null;
-    try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed: unknown = JSON.parse(stored);
-        if (isLiveDraftEnvelope(parsed, isCaptureDraft)) {
-          recovered = parsed;
-        }
-      }
-    } catch {
-      // Draft recovery is best effort; canonical product state remains remote.
-    }
+    const recovered = recoverDraft(initialStorageKey);
     const timer = window.setTimeout(() => {
       if (
         recovered &&
@@ -171,7 +170,7 @@ export function LiveQuickCaptureDialog({
       setHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [storageKey]);
+  }, [initialStorageKey]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -227,11 +226,32 @@ export function LiveQuickCaptureDialog({
   }, [liveData.client, workspaceId, defaultTeamId]);
 
   const selectedBoard = useMemo(
-    () => boards.find((board) => board.id === draft.boardId) ?? boards[0],
+    () =>
+      draft.boardId
+        ? boards.find((board) => board.id === draft.boardId)
+        : boards[0],
     [boards, draft.boardId],
   );
 
   function changeDraft(patch: Partial<LiveCaptureDraft>) {
+    const switchingTaskCaptureType =
+      creationIntent === "task" &&
+      patch.type !== undefined &&
+      patch.type !== draft.type;
+    if (switchingTaskCaptureType) {
+      // Keep each optional type recoverable without replacing the task draft.
+      persistDraft(storageKey, draft, idempotencyKey);
+      const recovered = recoverDraft(
+        `${baseStorageKey}:create-task:${patch.type}`,
+      );
+      if (recovered) {
+        setDraft(recovered.payload);
+        setIdempotencyKey(recovered.idempotencyKey);
+        setError(null);
+        setRetrying(false);
+        return;
+      }
+    }
     const next = { ...draft, ...patch };
     const changedAfterAttempt =
       Boolean(draft.attemptedFingerprint) &&
@@ -240,7 +260,7 @@ export function LiveQuickCaptureDialog({
       ...next,
       ...(changedAfterAttempt ? { attemptedFingerprint: "" } : {}),
     });
-    if (error || changedAfterAttempt) {
+    if (changedAfterAttempt || switchingTaskCaptureType) {
       setError(null);
       setRetrying(false);
       setIdempotencyKey(crypto.randomUUID());
@@ -402,10 +422,15 @@ export function LiveQuickCaptureDialog({
             <Plus size={18} />
           </span>
           <div>
-            <h2 id="live-capture-title">Quick capture</h2>
+            <h2 id="live-capture-title">
+              {creationIntent === "task"
+                ? `Create ${captureTypes[draft.type].label}`
+                : "Quick capture"}
+            </h2>
             <p>
-              Capture work, an idea or a request. Organize it now or save it for
-              later.
+              {creationIntent === "task" && draft.type === "task"
+                ? "Add a task, choose an owner and set a due date."
+                : "Capture work, an idea or a request. Organize it now or save it for later."}
             </p>
           </div>
           {!embedded ? (
@@ -521,6 +546,11 @@ export function LiveQuickCaptureDialog({
                     required={draft.destination === "board"}
                     value={selectedBoard?.id ?? ""}
                   >
+                    {draft.boardId && !selectedBoard && boards.length > 0 ? (
+                      <option value="" disabled>
+                        Choose an available board
+                      </option>
+                    ) : null}
                     {boards.length === 0 ? (
                       <option value="">No board available</option>
                     ) : null}
@@ -735,6 +765,25 @@ function clearDraft(key: string) {
   } catch {
     // The server has already confirmed the canonical record.
   }
+}
+
+function recoverDraft(key: string): LiveDraftEnvelope<LiveCaptureDraft> | null {
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (!stored) return null;
+    const parsed: unknown = JSON.parse(stored);
+    if (
+      isLiveDraftEnvelope(parsed, isCaptureDraft) &&
+      (parsed.payload.title.trim() ||
+        parsed.payload.description.trim() ||
+        parsed.payload.attemptedFingerprint)
+    ) {
+      return parsed;
+    }
+  } catch {
+    // Draft recovery is best effort; canonical product state remains remote.
+  }
+  return null;
 }
 
 function persistDraft(

@@ -2074,6 +2074,100 @@ describe("PostgreSQL-backed API", () => {
     }
   });
 
+  it("persists Report & Log time, results and resources under the same privacy and version rules", async () => {
+    const live = createLiveHarness();
+    const client = (userId: string) =>
+      createReportPlanClient({
+        baseUrl: "http://trevv.test/api/v1",
+        getAccessToken: async () => userId,
+        fetchImpl: async (input, init) => live.app.request(input, init),
+      });
+    const author = client(fixture.first.memberId);
+    const owner = client(fixture.first.ownerId);
+    const input: SaveReportPlanInput = {
+      kind: "log",
+      title: "Campaign work log",
+      period: "day",
+      periodStart: "2026-09-14",
+      periodEnd: "2026-09-14",
+      context: "Sprint delivery",
+      health: "on_track",
+      state: "draft",
+      content: {
+        workingOn: "",
+        completed: "",
+        blockers: "",
+        supportNeeded: "",
+        nextSteps: "Review results",
+        goals: "",
+        successCriteria: "",
+        dependencies: "",
+        results: "Delivered assets",
+        progressPercent: 75,
+        templateId: "work-log",
+        resources: [
+          {
+            label: "Results folder",
+            url: "https://drive.google.com/drive/folders/results",
+          },
+        ],
+        timeEntries: [
+          {
+            date: "2026-09-14",
+            activity: "Design delivery",
+            startTime: "09:00",
+            endTime: "12:00",
+            minutes: 150,
+            breakMinutes: 30,
+          },
+        ],
+      },
+    };
+    try {
+      const key = crypto.randomUUID();
+      const draft = await author.create(
+        fixture.first.visibleWorkspaceId,
+        input,
+        key,
+      );
+      expect(draft.content).toEqual(input.content);
+      expect(
+        await author.create(fixture.first.visibleWorkspaceId, input, key),
+      ).toEqual(draft);
+      await expect(owner.get(draft.id)).rejects.toMatchObject({ status: 404 });
+      const published = await author.update(
+        draft.id,
+        draft.version,
+        { ...input, state: "published" },
+        crypto.randomUUID(),
+      );
+      expect((await owner.get(draft.id)).content).toEqual(input.content);
+      expect(
+        (
+          await owner.list(fixture.first.visibleWorkspaceId, {
+            kind: "log",
+            page: 1,
+          })
+        ).data.map((row) => row.id),
+      ).toContain(draft.id);
+      await expect(
+        owner.update(draft.id, published.version, input, crypto.randomUUID()),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        author.update(
+          draft.id,
+          draft.version,
+          { ...input, state: "published" },
+          crypto.randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      await author.archive(draft.id, published.version, crypto.randomUUID());
+      await expect(owner.get(draft.id)).rejects.toMatchObject({ status: 404 });
+    } finally {
+      await live.close();
+    }
+  });
+
   it("persists member reports with author-only drafts, workspace publishing, version checks and idempotent archiving", async () => {
     const live = createLiveHarness();
     const reports = (userId: string) =>

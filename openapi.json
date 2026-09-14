@@ -18,7 +18,7 @@
     { "name": "Waiting" },
     { "name": "Management Memory" },
     { "name": "Reviews" },
-    { "name": "Report and plan" },
+    { "name": "Report & Log" },
     { "name": "Insights" },
     { "name": "Blueprints" },
     { "name": "Commercial" },
@@ -1534,7 +1534,7 @@
       "get": {
         "operationId": "listReportPlans",
         "summary": "List published workspace updates and your private drafts",
-        "tags": ["Report and plan"],
+        "tags": ["Report & Log"],
         "parameters": [
           {
             "name": "workspaceId",
@@ -1567,7 +1567,7 @@
         "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
         "responses": {
           "200": {
-            "description": "Scoped report and plan response",
+            "description": "Scoped report, log or plan response",
             "content": {
               "application/json": {
                 "schema": {
@@ -1581,7 +1581,7 @@
                         "properties": {
                           "kind": {
                             "type": "string",
-                            "enum": ["report", "plan"]
+                            "enum": ["report", "log", "plan"]
                           },
                           "title": {
                             "type": "string",
@@ -1642,6 +1642,84 @@
                               "dependencies": {
                                 "type": "string",
                                 "maxLength": 4000
+                              },
+                              "results": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "progressPercent": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 100
+                              },
+                              "templateId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "resources": {
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 160
+                                    },
+                                    "url": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    },
+                                    "note": {
+                                      "type": "string",
+                                      "maxLength": 500
+                                    }
+                                  },
+                                  "required": ["label", "url"],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "timeEntries": {
+                                "maxItems": 100,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "date": {
+                                      "type": "string",
+                                      "format": "date",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                    },
+                                    "activity": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 240
+                                    },
+                                    "minutes": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 1440
+                                    },
+                                    "breakMinutes": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 1439
+                                    },
+                                    "startTime": {
+                                      "type": "string",
+                                      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                    },
+                                    "endTime": {
+                                      "type": "string",
+                                      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                    },
+                                    "endsNextDay": { "type": "boolean" }
+                                  },
+                                  "required": ["date", "activity", "minutes"],
+                                  "additionalProperties": false
+                                }
                               }
                             },
                             "required": [
@@ -1746,8 +1824,8 @@
       },
       "post": {
         "operationId": "createReportPlan",
-        "summary": "Save a private draft or publish a member report or plan",
-        "tags": ["Report and plan"],
+        "summary": "Save a private draft or publish a member report, log or plan",
+        "tags": ["Report & Log"],
         "parameters": [
           {
             "name": "workspaceId",
@@ -1771,7 +1849,10 @@
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
-                  "kind": { "type": "string", "enum": ["report", "plan"] },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["report", "log", "plan"]
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -1810,7 +1891,76 @@
                         "type": "string",
                         "maxLength": 4000
                       },
-                      "dependencies": { "type": "string", "maxLength": 4000 }
+                      "dependencies": { "type": "string", "maxLength": 4000 },
+                      "results": { "type": "string", "maxLength": 4000 },
+                      "progressPercent": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "templateId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "resources": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160
+                            },
+                            "url": { "type": "string", "maxLength": 2048 },
+                            "note": { "type": "string", "maxLength": 500 }
+                          },
+                          "required": ["label", "url"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "timeEntries": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "activity": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "minutes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1440
+                            },
+                            "breakMinutes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1439
+                            },
+                            "startTime": {
+                              "type": "string",
+                              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                            },
+                            "endTime": {
+                              "type": "string",
+                              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                            },
+                            "endsNextDay": { "type": "boolean" }
+                          },
+                          "required": ["date", "activity", "minutes"],
+                          "additionalProperties": false
+                        }
+                      }
                     },
                     "required": [
                       "workingOn",
@@ -1843,14 +1993,17 @@
         },
         "responses": {
           "201": {
-            "description": "Scoped report and plan response",
+            "description": "Scoped report, log or plan response",
             "content": {
               "application/json": {
                 "schema": {
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
-                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["report", "log", "plan"]
+                    },
                     "title": {
                       "type": "string",
                       "minLength": 1,
@@ -1895,7 +2048,76 @@
                           "type": "string",
                           "maxLength": 4000
                         },
-                        "dependencies": { "type": "string", "maxLength": 4000 }
+                        "dependencies": { "type": "string", "maxLength": 4000 },
+                        "results": { "type": "string", "maxLength": 4000 },
+                        "progressPercent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "templateId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "resources": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "url": { "type": "string", "maxLength": 2048 },
+                              "note": { "type": "string", "maxLength": 500 }
+                            },
+                            "required": ["label", "url"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "timeEntries": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                              },
+                              "activity": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "minutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
+                              },
+                              "breakMinutes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1439
+                              },
+                              "startTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endsNextDay": { "type": "boolean" }
+                            },
+                            "required": ["date", "activity", "minutes"],
+                            "additionalProperties": false
+                          }
+                        }
                       },
                       "required": [
                         "workingOn",
@@ -1990,8 +2212,8 @@
     "/api/v1/report-plans/{id}": {
       "get": {
         "operationId": "getReportPlan",
-        "summary": "Read an accessible report or plan",
-        "tags": ["Report and plan"],
+        "summary": "Read an accessible report, log or plan",
+        "tags": ["Report & Log"],
         "parameters": [
           {
             "name": "id",
@@ -2003,14 +2225,17 @@
         "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
         "responses": {
           "200": {
-            "description": "Scoped report and plan response",
+            "description": "Scoped report, log or plan response",
             "content": {
               "application/json": {
                 "schema": {
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
-                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["report", "log", "plan"]
+                    },
                     "title": {
                       "type": "string",
                       "minLength": 1,
@@ -2055,7 +2280,76 @@
                           "type": "string",
                           "maxLength": 4000
                         },
-                        "dependencies": { "type": "string", "maxLength": 4000 }
+                        "dependencies": { "type": "string", "maxLength": 4000 },
+                        "results": { "type": "string", "maxLength": 4000 },
+                        "progressPercent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "templateId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "resources": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "url": { "type": "string", "maxLength": 2048 },
+                              "note": { "type": "string", "maxLength": 500 }
+                            },
+                            "required": ["label", "url"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "timeEntries": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                              },
+                              "activity": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "minutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
+                              },
+                              "breakMinutes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1439
+                              },
+                              "startTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endsNextDay": { "type": "boolean" }
+                            },
+                            "required": ["date", "activity", "minutes"],
+                            "additionalProperties": false
+                          }
+                        }
                       },
                       "required": [
                         "workingOn",
@@ -2148,8 +2442,8 @@
       },
       "patch": {
         "operationId": "updateReportPlan",
-        "summary": "Update your own report or plan",
-        "tags": ["Report and plan"],
+        "summary": "Update your own report, log or plan",
+        "tags": ["Report & Log"],
         "parameters": [
           {
             "name": "id",
@@ -2180,7 +2474,10 @@
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
-                  "kind": { "type": "string", "enum": ["report", "plan"] },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["report", "log", "plan"]
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -2219,7 +2516,76 @@
                         "type": "string",
                         "maxLength": 4000
                       },
-                      "dependencies": { "type": "string", "maxLength": 4000 }
+                      "dependencies": { "type": "string", "maxLength": 4000 },
+                      "results": { "type": "string", "maxLength": 4000 },
+                      "progressPercent": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "templateId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "resources": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160
+                            },
+                            "url": { "type": "string", "maxLength": 2048 },
+                            "note": { "type": "string", "maxLength": 500 }
+                          },
+                          "required": ["label", "url"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "timeEntries": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "activity": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "minutes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1440
+                            },
+                            "breakMinutes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1439
+                            },
+                            "startTime": {
+                              "type": "string",
+                              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                            },
+                            "endTime": {
+                              "type": "string",
+                              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                            },
+                            "endsNextDay": { "type": "boolean" }
+                          },
+                          "required": ["date", "activity", "minutes"],
+                          "additionalProperties": false
+                        }
+                      }
                     },
                     "required": [
                       "workingOn",
@@ -2252,14 +2618,17 @@
         },
         "responses": {
           "200": {
-            "description": "Scoped report and plan response",
+            "description": "Scoped report, log or plan response",
             "content": {
               "application/json": {
                 "schema": {
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
-                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["report", "log", "plan"]
+                    },
                     "title": {
                       "type": "string",
                       "minLength": 1,
@@ -2304,7 +2673,76 @@
                           "type": "string",
                           "maxLength": 4000
                         },
-                        "dependencies": { "type": "string", "maxLength": 4000 }
+                        "dependencies": { "type": "string", "maxLength": 4000 },
+                        "results": { "type": "string", "maxLength": 4000 },
+                        "progressPercent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "templateId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "resources": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "url": { "type": "string", "maxLength": 2048 },
+                              "note": { "type": "string", "maxLength": 500 }
+                            },
+                            "required": ["label", "url"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "timeEntries": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                              },
+                              "activity": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "minutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
+                              },
+                              "breakMinutes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1439
+                              },
+                              "startTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endsNextDay": { "type": "boolean" }
+                            },
+                            "required": ["date", "activity", "minutes"],
+                            "additionalProperties": false
+                          }
+                        }
                       },
                       "required": [
                         "workingOn",
@@ -2397,8 +2835,8 @@
       },
       "delete": {
         "operationId": "archiveReportPlan",
-        "summary": "Archive your own report or plan without deleting its history",
-        "tags": ["Report and plan"],
+        "summary": "Archive your own report, log or plan without deleting its history",
+        "tags": ["Report & Log"],
         "parameters": [
           {
             "name": "id",
@@ -2423,14 +2861,17 @@
         "description": "Requires access to the workspace. Only the author can read private drafts or edit/archive their own updates. Published records are visible to people with workspace read access. Publishing requires work completed or in progress for reports, and a goal plus actions for plans. Daily records cover one date; end dates must not precede start dates. Published records cannot be reverted to drafts.",
         "responses": {
           "200": {
-            "description": "Scoped report and plan response",
+            "description": "Scoped report, log or plan response",
             "content": {
               "application/json": {
                 "schema": {
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
-                    "kind": { "type": "string", "enum": ["report", "plan"] },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["report", "log", "plan"]
+                    },
                     "title": {
                       "type": "string",
                       "minLength": 1,
@@ -2475,7 +2916,76 @@
                           "type": "string",
                           "maxLength": 4000
                         },
-                        "dependencies": { "type": "string", "maxLength": 4000 }
+                        "dependencies": { "type": "string", "maxLength": 4000 },
+                        "results": { "type": "string", "maxLength": 4000 },
+                        "progressPercent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "templateId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "resources": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "url": { "type": "string", "maxLength": 2048 },
+                              "note": { "type": "string", "maxLength": 500 }
+                            },
+                            "required": ["label", "url"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "timeEntries": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                              },
+                              "activity": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "minutes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
+                              },
+                              "breakMinutes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1439
+                              },
+                              "startTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endTime": {
+                                "type": "string",
+                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                              },
+                              "endsNextDay": { "type": "boolean" }
+                            },
+                            "required": ["date", "activity", "minutes"],
+                            "additionalProperties": false
+                          }
+                        }
                       },
                       "required": [
                         "workingOn",

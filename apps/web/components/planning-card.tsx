@@ -29,6 +29,7 @@ export function PlanningCard({
   selected,
   onSelect,
   onEdit,
+  sprintContext = false,
 }: {
   board: BoardDto;
   workspaceSlug: string;
@@ -37,12 +38,16 @@ export function PlanningCard({
   parentName?: string | undefined;
   items: WorkItemDto[];
   complete: boolean;
+  sprintContext?: boolean;
   selected?: boolean;
   onSelect?: () => void;
   onEdit?: (() => void) | undefined;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const kind = planningKindLabels[board.planning?.kind ?? "project"];
+  const kind =
+    sprintContext && (!board.planning || board.planning.kind === "project")
+      ? "Sprint"
+      : planningKindLabels[board.planning?.kind ?? "project"];
   const state = board.planning?.state ?? "planned";
   const href = `${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(board.id)}`;
   const done = items.filter((item) => item.status === "done").length;
@@ -100,12 +105,14 @@ export function PlanningCard({
           <dd title={teamName}>{teamName ?? "No team assigned"}</dd>
         </div>
         <div>
-          <dt>Project</dt>
+          <dt>{sprintContext ? "Parent board" : "Project"}</dt>
           <dd title={parentName ?? board.name}>
             {parentName ??
-              ((board.planning?.kind ?? "project") === "project"
-                ? board.name
-                : "Standalone plan")}
+              (sprintContext
+                ? "Standalone sprint"
+                : (board.planning?.kind ?? "project") === "project"
+                  ? board.name
+                  : "Standalone plan")}
           </dd>
         </div>
         <div>

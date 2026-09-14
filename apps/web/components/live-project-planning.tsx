@@ -67,7 +67,7 @@ export function LiveProjectPlanning(props: { workspaceSlug: string }) {
 
 function ProjectPlanningPage({ workspaceSlug }: { workspaceSlug: string }) {
   const data = useLiveAppRecords();
-  const sprintFocus = useSearchParams().get("mode") === "sprints";
+  const sprintFocus = useSearchParams().get("mode") !== "plans";
   const workspace = data.workspaces.find(
     (entry) => entry.slug === workspaceSlug,
   );
@@ -334,8 +334,11 @@ export function PlanEditor({
   const [name, setName] = useState(board?.name ?? "");
   const [description, setDescription] = useState(board?.description ?? "");
   const [kind, setKind] = useState<PlanKind>(
-    board?.planning?.kind ??
-      (sprintFocus || parentBoard ? "sprint" : "project"),
+    board
+      ? (board.planning?.kind ?? "project")
+      : sprintFocus || parentBoard
+        ? "sprint"
+        : "project",
   );
   const [state, setState] = useState(
     initialState ?? board?.planning?.state ?? "planned",
@@ -447,7 +450,7 @@ export function PlanEditor({
               {sprintFocus
                 ? board
                   ? "Edit sprint"
-                  : "Plan sprint"
+                  : "New Sprint"
                 : board
                   ? "Edit plan"
                   : "Create a project or delivery cycle"}
@@ -559,7 +562,7 @@ export function PlanEditor({
               >
                 {Object.entries(kindLabels).map(([value, label]) => (
                   <option key={value} value={value}>
-                    {label}
+                    {sprintFocus && value === "project" ? "Sprint" : label}
                   </option>
                 ))}
               </select>
@@ -580,9 +583,9 @@ export function PlanEditor({
             </label>
           </div>
           <label className={styles.field}>
-            Parent project
+            {sprintFocus ? "Parent board" : "Parent project"}
             <select
-              aria-label="Parent project"
+              aria-label={sprintFocus ? "Parent board" : "Parent project"}
               value={parentId}
               disabled={Boolean(board)}
               onChange={(event) => setParentId(event.target.value)}
@@ -653,7 +656,7 @@ export function PlanEditor({
         <footer>
           <span>
             {board
-              ? "Changes are saved for everyone with project access."
+              ? "Changes are saved for everyone with board access."
               : "You can add tasks and milestones after creating this plan."}
           </span>
           <div>

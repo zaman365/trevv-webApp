@@ -1,7 +1,8 @@
 .main {
-  width: min(100%, 90rem);
+  width: 100%;
   min-width: 0;
   padding: clamp(1rem, 2.5vw, 2.5rem);
+  padding-inline: var(--workspace-page-gutter, 24px);
   margin: 0 auto;
   color: var(--text, #20243b);
 }
@@ -57,7 +58,7 @@
   min-height: 2.6rem;
   padding: 0.65rem 1rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 0.6rem;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   font: inherit;
@@ -113,8 +114,9 @@
   margin-top: 0.25rem;
 }
 .feed {
+  composes: box from "./box-surface.module.css";
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 0.9rem;
+  border-radius: var(--fh-radius-card);
   background: var(--surface, white);
   overflow: hidden;
 }
@@ -130,7 +132,7 @@
 .tabs button,
 .presets button {
   border: 0;
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-control);
   background: transparent;
   color: var(--text-secondary, #626a80);
   padding: 0.6rem 0.85rem;
@@ -164,7 +166,7 @@
   width: 100%;
   min-width: 0;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   min-height: 2.6rem;
@@ -217,8 +219,9 @@
   align-items: start;
 }
 .card {
+  composes: box from "./box-surface.module.css";
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 0.75rem;
+  border-radius: var(--fh-radius-card);
   padding: 1.2rem;
   overflow-wrap: anywhere;
   min-width: 0;
@@ -290,7 +293,7 @@
 .flags span {
   padding: 0.25rem 0.5rem;
   background: #fff5e7;
-  border-radius: 0.3rem;
+  border-radius: var(--fh-radius-control);
 }
 .details {
   margin-top: 0.8rem;
@@ -362,7 +365,7 @@
 .success,
 .confirm {
   padding: 0.85rem 1rem;
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-card);
   font-size: 0.8rem;
   line-height: 1.6;
 }
@@ -416,7 +419,7 @@
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 1rem;
+  border-radius: var(--fh-radius-overlay);
   background: var(--surface, #fff);
   color: var(--text, #20243b);
   box-shadow: 0 24px 90px rgb(18 18 45 / 25%);
@@ -446,7 +449,7 @@
   color: var(--text-secondary, #626a80);
   background: var(--surface-muted, #f6f5fc);
   padding: 0.85rem;
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-card);
   margin: 0 0 1.3rem;
 }
 .privacy svg {
@@ -571,7 +574,7 @@
   }
   .dialog {
     max-height: calc(100dvh - 0.8rem);
-    border-radius: 0.75rem;
+    border-radius: var(--fh-radius-overlay);
   }
   .dialogHeader,
   .editorBody,
@@ -583,5 +586,156 @@
   }
   .editorFooter .actions button {
     flex: 1;
+  }
+}
+
+.embedded {
+  min-width: 0;
+  color: var(--fh-ink);
+}
+.embedded .hero h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.main > [role="tablist"],
+.embedded > [role="tablist"] {
+  margin-bottom: 1rem;
+}
+.feed[hidden] {
+  display: none;
+}
+.templatePanel {
+  padding: 1.25rem 0;
+}
+.templatePanel > h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+.templatePanel > p {
+  color: var(--fh-muted);
+  font-size: 0.85rem;
+}
+.templateGrid {
+  composes: tiles from "./box-surface.module.css";
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 1rem;
+}
+.templateGrid article {
+  border: 1px solid var(--fh-border);
+  border-radius: var(--fh-radius-card);
+  padding: 1.25rem;
+  background: var(--fh-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.templateGrid h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.templateGrid p {
+  font-size: 0.83rem;
+  color: var(--fh-muted);
+  line-height: 1.6;
+  margin: 0;
+  flex: 1;
+}
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.sectionHeading h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+.sectionHeading p {
+  font-size: 0.8rem;
+  color: var(--fh-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+.entryList {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.entry {
+  composes: box from "./box-surface.module.css";
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid var(--fh-border);
+  border-radius: var(--fh-radius-card);
+}
+.entry legend {
+  padding: 0 0.4rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.entry > button {
+  margin-top: 0.75rem;
+}
+.editorFields .checkLabel {
+  flex-direction: row;
+  align-items: center;
+}
+.editorFields .checkLabel input {
+  width: 18px;
+  min-height: 18px;
+}
+.resourceList {
+  padding: 0;
+  margin: 0.75rem 0;
+  list-style: none;
+  display: grid;
+  gap: 0.7rem;
+}
+.resourceList li {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.resourceList a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--fh-primary-strong);
+}
+.resourceList span {
+  color: var(--fh-muted);
+}
+.logSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  margin: 0.75rem 0;
+  color: var(--fh-muted);
+}
+.logSummary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.editorBody > [role="tablist"] {
+  margin-bottom: 1.25rem;
+}
+.feedHeader {
+  flex-wrap: wrap;
+}
+@media (max-width: 500px) {
+  .editorFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .intro {
+    padding: 0.5rem 0 1rem;
   }
 }

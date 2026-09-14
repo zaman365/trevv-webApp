@@ -488,9 +488,9 @@ function WorkspaceChrome({
     ],
     ["calendar", "Calendar", scopedHref("calendar"), CalendarDays, undefined],
     [
-      "report-plan",
-      "Report and plan",
-      scopedHref("report-plan"),
+      "report-log",
+      "Report & Log",
+      scopedHref("report-log"),
       BookOpenText,
       undefined,
     ],
@@ -1173,7 +1173,12 @@ function WorkspaceChrome({
                 aria-label={copy.shell.userMenu}
                 onClick={() => setUserMenuOpen((current) => !current)}
               >
-                {userInitials}
+                <span
+                  className="avatar avatar-mz topbar-avatar-initials"
+                  aria-hidden="true"
+                >
+                  {userInitials}
+                </span>
               </button>
               {userMenuOpen && (
                 <div className="user-menu" role="menu">

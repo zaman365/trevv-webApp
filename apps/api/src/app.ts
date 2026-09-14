@@ -2041,7 +2041,7 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     if (!parsed.success)
       return validationFailure(
         context,
-        "Review the report or plan fields.",
+        "Review the report, log or plan fields.",
         parsed.error.flatten(),
       );
     const idempotency = readIdempotencyKey(context, true);
@@ -2075,7 +2075,7 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     if (!parsed.success)
       return validationFailure(
         context,
-        "Review the report or plan fields.",
+        "Review the report, log or plan fields.",
         parsed.error.flatten(),
       );
     const version = readIfMatch(context);

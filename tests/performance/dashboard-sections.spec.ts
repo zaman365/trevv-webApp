@@ -157,7 +157,7 @@ test("every top tab updates the dashboard in place and offers the correct full p
 }) => {
   await dashboard(page);
   const tabs = page.getByRole("tablist", { name: "Dashboard sections" });
-  await expect(tabs.getByRole("tab")).toHaveCount(9);
+  await expect(tabs.getByRole("tab")).toHaveCount(10);
   await expect(
     tabs.getByRole("tab", { name: /^(Messages|Inbox)$/ }),
   ).toHaveCount(0);
@@ -169,7 +169,7 @@ test("every top tab updates the dashboard in place and offers the correct full p
     });
     await expect(panel).toBeVisible();
     await expect(page.getByRole("tabpanel")).toHaveCount(
-      section.id === "my-work" ? 2 : 1,
+      ["my-work", "planning", "report-log"].includes(section.id) ? 2 : 1,
     );
     await expect(
       panel.getByRole("link", {
@@ -313,7 +313,7 @@ test("team and sprint management remain available inside dashboard panels", asyn
   await expect(
     page.getByRole("region", { name: "Sprint planning", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Plan sprint", exact: true }).click();
+  await page.getByRole("button", { name: "New Sprint", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
 });

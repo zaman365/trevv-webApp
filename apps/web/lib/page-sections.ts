@@ -3,6 +3,12 @@ import type { WorkspaceView } from "./workspace-routes";
 
 export const sectionCatalog = {
   ...Object.fromEntries(dashboardSections.map((entry) => [entry.id, entry])),
+  "report-log": {
+    id: "report-log",
+    label: "Report & Log",
+    title: "Report & Log",
+    description: "Report progress, log work and time, and link results.",
+  },
   people: {
     id: "people",
     label: "People",
@@ -25,13 +31,21 @@ export const myWorkRelatedSections = [
   "approvals",
   "waiting",
   "ideas",
+  "report-log",
   "inbox",
   "attention",
 ] as const;
 
 export const workspaceSectionGroups = {
   "my-work": ["my-work", ...myWorkRelatedSections],
-  planning: ["planning", "ideas", "my-work", "teams", "decisions"],
+  planning: [
+    "planning",
+    "report-log",
+    "ideas",
+    "my-work",
+    "teams",
+    "decisions",
+  ],
   inbox: ["inbox", "my-work", "messages", "waiting"],
   attention: ["attention", "waiting", "decisions", "approvals", "reviews"],
   decisions: ["decisions", "approvals", "attention", "messages"],
@@ -39,9 +53,16 @@ export const workspaceSectionGroups = {
   waiting: ["waiting", "my-work", "messages", "attention"],
   ideas: ["ideas", "planning", "decisions", "teams"],
   people: ["people", "teams", "messages", "my-work"],
-  teams: ["teams", "people", "messages", "my-work", "planning"],
+  teams: ["teams", "report-log", "people", "messages", "my-work", "planning"],
   messages: ["messages", "people", "teams", "inbox", "waiting"],
-  reviews: ["reviews", "attention", "my-work", "decisions", "approvals"],
+  reviews: [
+    "reviews",
+    "report-log",
+    "attention",
+    "my-work",
+    "decisions",
+    "approvals",
+  ],
   calendar: ["calendar", "my-work", "planning", "waiting"],
   search: ["search", "my-work", "planning", "people"],
 } as const satisfies Partial<

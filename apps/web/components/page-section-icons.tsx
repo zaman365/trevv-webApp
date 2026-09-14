@@ -19,6 +19,7 @@ const sectionIcons = {
   summary: ChartNoAxesCombined,
   workspaces: FolderKanban,
   planning: FolderKanban,
+  "report-log": ClipboardCheck,
   "my-work": ListTodo,
   ideas: Lightbulb,
   teams: Users,

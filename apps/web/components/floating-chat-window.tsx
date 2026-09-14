@@ -16,10 +16,8 @@ import type {
 import {
   ArrowLeft,
   ArrowUpRight,
-  Maximize2,
   MessageCircleMore,
   MessagesSquare,
-  Minimize2,
   Minus,
   Plus,
   RefreshCw,
@@ -107,7 +105,6 @@ export function FloatingChatWindow({
   const [mobile, setMobile] = useState<"directory" | "conversation">(
     "directory",
   );
-  const [expanded, setExpanded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState(false);
   const [messageBusy, setMessageBusy] = useState(false);
@@ -378,7 +375,7 @@ export function FloatingChatWindow({
       popover="manual"
       role="dialog"
       aria-label="Floating chats"
-      className={`${styles.window} ${expanded ? styles.expanded : ""}`}
+      className={styles.window}
       data-mobile={mobile}
       onKeyDown={(event) => {
         if (
@@ -421,7 +418,11 @@ export function FloatingChatWindow({
             </select>
           </div>
         </div>
-        <div className={styles.headerActions}>
+        <div
+          className={styles.headerActions}
+          role="group"
+          aria-label="Chat window actions"
+        >
           <Link
             href={workspaceHref(
               workspaceSlug,
@@ -430,7 +431,8 @@ export function FloatingChatWindow({
                 ? encodeURIComponent(activeConversation.id)
                 : undefined,
             )}
-            aria-label="Open chats full page"
+            aria-label="Open in full page"
+            title="Open in full page"
             onClick={(event) => {
               if (busy) event.preventDefault();
               else onClose();
@@ -441,28 +443,12 @@ export function FloatingChatWindow({
           <button
             type="button"
             className={styles.iconButton}
-            aria-label={expanded ? "Restore chat window" : "Expand chat window"}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
-          </button>
-          <button
-            type="button"
-            className={styles.iconButton}
             aria-label="Minimize chat window"
+            title="Minimize"
             disabled={busy}
             onClick={onClose}
           >
             <Minus size={19} />
-          </button>
-          <button
-            type="button"
-            className={styles.iconButton}
-            aria-label="Close chat window"
-            disabled={busy}
-            onClick={onClose}
-          >
-            <X size={19} />
           </button>
         </div>
       </header>

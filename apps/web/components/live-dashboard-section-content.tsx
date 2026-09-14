@@ -5,6 +5,11 @@ import { lazy } from "react";
 import type { DashboardSection } from "@/lib/dashboard-sections";
 import { useLiveAppRecords } from "@/lib/live-app-data";
 
+const ReportLog = lazy(() =>
+  import("./report-plan-experience").then((m) => ({
+    default: m.ReportPlanWorkspace,
+  })),
+);
 const SharedPlanningHub = dynamic(
   () => import("./shared-planning-hub").then((m) => m.SharedPlanningHub),
   { loading: () => <p>Loading plans and ideas…</p> },
@@ -54,7 +59,7 @@ export function DashboardSectionContent({
   section,
   workspaceId,
   workspaceSlug,
-  sprintFocus = false,
+  sprintFocus = true,
 }: {
   section: Exclude<DashboardSection, "summary">;
   workspaceId: string;
@@ -64,6 +69,14 @@ export function DashboardSectionContent({
   const data = useLiveAppRecords();
   const items = data.items.filter((item) => item.workspaceId === workspaceId);
   switch (section) {
+    case "report-log":
+      return (
+        <ReportLog
+          workspaceId={workspaceId}
+          workspaceSlug={workspaceSlug}
+          embedded
+        />
+      );
     case "ideas":
       return (
         <SharedPlanningHub

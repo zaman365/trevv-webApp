@@ -90,6 +90,9 @@ export function teamWorkspaceApi() {
         Object.assign(existingBoard, request.postDataJSON(), {
           versionTag: "2026-09-13T12:00:00.000Z",
         });
+        // The API omits cleared dates from BoardDto rather than returning null.
+        if (existingBoard.startDate === null) delete existingBoard.startDate;
+        if (existingBoard.endDate === null) delete existingBoard.endDate;
       }
       return respond(route, existingBoard);
     }

@@ -36,6 +36,15 @@ export function presentLiveError(error: unknown): LiveErrorPresentation {
       description: error.message,
       requestId: error.requestId,
     };
+    if (
+      error.code === "invalid_save_confirmation" ||
+      error.code === "invalid_response"
+    )
+      return {
+        ...common,
+        kind: "terminal-error",
+        title: "The save confirmation could not be read",
+      };
     if (error.status === 401 || error.status === 403 || error.status === 404) {
       return {
         ...common,
@@ -80,7 +89,7 @@ export function presentLiveError(error: unknown): LiveErrorPresentation {
       kind: "offline",
       title: "You appear to be offline",
       description:
-        "The draft is still available, but no business change has been saved.",
+        "The connection was interrupted, so the save could not be confirmed. Your draft is kept; retry the same save when connected.",
     };
   }
 

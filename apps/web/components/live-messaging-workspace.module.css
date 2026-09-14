@@ -35,7 +35,7 @@
   gap: 1.25rem;
   padding: clamp(1rem, 2vw, 1.5rem);
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 16px;
+  border-radius: var(--fh-radius-card);
   /* Keep the text surface solid so automated and assistive contrast checks can
      resolve the actual foreground/background pair in every theme. */
   background: var(--surface, #fff);
@@ -92,7 +92,7 @@
   min-height: 2.5rem;
   padding: 0.55rem 0.85rem;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--fh-primary, #5b56db);
   color: var(--fh-on-primary, #fff);
   font-size: 0.82rem;
@@ -141,7 +141,7 @@
   min-height: 2.15rem;
   padding: 0.38rem 0.62rem;
   border: 1px solid var(--border-strong, #c8cedc);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: var(--text, #1f2433);
   font-size: 0.75rem;
@@ -204,7 +204,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   width: min(100%, 42rem);
   max-height: min(90dvh, 52rem);
-  border-radius: 16px;
+  border-radius: var(--fh-radius-overlay);
   overflow: hidden;
 }
 
@@ -236,7 +236,7 @@
   height: 2.25rem;
   padding: 0;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   cursor: pointer;
@@ -268,7 +268,7 @@
   min-height: 2.55rem;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--border-strong, #c8cedc);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: var(--text, #1f2433);
   font: inherit;
@@ -285,7 +285,7 @@
   margin: 0;
   padding: 0.8rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 10px;
+  border-radius: var(--fh-radius-card);
 }
 
 .choiceList legend,
@@ -346,7 +346,7 @@
   align-items: start;
   padding: 0.65rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-card);
 }
 
 .kindChoices label > span {
@@ -370,7 +370,7 @@
   min-height: 2.5rem;
   padding: 0.55rem 0.8rem;
   border: 1px solid var(--border-strong, #c8cedc);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: var(--text, #1f2433);
   cursor: pointer;
@@ -395,7 +395,7 @@
   padding: 0.85rem;
   border: 1px solid
     color-mix(in srgb, var(--fh-primary, #5b56db) 30%, var(--border, #dfe3ec));
-  border-radius: 10px;
+  border-radius: var(--fh-radius-card);
   background: var(--fh-primary-soft, #efeeff);
   color: var(--fh-primary-strong, #4842c7);
 }
@@ -419,7 +419,7 @@
   min-width: 0;
   padding: 0.55rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface, #fff);
 }
 
@@ -452,7 +452,7 @@
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 16px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface, #fff);
 }
 
@@ -506,7 +506,7 @@
   min-height: 2.15rem;
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   font-size: 0.75rem;
@@ -563,7 +563,7 @@
   margin-top: 0.2rem;
   padding: 0.5rem;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--fh-radius-card);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -833,7 +833,7 @@
   padding: 0.7rem 0.8rem 0.8rem;
   border: 1px solid var(--border, #dfe3ec);
   border-left: 3px solid var(--fh-primary, #5b56db);
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 var(--fh-radius-card) var(--fh-radius-card) 0;
   background: color-mix(
     in srgb,
     var(--fh-primary-soft, #efeeff) 38%,
@@ -884,7 +884,7 @@
   min-height: 2rem;
   padding: 0.3rem 0.45rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 7px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   font-size: 0.75rem;
@@ -929,7 +929,7 @@
   min-height: 1.9rem;
   padding: 0.25rem 0.45rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 7px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: var(--text-secondary, #5f687c);
   font-size: 0.75rem;
@@ -951,7 +951,7 @@
   margin-top: 0.3rem;
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface-subtle, #f7f8fb);
   font-size: 0.75rem;
 }
@@ -1004,7 +1004,7 @@
   padding: 0.65rem 0.75rem;
   resize: vertical;
   border: 1px solid var(--border-strong, #c8cedc);
-  border-radius: 10px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface-subtle, #f7f8fb);
   color: var(--text, #1f2433);
   font: inherit;
@@ -1032,7 +1032,7 @@
 .replyContext {
   width: fit-content;
   padding: 0.25rem 0.45rem;
-  border-radius: 7px;
+  border-radius: var(--fh-radius-card);
   background: var(--fh-primary-soft, #efeeff);
   color: var(--fh-primary-strong, #4842c7);
   font-size: 0.75rem;
@@ -1114,7 +1114,7 @@
   height: 2rem;
   padding: 0;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 7px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: var(--text-secondary, #5f687c);
   cursor: pointer;
@@ -1350,7 +1350,7 @@
   .dialog {
     width: 100%;
     max-height: 92dvh;
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--fh-radius-overlay) var(--fh-radius-overlay) 0 0;
   }
 
   .messageRow > div > header {

@@ -76,7 +76,7 @@
   width: 2rem;
   height: 2rem;
   background: #4273ff;
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-control);
   font-size: 1.2rem;
   color: white;
 }
@@ -151,7 +151,7 @@
   width: 3.2rem;
   height: 3.2rem;
   border: 1px solid #cfdcfb;
-  border-radius: 0.9rem;
+  border-radius: var(--fh-radius-control);
   color: var(--blue);
   background: #eff4ff;
 }
@@ -180,7 +180,7 @@
   background: #fff;
   padding: 0.75rem 0.85rem;
   border: 1px solid #c9d1dd;
-  border-radius: 0.45rem;
+  border-radius: var(--fh-radius-control);
   min-height: 2.75rem;
 }
 .form textarea {
@@ -196,7 +196,7 @@
 .danger {
   min-height: 2.75rem;
   border: 1px solid transparent;
-  border-radius: 0.45rem;
+  border-radius: var(--fh-radius-control);
   padding: 0.65rem 1rem;
   display: inline-flex;
   justify-content: center;
@@ -275,7 +275,7 @@
 .notice {
   padding: 1rem;
   border: 1px solid #bdd0f5;
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-card);
   background: #f0f5ff;
   color: #243d6c;
   margin: 1rem 0 !important;
@@ -318,7 +318,7 @@
   align-items: center;
   min-height: 2.9rem;
   padding: 0.7rem;
-  border-radius: 0.4rem;
+  border-radius: var(--fh-radius-control);
 }
 .nav a:hover {
   background: #1c2c49;
@@ -404,7 +404,7 @@
 .metric {
   background: white;
   border: 1px solid var(--line);
-  border-radius: 0.65rem;
+  border-radius: var(--fh-radius-card);
   padding: 1.25rem;
 }
 .metric > div {
@@ -430,7 +430,7 @@
 .panel {
   background: white;
   border: 1px solid var(--line);
-  border-radius: 0.65rem;
+  border-radius: var(--fh-radius-card);
   min-width: 0;
   overflow: hidden;
 }
@@ -608,7 +608,7 @@
   min-height: 0;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 0.8rem;
+  border-radius: var(--fh-radius-overlay);
   max-width: min(36rem, calc(100vw - 2rem));
   width: 100%;
   color: var(--ink);
@@ -645,7 +645,7 @@
   padding: 1rem;
   background: #f3f6fb;
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-card);
   display: block;
   overflow-wrap: anywhere;
   font-family: ui-monospace, monospace;
@@ -843,7 +843,7 @@
 }
 .contactCard {
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--fh-radius-card);
   padding: 1.25rem;
   overflow-wrap: anywhere;
 }
@@ -924,7 +924,7 @@
   max-width: 18rem;
   min-height: 2.75rem;
   border: 1px solid #c9d1dd;
-  border-radius: 0.45rem;
+  border-radius: var(--fh-radius-control);
   background: white;
   padding: 0.65rem;
   color: var(--ink);

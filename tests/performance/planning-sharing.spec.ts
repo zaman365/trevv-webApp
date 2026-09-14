@@ -233,6 +233,9 @@ for (const width of [1440, 390]) {
     await expect(page).toHaveURL(currentUrl);
     await hub.getByRole("button", { name: "Task", exact: true }).click();
     await expect(
+      page.getByRole("dialog", { name: "Create Task", exact: true }),
+    ).toBeVisible();
+    await expect(
       page.getByRole("tab", { name: "Task", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
     await expect(page.getByTestId("live-capture-title")).toHaveValue("");

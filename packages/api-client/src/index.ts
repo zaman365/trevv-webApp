@@ -14,20 +14,17 @@ import {
   captureInboxItemSchema,
   changeRadarSchema,
   collaborationEventBatchSchema,
-  completeOnboardingSchema,
   conversationMessageSchema,
   conversationReadCheckpointSchema,
   conversationSchema,
   convertInboxItemSchema,
   convertedInboxItemSchema,
-  createPrivacyRequestSchema,
   createBoardSchema,
   updateBoardSchema,
   createCalendarEventSchema,
   createConversationMessageSchema,
   createConversationSchema,
   createInvitationSchema,
-  createItemSchema,
   createPortfolioSchema,
   createTeamSchema,
   createWaitingSchema,
@@ -74,7 +71,6 @@ import {
   versionTagEntityTagSchema,
   waitingActionSchema,
   waitingStateSchema,
-  weeklyReviewInputSchema,
   weeklyReviewRecordSchema,
   weeklyReviewResponseSchema,
   workItemEvidenceInputSchema,
@@ -214,7 +210,17 @@ function createApiMethods({
       headers,
       credentials: "include",
     });
-    const body: unknown = await response.json();
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new TrevvApiError(
+        "invalid_response",
+        "The service returned an unreadable response. Your draft is kept; retry the same save to check its result.",
+        response.headers.get("x-request-id") ?? "unknown",
+        response.status,
+      );
+    }
     if (!response.ok) {
       const parsed = apiErrorSchema.safeParse(body);
       if (parsed.success)
@@ -281,6 +287,8 @@ function createApiMethods({
       input: CompleteOnboardingInput,
       idempotencyKey: string,
     ): Promise<VersionedMutationResponse<OnboardingState>> => {
+      const { completeOnboardingSchema } =
+        await import("./mutation-response.js");
       const body = completeOnboardingSchema.parse(input);
       const key = idempotencyKeySchema.parse(idempotencyKey);
       const response = await request("/onboarding/complete", {
@@ -1076,7 +1084,8 @@ function createApiMethods({
       input: CreateItemInput,
       idempotencyKey: string,
     ): Promise<VersionedMutationResponse<WorkItemDto>> => {
-      const body = createItemSchema.parse(input);
+      const { validateNewItem } = await import("./mutation-response.js");
+      const body = validateNewItem(input);
       const key = idempotencyKeySchema.parse(idempotencyKey);
       const response = await request("/items", {
         method: "POST",
@@ -1191,6 +1200,8 @@ function createApiMethods({
       input: WeeklyReviewInput,
       idempotencyKey: string,
     ): Promise<MutationResponse<WeeklyReviewResponse>> => {
+      const { weeklyReviewInputSchema } =
+        await import("./mutation-response.js");
       const body = weeklyReviewInputSchema.parse(input);
       const key = idempotencyKeySchema.parse(idempotencyKey);
       const response = await request("/reviews/weekly", {
@@ -1245,6 +1256,8 @@ function createApiMethods({
       input: CreatePrivacyRequestInput,
       idempotencyKey: string,
     ): Promise<VersionedMutationResponse<DataLifecycleRequestDto>> => {
+      const { createPrivacyRequestSchema } =
+        await import("./mutation-response.js");
       const body = createPrivacyRequestSchema.parse(input);
       return parseVersionedMutation(
         await request("/privacy/requests", {
@@ -1301,42 +1314,28 @@ function mutationHeaders(
   return headers;
 }
 
-function parseVersionedMutation<T>(
+async function parseVersionedMutation<T>(
   result: RawResponse,
   schema: { parse(value: unknown): T & { version: number } },
-): VersionedMutationResponse<T> {
-  const data = schema.parse(result.body);
-  const etag = entityTagSchema.parse(result.response.headers.get("etag"));
-  if (Number.parseInt(etag.slice(1, -1), 10) !== data.version)
-    throw new TrevvApiError(
-      "unexpected_response",
-      "The response ETag did not match the resource version.",
-      result.response.headers.get("x-request-id") ?? "unknown",
-      result.response.status,
-    );
-  return { data, etag, ...mutationMetadata(result.response) };
+): Promise<VersionedMutationResponse<T>> {
+  return parseNestedVersionedMutation(result, schema, (data) => data.version);
 }
 
-function parseNestedVersionedMutation<T>(
+async function parseNestedVersionedMutation<T>(
   result: RawResponse,
   schema: { parse(value: unknown): T },
   version: (value: T) => number,
-): VersionedMutationResponse<T> {
-  const data = schema.parse(result.body);
-  const etag = entityTagSchema.parse(result.response.headers.get("etag"));
-  if (Number.parseInt(etag.slice(1, -1), 10) !== version(data))
-    throw new TrevvApiError(
-      "unexpected_response",
-      "The response ETag did not match the resource version.",
-      result.response.headers.get("x-request-id") ?? "unknown",
-      result.response.status,
-    );
-  return { data, etag, ...mutationMetadata(result.response) };
+): Promise<VersionedMutationResponse<T>> {
+  const { confirmSavedResource } = await import("./mutation-response.js");
+  return {
+    ...confirmSavedResource(result, schema, version),
+    ...mutationMetadata(result.response),
+  };
 }
 
 function parseItemTransition(
   result: RawResponse,
-): VersionedMutationResponse<WorkItemTransitionResponse> {
+): Promise<VersionedMutationResponse<WorkItemTransitionResponse>> {
   return parseNestedVersionedMutation(
     result,
     workItemTransitionResponseSchema,

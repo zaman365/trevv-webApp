@@ -102,7 +102,14 @@ export function LiveQuickCaptureDialog(
 ) {
   return (
     <Suspense
-      fallback={<LoadingDialog onClose={props.onClose} title="Quick capture" />}
+      fallback={
+        <LoadingDialog
+          onClose={props.onClose}
+          title={
+            props.creationIntent === "task" ? "Create Task" : "Quick capture"
+          }
+        />
+      }
     >
       <LiveCapture {...props} />
     </Suspense>

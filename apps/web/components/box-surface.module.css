@@ -1,0 +1,33 @@
+.box,
+.tiles > :is(article, button) {
+  transition: border-color 160ms ease;
+}
+
+@media (hover: hover) {
+  /* Highlight the innermost card without lighting up its containing panels. */
+  .box:hover:where(
+      :not(
+        :disabled,
+        [aria-disabled="true"],
+        :has(.box:hover, .tiles > :is(article, button):hover)
+      )
+    ),
+  .tiles
+    > :is(article, button):hover:where(
+      :not(:disabled, [aria-disabled="true"])
+    ) {
+    border-color: var(--fh-primary);
+    background-color: color-mix(
+      in srgb,
+      var(--fh-primary) 4%,
+      var(--fh-surface)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .box,
+  .tiles > :is(article, button) {
+    transition: none;
+  }
+}

@@ -64,6 +64,7 @@ export function LiveCreateTask({ workspaces }: { workspaces: WorkspaceDto[] }) {
           key={workspace.id}
           workspaceId={workspace.id}
           workspaceSlug={workspace.slug}
+          creationIntent="task"
           defaultDestination="board"
           defaultAssigneeId={session.user.id}
           onClose={() => setOpen(false)}

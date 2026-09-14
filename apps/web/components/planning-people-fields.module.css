@@ -1,6 +1,6 @@
 .peopleFields {
   border: 1px solid var(--border, #e0e3ef);
-  border-radius: 16px;
+  border-radius: var(--fh-radius-card);
   padding: 18px;
   display: grid;
   gap: 14px;
@@ -31,7 +31,7 @@
 .peopleFields textarea {
   width: 100%;
   border: 1px solid #ccd2e2;
-  border-radius: 10px;
+  border-radius: var(--fh-radius-control);
   padding: 11px;
   background: var(--surface, white);
   color: inherit;
@@ -76,7 +76,7 @@
 .actions button,
 .actions a {
   border: 1px solid #dce0eb;
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   padding: 8px 12px;

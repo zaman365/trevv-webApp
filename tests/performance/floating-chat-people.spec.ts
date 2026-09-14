@@ -30,6 +30,74 @@ async function openTeamChat(page: Page) {
   return floating;
 }
 
+test("chat opens at one larger size with only full-page and minimize window actions", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await start(page);
+  const floating = await openTeamChat(page);
+  const actions = floating.getByRole("group", { name: "Chat window actions" });
+  await expect(
+    actions.getByRole("link", { name: "Open in full page", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `/app/workspaces/launch/messages#${teamConversation.id}`,
+  );
+  await expect(actions.locator("button, a")).toHaveCount(2);
+  await expect(
+    actions.getByRole("button", { name: "Minimize chat window" }),
+  ).toBeVisible();
+  await expect(
+    floating.getByRole("button", {
+      name: /^(Expand|Restore|Close) chat window$/,
+    }),
+  ).toHaveCount(0);
+  const original = (await floating.boundingBox())!;
+  expect(original.width).toBeGreaterThan(1000);
+  expect(original.height).toBeGreaterThan(800);
+  await floating
+    .getByLabel("Message", { exact: true })
+    .fill("Keep this conversation draft");
+  await actions.getByRole("button", { name: "Minimize chat window" }).click();
+  await expect(floating).toBeHidden();
+  await page.getByLabel("Open chats", { exact: true }).click();
+  await expect(floating.getByLabel("Message", { exact: true })).toHaveValue(
+    "Keep this conversation draft",
+  );
+  expect(await floating.boundingBox()).toEqual(original);
+  await floating.getByRole("tab", { name: "Launch team", exact: true }).click();
+
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 1280, height: 800 },
+    { width: 1024, height: 768 },
+    { width: 390, height: 844 },
+    { width: 320, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const bounds = (await floating.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.y).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height);
+    await expect(actions.getByRole("link")).toBeInViewport();
+    await expect(actions.getByRole("button")).toBeInViewport();
+    await expect(
+      floating.getByRole("button", { name: "Send", exact: true }),
+    ).toBeInViewport();
+    expect(
+      await floating.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    if (viewport.width === 1440 || viewport.width === 390) {
+      await page.screenshot({
+        path: testInfo.outputPath(`chat-size-${viewport.width}.png`),
+      });
+    }
+  }
+});
+
 test("mobile navigation stays clickable below the chat launcher and window", async ({
   page,
 }) => {
@@ -437,10 +505,9 @@ test("chat opened from a person card in a team dialog stays above the dialog and
   await floating
     .getByLabel("Message", { exact: true })
     .fill("A draft above the team dialog");
-  await floating.getByRole("button", { name: "Expand chat window" }).click();
   await expect(
-    floating.getByRole("button", { name: "Restore chat window" }),
+    floating.getByRole("link", { name: "Open in full page" }),
   ).toBeVisible();
-  await floating.getByRole("button", { name: "Close chat window" }).click();
+  await floating.getByRole("button", { name: "Minimize chat window" }).click();
   await expect(floating).toHaveCount(0);
 });

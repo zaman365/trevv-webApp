@@ -93,3 +93,59 @@ describe("report and plan periods", () => {
     );
   });
 });
+
+import {
+  reportFromTemplate,
+  reportTemplates,
+  reuseReportTemplate,
+  reportTimeCsv,
+} from "./report-plan";
+import { saveReportPlanSchema } from "@founderhq/api-contract/report-plan";
+describe("Report & Log templates and exports", () => {
+  it("creates valid private template drafts without claiming work has already happened", () => {
+    for (const template of reportTemplates) {
+      const draft = reportFromTemplate(template.id, "2026-09-14");
+      expect(saveReportPlanSchema.safeParse(draft).success).toBe(true);
+      expect(draft.content.completed).toBe("");
+      expect(draft.state).toBe("draft");
+      expect(draft.content.templateId).toBe(template.id);
+    }
+  });
+  it("exports complete work evidence and reuses structure without repeating actual time or progress", () => {
+    const record: ReportPlanDto = {
+      ...newReportPlan("log", "2026-09-14"),
+      id: "log",
+      workspaceId: "workspace",
+      authorId: "member",
+      authorName: "Alex",
+      version: 0,
+      createdAt: "2026-09-14T12:00:00Z",
+      updatedAt: "2026-09-14T12:00:00Z",
+      archivedAt: null,
+      publishedAt: null,
+    };
+    record.content = {
+      ...record.content,
+      results: "Released assets",
+      progressPercent: 60,
+      timeEntries: [
+        { date: "2026-09-14", activity: "=Potential formula", minutes: 90 },
+      ],
+      resources: [
+        { label: "Results", url: "https://drive.google.com/file/d/result" },
+      ],
+    };
+    const text = reportPlanText(record);
+    expect(text).toContain("1h 30m");
+    expect(text).toContain("Progress: 60%");
+    expect(text).toContain("https://drive.google.com/file/d/result");
+    expect(text).toContain("Released assets");
+    expect(reportTimeCsv([record])).toContain("'=Potential formula");
+    const reused = reuseReportTemplate(record, "2026-09-15");
+    expect(reused.content.timeEntries).toEqual([]);
+    expect(reused.content.progressPercent).toBeUndefined();
+    expect(reused.content.results).toBe("");
+    expect(reused.content.resources).toEqual(record.content.resources);
+    expect(record.content.timeEntries).toHaveLength(1);
+  });
+});

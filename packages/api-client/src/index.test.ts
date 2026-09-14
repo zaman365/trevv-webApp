@@ -62,6 +62,102 @@ const item = {
 } as const;
 
 describe("Phase 3 API client", () => {
+  it.each([undefined, '"99"', "invalid"])(
+    "reports an invalid save receipt (%s) and allows an identical retry",
+    async (etag) => {
+      const responses = [
+        Response.json(item, {
+          status: 201,
+          headers: { ...(etag ? { etag } : {}), "x-request-id": "save-trace" },
+        }),
+        Response.json(item, {
+          status: 201,
+          headers: { etag: '"4"', "idempotency-replayed": "true" },
+        }),
+      ];
+      const fetchMock = vi.fn(
+        async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+          responses.shift()!,
+      );
+      const client = createApiClient({
+        baseUrl: "https://api.example.test/api/v1",
+        fetchImpl: fetchMock,
+      });
+      await expect(
+        client.createItem({ ...item, assigneeIds: ["user-1"] }, idempotencyKey),
+      ).rejects.toMatchObject({
+        code: "invalid_save_confirmation",
+        requestId: "save-trace",
+        status: 201,
+      });
+      await expect(
+        client.createItem({ ...item, assigneeIds: ["user-1"] }, idempotencyKey),
+      ).resolves.toMatchObject({ data: item, etag: '"4"', replayed: true });
+      expect(
+        fetchMock.mock.calls.map((call) =>
+          new Headers(call[1]?.headers).get("idempotency-key"),
+        ),
+      ).toEqual([idempotencyKey, idempotencyKey]);
+    },
+  );
+
+  it("describes malformed saved records without exposing raw response data", async () => {
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: async () =>
+        Response.json(
+          { unexpected: "private response data" },
+          { status: 201, headers: { etag: '"1"' } },
+        ),
+    });
+    await expect(
+      client.createItem({ ...item, assigneeIds: ["user-1"] }, idempotencyKey),
+    ).rejects.toMatchObject({
+      code: "invalid_save_confirmation",
+      message: expect.stringContaining("may already be saved"),
+    });
+  });
+
+  it.each([200, 502])(
+    "normalizes unreadable HTTP %s responses",
+    async (status) => {
+      const client = createApiClient({
+        baseUrl: "https://api.example.test/api/v1",
+        fetchImpl: async () =>
+          new Response("<html>Gateway response</html>", {
+            status,
+            headers: { "x-request-id": "gateway-trace" },
+          }),
+      });
+      await expect(
+        client.createItem({ ...item, assigneeIds: ["user-1"] }, idempotencyKey),
+      ).rejects.toMatchObject({
+        code: "invalid_response",
+        status,
+        requestId: "gateway-trace",
+      });
+    },
+  );
+
+  it("explains invalid task fields before sending a request", async () => {
+    const fetchMock = vi.fn();
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: fetchMock,
+    });
+    await expect(
+      client.createItem(
+        { ...item, assigneeIds: ["user-1"], dueDate: "15.09.2026" },
+        idempotencyKey,
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      status: 422,
+      message: expect.stringContaining("dueDate"),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("creates a durable Portfolio with an idempotency key", async () => {
     const fetchMock = vi.fn(
       async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>

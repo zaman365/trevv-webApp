@@ -31,7 +31,7 @@ export default function GlobalError({ error, retry, reset }: RouteErrorProps) {
           style={{
             background: "white",
             border: "1px solid #dfe3ec",
-            borderRadius: "16px",
+            borderRadius: "var(--fh-radius-card, 6px)",
             maxWidth: "560px",
             padding: "24px",
           }}
@@ -49,7 +49,7 @@ export default function GlobalError({ error, retry, reset }: RouteErrorProps) {
             style={{
               background: "#5148c8",
               border: 0,
-              borderRadius: "9px",
+              borderRadius: "var(--fh-radius-control, 4px)",
               color: "white",
               cursor: "pointer",
               font: "inherit",

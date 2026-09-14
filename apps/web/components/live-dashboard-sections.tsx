@@ -22,6 +22,7 @@ const icons = {
   summary: ChartNoAxesCombined,
   "my-work": ListTodo,
   planning: FolderKanban,
+  "report-log": ClipboardCheck,
   ideas: Lightbulb,
   teams: Users,
   messages: MessageCircleMore,

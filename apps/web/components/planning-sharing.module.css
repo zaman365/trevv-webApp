@@ -1,6 +1,6 @@
 .peopleFields {
   border: 1px solid var(--border, #e0e3ef);
-  border-radius: 16px;
+  border-radius: var(--fh-radius-card);
   padding: 18px;
   display: grid;
   gap: 14px;
@@ -31,7 +31,7 @@
 .peopleFields textarea {
   width: 100%;
   border: 1px solid var(--fh-border-strong);
-  border-radius: 10px;
+  border-radius: var(--fh-radius-control);
   padding: 11px;
   background: var(--surface, white);
   color: inherit;
@@ -78,7 +78,7 @@
 .hub button,
 .hub a {
   border: 1px solid var(--fh-border);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   padding: 8px 12px;
@@ -114,7 +114,7 @@
   gap: 4px;
   padding: 5px;
   border: 1px solid var(--fh-border);
-  border-radius: 12px;
+  border-radius: var(--fh-radius-card);
   background: var(--fh-surface);
   box-shadow: 0 8px 24px #18223b1a;
 }
@@ -131,11 +131,12 @@
   gap: 6px;
 }
 .hub {
+  composes: box from "./box-surface.module.css";
   display: grid;
   gap: 18px;
   padding: 24px;
   border: 1px solid var(--border, #e0e3ef);
-  border-radius: 20px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface, #fff);
 }
 .clickableHub {
@@ -154,10 +155,10 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  border-radius: 20px;
+  border-radius: var(--fh-radius-card);
 }
-.hubLink:hover::after {
-  box-shadow: inset 0 0 0 1px var(--fh-primary, #625bea);
+.hub:has(.hubLink:hover) {
+  border-color: var(--fh-primary, #625bea);
 }
 .hubLink:focus-visible {
   outline: none;
@@ -209,12 +210,13 @@
   gap: 14px;
 }
 .card {
+  composes: box from "./box-surface.module.css";
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 18px;
   border: 1px solid var(--fh-border);
-  border-radius: 14px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface-subtle, #fafaff);
   min-width: 0;
 }
@@ -261,7 +263,7 @@
 .filters input,
 .filters select {
   border: 1px solid var(--fh-border);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   padding: 10px;
   font: inherit;
   background: var(--surface, white);

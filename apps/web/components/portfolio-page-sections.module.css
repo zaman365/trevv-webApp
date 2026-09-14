@@ -17,7 +17,7 @@
 .toolbar {
   padding: 16px;
   border: 1px solid var(--fh-border);
-  border-radius: 12px;
+  border-radius: var(--fh-radius-card);
   background: var(--fh-surface);
   justify-content: flex-start;
 }
@@ -33,7 +33,7 @@
   min-height: 40px;
   padding: 8px 12px;
   border: 1px solid var(--fh-border);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--fh-surface);
   color: var(--fh-ink);
   font: inherit;
@@ -53,11 +53,12 @@
   gap: 16px;
 }
 .card {
+  composes: box from "./box-surface.module.css";
   display: grid;
   gap: 12px;
   padding: 20px;
   border: 1px solid var(--fh-border);
-  border-radius: 14px;
+  border-radius: var(--fh-radius-card);
   background: var(--fh-surface);
   min-width: 0;
 }

@@ -11,8 +11,10 @@ import {
 } from "react";
 import {
   CalendarDays,
+  ArrowUpRight,
   ChevronDown,
   Columns3,
+  LayoutGrid,
   List,
   Search,
 } from "lucide-react";
@@ -91,7 +93,8 @@ export function LiveTaskList({
       ),
     ),
   ].sort();
-  const [view, setView] = useState<"list" | "board">("list");
+  const [view, setView] = useState<"cards" | "list" | "board">("cards");
+  const [cardPage, setCardPage] = useState({ index: 0, filters: "" });
   const [sort, setSort] = useState<"due" | "priority" | "recent">("due");
   const [today, setToday] = useState(() => taskToday(timezone));
   useEffect(() => {
@@ -168,6 +171,30 @@ export function LiveTaskList({
     [scoped, period, today, sort],
   );
   const done = items.filter((item) => item.status === "done").length;
+  const cardPageSize = 24;
+  const lastCardPage = Math.max(
+    0,
+    Math.ceil(visible.length / cardPageSize) - 1,
+  );
+  const cardFilterKey = JSON.stringify([
+    search,
+    period,
+    status,
+    assignee,
+    availableWorkspaceId,
+    priority,
+    topic,
+    kind,
+    sort,
+  ]);
+  const activeCardPage =
+    cardPage.filters === cardFilterKey
+      ? Math.min(cardPage.index, lastCardPage)
+      : 0;
+  const cardItems = visible.slice(
+    activeCardPage * cardPageSize,
+    (activeCardPage + 1) * cardPageSize,
+  );
 
   function renderItem(item: WorkItemDto) {
     const workspace = workspaceNames.get(item.workspaceId);
@@ -185,7 +212,7 @@ export function LiveTaskList({
     );
     return (
       <article
-        className={styles.task}
+        className={`${styles.task} ${view !== "list" ? styles.card : ""}`}
         data-status={item.status}
         data-testid={`work-item-${item.id}`}
         role="listitem"
@@ -193,6 +220,7 @@ export function LiveTaskList({
         {onOpen ? (
           <button
             className={styles.title}
+            title={item.title}
             onClick={() => onOpen(item)}
             type="button"
           >
@@ -201,11 +229,17 @@ export function LiveTaskList({
         ) : (
           <Link
             className={styles.title}
+            title={item.title}
             href={`${workspaceHref(workspace?.slug ?? "")}/boards/${encodeURIComponent(item.boardId)}#${encodeURIComponent(item.id)}`}
           >
             {title}
           </Link>
         )}
+        {view !== "list" ? (
+          <p className={styles.description} title={item.description}>
+            {item.description}
+          </p>
+        ) : null}
         <span
           className={styles.assignees}
           title={
@@ -213,6 +247,9 @@ export function LiveTaskList({
             "Unassigned"
           }
         >
+          {view !== "list" ? (
+            <span className={styles.fieldLabel}>Owner</span>
+          ) : null}
           {item.assignees.length
             ? item.assignees.map((person, index) => (
                 <span key={person.id}>
@@ -260,6 +297,12 @@ export function LiveTaskList({
         <span className={styles.saved} aria-live="polite">
           {pendingIds.has(item.id) ? "Saving…" : `v${item.version}`}
         </span>
+        {view !== "list" ? (
+          <span className={styles.openHint} aria-hidden="true">
+            Open {item.type}
+            <ArrowUpRight size={14} />
+          </span>
+        ) : null}
       </article>
     );
   }
@@ -278,6 +321,13 @@ export function LiveTaskList({
           />
         </label>
         <div className={styles.views} role="group" aria-label="Task view">
+          <button
+            type="button"
+            aria-pressed={view === "cards"}
+            onClick={() => setView("cards")}
+          >
+            <LayoutGrid size={15} aria-hidden="true" /> Cards
+          </button>
           <button
             type="button"
             aria-pressed={view === "list"}
@@ -448,12 +498,59 @@ export function LiveTaskList({
                 setStatus("all");
                 setPriority("all");
                 setWorkspaceId("all");
+                setTopic("");
+                setKind("");
               }}
             >
               Clear filters
             </button>
           ) : null}
         </div>
+      ) : view === "cards" ? (
+        <>
+          <WindowedCollection
+            items={cardItems}
+            itemKey={recordKey}
+            label={label}
+            className={styles.cardGrid}
+          >
+            {renderItem}
+          </WindowedCollection>
+          {visible.length > cardPageSize ? (
+            <nav className={styles.pagination} aria-label="Task card pages">
+              <span>
+                {activeCardPage * cardPageSize + 1}–
+                {Math.min((activeCardPage + 1) * cardPageSize, visible.length)}{" "}
+                of {visible.length} tasks · Page {activeCardPage + 1} of{" "}
+                {lastCardPage + 1}
+              </span>
+              <button
+                type="button"
+                disabled={activeCardPage === 0}
+                onClick={() =>
+                  setCardPage({
+                    index: activeCardPage - 1,
+                    filters: cardFilterKey,
+                  })
+                }
+              >
+                Previous tasks
+              </button>
+              <button
+                type="button"
+                disabled={activeCardPage === lastCardPage}
+                onClick={() =>
+                  setCardPage({
+                    index: activeCardPage + 1,
+                    filters: cardFilterKey,
+                  })
+                }
+              >
+                Next tasks
+              </button>
+            </nav>
+          ) : null}
+        </>
       ) : view === "list" ? (
         <WindowedCollection
           items={visible}
@@ -482,7 +579,7 @@ export function LiveTaskList({
                   itemKey={recordKey}
                   label={`${workItemStatusLabel(candidate)} tasks`}
                   className={styles.cards}
-                  estimateHeight={200}
+                  estimateHeight={300}
                 >
                   {renderItem}
                 </WindowedCollection>

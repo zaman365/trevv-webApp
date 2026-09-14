@@ -344,6 +344,7 @@ export function SharedPlanningHub({
             workspaceId={workspaceId}
             workspaceSlug={workspaceSlug}
             defaultType={create}
+            {...(create === "task" ? { creationIntent: "task" as const } : {})}
             {...(teamId ? { defaultTeamId: teamId } : {})}
             defaultAssigneeId={session.user.id}
             draftScope={`planning-${create}:${workspaceId}:${teamId ?? "all"}`}

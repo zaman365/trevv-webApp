@@ -11,7 +11,7 @@
 .guideSteps article {
   border: 1px solid var(--border, #dfe3ec);
   padding: 1.25rem;
-  border-radius: 12px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface, #fff);
   scroll-margin-top: 5rem;
   min-width: 0;
@@ -46,7 +46,7 @@
   min-height: 44px;
   padding: 0.6rem 0.8rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
 }
 .guideSteps li {

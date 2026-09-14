@@ -71,7 +71,7 @@
 .details > summary:focus-visible {
   outline: 2px solid var(--fh-primary);
   outline-offset: -3px;
-  border-radius: 6px;
+  border-radius: var(--fh-radius-control);
 }
 .panel {
   position: absolute;
@@ -81,7 +81,7 @@
   width: min(340px, calc(100vw - 32px));
   padding: 16px;
   border: 1px solid var(--fh-border);
-  border-radius: 12px;
+  border-radius: var(--fh-radius-overlay);
   background: var(--fh-surface);
   color: var(--fh-ink);
   box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
@@ -108,7 +108,7 @@
   width: 32px;
   min-height: 32px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
 }
 .compact .details > summary:hover,
 .compact .details[open] > summary {
@@ -151,7 +151,7 @@
   margin-top: 12px;
   padding: 0 12px;
   border: 1px solid var(--fh-border);
-  border-radius: 8px;
+  border-radius: var(--fh-radius-control);
   background: var(--fh-surface);
   color: var(--fh-ink);
   font: inherit;

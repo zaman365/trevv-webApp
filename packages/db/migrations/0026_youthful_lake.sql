@@ -1,0 +1,2 @@
+ALTER TABLE "member_report_plans" DROP CONSTRAINT "member_report_plans_kind_check";--> statement-breakpoint
+ALTER TABLE "member_report_plans" ADD CONSTRAINT "member_report_plans_kind_check" CHECK ("member_report_plans"."kind" IN ('report', 'log', 'plan'));

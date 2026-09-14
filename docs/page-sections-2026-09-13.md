@@ -173,3 +173,26 @@ Details retains the full original description and every milestone link. Empty
 template labels are omitted only from the short summary; source descriptions,
 plan editing, lifecycle controls, team filters, task capture, project backlog,
 permissions and unfinished-work guidance remain available.
+
+## Unified Sprints entry points (September 14)
+
+Dashboard Sprints, the default planning page and embedded Sprints sections now
+use the same workspace board list. Previously, the Dashboard filtered strictly
+by `planning.kind === "sprint"`, while the full page displayed every board.
+That excluded the existing project-kind records from the Dashboard after the
+page was renamed. Existing project-kind and untyped boards now appear as Sprints
+in this surface; their stored kinds, IDs, task membership and parent links remain
+unchanged. Other explicit plan kinds retain their labels.
+
+New Sprint creates a sprint with a goal, optional team and parent board, and
+required start and target dates. Existing records remain editable without
+converting their stored kind. Overview, Sprint work and Milestones provide
+in-place previews; status and team filters apply to each view. Work appearing
+in both a parent board and its child cycle is listed only once in the aggregate
+previews. Their `sprintView` URL state restores on reload and browser navigation,
+and previously opened previews retain their task state.
+
+The old `?mode=sprints` URL remains supported. Other plans opens
+`/planning?mode=plans`, retaining every original plan type, template, editor,
+parent-project workflow and team-specific planning capability. New and existing
+sprint task capture opens Create Task and retains the selected board/cycle.

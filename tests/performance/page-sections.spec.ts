@@ -129,6 +129,17 @@ test("Portfolio retains workspace creation and adds searchable local sections", 
   await expect(page.getByTestId("workspace-card-launch")).toBeVisible();
   await page.getByTestId("create-workspace-open").click();
   await expect(page.getByTestId("create-workspace-dialog")).toBeVisible();
+  await page
+    .getByTestId("create-workspace-dialog")
+    .getByLabel("Name", { exact: true })
+    .fill("Retained workspace draft");
+  await page.getByRole("button", { name: "Close workspace creation" }).click();
+  await page.getByTestId("create-workspace-open").click();
+  await expect(
+    page
+      .getByTestId("create-workspace-dialog")
+      .getByLabel("Name", { exact: true }),
+  ).toHaveValue("Retained workspace draft");
   await page.getByRole("button", { name: "Close workspace creation" }).click();
   await tabs.getByRole("tab", { name: "Workspaces", exact: true }).click();
   await page
@@ -163,6 +174,7 @@ for (const view of ["page-my-work", "portfolio"] as const) {
       "Approvals",
       "Waiting",
       "Plans and ideas",
+      "Report & Log",
       "Inbox",
       "Attention",
     ]);
@@ -439,9 +451,7 @@ test("Teams embeds actionable People cards, projects and messages without nested
   ).toBeVisible();
   await expect(page.locator("main")).toHaveCount(1);
   await tabs.getByRole("tab", { name: "Sprints", exact: true }).click();
-  await page
-    .getByRole("button", { name: "New project / plan", exact: true })
-    .click();
+  await page.getByRole("button", { name: "New Sprint", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
 });
 

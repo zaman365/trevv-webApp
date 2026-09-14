@@ -27,7 +27,7 @@
   bottom: 5.25rem;
   padding: 2rem;
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: var(--fh-radius-overlay);
   background: var(--surface);
   color: var(--text);
 }

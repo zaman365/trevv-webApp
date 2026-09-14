@@ -7,6 +7,45 @@ afterEach(() => {
 });
 
 describe("browser API proxy boundary", () => {
+  it("preserves task save receipts, idempotency, and optimistic concurrency end to end", async () => {
+    vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+    const upstream = vi.fn().mockResolvedValue(
+      Response.json(
+        { id: "task-one", version: 2 },
+        {
+          status: 201,
+          headers: {
+            etag: '"2"',
+            "idempotency-key": "save-one",
+            "idempotency-replayed": "true",
+            "x-request-id": "save-trace",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+    const response = await proxyApiRequest(
+      new Request("https://trevv.test/api/v1/items", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "save-one",
+          "if-match": '"1"',
+        },
+        body: JSON.stringify({ title: "Demo Task" }),
+      }),
+      ["v1", "items"],
+    );
+    const forwarded = new Headers(
+      (upstream.mock.calls[0]?.[1] as RequestInit).headers,
+    );
+    expect(forwarded.get("idempotency-key")).toBe("save-one");
+    expect(forwarded.get("if-match")).toBe('"1"');
+    expect(response.status).toBe(201);
+    expect(response.headers.get("etag")).toBe('"2"');
+    expect(response.headers.get("idempotency-replayed")).toBe("true");
+    expect(response.headers.get("idempotency-key")).toBe("save-one");
+  });
   it("forwards only separate administrator cookies to the administrator realm", async () => {
     vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
     const upstream = vi.fn().mockResolvedValue(Response.json({ ok: true }));

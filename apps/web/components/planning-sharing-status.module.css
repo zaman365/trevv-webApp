@@ -8,7 +8,7 @@
 .actions button,
 .actions a {
   border: 1px solid #dce0eb;
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: inherit;
   padding: 8px 12px;
@@ -34,7 +34,7 @@
 }
 .shareStatus {
   border: 1px solid #d9d5fa;
-  border-radius: 14px;
+  border-radius: var(--fh-radius-card);
   padding: 16px;
   background: var(--surface, #fff);
   box-shadow: 0 8px 32px #2520571a;

@@ -81,7 +81,7 @@ test("sprint filters and work use actual cycle membership, with project backlog 
   page,
 }) => {
   const { panel, fixture } = await sprints(page);
-  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(3);
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(6);
   const active = panel.getByRole("article", {
     name: "active launch sprint sprint",
     exact: true,
@@ -105,15 +105,15 @@ test("sprint filters and work use actual cycle membership, with project backlog 
   await expect(details.getByText(/Server confirmed/)).toBeVisible();
   expect(fixture.transitions[0]).toMatchObject({ body: { status: "review" } });
   await details
-    .getByRole("button", { name: "Project backlog", exact: true })
+    .getByRole("button", { name: "Board backlog", exact: true })
     .click();
   await expect(details).toContainText("Backlog research");
   await expect(details).not.toContainText("Prepare release");
   await panel
     .getByRole("group", { name: "Sprint status" })
-    .getByRole("button", { name: "Planned 1", exact: true })
+    .getByRole("button", { name: "Planned 2", exact: true })
     .click();
-  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(1);
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(2);
   await expect(
     panel.getByRole("button", { name: "planned launch sprint", exact: true }),
   ).toBeVisible();
@@ -122,7 +122,7 @@ test("sprint filters and work use actual cycle membership, with project backlog 
     .selectOption("team-operations");
   await expect(panel.getByText("No sprints match these filters")).toBeVisible();
   await panel.getByRole("button", { name: "Clear filters" }).click();
-  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(3);
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(6);
 });
 
 test("sprint cards open their work from the whole card and keep full-page links separate", async ({
@@ -174,6 +174,7 @@ test("planning cards stay aligned across teams and expose notes, milestones, edi
     api: api.api,
     records: [{ ...item, type: "milestone", title: "Review the campaign" }],
   });
+  await page.goto("https://trevv.test/?view=planning&mode=plans");
   await expect(
     page.getByRole("heading", { name: "Sprints", exact: true, level: 1 }),
   ).toBeVisible();
@@ -225,12 +226,12 @@ test("planning cards stay aligned across teams and expose notes, milestones, edi
   ).toBeVisible();
 });
 
-test("Plan sprint persists sprint type, goal, team, parent and required dates; task capture keeps its cycle", async ({
+test("New Sprint persists sprint type, goal, team, parent and required dates; task capture keeps its cycle", async ({
   page,
 }) => {
   const { panel, api, fixture } = await sprints(page);
-  await panel.getByRole("button", { name: "Plan sprint", exact: true }).click();
-  let editor = page.getByRole("dialog", { name: "Plan sprint", exact: true });
+  await panel.getByRole("button", { name: "New Sprint", exact: true }).click();
+  let editor = page.getByRole("dialog", { name: "New Sprint", exact: true });
   await expect(editor.getByLabel("Plan type", { exact: true })).toHaveValue(
     "sprint",
   );
@@ -245,7 +246,7 @@ test("Plan sprint persists sprint type, goal, team, parent and required dates; t
     .fill("Ship the launch checklist");
   await editor.getByLabel("Team", { exact: true }).selectOption("team-launch");
   await editor
-    .getByLabel("Parent project", { exact: true })
+    .getByLabel("Parent board", { exact: true })
     .selectOption(board.id);
   await editor.getByLabel("Start date", { exact: true }).fill("2026-09-14");
   await editor.getByLabel("Target date", { exact: true }).fill("2026-09-25");
@@ -353,44 +354,176 @@ test("starting and completing a sprint saves its lifecycle without completing it
   expect(fixture.transitions).toHaveLength(0);
 });
 
-test("full sprint page restores its mode and keeps generic project management reachable", async ({
+test("Dashboard and full Sprints keep legacy boards visible and preserve their stored relationships", async ({
   page,
 }) => {
   const api = teamWorkspaceApi();
-  await setup(page, "", { view: "planning", api: api.api });
+  api.state.boards = api.state.boards.slice(0, 2);
+  const first = api.state.boards[0]!;
+  const second = api.state.boards[1]!;
+  first.name = board.name;
+  second.name = "Launch delivery";
+  second.planning = {
+    kind: "project",
+    state: "planned",
+    parentBoardId: first.id,
+    teamId: "team-operations",
+  };
+  const original = structuredClone(api.state.boards);
+  await setup(page, "", {
+    dashboard: true,
+    styled: true,
+    api: api.api,
+    records: [{ ...item, planning: { cycleId: second.id } }],
+  });
+  await page.getByRole("tab", { name: "Sprints", exact: true }).click();
+  const panel = page.getByRole("region", {
+    name: "Sprint planning",
+    exact: true,
+  });
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(2);
   await expect(
-    page.getByRole("button", { name: "New project / plan", exact: true }),
+    panel.getByRole("button", { name: "All sprints 2", exact: true }),
+  ).toBeVisible();
+  const ids = await panel
+    .getByRole("article")
+    .evaluateAll((nodes) =>
+      nodes.map((n) => n.getAttribute("data-testid")).sort(),
+    );
+  await page.goto("https://trevv.test/?view=planning");
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(2);
+  expect(
+    await panel
+      .getByRole("article")
+      .evaluateAll((nodes) =>
+        nodes.map((n) => n.getAttribute("data-testid")).sort(),
+      ),
+  ).toEqual(ids);
+  await expect(page.getByText("Project plans", { exact: true })).toHaveCount(0);
+  await expect(
+    panel.getByRole("button", { name: "New Sprint", exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "Other plans", exact: true }),
+  ).toHaveAttribute("href", "/app/workspaces/launch/planning?mode=plans");
+  expect(api.state.boards).toEqual(original);
+  const card = panel.getByTestId(`planning-card-${second.id}`);
+  await expect(card).toContainText("0 / 1 work items completed");
+  await card.getByRole("button", { name: "Edit sprint", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Edit sprint", exact: true });
+  await editor
+    .getByLabel("Goal and success criteria", { exact: true })
+    .fill("Deliver the launch");
+  await editor
+    .getByRole("button", { name: "Save sprint", exact: true })
+    .click();
+  await expect(editor).toHaveCount(0);
+  expect(api.state.boards.find((b) => b.id === second.id)?.planning).toEqual(
+    original[1]!.planning,
+  );
+  await expect(
+    panel.getByRole("link", { name: /^Ship the launch/ }),
   ).toBeVisible();
   await page.goto("https://trevv.test/?view=planning&mode=sprints");
-  await expect(
-    page.getByRole("heading", { name: "Sprints", exact: true, level: 1 }),
-  ).toBeVisible();
-  await expect(
-    page
-      .getByRole("tablist", { name: "Sprints sections", exact: true })
-      .getByRole("tab", { name: "Sprints", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
-  await expect(
-    page.getByText("Plan your first sprint", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Projects and other plans" }),
-  ).toHaveAttribute("href", "/app/workspaces/launch/planning");
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(2);
   await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Sprints", exact: true, level: 1 }),
-  ).toBeVisible();
-  await page.evaluate(() => {
-    history.pushState(null, "", "/?view=planning");
-    dispatchEvent(new PopStateEvent("popstate"));
-  });
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(2);
+  await page.goto("https://trevv.test/?view=planning&mode=plans");
   await expect(
     page.getByRole("button", { name: "New project / plan", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "New project / plan", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Plan type", { exact: true }).getByRole("option"),
+  ).toHaveCount(7);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goBack();
   await expect(
-    page.getByRole("heading", { name: "Sprints", exact: true, level: 1 }),
+    panel.getByRole("button", { name: "New Sprint", exact: true }),
   ).toBeVisible();
+});
+
+test("sprint work and milestone previews follow team filters, avoid duplicate tasks and restore their tab", async ({
+  page,
+}) => {
+  const api = teamWorkspaceApi();
+  api.state.boards = api.state.boards.slice(0, 2);
+  const first = api.state.boards[0]!;
+  const second = api.state.boards[1]!;
+  await setup(page, "", {
+    view: "planning",
+    dashboard: true,
+    styled: true,
+    api: api.api,
+    records: [
+      {
+        ...item,
+        id: "milestone-one",
+        title: "Launch milestone",
+        type: "milestone",
+        planning: { cycleId: second.id },
+      },
+      { ...item, id: "launch-task", title: "Prepare launch" },
+      {
+        ...item,
+        id: "other-task",
+        boardId: second.id,
+        title: "Operations follow-up",
+      },
+      {
+        ...item,
+        id: "private-task",
+        workspaceId: "private",
+        title: "Outside workspace",
+      },
+    ],
+  });
+  const panel = page.getByRole("region", {
+    name: "Sprint planning",
+    exact: true,
+  });
+  const tabs = panel.getByRole("tablist", {
+    name: "Sprint views",
+    exact: true,
+  });
+  await tabs.getByRole("tab", { name: "Sprint work", exact: true }).click();
+  const work = panel.getByRole("tabpanel", {
+    name: "Sprint work",
+    exact: true,
+  });
+  await expect(
+    work.getByRole("link", { name: /^Launch milestone/ }),
+  ).toHaveCount(1);
+  await expect(work).toContainText("Prepare launch");
+  await expect(work).toContainText("Operations follow-up");
+  await expect(work).not.toContainText("Outside workspace");
+  await panel
+    .getByRole("combobox", { name: "Team", exact: true })
+    .selectOption(first.planning!.teamId!);
+  await expect(work).not.toContainText("Operations follow-up");
+  await tabs.getByRole("tab", { name: "Milestones", exact: true }).click();
+  const milestones = panel.getByRole("tabpanel", {
+    name: "Milestones",
+    exact: true,
+  });
+  await expect(milestones).toContainText("Launch milestone");
+  await expect(milestones).not.toContainText("Prepare launch");
+  await expect(page).toHaveURL(/sprintView=milestones/);
+  await page.reload();
+  await expect(
+    tabs.getByRole("tab", { name: "Milestones", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    milestones.getByRole("link", { name: /^Launch milestone/ }),
+  ).toHaveCount(1);
+  await tabs.getByRole("tab", { name: "Milestones", exact: true }).focus();
+  await page.keyboard.press("Home");
+  await expect(
+    tabs.getByRole("tab", { name: "Overview", exact: true }),
+  ).toBeFocused();
+  await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(2);
 });
 
 test("sprint layout fits a narrow screen and board permission loss clears details", async ({
@@ -399,7 +532,7 @@ test("sprint layout fits a narrow screen and board permission loss clears detail
   await page.setViewportSize({ width: 390, height: 844 });
   const { panel } = await sprints(page);
   await expect(
-    panel.getByRole("button", { name: "Plan sprint", exact: true }),
+    panel.getByRole("button", { name: "New Sprint", exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -426,6 +559,6 @@ test("sprint layout fits a narrow screen and board permission loss clears detail
     .click();
   await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(0);
   await expect(
-    panel.getByRole("button", { name: "Plan sprint", exact: true }),
+    panel.getByRole("button", { name: "New Sprint", exact: true }),
   ).toHaveCount(0);
 });

@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -14,6 +21,9 @@ import {
   RefreshCw,
   Send,
   X,
+  Clock3,
+  LayoutTemplate,
+  Download,
 } from "lucide-react";
 import { TrevvApiError } from "@founderhq/api-client";
 import {
@@ -41,12 +51,26 @@ import {
   reportPeriod,
   reportPlanInput,
   reportPlanText,
+  reportTemplates,
+  reportTemplateHints,
+  reportFromTemplate,
+  reportKindLabels,
+  reuseReportTemplate,
+  reportTimeTotal,
+  formatWorkMinutes,
+  reportTimeCsv,
   type PeriodPreset,
 } from "@/lib/report-plan";
 import { createDemoReportPlanClient } from "@/lib/report-plan-demo";
 import { workspaceHref } from "@/lib/workspace-routes";
-import { AppLink as Link } from "./navigation-link";
+import { AppLink as Link } from "@/components/navigation-link";
 import { WorkspaceFrame } from "./workspace-frame";
+import { PageTabs } from "./page-tabs";
+import {
+  ReportTimeFields,
+  ReportResourceFields,
+  ReportLogDetails,
+} from "./report-log-fields";
 import styles from "./report-plan.module.css";
 
 const presets: Array<[PeriodPreset, string]> = [
@@ -68,17 +92,16 @@ export function ReportPlanExperience({
   const { allWorkspaces } = useWorkspaceState();
   const workspace = allWorkspaces.find((value) => value.slug === workspaceSlug);
   return (
-    <WorkspaceFrame active="report-plan" workspaceSlug={workspaceSlug}>
+    <WorkspaceFrame active="report-log" workspaceSlug={workspaceSlug}>
       {workspace ? (
         <ReportPlanWorkspace
           key={`${session.organization.id}:${session.user.id}:${workspace.id}`}
           workspaceId={workspace.id}
           workspaceSlug={workspaceSlug}
-          workspaceName={workspace.name}
         />
       ) : (
         <main className={styles.main}>
-          <h1>Report and plan</h1>
+          <h1>Report & Log</h1>
           <p>This workspace is not available.</p>
         </main>
       )}
@@ -86,13 +109,14 @@ export function ReportPlanExperience({
   );
 }
 
-function ReportPlanWorkspace({
+export function ReportPlanWorkspace({
   workspaceId,
   workspaceSlug,
+  embedded = false,
 }: {
   workspaceId: string;
   workspaceSlug: string;
-  workspaceName: string;
+  embedded?: boolean;
 }) {
   const session = useAppSession();
   const liveData = useOptionalLiveAppRecords();
@@ -113,6 +137,10 @@ function ReportPlanWorkspace({
     session.user.id,
     workspaceId,
   ];
+  const tabsId = useId();
+  const [showTemplates, setShowTemplates] = useState(false);
+  const Container = embedded ? "section" : "main";
+  const Heading = embedded ? "h2" : "h1";
   const [filters, setFilters] = useState<ReportPlanQuery>({ page: 1 });
   const [editor, setEditor] = useState<Editor | null>(null);
   const [notice, setNotice] = useState("");
@@ -157,12 +185,15 @@ function ReportPlanWorkspace({
     setFilters((current) => ({ ...current, ...patch, page: 1 }));
     setNotice("");
   };
-  const start = (kind: "report" | "plan") => {
+  const start = (kind: SaveReportPlanInput["kind"]) => {
     setEditor({ input: newReportPlan(kind, today) });
     setActionError("");
     setNotice("");
   };
-  const open = async (record: ReportPlanDto, duplicate = false) => {
+  const open = async (
+    record: ReportPlanDto,
+    duplicate: false | "next" | "template" = false,
+  ) => {
     setOpening(true);
     setActionError("");
     try {
@@ -171,7 +202,12 @@ function ReportPlanWorkspace({
         throw new Error("This update was archived. Refresh the list.");
       setEditor(
         duplicate
-          ? { input: nextReportPlan(latest) }
+          ? {
+              input:
+                duplicate === "next"
+                  ? nextReportPlan(latest)
+                  : reuseReportTemplate(latest, today),
+            }
           : { record: latest, input: reportPlanInput(latest) },
       );
     } catch (error) {
@@ -182,6 +218,7 @@ function ReportPlanWorkspace({
   };
   const onSaved = (record: ReportPlanDto) => {
     setEditor(null);
+    setShowTemplates(false);
     setFilters({
       page: 1,
       authorId: session.user.id,
@@ -208,11 +245,24 @@ function ReportPlanWorkspace({
       );
     }
   }
+  function exportTime() {
+    const url = URL.createObjectURL(
+      new Blob([reportTimeCsv(rows)], { type: "text/csv;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `trevv-work-time-page-${filters.page}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   return (
-    <main className={styles.main}>
+    <Container
+      className={embedded ? styles.embedded : styles.main}
+      aria-label="Report & Log"
+    >
       <header className={`${styles.hero} compact-page-header`}>
         <div>
-          <h1>Report and plan</h1>
+          <Heading>Report & Log</Heading>
         </div>
         {canWrite && (
           <div className={styles.actions}>
@@ -223,9 +273,8 @@ function ReportPlanWorkspace({
               <FileText size={18} />
               Write report
             </button>
-            <button className={styles.primary} onClick={() => start("plan")}>
-              <Plus size={19} />
-              Create plan
+            <button className={styles.primary} onClick={() => start("log")}>
+              <Clock3 size={18} aria-hidden="true" /> Log work / time
             </button>
           </div>
         )}
@@ -241,8 +290,10 @@ function ReportPlanWorkspace({
         <div>
           <CalendarDays size={22} />
           <div>
-            <strong>Plan the next period</strong>
-            <p>Tomorrow, a week, a month, a sprint or your own dates.</p>
+            <strong>Log work and time</strong>
+            <p>
+              Activities, working hours, breaks, results and resource links.
+            </p>
           </div>
         </div>
         <div>
@@ -263,34 +314,100 @@ function ReportPlanWorkspace({
       )}
       {!canWrite && !accessLost && (
         <p className={styles.notice}>
-          Your role can read shared updates. Writing reports and plans requires
+          Your role can read shared updates. Writing reports and logs requires
           member access.
         </p>
       )}
-      <section className={styles.feed} aria-label="Reports and plans">
-        <div className={styles.feedHeader}>
-          <div className={styles.tabs} role="group" aria-label="Update type">
-            {[
-              [undefined, "All updates"],
-              ["report", "Reports"],
-              ["plan", "Plans"],
-            ].map(([kind, label]) => (
-              <button
-                key={label}
-                aria-pressed={filters.kind === kind}
-                onClick={() =>
-                  changeFilters({ kind: kind as ReportPlanQuery["kind"] })
-                }
-              >
-                {label}
-              </button>
+      <PageTabs
+        id={tabsId}
+        label="Report & Log views"
+        value={showTemplates ? "templates" : (filters.kind ?? "all")}
+        sections={[
+          { id: "all", label: "All updates" },
+          { id: "report", label: "Reports" },
+          { id: "log", label: "Work logs" },
+          { id: "plan", label: "Plans" },
+          {
+            id: "templates",
+            label: "Templates",
+            icon: <LayoutTemplate size={16} aria-hidden="true" />,
+          },
+        ]}
+        onChange={(view) => {
+          setShowTemplates(view === "templates");
+          if (view !== "templates")
+            changeFilters({
+              kind:
+                view === "all" ? undefined : (view as ReportPlanQuery["kind"]),
+            });
+        }}
+      />
+      {showTemplates && (
+        <section
+          className={styles.templatePanel}
+          role="tabpanel"
+          id={`${tabsId}-panel-templates`}
+          aria-labelledby={`${tabsId}-tab-templates`}
+        >
+          <h2>Start with a template</h2>
+          <p>
+            Choose a structure, then add your own work, results and resources.
+          </p>
+          <div className={styles.templateGrid}>
+            {reportTemplates.map((template) => (
+              <article key={template.id}>
+                <LayoutTemplate size={20} aria-hidden="true" />
+                <h3>{template.name}</h3>
+                <p>{template.description}</p>
+                <button
+                  className={styles.secondary}
+                  disabled={!canWrite}
+                  onClick={() =>
+                    setEditor({ input: reportFromTemplate(template.id, today) })
+                  }
+                >
+                  Use {template.name}
+                </button>
+              </article>
             ))}
+          </div>
+        </section>
+      )}
+      <section
+        className={styles.feed}
+        hidden={showTemplates}
+        role="tabpanel"
+        id={`${tabsId}-panel-${filters.kind ?? "all"}`}
+        aria-labelledby={`${tabsId}-tab-${filters.kind ?? "all"}`}
+      >
+        <div className={styles.feedHeader}>
+          <div className={styles.actions}>
+            <strong>
+              {filters.kind
+                ? `${reportKindLabels[filters.kind]} entries`
+                : "Workspace updates"}
+            </strong>
+            {filters.kind === "plan" && canWrite && (
+              <button
+                className={styles.secondary}
+                onClick={() => start("plan")}
+              >
+                <Plus size={16} aria-hidden="true" />
+                Create plan
+              </button>
+            )}
+            {rows.some((record) => record.content.timeEntries?.length) && (
+              <button className={styles.secondary} onClick={exportTime}>
+                <Download size={16} aria-hidden="true" /> Export time on this
+                page
+              </button>
+            )}
           </div>
           <button
             className={styles.iconButton}
             disabled={query.isFetching || !validRange}
             onClick={() => void query.refetch()}
-            aria-label="Refresh reports and plans"
+            aria-label="Refresh reports and logs"
           >
             <RefreshCw size={18} />
           </button>
@@ -366,7 +483,7 @@ function ReportPlanWorkspace({
           </button>
         </div>
         <div className={styles.filterFoot}>
-          <span>Dates include overlapping report and plan periods.</span>
+          <span>Dates include overlapping report and log periods.</span>
           <div>
             <button
               onClick={() => {
@@ -404,7 +521,7 @@ function ReportPlanWorkspace({
           </p>
         ) : query.isPending ? (
           <p role="status" className={styles.empty}>
-            Loading reports and plans…
+            Loading reports and logs…
           </p>
         ) : null}
         {validRange &&
@@ -421,7 +538,7 @@ function ReportPlanWorkspace({
                     filters[key as keyof ReportPlanQuery] !== undefined,
                 )
                   ? "Try a different member, date range or visibility filter."
-                  : "Share a progress report or outline your next plan to start the conversation."}
+                  : "Write a report, log your work or choose a template to get started."}
               </p>
               {canWrite && (
                 <button
@@ -445,7 +562,7 @@ function ReportPlanWorkspace({
                     ) : (
                       <CalendarDays size={15} />
                     )}
-                    {record.kind === "report" ? "Report" : "Plan"}
+                    {reportKindLabels[record.kind]}
                   </span>
                   <span>{formatPeriod(record)}</span>
                   <span className={styles.health} data-health={record.health}>
@@ -464,10 +581,31 @@ function ReportPlanWorkspace({
                   {record.context && ` · ${record.context}`}
                 </p>
                 <p className={styles.preview}>
-                  {(record.kind === "report"
-                    ? record.content.completed || record.content.workingOn
-                    : record.content.goals) || "Draft in progress"}
+                  {(record.kind === "plan"
+                    ? record.content.goals
+                    : record.content.results ||
+                      record.content.completed ||
+                      record.content.workingOn ||
+                      record.content.timeEntries
+                        ?.map((entry) => entry.activity)
+                        .join(" · ")) || "Draft in progress"}
                 </p>
+                <div className={styles.logSummary}>
+                  {!!record.content.timeEntries?.length && (
+                    <span>
+                      <Clock3 size={14} aria-hidden="true" />
+                      {formatWorkMinutes(reportTimeTotal(record))} logged
+                    </span>
+                  )}
+                  {record.content.progressPercent !== undefined && (
+                    <span>{record.content.progressPercent}% progress</span>
+                  )}
+                  {!!record.content.resources?.length && (
+                    <span>
+                      {record.content.resources.length} resource links
+                    </span>
+                  )}
+                </div>
                 <div className={styles.flags}>
                   {record.content.blockers && <span>Blocker reported</span>}
                   {record.content.supportNeeded && (
@@ -477,7 +615,7 @@ function ReportPlanWorkspace({
                 <details className={styles.details}>
                   <summary>Read full {record.kind}</summary>
                   <dl>
-                    {(record.kind === "report" ? reportFields : planFields)
+                    {(record.kind === "plan" ? planFields : reportFields)
                       .filter((field) => record.content[field])
                       .map((field) => (
                         <div key={field}>
@@ -486,6 +624,7 @@ function ReportPlanWorkspace({
                         </div>
                       ))}
                   </dl>
+                  <ReportLogDetails input={record} />
                   <p className={styles.byline}>
                     Last saved {formatSaved(record.updatedAt, timezone)}
                   </p>
@@ -503,12 +642,21 @@ function ReportPlanWorkspace({
                       Edit {record.state === "draft" ? "draft" : "update"}
                     </button>
                   )}
+                  {canWrite && record.authorId === session.user.id && (
+                    <button
+                      disabled={opening}
+                      onClick={() => void open(record, "template")}
+                    >
+                      <LayoutTemplate size={15} aria-hidden="true" />
+                      Use as template
+                    </button>
+                  )}
                   {canWrite &&
                     record.kind === "plan" &&
                     record.authorId === session.user.id && (
                       <button
                         disabled={opening}
-                        onClick={() => void open(record, true)}
+                        onClick={() => void open(record, "next")}
                       >
                         Plan next period
                         <ArrowRight size={15} />
@@ -583,11 +731,13 @@ function ReportPlanWorkspace({
           }
         />
       )}
-    </main>
+    </Container>
   );
 }
 
 const hints = {
+  results:
+    "What changed because of this work? Include deliverables, measurable results, impact or lessons learned.",
   workingOn:
     "What are you working on right now? Include the task, its current stage and what remains.",
   completed:
@@ -626,6 +776,8 @@ function ReportPlanEditor({
   onSaved: (record: ReportPlanDto) => void;
   onReload: (record: ReportPlanDto) => void;
 }) {
+  const editorTabsId = useId();
+  const [editorTab, setEditorTab] = useState("update");
   const [input, setInput] = useState(initial.input);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -658,6 +810,14 @@ function ReportPlanEditor({
     if (busy) return;
     const parsed = saveReportPlanSchema.safeParse({ ...input, state });
     if (!parsed.success) {
+      const section = parsed.error.issues[0]?.path[1];
+      setEditorTab(
+        section === "timeEntries"
+          ? "time"
+          : section === "resources"
+            ? "resources"
+            : "update",
+      );
       setError(parsed.error.issues.map((issue) => issue.message).join(" "));
       return;
     }
@@ -747,7 +907,11 @@ function ReportPlanEditor({
               {initial.record ? "Edit your update" : "New update"}
             </p>
             <h2 id="report-plan-editor-title">
-              {input.kind === "report" ? "Progress report" : "Work plan"}
+              {input.kind === "plan"
+                ? "Work plan"
+                : input.kind === "log"
+                  ? "Work & time log"
+                  : "Progress report"}
             </h2>
           </div>
           <button
@@ -759,7 +923,7 @@ function ReportPlanEditor({
             <X size={21} />
           </button>
         </header>
-        <form onSubmit={submit}>
+        <form onSubmit={submit} noValidate>
           <div className={styles.editorBody}>
             <p id="report-plan-editor-privacy" className={styles.privacy}>
               <LockKeyhole size={17} />
@@ -769,174 +933,271 @@ function ReportPlanEditor({
                   ? "This update is shared with people who can access this workspace. Saved changes remain shared."
                   : "Save a private draft, or publish when you’re ready to share with people who can access this workspace."}
             </p>
+            <PageTabs
+              id={editorTabsId}
+              label="Report editor sections"
+              value={editorTab}
+              onChange={setEditorTab}
+              sections={[
+                { id: "update", label: "Update" },
+                {
+                  id: "time",
+                  label: `Working time${input.content.timeEntries?.length ? ` (${input.content.timeEntries.length})` : ""}`,
+                },
+                {
+                  id: "resources",
+                  label: `Links & resources${input.content.resources?.length ? ` (${input.content.resources.length})` : ""}`,
+                },
+              ]}
+            />
             <fieldset disabled={busy} className={styles.editorFields}>
-              <label className={styles.full}>
-                Title
-                <input
-                  value={input.title}
-                  required
-                  maxLength={160}
-                  onChange={(event) =>
-                    setInput((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <div className={styles.full}>
-                <span className={styles.fieldLabel}>Quick dates</span>
-                <div className={styles.presets}>
-                  {presets.map(([preset, label]) => (
-                    <button
-                      type="button"
-                      key={preset}
-                      onClick={() =>
-                        setInput((current) => ({
-                          ...current,
-                          ...reportPeriod(preset, today),
-                          title: [
-                            "Daily report",
-                            "Tomorrow’s plan",
-                            ...presets.flatMap(([, name]) => [
-                              `${name} report`,
-                              `${name} plan`,
-                            ]),
-                          ].includes(current.title)
-                            ? `${label} ${current.kind}`
-                            : current.title,
-                        }))
-                      }
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+              <div
+                className={styles.full}
+                role="tabpanel"
+                id={`${editorTabsId}-panel-${editorTab}`}
+                aria-labelledby={`${editorTabsId}-tab-${editorTab}`}
+              >
+                {editorTab === "time" ? (
+                  <ReportTimeFields input={input} onChange={setInput} />
+                ) : editorTab === "resources" ? (
+                  <ReportResourceFields input={input} onChange={setInput} />
+                ) : (
+                  <div className={styles.editorFields}>
+                    {!initial.record && (
+                      <label className={styles.full}>
+                        Template
+                        <select
+                          value={input.content.templateId ?? ""}
+                          onChange={(e) =>
+                            setInput((current) => ({
+                              ...current,
+                              content: {
+                                ...current.content,
+                                templateId: e.target.value || undefined,
+                              },
+                            }))
+                          }
+                        >
+                          <option value="">
+                            Blank {reportKindLabels[input.kind].toLowerCase()}
+                          </option>
+                          {reportTemplates
+                            .filter((t) => t.kind === input.kind)
+                            .map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name}
+                              </option>
+                            ))}
+                        </select>
+                        <span className={styles.hint}>
+                          Templates guide your update. Changing this choice
+                          keeps everything you have written.
+                        </span>
+                      </label>
+                    )}
+                    <label className={styles.full}>
+                      Title
+                      <input
+                        value={input.title}
+                        required
+                        maxLength={160}
+                        onChange={(event) =>
+                          setInput((current) => ({
+                            ...current,
+                            title: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <div className={styles.full}>
+                      <span className={styles.fieldLabel}>Quick dates</span>
+                      <div className={styles.presets}>
+                        {presets.map(([preset, label]) => (
+                          <button
+                            type="button"
+                            key={preset}
+                            onClick={() =>
+                              setInput((current) => ({
+                                ...current,
+                                ...reportPeriod(preset, today),
+                                title: [
+                                  "Daily report",
+                                  "Tomorrow’s plan",
+                                  ...presets.flatMap(([, name]) => [
+                                    `${name} report`,
+                                    `${name} plan`,
+                                  ]),
+                                ].includes(current.title)
+                                  ? `${label} ${current.kind}`
+                                  : current.title,
+                              }))
+                            }
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <label>
+                      Period
+                      <select
+                        value={input.period}
+                        onChange={(event) => {
+                          const period = event.target
+                            .value as SaveReportPlanInput["period"];
+                          setInput((current) => ({
+                            ...current,
+                            period,
+                            ...(period === "day"
+                              ? { periodEnd: current.periodStart }
+                              : {}),
+                          }));
+                        }}
+                      >
+                        <option value="day">Day</option>
+                        <option value="week">Week</option>
+                        <option value="month">Month</option>
+                        <option value="sprint">Sprint</option>
+                        <option value="custom">Custom period</option>
+                      </select>
+                    </label>
+                    <label>
+                      Progress
+                      <select
+                        value={input.health}
+                        onChange={(event) =>
+                          setInput((current) => ({
+                            ...current,
+                            health: event.target
+                              .value as SaveReportPlanInput["health"],
+                          }))
+                        }
+                      >
+                        {Object.entries(healthLabels).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Start date
+                      <input
+                        type="date"
+                        required
+                        value={input.periodStart}
+                        onChange={(event) =>
+                          setInput((current) => ({
+                            ...current,
+                            periodStart: event.target.value,
+                            ...(current.period === "day"
+                              ? { periodEnd: event.target.value }
+                              : {}),
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      End date
+                      <input
+                        type="date"
+                        required
+                        readOnly={input.period === "day"}
+                        min={input.periodStart}
+                        value={input.periodEnd}
+                        onChange={(event) =>
+                          setInput((current) => ({
+                            ...current,
+                            periodEnd: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <p className={styles.dateNote}>
+                      Quick dates use {timezone}. Start and end dates are
+                      included.
+                    </p>
+                    <label className={styles.full}>
+                      Sprint or work context{" "}
+                      <span className={styles.optional}>
+                        (optional context)
+                      </span>
+                      <input
+                        maxLength={240}
+                        placeholder="e.g. Website launch · Sprint 12"
+                        value={input.context}
+                        onChange={(event) =>
+                          setInput((current) => ({
+                            ...current,
+                            context: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className={styles.full}>
+                      Progress percentage · Optional
+                      <input
+                        aria-label="Progress percentage"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={input.content.progressPercent ?? ""}
+                        onChange={(e) =>
+                          setInput((current) => ({
+                            ...current,
+                            content: {
+                              ...current.content,
+                              progressPercent:
+                                e.target.value === ""
+                                  ? undefined
+                                  : Number(e.target.value),
+                            },
+                          }))
+                        }
+                      />
+                      <span className={styles.hint}>
+                        Your reported progress for this work; task status is
+                        managed separately.
+                      </span>
+                    </label>
+                    {(input.kind === "plan" ? planFields : reportFields).map(
+                      (field) => (
+                        <label key={field} className={styles.full}>
+                          {contentLabels[field]}
+                          <span className={styles.hint}>
+                            {reportTemplateHints[
+                              input.content.templateId ?? ""
+                            ]?.[field] ?? hints[field]}
+                          </span>
+                          <textarea
+                            rows={
+                              field === "completed" ||
+                              field === "goals" ||
+                              field === "nextSteps"
+                                ? 4
+                                : 3
+                            }
+                            maxLength={4000}
+                            value={input.content[field] ?? ""}
+                            onChange={(event) =>
+                              setInput((current) => ({
+                                ...current,
+                                content: {
+                                  ...current.content,
+                                  [field]: event.target.value,
+                                },
+                              }))
+                            }
+                          />
+                          <span className={styles.counter}>
+                            {(input.content[field] ?? "").length}/4,000
+                          </span>
+                        </label>
+                      ),
+                    )}
+                  </div>
+                )}
               </div>
-              <label>
-                Period
-                <select
-                  value={input.period}
-                  onChange={(event) => {
-                    const period = event.target
-                      .value as SaveReportPlanInput["period"];
-                    setInput((current) => ({
-                      ...current,
-                      period,
-                      ...(period === "day"
-                        ? { periodEnd: current.periodStart }
-                        : {}),
-                    }));
-                  }}
-                >
-                  <option value="day">Day</option>
-                  <option value="week">Week</option>
-                  <option value="month">Month</option>
-                  <option value="sprint">Sprint</option>
-                  <option value="custom">Custom period</option>
-                </select>
-              </label>
-              <label>
-                Progress
-                <select
-                  value={input.health}
-                  onChange={(event) =>
-                    setInput((current) => ({
-                      ...current,
-                      health: event.target
-                        .value as SaveReportPlanInput["health"],
-                    }))
-                  }
-                >
-                  {Object.entries(healthLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Start date
-                <input
-                  type="date"
-                  required
-                  value={input.periodStart}
-                  onChange={(event) =>
-                    setInput((current) => ({
-                      ...current,
-                      periodStart: event.target.value,
-                      ...(current.period === "day"
-                        ? { periodEnd: event.target.value }
-                        : {}),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                End date
-                <input
-                  type="date"
-                  required
-                  readOnly={input.period === "day"}
-                  min={input.periodStart}
-                  value={input.periodEnd}
-                  onChange={(event) =>
-                    setInput((current) => ({
-                      ...current,
-                      periodEnd: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <p className={styles.dateNote}>
-                Quick dates use {timezone}. Start and end dates are included.
-              </p>
-              <label className={styles.full}>
-                Project or sprint{" "}
-                <span className={styles.optional}>(optional context)</span>
-                <input
-                  maxLength={240}
-                  placeholder="e.g. Website launch · Sprint 12"
-                  value={input.context}
-                  onChange={(event) =>
-                    setInput((current) => ({
-                      ...current,
-                      context: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              {(input.kind === "report" ? reportFields : planFields).map(
-                (field) => (
-                  <label key={field} className={styles.full}>
-                    {contentLabels[field]}
-                    <span className={styles.hint}>{hints[field]}</span>
-                    <textarea
-                      rows={
-                        field === "completed" ||
-                        field === "goals" ||
-                        field === "nextSteps"
-                          ? 4
-                          : 3
-                      }
-                      maxLength={4000}
-                      value={input.content[field]}
-                      onChange={(event) =>
-                        setInput((current) => ({
-                          ...current,
-                          content: {
-                            ...current.content,
-                            [field]: event.target.value,
-                          },
-                        }))
-                      }
-                    />
-                    <span className={styles.counter}>
-                      {input.content[field].length}/4,000
-                    </span>
-                  </label>
-                ),
-              )}
             </fieldset>
             {error && (
               <div className={styles.error} role="alert">

@@ -6,9 +6,15 @@ The floating messenger is a persistent, bottom-right companion in the signed-in
 workspace. It opens without leaving the current page. Threads, People and Teams
 are its primary tabs, with independently closable conversation tabs underneath.
 People can search conversations, start a private direct conversation or a group
-thread, open a team room, minimize, expand, and open the full Messages page.
+thread, open a team room, minimize, and open the full Messages page.
 Changing pages does not discard open conversations; switching a conversation or
-closing the window retains its existing recoverable draft.
+minimizing the window retains its existing recoverable draft.
+
+As requested on September 14, the window uses one larger default size, up to
+1248 × 896px, fitted to the available screen space. Its top-right actions are
+Open in full page and Minimize. The former expand/restore and duplicate close
+buttons are removed. Conversation tabs still close independently, and mobile
+layouts continue to keep the composer and bottom navigation accessible.
 
 The conversation view reuses the full live messenger: confirmed delivery, retry
 identity, recovered drafts, earlier messages, threaded replies, reactions,

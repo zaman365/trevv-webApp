@@ -8,6 +8,7 @@ export type ActiveWorkspacePage =
   | "guide"
   | "calendar"
   | "report-plan"
+  | "report-log"
   | "attention"
   | "myWork"
   | "inbox"
@@ -72,11 +73,13 @@ export function workspaceShellRoute(
   if (!isWorkspaceView(view)) return null;
   return {
     active:
-      view === "my-work"
-        ? "myWork"
-        : view === "blueprints"
-          ? "templates"
-          : view,
+      view === "report-plan"
+        ? "report-log"
+        : view === "my-work"
+          ? "myWork"
+          : view === "blueprints"
+            ? "templates"
+            : view,
     workspaceSlug,
     requiresRecords: true,
   };

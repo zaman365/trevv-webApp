@@ -22,6 +22,7 @@ describe("dashboard sections", () => {
       "my-work",
       "planning",
       "ideas",
+      "report-log",
       "teams",
       "decisions",
       "approvals",

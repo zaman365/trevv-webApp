@@ -86,6 +86,10 @@ describe("static route warming", () => {
   });
   it("loads member reports separately while preserving workspace reviews", () => {
     for (const mode of ["demo", "live"] as const) {
+      expect(routeCodeModules("/app/workspaces/one/report-log", mode)).toEqual([
+        "moduleLoader",
+        "reportPlan",
+      ]);
       expect(routeCodeModules("/app/workspaces/one/report-plan", mode)).toEqual(
         ["moduleLoader", "reportPlan"],
       );

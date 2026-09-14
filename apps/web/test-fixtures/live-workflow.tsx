@@ -31,6 +31,7 @@ import { LiveTeamWorkflow } from "../components/live-team-workflow";
 import { LiveTeamPage } from "../components/live-team-page";
 import { LiveAttention } from "../components/live-work-attention";
 import { LiveMessagingWorkspace } from "../components/live-messaging-workspace";
+import { ReportPlanWorkspace } from "../components/report-plan-experience";
 import { board, session, snapshot } from "./live-workflow-data";
 import type { WorkItemDto } from "@founderhq/api-contract";
 
@@ -40,6 +41,13 @@ function Workflow() {
   const queryClient = useQueryClient();
   const [capture, setCapture] = useState(false);
   const [confirmed, setConfirmed] = useState<LiveCaptureSuccess | null>(null);
+  if (view === "report-log" || view === "report-plan")
+    return (
+      <ReportPlanWorkspace
+        workspaceId={board.workspaceId}
+        workspaceSlug="launch"
+      />
+    );
   if (view === "personal") return <LivePersonalWork />;
   if (view === "calendar")
     return (

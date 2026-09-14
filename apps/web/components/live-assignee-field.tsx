@@ -1,12 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { TrevvApiError } from "@founderhq/api-client";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords } from "@/lib/live-app-data";
 import styles from "./live-operating-loop.module.css";
-import { LiveInvitePerson } from "./live-invite-person";
+const LiveInvitePerson = lazy(() =>
+  import("./live-invite-person").then((module) => ({
+    default: module.LiveInvitePerson,
+  })),
+);
 
 export function LiveAssigneeField({
   workspaceId,
@@ -24,6 +28,7 @@ export function LiveAssigneeField({
   const session = useAppSession();
   const { client } = useLiveAppRecords();
   const [teamId, setTeamId] = useState("");
+  const [inviteRevealed, setInviteRevealed] = useState(false);
   const directory = useQuery({
     queryKey: [
       "workspace-resources",
@@ -95,17 +100,25 @@ export function LiveAssigneeField({
         </small>
       ) : null}
       {!directory.isPending && !accessLost ? (
-        <details>
+        <details
+          onToggle={(event) => {
+            if (event.currentTarget.open) setInviteRevealed(true);
+          }}
+        >
           <summary>
             {people.length <= 1
               ? "Add people to assign work"
               : "Missing someone? Add a teammate"}
           </summary>
-          <LiveInvitePerson
-            workspaceId={workspaceId}
-            {...(team ? { teamId: team.id, teamName: team.name } : {})}
-            onRefresh={() => void directory.refetch()}
-          />
+          {inviteRevealed ? (
+            <Suspense fallback={<p role="status">Loading invitations…</p>}>
+              <LiveInvitePerson
+                workspaceId={workspaceId}
+                {...(team ? { teamId: team.id, teamName: team.name } : {})}
+                onRefresh={() => void directory.refetch()}
+              />
+            </Suspense>
+          ) : null}
         </details>
       ) : null}
     </div>

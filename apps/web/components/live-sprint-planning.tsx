@@ -4,7 +4,14 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BoardDto } from "@founderhq/api-contract";
 import { TrevvApiError } from "@founderhq/api-client";
-import { ArrowUpRight, Plus, RefreshCw } from "lucide-react";
+import {
+  ArrowUpRight,
+  Plus,
+  RefreshCw,
+  LayoutGrid,
+  ListTodo,
+  Milestone,
+} from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords } from "@/lib/live-app-data";
@@ -13,6 +20,7 @@ import { presentLiveReadError } from "@/lib/live-errors";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { dashboardPlanItems } from "@/lib/workspace-dashboard";
+import { PageSections } from "./page-sections";
 import { PlanningCard } from "./planning-card";
 import cardStyles from "./planning-card.module.css";
 import { PlanEditor } from "./live-project-planning";
@@ -71,17 +79,24 @@ export function SprintPlanningContent({
   const boards = accessLost
     ? []
     : (query.data ?? []).filter((board) => board.workspaceId === workspaceId);
-  const sprints = boards.filter((board) => board.planning?.kind === "sprint");
+  // The Sprints surface was formerly the all-board planning page. Keep its
+  // existing records visible without rewriting their kinds or task links.
+  const sprints = boards;
   const scoped = sprints.filter(
     (board) => !teamFilter || board.planning?.teamId === teamFilter,
   );
   const shown = scoped
     .filter(
-      (board) => stateFilter === "all" || board.planning?.state === stateFilter,
+      (board) =>
+        stateFilter === "all" ||
+        (board.planning?.state ?? "planned") === stateFilter,
     )
     .sort(
       (a, b) =>
-        order[a.planning!.state] - order[b.planning!.state] ||
+        order[a.planning?.state ?? "planned"] -
+          order[b.planning?.state ?? "planned"] ||
+        Number(b.planning?.kind === "sprint") -
+          Number(a.planning?.kind === "sprint") ||
         (a.startDate ?? "9999").localeCompare(b.startDate ?? "9999") ||
         a.name.localeCompare(b.name),
     );
@@ -92,6 +107,12 @@ export function SprintPlanningContent({
   const items = accessLost
     ? []
     : data.items.filter((item) => item.workspaceId === workspaceId);
+  const scopedBoardIds = new Set(shown.map((board) => board.id));
+  const scopedWork = items.filter(
+    (item) =>
+      scopedBoardIds.has(item.boardId) ||
+      (item.planning?.cycleId && scopedBoardIds.has(item.planning.cycleId)),
+  );
   const work = selected ? dashboardPlanItems(items, selected) : [];
   const backlog = parent
     ? items.filter(
@@ -135,255 +156,307 @@ export function SprintPlanningContent({
   }
   return (
     <section aria-label="Sprint planning" className={styles.root}>
-      <div className={styles.toolbar}>
-        <div className={styles.filters} role="group" aria-label="Sprint status">
-          {states.map((state) => (
-            <button
-              key={state}
-              type="button"
-              aria-pressed={stateFilter === state}
-              onClick={() => setStateFilter(state)}
-            >
-              {labels[state]}{" "}
-              <span>
-                {
-                  scoped.filter(
-                    (board) =>
-                      state === "all" || board.planning?.state === state,
-                  ).length
-                }
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className={styles.actions}>
-          <button
-            type="button"
-            aria-label="Refresh sprints"
-            title="Refresh sprints"
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-          <Link href={workspaceHref(workspaceSlug, "planning")}>
-            Projects and other plans{" "}
-            <ArrowUpRight size={14} aria-hidden="true" />
-          </Link>
-          {canEdit && (
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => edit()}
-            >
-              <Plus size={16} aria-hidden="true" /> Plan sprint
-            </button>
-          )}
-        </div>
-      </div>
-      {!!directory.data?.teams.length && (
-        <label className={styles.teamFilter}>
-          Team
-          <select
-            value={teamFilter}
-            onChange={(event) => setTeamFilter(event.target.value)}
-          >
-            <option value="">All teams</option>
-            {directory.data.teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {confirmation && <p role="status">{confirmation}</p>}
-      {query.isPending && <p role="status">Loading sprints…</p>}
-      {query.error && (
-        <LiveStateNotice
-          {...presentLiveReadError(query.error)}
-          actions={
-            <button type="button" onClick={() => void query.refetch()}>
-              Retry sprints
-            </button>
-          }
-        />
-      )}
-      {data.accessLost && !query.error && (
-        <LiveStateNotice
-          kind="permission-loss"
-          title="Workspace not available"
-        />
-      )}
-      {!query.isPending && !query.error && !accessLost && !shown.length && (
-        <div className={styles.empty}>
-          <h3>
-            {sprints.length
-              ? "No sprints match these filters"
-              : "Plan your first sprint"}
-          </h3>
-          <p>
-            {sprints.length
-              ? "Choose another status or team to see its sprints."
-              : "Choose a goal, a team and a start and end date. Then add the work the team will deliver in this sprint."}
-          </p>
-          {!!sprints.length && (
-            <button
-              type="button"
-              onClick={() => {
-                setStateFilter("all");
-                setTeamFilter("");
-              }}
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-      )}
-      <div className={cardStyles.grid}>
-        {shown.map((board) => {
-          const tasks = dashboardPlanItems(items, board);
-          const team = directory.data?.teams.find(
-            (entry) => entry.id === board.planning?.teamId,
-          );
-          const project = boards.find(
-            (entry) => entry.id === board.planning?.parentBoardId,
-          );
-          return (
-            <PlanningCard
-              key={board.id}
-              board={board}
-              workspaceSlug={workspaceSlug}
-              timezone={timezone}
-              teamName={team?.name}
-              parentName={project?.name}
-              items={tasks}
-              complete={complete}
-              selected={selected?.id === board.id}
-              onSelect={() => {
-                setSelectedId(board.id);
-                setWorkScope("sprint");
-              }}
-            />
-          );
-        })}
-      </div>
-      {selected && (
-        <section
-          id="selected-sprint-work"
-          className={styles.detail}
-          aria-label={`${selected.name} sprint details`}
-        >
-          <header className={styles.toolbar}>
-            <div>
-              <small>{labels[selected.planning!.state]} sprint</small>
-              <h3>{selected.name}</h3>
-            </div>
-            <div className={styles.actions}>
-              <Link
-                href={`${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(selected.id)}`}
-              >
-                Open sprint board <ArrowUpRight size={14} aria-hidden="true" />
-              </Link>
-              {canEdit && (
-                <>
-                  <button type="button" onClick={() => edit(selected)}>
-                    Edit sprint
-                  </button>
-                  {selected.planning?.state !== "completed" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        edit(
-                          selected,
-                          selected.planning?.state === "active"
-                            ? "completed"
-                            : "active",
-                        )
-                      }
-                    >
-                      {selected.planning?.state === "active"
-                        ? "Review and complete"
-                        : "Start sprint"}
-                    </button>
-                  )}
-                  {selected.planning?.state !== "completed" && (
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={() => {
-                        trigger.current = document.activeElement as HTMLElement;
-                        setCaptureId(selected.id);
-                      }}
-                    >
-                      Add sprint task
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </header>
-          <p className={styles.goal}>
-            {selected.description ||
-              "Set a clear goal and success criteria in Edit sprint."}
-          </p>
-          {selected.planning?.state === "completed" &&
-            complete &&
-            work.some((item) => item.status !== "done") && (
-              <p className={styles.blocked}>
-                Unfinished work stays visible. Open a task to move it to the
-                next sprint or return it to the project backlog.
-              </p>
-            )}
-          {parent && (
+      <PageSections
+        scope={`sprints:${session.organization.id}:${workspaceId}`}
+        queryParameter="sprintView"
+        label="Sprint views"
+        sections={[
+          {
+            id: "overview",
+            label: "Overview",
+            icon: <LayoutGrid size={16} aria-hidden="true" />,
+          },
+          {
+            id: "work",
+            label: "Sprint work",
+            icon: <ListTodo size={16} aria-hidden="true" />,
+          },
+          {
+            id: "milestones",
+            label: "Milestones",
+            icon: <Milestone size={16} aria-hidden="true" />,
+          },
+        ]}
+        toolbar={
+          <>
             <div className={styles.toolbar}>
               <div
                 className={styles.filters}
                 role="group"
-                aria-label="Sprint work scope"
+                aria-label="Sprint status"
               >
-                <button
-                  type="button"
-                  aria-pressed={workScope === "sprint"}
-                  onClick={() => setWorkScope("sprint")}
-                >
-                  Sprint work
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={workScope === "backlog"}
-                  onClick={() => setWorkScope("backlog")}
-                >
-                  Project backlog
-                </button>
+                {states.map((state) => (
+                  <button
+                    key={state}
+                    type="button"
+                    aria-pressed={stateFilter === state}
+                    onClick={() => setStateFilter(state)}
+                  >
+                    {labels[state]}{" "}
+                    <span>
+                      {
+                        scoped.filter(
+                          (board) =>
+                            state === "all" ||
+                            (board.planning?.state ?? "planned") === state,
+                        ).length
+                      }
+                    </span>
+                  </button>
+                ))}
               </div>
-              <Link
-                href={`${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(parent.id)}`}
-              >
-                Open {parent.name}
-              </Link>
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  aria-label="Refresh sprints"
+                  title="Refresh sprints"
+                  disabled={query.isFetching}
+                  onClick={() => void query.refetch()}
+                >
+                  <RefreshCw size={16} aria-hidden="true" />
+                </button>
+                <Link
+                  href={`${workspaceHref(workspaceSlug, "planning")}?mode=plans`}
+                >
+                  Other plans <ArrowUpRight size={14} aria-hidden="true" />
+                </Link>
+                {canEdit && (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => edit()}
+                  >
+                    <Plus size={16} aria-hidden="true" /> New Sprint
+                  </button>
+                )}
+              </div>
             </div>
-          )}
-          {parent && workScope === "backlog" && (
-            <p>
-              Unscheduled open work from {parent.name}. Open a task and choose
-              this sprint in its planning fields to include it.
-            </p>
-          )}
+            {!!directory.data?.teams.length && (
+              <label className={styles.teamFilter}>
+                Team
+                <select
+                  value={teamFilter}
+                  onChange={(event) => setTeamFilter(event.target.value)}
+                >
+                  <option value="">All teams</option>
+                  {directory.data.teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {confirmation && <p role="status">{confirmation}</p>}
+            {query.isPending && <p role="status">Loading sprints…</p>}
+            {query.error && (
+              <LiveStateNotice
+                {...presentLiveReadError(query.error)}
+                actions={
+                  <button type="button" onClick={() => void query.refetch()}>
+                    Retry sprints
+                  </button>
+                }
+              />
+            )}
+            {data.accessLost && !query.error && (
+              <LiveStateNotice
+                kind="permission-loss"
+                title="Workspace not available"
+              />
+            )}
+          </>
+        }
+        renderSection={(view) => (
           <LiveMyWork
-            key={`${selected.id}:${parent ? workScope : "sprint"}`}
-            items={parent && workScope === "backlog" ? backlog : work}
+            items={
+              view === "milestones"
+                ? scopedWork.filter((item) => item.type === "milestone")
+                : scopedWork
+            }
             assignedToMe={false}
             initialPeriod="all"
             workspaceSlug={workspaceSlug}
-            title={
-              parent && workScope === "backlog"
-                ? "Project backlog"
-                : "Sprint work"
-            }
+            title={view === "milestones" ? "Sprint milestones" : "Sprint work"}
           />
-        </section>
-      )}
+        )}
+      >
+        {!query.isPending && !query.error && !accessLost && !shown.length && (
+          <div className={styles.empty}>
+            <h3>
+              {sprints.length
+                ? "No sprints match these filters"
+                : "Plan your first sprint"}
+            </h3>
+            <p>
+              {sprints.length
+                ? "Choose another status or team to see its sprints."
+                : "Choose a goal, a team and a start and end date. Then add the work the team will deliver in this sprint."}
+            </p>
+            {!!sprints.length && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStateFilter("all");
+                  setTeamFilter("");
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+        <div className={cardStyles.grid}>
+          {shown.map((board) => {
+            const tasks = dashboardPlanItems(items, board);
+            const team = directory.data?.teams.find(
+              (entry) => entry.id === board.planning?.teamId,
+            );
+            const project = boards.find(
+              (entry) => entry.id === board.planning?.parentBoardId,
+            );
+            return (
+              <PlanningCard
+                key={board.id}
+                board={board}
+                workspaceSlug={workspaceSlug}
+                timezone={timezone}
+                teamName={team?.name}
+                parentName={project?.name}
+                items={tasks}
+                complete={complete}
+                sprintContext
+                onEdit={canEdit ? () => edit(board) : undefined}
+                selected={selected?.id === board.id}
+                onSelect={() => {
+                  setSelectedId(board.id);
+                  setWorkScope("sprint");
+                }}
+              />
+            );
+          })}
+        </div>
+        {selected && (
+          <section
+            id="selected-sprint-work"
+            className={styles.detail}
+            aria-label={`${selected.name} sprint details`}
+          >
+            <header className={styles.toolbar}>
+              <div>
+                <small>
+                  {labels[selected.planning?.state ?? "planned"]} sprint
+                </small>
+                <h3>{selected.name}</h3>
+              </div>
+              <div className={styles.actions}>
+                <Link
+                  href={`${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(selected.id)}`}
+                >
+                  Open sprint board{" "}
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </Link>
+                {canEdit && (
+                  <>
+                    <button type="button" onClick={() => edit(selected)}>
+                      Edit sprint
+                    </button>
+                    {selected.planning?.state !== "completed" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          edit(
+                            selected,
+                            selected.planning?.state === "active"
+                              ? "completed"
+                              : "active",
+                          )
+                        }
+                      >
+                        {selected.planning?.state === "active"
+                          ? "Review and complete"
+                          : "Start sprint"}
+                      </button>
+                    )}
+                    {selected.planning?.state !== "completed" && (
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={() => {
+                          trigger.current =
+                            document.activeElement as HTMLElement;
+                          setCaptureId(selected.id);
+                        }}
+                      >
+                        Add sprint task
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </header>
+            <p className={styles.goal}>
+              {selected.description ||
+                "Set a clear goal and success criteria in Edit sprint."}
+            </p>
+            {selected.planning?.state === "completed" &&
+              complete &&
+              work.some((item) => item.status !== "done") && (
+                <p className={styles.blocked}>
+                  Unfinished work stays visible. Open a task to move it to the
+                  next sprint or return it to the board backlog.
+                </p>
+              )}
+            {parent && (
+              <div className={styles.toolbar}>
+                <div
+                  className={styles.filters}
+                  role="group"
+                  aria-label="Sprint work scope"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={workScope === "sprint"}
+                    onClick={() => setWorkScope("sprint")}
+                  >
+                    Sprint work
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={workScope === "backlog"}
+                    onClick={() => setWorkScope("backlog")}
+                  >
+                    Board backlog
+                  </button>
+                </div>
+                <Link
+                  href={`${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(parent.id)}`}
+                >
+                  Open {parent.name}
+                </Link>
+              </div>
+            )}
+            {parent && workScope === "backlog" && (
+              <p>
+                Unscheduled open work from {parent.name}. Open a task and choose
+                this sprint in its planning fields to include it.
+              </p>
+            )}
+            <LiveMyWork
+              key={`${selected.id}:${parent ? workScope : "sprint"}`}
+              items={parent && workScope === "backlog" ? backlog : work}
+              assignedToMe={false}
+              initialPeriod="all"
+              workspaceSlug={workspaceSlug}
+              title={
+                parent && workScope === "backlog"
+                  ? "Board backlog"
+                  : "Sprint work"
+              }
+            />
+          </section>
+        )}
+      </PageSections>
       {editing && canEdit && (
         <PlanEditor
           workspaceId={workspaceId}
@@ -402,6 +475,7 @@ export function SprintPlanningContent({
         <LiveQuickCaptureDialog
           workspaceId={workspaceId}
           workspaceSlug={workspaceSlug}
+          creationIntent="task"
           defaultBoardId={captureBoard.id}
           {...(captureBoard.planning?.teamId
             ? { defaultTeamId: captureBoard.planning.teamId }

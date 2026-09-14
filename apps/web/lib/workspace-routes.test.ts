@@ -31,6 +31,7 @@ describe("workspace routes", () => {
     expect(isWorkspaceView("dashboard")).toBe(true);
     expect(isWorkspaceView("teams")).toBe(true);
     expect(isWorkspaceView("report-plan")).toBe(true);
+    expect(isWorkspaceView("report-log")).toBe(true);
     expect(isWorkspaceView("reviews")).toBe(true);
     expect(isWorkspaceView("team")).toBe(false);
     expect(isWorkspaceView("portfolio")).toBe(false);

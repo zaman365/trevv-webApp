@@ -2,6 +2,11 @@
 import { lazy } from "react";
 import { DashboardSectionContent } from "./live-dashboard-section-content";
 import type { DashboardSection } from "@/lib/dashboard-sections";
+const ReportLog = lazy(() =>
+  import("./report-plan-experience").then((m) => ({
+    default: m.ReportPlanWorkspace,
+  })),
+);
 const People = lazy(() =>
   import("./live-people-page").then((m) => ({ default: m.LivePeoplePage })),
 );
@@ -17,6 +22,14 @@ export function WorkspaceSectionContent({
   workspaceSlug: string;
   workspaceId: string;
 }) {
+  if (section === "report-log")
+    return (
+      <ReportLog
+        workspaceSlug={workspaceSlug}
+        workspaceId={workspaceId}
+        embedded
+      />
+    );
   if (section === "people")
     return <People workspaceSlug={workspaceSlug} embedded />;
   if (section === "reviews") return <Review workspaceId={workspaceId} />;

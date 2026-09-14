@@ -17,7 +17,7 @@
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: var(--fh-radius-overlay);
   box-shadow: 0 24px 90px rgb(0 0 0 / 25%);
 }
 .dialog [hidden] {
@@ -50,7 +50,7 @@
 .severity {
   display: inline-block;
   padding: 0.3rem 0.6rem;
-  border-radius: 7px;
+  border-radius: var(--fh-radius-control);
   background: var(--fh-primary-soft);
   color: var(--fh-primary-strong);
   text-transform: capitalize;
@@ -88,7 +88,7 @@
   min-height: 2.6rem;
   padding: 0.55rem 0.85rem;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -154,7 +154,7 @@
   gap: 1rem;
   padding: 1.1rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface-subtle);
   min-width: 0;
 }
@@ -209,7 +209,7 @@
   padding: 0.85rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--fh-radius-card);
   min-width: 0;
   font-size: 0.82rem;
 }
@@ -235,7 +235,7 @@
   min-height: 2.6rem;
   padding: 0.7rem;
   border: 1px solid var(--border-strong);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -313,7 +313,7 @@
   }
   .dialog {
     max-height: calc(100dvh - 1rem);
-    border-radius: 14px;
+    border-radius: var(--fh-radius-overlay);
   }
   .header,
   .body {

@@ -337,7 +337,7 @@ export function createReportPlanRepositories(
 function missing() {
   return new RepositoryError(
     "resource_not_found",
-    "This report or plan is not available.",
+    "This report, log or plan is not available.",
   );
 }
 function conflict() {

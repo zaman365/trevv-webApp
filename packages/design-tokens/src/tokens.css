@@ -8,8 +8,8 @@
   --fh-ink: #172033;
   --fh-ink-soft: #3e465a;
   --fh-muted: #626b7e;
-  --fh-border: #e2e5ec;
-  --fh-border-strong: #d3d7e2;
+  --fh-border: #d0d5e0;
+  --fh-border-strong: #bcc4d4;
   --fh-primary: #5b5bd6;
   --fh-primary-strong: #4747bd;
   --fh-primary-soft: #eeeeff;
@@ -30,9 +30,13 @@
   --fh-info-border: #b8c8f0;
   --fh-shadow-sm: 0 1px 2px rgb(23 32 51 / 4%);
   --fh-shadow-md: 0 12px 32px rgb(23 32 51 / 8%);
-  --fh-radius-control: 11px;
-  --fh-radius-card: 17px;
-  --fh-radius-panel: 20px;
+  /* Corner scale: compact controls, content surfaces, then floating surfaces.
+     Nested panels share the card radius; circles and data graphics keep
+     their own geometry. Use these tokens instead of per-page values. */
+  --fh-radius-control: 4px;
+  --fh-radius-card: 6px;
+  --fh-radius-panel: var(--fh-radius-card);
+  --fh-radius-overlay: 8px;
 
   /* Focus ring. Must clear 3:1 against the surface behind it to satisfy
      WCAG 2.2 SC 2.4.11. The solid primary reaches 5.37:1; the inner white
@@ -78,8 +82,8 @@
   --fh-ink: #f4f6fb;
   --fh-ink-soft: #d9deea;
   --fh-muted: #9da5ba;
-  --fh-border: #2a3143;
-  --fh-border-strong: #384157;
+  --fh-border: #3b4559;
+  --fh-border-strong: #505d76;
   --fh-primary: #8b88ff;
   --fh-primary-strong: #a4a2ff;
   --fh-primary-soft: #29294d;
@@ -117,8 +121,8 @@
     --fh-ink: #f4f6fb;
     --fh-ink-soft: #d9deea;
     --fh-muted: #9da5ba;
-    --fh-border: #2a3143;
-    --fh-border-strong: #384157;
+    --fh-border: #3b4559;
+    --fh-border-strong: #505d76;
     --fh-primary: #8b88ff;
     --fh-primary-strong: #a4a2ff;
     --fh-primary-soft: #29294d;

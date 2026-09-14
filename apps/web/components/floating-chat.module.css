@@ -25,13 +25,13 @@
   z-index: 89;
   right: 1.25rem;
   bottom: 5.25rem;
-  width: min(53rem, calc(100vw - 2.5rem));
-  height: min(43rem, calc(100dvh - 7rem));
+  width: min(78rem, calc(100vw - 2.5rem));
+  height: min(56rem, calc(100dvh - 7rem));
   min-height: 0;
   color: var(--text, #1f2433);
   background: var(--surface, #fff);
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 1.25rem;
+  border-radius: var(--fh-radius-overlay);
   box-shadow: 0 20px 80px rgb(21 25 38 / 24%);
   overflow: hidden;
 }
@@ -45,10 +45,6 @@
 .loading {
   height: auto;
   padding: 2rem;
-}
-.expanded {
-  width: min(78rem, calc(100vw - 2.5rem));
-  height: calc(100dvh - 7rem);
 }
 .header {
   display: flex;
@@ -84,6 +80,7 @@
 .headerActions {
   display: flex;
   gap: 0.25rem;
+  flex-shrink: 0;
 }
 .iconButton,
 .headerActions a {
@@ -93,7 +90,7 @@
   width: 2.2rem;
   height: 2.2rem;
   border: 1px solid transparent;
-  border-radius: 0.6rem;
+  border-radius: var(--fh-radius-control);
   color: var(--text-secondary);
   background: var(--surface);
   cursor: pointer;
@@ -124,7 +121,7 @@
   gap: 0.2rem;
   border: 1px solid var(--border);
   padding: 0.25rem;
-  border-radius: 0.85rem;
+  border-radius: var(--fh-radius-card);
   background: var(--surface);
 }
 .primaryTabs button {
@@ -134,7 +131,7 @@
   justify-content: center;
   gap: 0.25rem;
   border: 0;
-  border-radius: 0.6rem;
+  border-radius: var(--fh-radius-control);
   padding: 0.6rem 0.3rem;
   font: inherit;
   font-size: 0.78rem;
@@ -154,7 +151,7 @@
   padding: 0.5rem 0.6rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 0.6rem;
+  border-radius: var(--fh-radius-control);
 }
 .search input {
   width: 100%;
@@ -174,7 +171,7 @@
   min-height: 2.65rem;
   width: 100%;
   border: 1px solid var(--border-strong);
-  border-radius: 0.7rem;
+  border-radius: var(--fh-radius-control);
   background: var(--fh-primary-soft);
   color: var(--fh-primary);
   font: inherit;
@@ -188,7 +185,7 @@
 }
 .row {
   border: 1px solid var(--border);
-  border-radius: 0.7rem;
+  border-radius: var(--fh-radius-card);
   background: var(--surface);
   padding: 0.7rem;
   display: flex;
@@ -269,7 +266,7 @@
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: 0.6rem;
+  border-radius: var(--fh-radius-control);
   flex: 0 0 auto;
   max-width: 13rem;
 }
@@ -337,13 +334,12 @@
   cursor: wait;
 }
 @media (max-width: 700px) {
-  .window,
-  .expanded {
+  .window {
     right: 0.5rem;
     bottom: 4.8rem;
     width: calc(100vw - 1rem);
     height: calc(100dvh - 6rem);
-    border-radius: 0.9rem;
+    border-radius: var(--fh-radius-overlay);
   }
   .launcher {
     bottom: max(0.75rem, env(safe-area-inset-bottom));
@@ -401,12 +397,10 @@
     bottom: calc(70px + max(0.75rem, env(safe-area-inset-bottom)));
   }
   .window,
-  .expanded,
   .loading {
     bottom: calc(70px + 4.8rem);
   }
-  .window,
-  .expanded {
+  .window {
     height: calc(100dvh - 70px - 6rem);
   }
 }

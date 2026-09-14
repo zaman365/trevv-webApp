@@ -84,6 +84,12 @@ Choose **Optional: save to Inbox for later** when you want to organize the
 item later; its type and suggested assignment are kept for conversion to work.
 Team-specific and issue follow-up captures retain their starting context.
 
+**New task** on Dashboard and My Work opens **Create Task** with **Task**
+selected. Task buttons on the Plans and ideas cards use the same focused editor.
+The other type tabs remain available; choosing one updates the editor heading.
+These task actions keep separate drafts for each type and restore the task draft
+when reopened, so a general Quick capture request never replaces your task.
+
 1. Open the project and choose New task / work item. Enter an actionable title, expected outcome, priority and due date. Task creation goes directly to the project; Inbox is optional.
 
 2. Choose an assignee. Filter people by team if useful. If someone is missing, use Add people to assign work, send an invitation, and refresh after they accept.
@@ -93,6 +99,14 @@ Team-specific and issue follow-up captures retain their starting context.
 4. Save, then open the task to edit its owner, dates, status and context. The assignee finds it in All my work across their workspaces and My Work within this workspace.
 
 ## 5. Plan sprints and project milestones
+
+Open Sprints from the Dashboard or its full page to see the same saved work.
+Choose New Sprint to set a goal, team, start date and target date. Use Overview
+to select a sprint, Sprint work to review its tasks across the current filters,
+and Milestones to review deliverables. Status and team filters apply to these
+previews. Select a card to work in place or use its Full page link for the board.
+Other plans keeps the original project, campaign and other planning options
+available. Existing boards and their tasks remain available in Sprints.
 
 1. Open a project and choose Plan a sprint / cycle. Set its goal, start date and target date, then save it as Planned. Use a campaign or operations cycle when that fits the team better.
 
@@ -113,6 +127,13 @@ Team-specific and issue follow-up captures retain their starting context.
 4. Post task-specific progress in the task’s Updates and evidence area. In Messages, use a request or decision with a response owner and due date when a reply must be followed up.
 
 ## 7. Run a daily follow-up
+
+Task collections open in **Cards** across Dashboard, My Work, teams, sprints,
+and boards. Click a card to open its task; use its status control or owner name
+without leaving the collection. Cards show context, priority, ownership, and
+the due date. Larger collections have **Previous tasks / Next tasks** controls.
+**List** retains the compact view, and **Board** groups the same cards by status.
+Search, date filters, sorting, and completed work remain available in all views.
 
 1. Start with Today and Overdue in My Work. Update Working, Review or Done as the work changes. Use the board view to see work by status.
 
@@ -195,3 +216,19 @@ If sharing is interrupted, the item remains saved. Use **Retry sharing** in the
 sharing notice, including after reloading; it resumes the same request without
 creating duplicate work or announcements. Inbox-first ideas remain available:
 organize them on a board before inviting collaborators.
+
+## Report & Log
+
+Open Report & Log from workspace navigation or its Dashboard, My Work, Sprints
+and Teams tabs. Choose Write report, Log work / time, or a template. Enter your
+activities, results and reported progress in Update; add durations or timed shifts
+and breaks in Working time. Links & resources accepts named Google Drive, Docs,
+design and other file URLs for every entry type. The linked file keeps its own
+sharing permissions.
+
+Save a private draft or publish to workspace members when ready. Use the feed
+filters to find a person’s updates or a reporting period. Read full update shows
+time and resource links; Copy text includes them, and Export time downloads the
+current page’s time entries. Use as template starts a fresh draft without carrying
+forward actual hours or completed results. Plans and next-period planning remain
+available in their own tab.

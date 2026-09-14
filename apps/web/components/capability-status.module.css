@@ -46,7 +46,7 @@
   gap: 10px;
   padding: 11px 12px;
   border: 1px solid color-mix(in srgb, #b7791f 30%, var(--fh-border));
-  border-radius: 12px;
+  border-radius: var(--fh-radius-card);
   background: color-mix(in srgb, #f6ad55 9%, var(--fh-surface));
   color: var(--fh-ink);
 }

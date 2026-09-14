@@ -33,7 +33,7 @@ export function createReportPlanClient({
         parsed.success ? parsed.data.error.code : "unexpected_response",
         parsed.success
           ? parsed.data.error.message
-          : "The server could not load this report or plan.",
+          : "The server could not load this report, log or plan.",
         response.headers.get("x-request-id") ?? "unknown",
         response.status,
         parsed.success ? parsed.data.error.details : undefined,

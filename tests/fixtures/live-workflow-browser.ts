@@ -71,6 +71,8 @@ export async function setup(
       | "personal"
       | "calendar"
       | "planning"
+      | "report-log"
+      | "report-plan"
       | `page-${string}`
       | "teams"
       | "team"
@@ -102,6 +104,7 @@ export async function setup(
   });
   const creations: Array<Record<string, unknown>> = [];
   if (
+    options.records ||
     options.dashboard ||
     options.view === "portfolio" ||
     options.view === "personal" ||
@@ -152,6 +155,8 @@ export async function setup(
         body: assets.get(path)!,
       });
     if (options.api && (await options.api(route))) return;
+    if (path.endsWith("/report-plans") && request.method() === "GET")
+      return route.fulfill({ json: { data: [], page: 1, hasMore: false } });
     if (path === `/api/v1/workspaces/${board.workspaceId}/conversation-unread`)
       return route.fulfill({ json: { unreadCount: 0 } });
     if (
@@ -328,7 +333,11 @@ export async function setup(
   await page.goto(
     `https://trevv.test/${options.view ? `?view=${options.view}${options.teamId ? `&teamId=${options.teamId}` : ""}` : options.dashboard ? "?view=dashboard" : ""}${hash}`,
   );
-  if (options.view === "attention") {
+  if (options.view === "report-log" || options.view === "report-plan") {
+    await expect(
+      page.getByRole("heading", { name: "Report & Log", exact: true }),
+    ).toBeVisible();
+  } else if (options.view === "attention") {
     await expect(
       page.getByRole("heading", { name: "Open signals" }),
     ).toBeVisible();

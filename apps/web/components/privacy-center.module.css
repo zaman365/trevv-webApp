@@ -71,7 +71,7 @@
   place-items: center;
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: 11px;
+  border-radius: var(--fh-radius-control);
   background: var(--fh-primary-soft, #efeeff);
   color: var(--fh-primary, #5b56db);
 }
@@ -81,7 +81,7 @@
   gap: 1rem;
   padding: clamp(1rem, 2vw, 1.35rem);
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 16px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface, #fff);
 }
 
@@ -107,7 +107,7 @@
 .card select {
   min-height: 2.4rem;
   border: 1px solid var(--border-strong, #c8cedc);
-  border-radius: 9px;
+  border-radius: var(--fh-radius-control);
   background: var(--surface, #fff);
   color: var(--text, #1f2433);
   font: inherit;
@@ -182,7 +182,7 @@
   gap: 1rem;
   padding: 0.85rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 12px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface-subtle, #f7f8fb);
 }
 
@@ -219,7 +219,7 @@
 .inventoryGrid article {
   padding: 0.85rem;
   border: 1px solid var(--border, #dfe3ec);
-  border-radius: 12px;
+  border-radius: var(--fh-radius-card);
   background: var(--surface-subtle, #f7f8fb);
 }
 

@@ -51,7 +51,25 @@ describe("presentLiveError", () => {
   it("treats network failures as unconfirmed offline work", () => {
     expect(presentLiveError(new TypeError("Failed to fetch"))).toMatchObject({
       kind: "offline",
-      description: expect.stringContaining("no business change"),
+      description: expect.stringContaining("save could not be confirmed"),
+    });
+  });
+
+  it("explains an incomplete save receipt without claiming the task was lost", () => {
+    expect(
+      presentLiveError(
+        new TrevvApiError(
+          "invalid_save_confirmation",
+          "The change may already be saved. Retry the same save.",
+          "trace-save",
+          201,
+        ),
+      ),
+    ).toMatchObject({
+      kind: "terminal-error",
+      title: "The save confirmation could not be read",
+      description: expect.stringContaining("may already be saved"),
+      requestId: "trace-save",
     });
   });
 });
