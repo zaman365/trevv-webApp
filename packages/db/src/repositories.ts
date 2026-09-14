@@ -50,6 +50,7 @@ import {
   ne,
   or,
   sql,
+  type SQLWrapper,
 } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as databaseSchema from "./schema.js";
@@ -90,6 +91,7 @@ import {
   workspaceMembers,
   workspaceCalendars,
   workspaces,
+  workspaceLogos,
   teams,
   teamMembers,
   teamRooms,
@@ -183,6 +185,7 @@ export interface WorkspaceProjection {
   name: string;
   description: string;
   icon: string;
+  logoUrl?: string;
   accent: string;
   type: (typeof workspaces.$inferSelect)["type"];
   stage: (typeof workspaces.$inferSelect)["lifecycleStage"];
@@ -314,6 +317,7 @@ export type UpdateWorkspaceInput = Partial<
     | "manualProgressValue"
   >
 > & {
+  logo?: { data: string; version: string } | null;
   type?: (typeof workspaces.$inferInsert)["type"];
   leadUserId?: string | null;
   nextMilestoneDate?: string | null;
@@ -709,6 +713,7 @@ export interface OrganizationScopedRepositories {
   };
   workspaces: {
     list: (portfolioId?: string) => Promise<WorkspaceProjection[]>;
+    getLogo: (id: string) => Promise<{ data: string; version: string } | null>;
     getBySlug: (slug: string) => Promise<WorkspaceProjection>;
     create: (
       input: CreateWorkspaceInput,
@@ -1446,6 +1451,22 @@ function createScopedRepositories(
     },
     workspaces: {
       list: listWorkspaces,
+      getLogo: async (id) => {
+        await assertWorkspace(database, scope.organizationId, id);
+        const [logo] = await database
+          .select({
+            data: workspaceLogos.data,
+            version: workspaceLogos.version,
+          })
+          .from(workspaceLogos)
+          .where(
+            and(
+              eq(workspaceLogos.organizationId, scope.organizationId),
+              eq(workspaceLogos.workspaceId, id),
+            ),
+          );
+        return logo ?? null;
+      },
       getBySlug: getWorkspaceBySlug,
       create: (input, context) =>
         runInTransaction((transaction) =>
@@ -3948,7 +3969,7 @@ async function updatePortfolio(
           and(
             eq(portfolios.organizationId, scope.organizationId),
             eq(portfolios.id, id),
-            eq(portfolios.updatedAt, expectedUpdatedAt),
+            matchesVersionTimestamp(portfolios.updatedAt, expectedUpdatedAt),
             isNull(portfolios.archivedAt),
             isNull(portfolios.deletedAt),
           ),
@@ -4038,7 +4059,7 @@ async function archivePortfolio(
           and(
             eq(portfolios.organizationId, scope.organizationId),
             eq(portfolios.id, id),
-            eq(portfolios.updatedAt, expectedUpdatedAt),
+            matchesVersionTimestamp(portfolios.updatedAt, expectedUpdatedAt),
             isNull(portfolios.archivedAt),
             isNull(portfolios.deletedAt),
           ),
@@ -4238,14 +4259,15 @@ async function updateWorkspace(
           input.leadUserId,
         ]);
       const now = monotonicTimestamp(expectedUpdatedAt, context.now);
+      const { logo, ...workspaceInput } = input;
       const [updated] = await transaction
         .update(workspaces)
-        .set({ ...input, updatedAt: now })
+        .set({ ...workspaceInput, updatedAt: now })
         .where(
           and(
             eq(workspaces.organizationId, scope.organizationId),
             eq(workspaces.id, id),
-            eq(workspaces.updatedAt, expectedUpdatedAt),
+            matchesVersionTimestamp(workspaces.updatedAt, expectedUpdatedAt),
             isNull(workspaces.archivedAt),
             isNull(workspaces.deletedAt),
           ),
@@ -4254,6 +4276,29 @@ async function updateWorkspace(
       if (!updated) {
         await assertWorkspace(transaction, scope.organizationId, id);
         throw versionConflict();
+      }
+      if (logo === null) {
+        await transaction
+          .delete(workspaceLogos)
+          .where(
+            and(
+              eq(workspaceLogos.organizationId, scope.organizationId),
+              eq(workspaceLogos.workspaceId, id),
+            ),
+          );
+      } else if (logo) {
+        await transaction
+          .insert(workspaceLogos)
+          .values({
+            ...logo,
+            workspaceId: id,
+            organizationId: scope.organizationId,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: workspaceLogos.workspaceId,
+            set: { ...logo, updatedAt: now },
+          });
       }
       if (input.leadUserId)
         await transaction
@@ -4316,7 +4361,7 @@ async function archiveWorkspace(
           and(
             eq(workspaces.organizationId, scope.organizationId),
             eq(workspaces.id, id),
-            eq(workspaces.updatedAt, expectedUpdatedAt),
+            matchesVersionTimestamp(workspaces.updatedAt, expectedUpdatedAt),
             isNull(workspaces.archivedAt),
             isNull(workspaces.deletedAt),
           ),
@@ -4623,7 +4668,7 @@ async function updateBoard(
             eq(boards.organizationId, scope.organizationId),
             eq(boards.id, id),
             ...(expectedUpdatedAt
-              ? [eq(boards.updatedAt, expectedUpdatedAt)]
+              ? [matchesVersionTimestamp(boards.updatedAt, expectedUpdatedAt)]
               : []),
             isNull(boards.archivedAt),
             isNull(boards.deletedAt),
@@ -5055,7 +5100,7 @@ async function updateComment(
       if (!item) throw notFound();
       if (item.version !== expectedItemVersion)
         throw versionConflict(item.version);
-      const now = context.now ?? new Date();
+      const now = monotonicTimestamp(expectedUpdatedAt, context.now);
       const [updated] = await transaction
         .update(comments)
         .set({ body: input.body, editedAt: now, updatedAt: now })
@@ -5063,7 +5108,7 @@ async function updateComment(
           and(
             eq(comments.organizationId, scope.organizationId),
             eq(comments.id, id),
-            eq(comments.updatedAt, expectedUpdatedAt),
+            matchesVersionTimestamp(comments.updatedAt, expectedUpdatedAt),
             isNull(comments.deletedAt),
           ),
         )
@@ -5226,7 +5271,7 @@ async function updateWorkspaceUpdate(
     { id, expectedUpdatedAt, ...input },
     async () => {
       await assertActorMembership(transaction, scope);
-      const now = context.now ?? new Date();
+      const now = monotonicTimestamp(expectedUpdatedAt, context.now);
       const [updated] = await transaction
         .update(workspaceUpdates)
         .set({ ...input, updatedAt: now })
@@ -5234,7 +5279,10 @@ async function updateWorkspaceUpdate(
           and(
             eq(workspaceUpdates.organizationId, scope.organizationId),
             eq(workspaceUpdates.id, id),
-            eq(workspaceUpdates.updatedAt, expectedUpdatedAt),
+            matchesVersionTimestamp(
+              workspaceUpdates.updatedAt,
+              expectedUpdatedAt,
+            ),
             isNull(workspaceUpdates.deletedAt),
           ),
         )
@@ -5564,7 +5612,7 @@ async function updateReviewRitual(
     { id, expectedUpdatedAt, ...input },
     async () => {
       await assertActorMembership(transaction, scope);
-      const now = context.now ?? new Date();
+      const now = monotonicTimestamp(expectedUpdatedAt, context.now);
       const [updated] = await transaction
         .update(reviewRituals)
         .set({ ...input, updatedAt: now })
@@ -5572,7 +5620,7 @@ async function updateReviewRitual(
           and(
             eq(reviewRituals.organizationId, scope.organizationId),
             eq(reviewRituals.id, id),
-            eq(reviewRituals.updatedAt, expectedUpdatedAt),
+            matchesVersionTimestamp(reviewRituals.updatedAt, expectedUpdatedAt),
             isNull(reviewRituals.deletedAt),
           ),
         )
@@ -5931,7 +5979,7 @@ async function hydrateWorkspaces(
         .filter((id): id is string => Boolean(id)),
     ),
   ];
-  const [leadRows, metricRows, updateRows] = await Promise.all([
+  const [leadRows, metricRows, updateRows, logoRows] = await Promise.all([
     leadIds.length
       ? database
           .select({ id: users.id, name: users.name })
@@ -5961,7 +6009,22 @@ async function hydrateWorkspaces(
         asc(databaseSchema.workspaceMetrics.name),
       ),
     findLatestWorkspaceUpdates(database, organizationId, workspaceIds),
+    database
+      .select({
+        workspaceId: workspaceLogos.workspaceId,
+        version: workspaceLogos.version,
+      })
+      .from(workspaceLogos)
+      .where(
+        and(
+          eq(workspaceLogos.organizationId, organizationId),
+          inArray(workspaceLogos.workspaceId, workspaceIds),
+        ),
+      ),
   ]);
+  const logoVersions = new Map(
+    logoRows.map((logo) => [logo.workspaceId, logo.version]),
+  );
   const leads = new Map(leadRows.map((lead) => [lead.id, lead]));
   const metricsByWorkspace = new Map<
     string,
@@ -5990,6 +6053,11 @@ async function hydrateWorkspaces(
       name: workspace.name,
       description: workspace.description,
       icon: workspace.icon,
+      ...(logoVersions.has(workspace.id)
+        ? {
+            logoUrl: `/api/v1/workspaces/${encodeURIComponent(workspace.id)}/logo?v=${logoVersions.get(workspace.id)}`,
+          }
+        : {}),
       accent: workspace.accentColor,
       type: workspace.type,
       stage: workspace.lifecycleStage,
@@ -9268,6 +9336,13 @@ function requiredDate(value: unknown): Date {
 
 function optionalDate(value: unknown): Date | null {
   return value === null || value === undefined ? null : requiredDate(value);
+}
+
+// Version tags cross the JavaScript/JSON boundary at millisecond precision.
+// PostgreSQL defaults may retain microseconds; compare at the same precision
+// and advance every successful write by at least one millisecond.
+function matchesVersionTimestamp(column: SQLWrapper, expected: Date) {
+  return sql`date_trunc('milliseconds', ${column}) = ${expected.toISOString()}::timestamptz`;
 }
 
 function monotonicTimestamp(expected: Date, requested?: Date): Date {

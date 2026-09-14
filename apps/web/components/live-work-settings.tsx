@@ -27,7 +27,7 @@ const privateBetaFoundationStatus = [
     title: "Import and private files",
     status: "Disabled · workflow not approved",
     description:
-      "Live CSV import and uploads are unavailable. TREVV stores no uploaded file and issues no signed download URL.",
+      "Live CSV import and general file attachments are unavailable. Workspace logo uploads are available in Identity and operating settings above; they are visible only to people with workspace access.",
   },
   {
     icon: Bot,

@@ -1,4 +1,5 @@
 import type { ReportPlanDto } from "@founderhq/api-contract/report-plan";
+import { normalizeWorkspaceLogo } from "./workspace-logo.js";
 import type { MemberReportPlanRecord } from "@founderhq/db";
 import type {
   AttentionSignalDto,
@@ -612,6 +613,14 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         new Date(expectedVersionTag),
         {
           ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.logo !== undefined
+            ? {
+                logo:
+                  input.logo === null
+                    ? null
+                    : await normalizeWorkspaceLogo(input.logo),
+              }
+            : {}),
           ...(input.slug !== undefined ? { slug: input.slug } : {}),
           ...(input.description !== undefined
             ? { description: input.description }
@@ -640,6 +649,16 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
         value: toWorkspaceDto(result.value),
         replayed: result.replayed,
       };
+    },
+
+    async getWorkspaceLogo(context, workspaceId) {
+      requireWorkspaceAccess(context.access, "read", workspaceId);
+      const logo = await scoped(
+        options.repositories,
+        context,
+      ).workspaces.getLogo(workspaceId);
+      if (!logo) throw notFound();
+      return logo;
     },
 
     async getWorkspace(context, slug) {
@@ -2311,6 +2330,7 @@ function toWorkspaceDto(workspace: WorkspaceProjection): WorkspaceDto {
     name: workspace.name,
     description: workspace.description,
     icon: workspace.icon,
+    ...(workspace.logoUrl ? { logoUrl: workspace.logoUrl } : {}),
     accent: workspace.accent,
     type: workspace.type,
     stage: workspace.stage,

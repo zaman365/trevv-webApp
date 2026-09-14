@@ -484,6 +484,28 @@ export const workspaces = pgTable(
   ],
 );
 
+// Small, normalized brand images live separately from workspace list payloads.
+export const workspaceLogos = pgTable(
+  "workspace_logos",
+  {
+    workspaceId: text("workspace_id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    data: text("data").notNull(),
+    version: text("version").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.workspaceId],
+      foreignColumns: [workspaces.organizationId, workspaces.id],
+      name: "workspace_logos_org_workspace_fk",
+    }).onDelete("cascade"),
+    check("workspace_logos_data_size", sql`length(${table.data}) <= 120000`),
+  ],
+);
+
 export const workspaceMembers = pgTable(
   "workspace_members",
   {

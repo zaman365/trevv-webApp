@@ -45,6 +45,7 @@ export interface Workspace {
   slug: string;
   name: string;
   icon: string;
+  logoUrl?: string | undefined;
   accent: string;
   type: WorkspaceType;
   stage: LifecycleStage;

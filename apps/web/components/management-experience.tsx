@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark as WorkspaceLogoMark } from "./workspace-mark";
 
 import { dateTimeFormatter } from "@/lib/date-format";
 
@@ -1874,7 +1875,7 @@ export function WorkspaceMark({
       className="workspace-mark"
       style={{ background: `${color}18`, color: "var(--fh-ink)" }}
     >
-      {workspace?.icon ?? fallback}
+      {workspace ? <WorkspaceLogoMark workspace={workspace} /> : fallback}
     </span>
   );
 }

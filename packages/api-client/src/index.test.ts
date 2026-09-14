@@ -62,6 +62,37 @@ const item = {
 } as const;
 
 describe("Phase 3 API client", () => {
+  it("reuses a versioned write receipt even when the form retries with a fresh key", async () => {
+    const keys: Array<string | null> = [];
+    const client = createApiClient({
+      baseUrl: "https://api.example.test/api/v1",
+      fetchImpl: async (_url, init) => {
+        keys.push(new Headers(init?.headers).get("idempotency-key"));
+        return Response.json(item, {
+          headers: keys.length === 1 ? {} : { etag: 'W/"4"' },
+        });
+      },
+    });
+    await expect(
+      client.updateItem(item.id, { title: "Renamed" }, 3, idempotencyKey),
+    ).rejects.toMatchObject({ code: "invalid_save_confirmation" });
+    await expect(
+      client.updateItem(
+        item.id,
+        { title: "Renamed" },
+        3,
+        "92222222-2222-4222-8222-222222222222",
+      ),
+    ).resolves.toMatchObject({ etag: '"4"' });
+    expect(keys).toEqual([idempotencyKey, idempotencyKey]);
+    await client.updateItem(
+      item.id,
+      { title: "Different edit" },
+      4,
+      "93333333-3333-4333-8333-333333333333",
+    );
+    expect(keys[2]).toBe("93333333-3333-4333-8333-333333333333");
+  });
   it.each([undefined, '"99"', "invalid"])(
     "reports an invalid save receipt (%s) and allows an identical retry",
     async (etag) => {

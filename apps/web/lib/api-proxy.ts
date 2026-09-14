@@ -156,7 +156,12 @@ export async function proxyApiRequest(
     responseHeaders.set("x-request-id", requestId);
   responseHeaders.set(
     "cache-control",
-    `private, no-store, max-age=0${responseHeaders.has("etag") ? ", no-transform" : ""}`,
+    `private, no-store, max-age=0${
+      responseHeaders.has("etag") ||
+      responseHeaders.get("cache-control")?.includes("no-transform")
+        ? ", no-transform"
+        : ""
+    }`,
   );
   responseHeaders.set("pragma", "no-cache");
 

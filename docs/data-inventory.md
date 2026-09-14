@@ -108,3 +108,12 @@ independent scheduler and monitor its completion.
 - Confirm purpose, lawful basis, retention, deletion propagation, breach path,
   DSAR deadlines, and data-location constraints for every category.
 - Record an owner and review date for every inventory and subprocessor change.
+
+# Workspace brand images
+
+`workspace_logos` stores one normalized, size-bounded WebP logo per workspace,
+scoped by organization and workspace. Only authorized workspace readers can
+retrieve pixels; only workspace managers can upload, replace or remove them.
+Workspace lists expose a versioned URL only. Removal deletes the stored image;
+workspace deletion cascades. Original uploaded files and image metadata are
+not retained. See [workspace logo controls](workspace-logos-and-save-receipts-2026-09-14.md).

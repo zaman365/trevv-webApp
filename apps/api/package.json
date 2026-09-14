@@ -30,6 +30,7 @@
     "@hono/node-server": "latest",
     "@hono/zod-validator": "latest",
     "hono": "latest",
+    "sharp": "0.35.4",
     "zod": "latest"
   },
   "devDependencies": {

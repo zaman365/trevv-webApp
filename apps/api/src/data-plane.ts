@@ -219,6 +219,10 @@ export interface DataPlane {
     context: ApiRequestContext,
     slug: string,
   ): Promise<WorkspaceDetail>;
+  getWorkspaceLogo(
+    context: ApiRequestContext,
+    workspaceId: string,
+  ): Promise<{ data: string; version: string }>;
   listTeamDirectory(
     context: ApiRequestContext,
     workspaceId: string,
@@ -468,6 +472,7 @@ export interface DataPlane {
 }
 
 export type DataPlaneErrorCode =
+  | "invalid_input"
   | "constraint_conflict"
   | "resource_not_found"
   | "scope_mismatch"

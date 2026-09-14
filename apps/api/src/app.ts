@@ -221,6 +221,7 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       exposeHeaders: [
         "x-request-id",
         "etag",
+        "x-trevv-resource-version",
         "idempotency-key",
         "idempotency-replayed",
       ],
@@ -1329,6 +1330,18 @@ export function createApiApp(dependencies: ApiAppDependencies) {
       result.replayed,
     );
     return context.json(result.value);
+  });
+
+  api.get("/api/v1/workspaces/:workspaceId/logo", async (context) => {
+    const logo = await dependencies.dataPlane.getWorkspaceLogo(
+      requestContext(context, clock, idGenerator),
+      context.req.param("workspaceId"),
+    );
+    context.header("content-type", "image/webp");
+    context.header("x-content-type-options", "nosniff");
+    context.header("content-security-policy", "default-src 'none'; sandbox");
+    context.header("cache-control", "private, no-store, no-transform");
+    return context.body(new Uint8Array(Buffer.from(logo.data, "base64")));
   });
 
   api.get("/api/v1/workspaces/:slug", async (context) =>
@@ -3284,6 +3297,7 @@ export function createUnavailableLiveDependencies(): {
     listWorkspaces: unavailable,
     createWorkspace: unavailable,
     updateWorkspace: unavailable,
+    getWorkspaceLogo: unavailable,
     getWorkspace: unavailable,
     listTeamDirectory: unavailable,
     getTeam: unavailable,
@@ -3831,6 +3845,8 @@ function setMutationHeaders(
   replayed?: boolean,
 ): void {
   context.header("etag", `"${version}"`);
+  context.header("x-trevv-resource-version", String(version));
+  context.header("cache-control", "private, no-store, no-transform");
   setIdempotencyHeaders(context, idempotencyKey, replayed);
 }
 
@@ -3841,6 +3857,8 @@ function setVersionTagMutationHeaders(
   replayed?: boolean,
 ): void {
   context.header("etag", `"${versionTag}"`);
+  context.header("x-trevv-resource-version", versionTag);
+  context.header("cache-control", "private, no-store, no-transform");
   setIdempotencyHeaders(context, idempotencyKey, replayed);
 }
 
@@ -3860,6 +3878,8 @@ function mapError(
   operations?: ApiOperations,
 ): Response {
   const code = dataPlaneErrorCode(error);
+  if (code === "invalid_input")
+    return failure(context, 422, code, error.message);
   if (error instanceof PermissionError || code === "resource_not_found")
     return failure(
       context,

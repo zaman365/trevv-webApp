@@ -1,6 +1,7 @@
 import {
   createItemSchema,
   entityTagSchema,
+  versionTagEntityTagSchema,
   type CreateItemInput,
 } from "@founderhq/api-contract";
 import { TrevvApiError } from "./index.js";
@@ -25,7 +26,7 @@ export function validateNewItem(input: CreateItemInput) {
 export function confirmSavedResource<T>(
   result: RawResponse,
   schema: { parse(value: unknown): T },
-  version: (value: T) => number,
+  version: (value: T) => number | string,
 ) {
   const data = parseSavedResource(result, schema);
   return { data, etag: confirmedEntityTag(result, version(data)) };
@@ -47,12 +48,22 @@ function parseSavedResource<T>(
   }
 }
 
-function confirmedEntityTag(result: RawResponse, version: number): string {
-  const parsed = entityTagSchema.safeParse(result.response.headers.get("etag"));
-  if (
-    !parsed.success ||
-    Number.parseInt(parsed.data.slice(1, -1), 10) !== version
-  )
+function confirmedEntityTag(
+  result: RawResponse,
+  version: number | string,
+): string {
+  // Resource versions are application concurrency tokens, not byte hashes.
+  // Compression proxies may weaken or replace HTTP ETags. Prefer the API's
+  // explicit receipt, and support matching weak ETags from older deployments.
+  const receipt = result.response.headers.get("x-trevv-resource-version");
+  const tag =
+    receipt === null
+      ? result.response.headers.get("etag")?.replace(/^W\//, "")
+      : `"${receipt}"`;
+  const parsed = (
+    typeof version === "number" ? entityTagSchema : versionTagEntityTagSchema
+  ).safeParse(tag);
+  if (!parsed.success || parsed.data !== `"${version}"`)
     throw new TrevvApiError(
       "invalid_save_confirmation",
       "The service did not return a valid save receipt. The change may already be saved. Your draft is kept; retry the same save to confirm it.",

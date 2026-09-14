@@ -12,6 +12,7 @@ import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice } from "./live-state";
+import { WorkspaceLogoField } from "./workspace-logo-field";
 import styles from "./live-operating-loop.module.css";
 
 const workspaceTypes: WorkspaceDto["type"][] = [
@@ -57,6 +58,7 @@ interface WorkspaceSettingsDraft {
   type: WorkspaceDto["type"];
   accent: string;
   icon: string;
+  logo: string | null | undefined;
   stage: WorkspaceDto["stage"];
   health: WorkspaceDto["health"];
   healthNote: string;
@@ -78,6 +80,7 @@ export function LiveWorkspaceSettings({
     session.managedWorkspaceIds.includes(workspace.id);
   const [draft, setDraft] = useState(() => draftFrom(workspace));
   const [pending, setPending] = useState(false);
+  const [processingLogo, setProcessingLogo] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState<WorkspaceDto | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
@@ -120,7 +123,7 @@ export function LiveWorkspaceSettings({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || processingLogo) return;
     setPending(true);
     setError(null);
     setSaved(null);
@@ -131,6 +134,7 @@ export function LiveWorkspaceSettings({
       type: draft.type,
       accent: draft.accent,
       icon: draft.icon.trim(),
+      ...(draft.logo !== undefined ? { logo: draft.logo } : {}),
       stage: draft.stage,
       health: draft.health,
       healthNote: draft.healthNote.trim(),
@@ -208,6 +212,15 @@ export function LiveWorkspaceSettings({
         />
       ) : null}
 
+      <WorkspaceLogoField
+        icon={draft.icon}
+        accent={draft.accent}
+        currentUrl={saved ? saved.logoUrl : workspace.logoUrl}
+        value={draft.logo}
+        disabled={pending}
+        onProcessing={setProcessingLogo}
+        onChange={(value) => change("logo", value)}
+      />
       <div className={styles.formGrid}>
         <label className={styles.field}>
           <span>Name</span>
@@ -361,8 +374,12 @@ export function LiveWorkspaceSettings({
         />
       </label>
 
-      <div className={styles.rowActions}>
-        <button className="primary-button" disabled={pending} type="submit">
+      <div className={`${styles.rowActions} ${styles.workspaceSettingsActions}`}>
+        <button
+          className="primary-button"
+          disabled={pending || processingLogo}
+          type="submit"
+        >
           {pending ? (
             "Saving…"
           ) : (
@@ -385,6 +402,7 @@ function draftFrom(workspace: WorkspaceDto): WorkspaceSettingsDraft {
     type: workspace.type,
     accent: workspace.accent,
     icon: workspace.icon,
+    logo: undefined,
     stage: workspace.stage,
     health: workspace.health,
     healthNote: workspace.healthNote,

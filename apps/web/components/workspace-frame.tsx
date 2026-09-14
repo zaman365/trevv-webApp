@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 import { personHref } from "@/lib/people-routes";
 
 import { SearchLauncher } from "./search-launcher";
@@ -503,10 +504,16 @@ function WorkspaceChrome({
                 }}
               >
                 <span className="workspace-context-icon project">
-                  {contextProject?.icon ?? <FolderKanban size={15} />}
+                  {contextProject ? (
+                    <WorkspaceMark workspace={contextProject} />
+                  ) : (
+                    <FolderKanban size={15} />
+                  )}
                 </span>
                 <span className="workspace-context-copy">
-                  <strong>{contextProject?.name ?? "Choose workspace"}</strong>
+                  <strong title={contextProject?.name ?? "Choose workspace"}>
+                    {contextProject?.name ?? "Choose workspace"}
+                  </strong>
                   <small>Workspace</small>
                 </span>
                 <ChevronDown
@@ -534,7 +541,11 @@ function WorkspaceChrome({
                           : undefined
                       }
                     >
-                      {contextProject?.icon ?? <FolderKanban size={20} />}
+                      {contextProject ? (
+                        <WorkspaceMark workspace={contextProject} />
+                      ) : (
+                        <FolderKanban size={20} />
+                      )}
                     </span>
                     <div>
                       <small>Current workspace</small>
@@ -634,7 +645,7 @@ function WorkspaceChrome({
                               color: project.accent,
                             }}
                           >
-                            {project.icon}
+                            <WorkspaceMark workspace={project} />
                           </span>
                           <span className="workspace-switcher-option-copy">
                             <strong>{project.name}</strong>
@@ -698,8 +709,8 @@ function WorkspaceChrome({
                 <Grid2X2 size={16} />
               </span>
               <span className="workspace-context-copy">
-                <small>Workspace</small>
                 <strong>{trevvBrand.organization}</strong>
+                <small>Workspace</small>
               </span>
             </div>
           )}
@@ -1114,6 +1125,15 @@ function WorkspaceChrome({
                   title="Messages"
                 >
                   <MessageCircleMore size={18} />
+                </Link>
+                <Link
+                  className={`topbar-tool topbar-tool-calendar ${active === "calendar" ? "active" : ""}`}
+                  aria-label="Calendar"
+                  aria-current={active === "calendar" ? "page" : undefined}
+                  href={scopedHref("calendar")}
+                  title="Calendar"
+                >
+                  <CalendarDays size={17} />
                 </Link>
                 {appSession.demo ? (
                   <Link

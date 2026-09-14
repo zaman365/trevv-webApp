@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 
 import { dateTimeFormatter } from "@/lib/date-format";
 
@@ -570,7 +571,9 @@ function AttentionCard({
           {workspace ? (
             <>
               <Link href={workspaceHref(workspace.slug)}>
-                <span>{workspace.icon}</span>
+                <span>
+                  <WorkspaceMark workspace={workspace} />
+                </span>
                 {workspace.name}
               </Link>
               {board && (
@@ -818,7 +821,7 @@ function AttentionDetailPanel({
                       color: workspace.accent,
                     }}
                   >
-                    {workspace.icon}
+                    <WorkspaceMark workspace={workspace} />
                   </span>
                   <div>
                     <strong>{workspace.name}</strong>

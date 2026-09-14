@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 
 import { dateTimeFormatter } from "@/lib/date-format";
 
@@ -77,7 +78,7 @@ export function ProjectTile({
 
       <div className="tile-head">
         <span className="tile-mark" aria-hidden="true">
-          {workspace.icon}
+          <WorkspaceMark workspace={workspace} />
         </span>
         <div className="tile-title">
           <h3>

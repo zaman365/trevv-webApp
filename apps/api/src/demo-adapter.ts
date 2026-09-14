@@ -460,6 +460,10 @@ export function createDemoAdapter(): DemoAdapter {
       );
     },
 
+    async getWorkspaceLogo() {
+      throw notFound();
+    },
+
     async getWorkspace(context, slug) {
       const workspace = demoWorkspaces.find(
         (candidate) => candidate.slug === slug,

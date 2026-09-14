@@ -4625,6 +4625,11 @@ body:has(.workspace-product) {
 .workspace-context-row {
   align-items: center;
   gap: 6px;
+  background: color-mix(
+    in srgb,
+    var(--fh-primary-soft) 60%,
+    var(--fh-surface)
+  );
 }
 .workspace-context-row .workspace-context-switcher {
   grid-template-columns: 28px minmax(0, 1fr) 15px;
@@ -4634,15 +4639,24 @@ body:has(.workspace-product) {
   width: 28px;
   height: 28px;
 }
+.workspace-context-row .workspace-context-copy {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
 .workspace-context-row .workspace-context-copy strong {
-  font-size: 14px;
-  line-height: 18px;
+  min-width: 0;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 750;
 }
 .workspace-context-row .workspace-context-copy small {
-  margin: 2px 0 0;
-  font-size: 10px;
-  line-height: 12px;
-  font-weight: 650;
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 550;
+  letter-spacing: 0;
   text-transform: none;
 }
 .workspace-context-switcher {
@@ -4680,6 +4694,10 @@ body:has(.workspace-product) {
 }
 .workspace-context-switcher:hover {
   background: var(--fh-surface-subtle);
+}
+.workspace-context-row
+  .workspace-switcher-trigger:is(:hover, [aria-expanded="true"]) {
+  background: var(--fh-primary-soft);
 }
 .workspace-context-switcher:has(.workspace-context-select:focus-visible) {
   box-shadow: var(--fh-focus);
@@ -5208,7 +5226,9 @@ body:has(.workspace-product) {
 }
 .nav-label {
   margin-bottom: 8px;
+  color: var(--fh-ink-soft);
   font-size: var(--fh-text-xs);
+  font-weight: 800;
 }
 .nav-item {
   height: 42px;

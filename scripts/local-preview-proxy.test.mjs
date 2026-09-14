@@ -77,3 +77,25 @@ test("failed preview saves are retried and their error details retained", async 
   await proxy(input);
   assert.equal(calls, 2);
 });
+
+test("preview preserves binary logo bytes and avoids proxy transformation", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "trevv-preview-image-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const bytes = Buffer.from([82, 73, 70, 70, 0, 255, 128, 17]);
+  const proxy = await createLocalPreviewProxy({
+    origin: "http://127.0.0.1:4180",
+    receiptsPath: join(dir, "receipts.json"),
+    fetchImpl: async (_url, init) => {
+      assert.equal(init.headers.get("accept-encoding"), "identity");
+      return new Response(bytes, { headers: { "content-type": "image/webp" } });
+    },
+  });
+  const result = await proxy({
+    path: "/api/v1/workspaces/workspace-one/logo",
+    method: "GET",
+    headers: {},
+    body: Buffer.alloc(0),
+  });
+  assert.deepEqual(result.body, bytes);
+  assert.equal(result.headers["cache-control"], "no-store, no-transform");
+});

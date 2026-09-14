@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 
 import {
   Archive,
@@ -1192,7 +1193,9 @@ function RoomContext({
             style={{ "--room-accent": workspace.accent } as React.CSSProperties}
           >
             <header>
-              <span>{workspace.icon}</span>
+              <span>
+                <WorkspaceMark workspace={workspace} />
+              </span>
               <div>
                 <small>{labelForProjectType(workspace.type)}</small>
                 <strong>{workspace.name}</strong>

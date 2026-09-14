@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 
 import { dateTimeFormatter } from "@/lib/date-format";
 
@@ -621,7 +622,9 @@ function BoardWorkspace({
           <div className="board-title-wrap">
             <p>{`${workspace.name} / ${board.category}`}</p>
             <div>
-              <span className="board-mark">{workspace.icon}</span>
+              <span className="board-mark">
+                <WorkspaceMark workspace={workspace} />
+              </span>
               <h1>{board.name}</h1>
               <Hint resourceId="boards" />
               <span className="board-menu-wrap">

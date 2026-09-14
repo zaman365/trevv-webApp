@@ -190,6 +190,75 @@ function createInput(fixture: TenantFixture, title: string, id?: string) {
 }
 
 describe("PostgreSQL repositories", () => {
+  it("persists workspace logos with settings, safely replays, replaces and removes them in tenant scope", async () => {
+    const fixture = await seedTenant("workspace-logo");
+    const foreign = await seedTenant("workspace-logo-foreign");
+    const repo = createPostgresRepositories(connection.db).forOrganization(
+      fixture.scope,
+    );
+    // Existing PostgreSQL defaults can contain microseconds that a JS Date
+    // cannot retain. The public version must still allow a first update.
+    await connection.db.update(workspaces).set({
+      updatedAt: sql`'2026-09-14T09:00:00.123456Z'::timestamptz`,
+    }).where(eq(workspaces.id, fixture.workspaceA));
+    const nextRequest = () => createPostgresRepositories(connection.db).forOrganization(
+      createOrganizationScope({ ...fixture.scope, requestId: crypto.randomUUID() }),
+    );
+    const workspace = (await repo.workspaces.list()).find(
+      (row) => row.id === fixture.workspaceA,
+    )!;
+    const logo = { data: "bm9ybWFsaXplZCBpbWFnZQ==", version: "a".repeat(64) };
+    const context = mutation(crypto.randomUUID(), "/workspaces/settings");
+    const first = await repo.workspaces.update(
+      workspace.id,
+      new Date(workspace.versionTag),
+      { name: "Branded workspace", logo },
+      context,
+    );
+    expect(first.value.logoUrl).toContain(logo.version);
+    expect(first.value.name).toBe("Branded workspace");
+    expect(JSON.stringify(first.value)).not.toContain(logo.data);
+    expect(await repo.workspaces.getLogo(workspace.id)).toEqual(logo);
+    const replay = await repo.workspaces.update(
+      workspace.id,
+      new Date(workspace.versionTag),
+      { name: "Branded workspace", logo },
+      context,
+    );
+    expect(replay.replayed).toBe(true);
+    expect(replay.value).toEqual(first.value);
+    await expect(
+      createPostgresRepositories(connection.db)
+        .forOrganization(foreign.scope)
+        .workspaces.getLogo(workspace.id),
+    ).rejects.toMatchObject({ code: "resource_not_found" });
+    const replaced = { data: "bmV3IGltYWdl", version: "b".repeat(64) };
+    await expect(
+      repo.workspaces.update(
+        workspace.id,
+        new Date(workspace.versionTag),
+        { logo: replaced },
+        mutation(crypto.randomUUID(), "/workspaces/settings"),
+      ),
+    ).rejects.toMatchObject({ code: "version_conflict" });
+    expect(await repo.workspaces.getLogo(workspace.id)).toEqual(logo);
+    const second = await nextRequest().workspaces.update(
+      workspace.id,
+      new Date(first.value.versionTag),
+      { logo: replaced },
+      mutation(crypto.randomUUID(), "/workspaces/settings"),
+    );
+    expect(second.value.logoUrl).toContain(replaced.version);
+    const removed = await nextRequest().workspaces.update(
+      workspace.id,
+      new Date(second.value.versionTag),
+      { logo: null },
+      mutation(crypto.randomUUID(), "/workspaces/settings"),
+    );
+    expect(removed.value.logoUrl).toBeUndefined();
+    expect(removed.value.icon).toBe(workspace.icon);
+    expect(await repo.workspaces.getLogo(workspace.id)).toBeNull();
+  });
   it("persists sprint and milestone context, isolates references, and rejects stale plan edits", async () => {
     const fixture = await seedTenant("planning");
     const other = await seedTenant("planning-other");

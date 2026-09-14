@@ -409,6 +409,12 @@ export const membershipSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
+// Files are decoded, fitted and stripped of metadata by the API before storage.
+export const workspaceLogoInputSchema = z
+  .string()
+  .max(120_000)
+  .regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/);
+
 export const workspaceSchema = z.object({
   id: idSchema,
   portfolioId: idSchema,
@@ -416,6 +422,10 @@ export const workspaceSchema = z.object({
   name: z.string().min(1).max(160),
   description: z.string().max(5_000),
   icon: z.string().min(1).max(12),
+  logoUrl: z
+    .string()
+    .regex(/^\/api\/v1\/workspaces\/[^/]+\/logo\?v=[a-f0-9]{64}$/)
+    .optional(),
   accent: z.string().regex(/^#[0-9a-f]{6}$/i),
   type: workspaceTypeSchema,
   stage: lifecycleStageSchema,
@@ -469,6 +479,7 @@ export const createWorkspaceSchema = z
 
 export const updateWorkspaceSchema = z
   .object({
+    logo: workspaceLogoInputSchema.nullable().optional(),
     name: z.string().trim().min(2).max(160).optional(),
     slug: productSlugSchema.optional(),
     description: z.string().trim().max(5_000).optional(),

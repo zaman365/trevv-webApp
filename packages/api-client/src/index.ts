@@ -200,6 +200,9 @@ function createApiMethods({
   getAccessToken,
   fetchImpl = fetch,
 }: ApiClientOptions) {
+  // A second attempt at the same versioned write must reuse its receipt even
+  // when a form generated a fresh key after an interrupted confirmation.
+  const versionedSaveKeys = new Map<string, string>();
   const request = async (
     path: string,
     init?: RequestInit,
@@ -209,6 +212,23 @@ function createApiMethods({
     headers.set("accept", "application/json");
     if (init?.body) headers.set("content-type", "application/json");
     if (token) headers.set("authorization", `Bearer ${token}`);
+    const saveKey = headers.get("idempotency-key");
+    if (saveKey && headers.has("if-match")) {
+      const fingerprint = JSON.stringify([
+        token,
+        path,
+        init?.method,
+        headers.get("if-match"),
+        init?.body,
+      ]);
+      const previousKey = versionedSaveKeys.get(fingerprint);
+      if (previousKey) headers.set("idempotency-key", previousKey);
+      else {
+        if (versionedSaveKeys.size >= 100)
+          versionedSaveKeys.delete(versionedSaveKeys.keys().next().value!);
+        versionedSaveKeys.set(fingerprint, saveKey);
+      }
+    }
     const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
       headers,
@@ -525,18 +545,11 @@ function createApiMethods({
           body: JSON.stringify(updateWorkspaceSchema.parse(input)),
         },
       );
-      const data = workspaceSchema.parse(response.body);
-      const etag = versionTagEntityTagSchema.parse(
-        response.response.headers.get("etag"),
+      return parseNestedVersionedMutation(
+        response,
+        workspaceSchema,
+        (data) => data.versionTag,
       );
-      if (etag !== `"${data.versionTag}"`)
-        throw new TrevvApiError(
-          "unexpected_response",
-          "The response ETag did not match the Workspace version.",
-          response.response.headers.get("x-request-id") ?? "unknown",
-          response.response.status,
-        );
-      return { data, etag, ...mutationMetadata(response.response) };
     },
 
     workspace: async (slug: string): Promise<WorkspaceDetailDto> =>
@@ -1316,11 +1329,11 @@ function createApiMethods({
         headers: mutationHeaders(version, idempotencyKey),
         body: JSON.stringify(body),
       });
-      return {
-        data: retentionPolicySchema.parse(result.body),
-        etag: entityTagSchema.parse(result.response.headers.get("etag")),
-        ...mutationMetadata(result.response),
-      };
+      return parseNestedVersionedMutation(
+        result,
+        retentionPolicySchema,
+        (data) => data.policyVersion,
+      );
     },
   };
 }
@@ -1345,7 +1358,7 @@ async function parseVersionedMutation<T>(
 async function parseNestedVersionedMutation<T>(
   result: RawResponse,
   schema: { parse(value: unknown): T },
-  version: (value: T) => number,
+  version: (value: T) => number | string,
 ): Promise<VersionedMutationResponse<T>> {
   const { confirmSavedResource } = await import("./mutation-response.js");
   return {

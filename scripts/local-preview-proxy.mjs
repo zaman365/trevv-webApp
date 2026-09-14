@@ -32,6 +32,7 @@ export async function createLocalPreviewProxy({
       ])
         headers.delete(name);
       const key = headers.get("idempotency-key");
+      headers.set("accept-encoding", "identity");
       const cacheKey =
         key && !["GET", "HEAD", "OPTIONS"].includes(method)
           ? `${method}:${path}:${key}`
@@ -72,11 +73,13 @@ export async function createLocalPreviewProxy({
         "transfer-encoding",
       ])
         delete responseHeaders[name];
-      responseHeaders["cache-control"] = "no-store";
+      responseHeaders["cache-control"] = "no-store, no-transform";
       const result = {
         status: response.status,
         headers: responseHeaders,
-        body: await response.text(),
+        body: response.headers.get("content-type")?.startsWith("image/")
+          ? Buffer.from(await response.arrayBuffer())
+          : await response.text(),
       };
       if (cacheKey && response.ok) {
         result.headers["idempotency-key"] = key;

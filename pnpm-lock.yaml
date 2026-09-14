@@ -60,6 +60,9 @@ importers:
       hono:
         specifier: latest
         version: 4.13.3
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@26.2.0)
       zod:
         specifier: latest
         version: 4.4.3

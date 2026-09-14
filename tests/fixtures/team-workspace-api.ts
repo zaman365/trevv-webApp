@@ -40,7 +40,14 @@ export function teamWorkspaceApi() {
     await route.fulfill({
       json,
       status,
-      ...(version !== undefined ? { headers: { etag: `"${version}"` } } : {}),
+      ...(version !== undefined
+        ? {
+            headers: {
+              etag: `"${version}"`,
+              "x-trevv-resource-version": String(version),
+            },
+          }
+        : {}),
     });
     return true;
   };

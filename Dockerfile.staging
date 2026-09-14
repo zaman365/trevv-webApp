@@ -43,11 +43,15 @@ RUN pnpm exec turbo run build \
   --filter=@founderhq/worker \
   --filter=@founderhq/web
 RUN pnpm --config.inject-workspace-packages=true \
-      --filter=@founderhq/api --prod deploy --no-optional /runtime/api && \
+      --filter=@founderhq/api --prod deploy /runtime/api && \
     pnpm --config.inject-workspace-packages=true \
       --filter=@founderhq/worker --prod deploy --no-optional /runtime/worker && \
     pnpm --config.inject-workspace-packages=true \
       --filter=@founderhq/db --prod deploy --no-optional /runtime/db
+# Exercise the packaged native decoder, so a missing platform binary fails the
+# image build before the API can be rolled out.
+RUN cd /runtime/api && node --input-type=module -e \
+    "import sharp from 'sharp'; await sharp({create:{width:1,height:1,channels:4,background:'#ffffff'}}).webp().toBuffer();"
 
 FROM node:${NODE_VERSION}-alpine3.24@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS service-runtime
 RUN apk upgrade --no-cache && \

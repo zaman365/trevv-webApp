@@ -87,6 +87,7 @@ describe("browser API proxy boundary", () => {
           status: 201,
           headers: {
             etag: '"2"',
+            "x-trevv-resource-version": "2",
             "idempotency-key": "save-one",
             "idempotency-replayed": "true",
             "x-request-id": "save-trace",
@@ -116,6 +117,7 @@ describe("browser API proxy boundary", () => {
     expect(forwarded.get("accept-encoding")).toBe("identity");
     expect(response.status).toBe(201);
     expect(response.headers.get("etag")).toBe('"2"');
+    expect(response.headers.get("x-trevv-resource-version")).toBe("2");
     expect(response.headers.get("cache-control")).toBe(
       "private, no-store, max-age=0, no-transform",
     );

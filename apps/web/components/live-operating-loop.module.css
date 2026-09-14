@@ -644,6 +644,11 @@
   max-width: 22rem;
 }
 
+.workspaceSettingsActions {
+  justify-content: flex-start;
+  max-width: none;
+}
+
 .formBody {
   display: grid;
   gap: 0.9rem;

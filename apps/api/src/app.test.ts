@@ -1584,3 +1584,45 @@ it("stamps scoped summaries without requiring full item hydration", async () => 
   expect(getSummary.mock.calls[0]?.[0].access.organizationId).toBe("org-live");
   expect(listItems).not.toHaveBeenCalled();
 });
+
+it("serves workspace logos as private authenticated image bytes", async () => {
+  const live = createUnavailableLiveDependencies();
+  const bytes = Buffer.from([82, 73, 70, 70, 0, 255, 128, 17]);
+  const getWorkspaceLogo = vi
+    .fn()
+    .mockResolvedValue({
+      data: bytes.toString("base64"),
+      version: "a".repeat(64),
+    });
+  const app = createApiApp({
+    mode: "live",
+    ...live,
+    accessResolver: liveAccessResolver,
+    dataPlane: { ...live.dataPlane, getWorkspaceLogo },
+  });
+  const response = await app.request(
+    "/api/v1/workspaces/workspace-live/logo?v=" + "a".repeat(64),
+  );
+  expect(response.status).toBe(200);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+  expect(response.headers.get("content-type")).toBe("image/webp");
+  expect(response.headers.get("cache-control")).toContain("private, no-store");
+  expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  expect(getWorkspaceLogo).toHaveBeenCalledWith(
+    expect.objectContaining({
+      access: expect.objectContaining({ organizationId: "org-live" }),
+    }),
+    "workspace-live",
+  );
+  getWorkspaceLogo.mockClear();
+  const anonymous = createApiApp({
+    mode: "live",
+    ...live,
+    accessResolver: { mode: "live", resolve: async () => null },
+    dataPlane: { ...live.dataPlane, getWorkspaceLogo },
+  });
+  expect(
+    (await anonymous.request("/api/v1/workspaces/workspace-live/logo")).status,
+  ).toBe(401);
+  expect(getWorkspaceLogo).not.toHaveBeenCalled();
+});

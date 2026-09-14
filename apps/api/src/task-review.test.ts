@@ -61,6 +61,8 @@ describe("task review API", () => {
     });
     expect(sent.status).toBe(200);
     expect(sent.headers.get("etag")).toBe('"1"');
+    expect(sent.headers.get("x-trevv-resource-version")).toBe("1");
+    expect(sent.headers.get("cache-control")).toContain("no-transform");
     const reviewItem = await sent.json();
     const replay = await app.request(path, {
       method: "POST",

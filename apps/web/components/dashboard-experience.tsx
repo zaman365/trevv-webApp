@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 
 import {
   Activity,
@@ -388,7 +389,7 @@ function DashboardMain({
               }}
               aria-hidden="true"
             >
-              {workspace.icon}
+              <WorkspaceMark workspace={workspace} />
             </span>
           ),
         }))

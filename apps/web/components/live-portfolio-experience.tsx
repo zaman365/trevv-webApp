@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 import { PortfolioPageSections } from "./portfolio-page-sections";
 
 import { LiveRefreshStatus } from "./live-refresh-status";
@@ -277,7 +278,7 @@ export function LivePortfolioExperience() {
                           color: workspace.accent,
                         }}
                       >
-                        {workspace.icon}
+                        <WorkspaceMark workspace={workspace} />
                       </span>
                       <div>
                         <p>

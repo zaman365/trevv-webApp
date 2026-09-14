@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 import {
   ArrowRight,
   Clock3,
@@ -305,7 +306,9 @@ function SearchView({
                 href={workspaceHref(workspace.slug)}
                 key={`workspace-${workspace.id}`}
               >
-                <span className="result-icon workspace">{workspace.icon}</span>
+                <span className="result-icon workspace">
+                  <WorkspaceMark workspace={workspace} />
+                </span>
                 <div>
                   <strong>{workspace.name}</strong>
                   <span>

@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceMark } from "./workspace-mark";
 
 import {
   ArrowRight,
@@ -65,7 +66,7 @@ export function StakeholderExperience({ slug }: { slug: string }) {
             color: "var(--fh-ink)",
           }}
         >
-          {workspace.icon}
+          <WorkspaceMark workspace={workspace} />
         </span>
         <div>
           <p>{workspace.type.replaceAll("_", " ")}</p>
