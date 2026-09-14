@@ -43,11 +43,24 @@ RUN pnpm exec turbo run build \
   --filter=@founderhq/worker \
   --filter=@founderhq/web
 RUN pnpm --config.inject-workspace-packages=true \
-      --filter=@founderhq/api --prod deploy /runtime/api && \
+      --filter=@founderhq/api --prod deploy --no-optional /runtime/api && \
     pnpm --config.inject-workspace-packages=true \
       --filter=@founderhq/worker --prod deploy --no-optional /runtime/worker && \
     pnpm --config.inject-workspace-packages=true \
       --filter=@founderhq/db --prod deploy --no-optional /runtime/db
+# Retain only sharp's native runtime packages. Enabling every optional
+# dependency also ships unrelated compiler binaries through optional peers.
+RUN node <<'NODE'
+const { createRequire } = require('node:module');
+const { cpSync, mkdirSync, realpathSync } = require('node:fs');
+const { dirname, join } = require('node:path');
+const source = createRequire(realpathSync('/app/apps/api/node_modules/sharp/package.json'));
+const destination = '/runtime/api/node_modules/sharp/node_modules/@img';
+mkdirSync(destination, { recursive: true });
+for (const name of [`sharp-linuxmusl-${process.arch}`, `sharp-libvips-linuxmusl-${process.arch}`]) {
+  cpSync(dirname(source.resolve(`@img/${name}/package`)), join(destination, name), { recursive: true });
+}
+NODE
 # Exercise the packaged native decoder, so a missing platform binary fails the
 # image build before the API can be rolled out.
 RUN cd /runtime/api && node --input-type=module -e \
