@@ -789,7 +789,20 @@ test.describe.serial("live founder operating loop", () => {
     );
     const currentVersion = (latestBeforeConflict.body as { version: number })
       .version;
-    await expect(staleRow).toContainText(`v${currentVersion}`);
+    await expect(staleRow).toHaveAttribute(
+      "data-version",
+      String(currentVersion),
+    );
+    await collaboratorPage
+      .getByTestId("live-board")
+      .getByRole("button", { name: "List", exact: true })
+      .click();
+    await staleRow
+      .getByRole("button", {
+        name: `Edit status for ${collaborationTitle}`,
+        exact: true,
+      })
+      .click();
     // Hold the collaborator's actual write while the owner commits. Deferred
     // loading and background sync can otherwise refresh the row before it edits.
     const updatePattern = `**/api/v1/items/${encodeURIComponent(collaborationItem!.id)}`;

@@ -14,16 +14,39 @@ const workflow = parse(
   ),
 );
 
-test("Northflank publication retains complete CI and verifies focused retries on the exact selected commit", () => {
+test("full checks are manual diagnostics without an extra release-gate job", () => {
+  const ci = parse(
+    readFileSync(
+      new URL("../.github/workflows/ci.yml", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(Object.keys(ci.on), ["workflow_dispatch"]);
+  assert.deepEqual(Object.keys(ci.jobs), [
+    "quality",
+    "e2e",
+    "accessibility",
+    "live-identity",
+    "staging-topology",
+  ]);
+});
+
+test("Northflank publication verifies the selected source without requiring CI or retries", () => {
   assert.deepEqual(Object.keys(workflow.on), ["workflow_dispatch"]);
-  const source = workflow.jobs["verify-source"];
-  const gate = source.steps.find((step) => step.id === "source").run;
-  assert.match(gate, /git rev-parse HEAD/);
-  assert.match(gate, /head_sha=\$\{GITHUB_SHA\}/);
-  assert.match(gate, /\.conclusion == "success"/);
-  assert.match(gate, /test "\$successful_runs" -ge 1/);
-  assert.match(gate, /node scripts\/verify-navigation-retry\.mjs publication/);
-  assert.equal(workflow.jobs["build-images"].needs, "verify-source");
+  assert.equal(workflow.jobs["verify-source"], undefined);
+  const build = workflow.jobs["build-images"];
+  assert.equal(build.needs, undefined);
+  assert.equal(build.env.SOURCE_SHA, "${{ github.sha }}");
+  assert.equal(build.steps[0].with.ref, "${{ github.sha }}");
+  const verify = build.steps.find(
+    (step) => step.name === "Verify the checkout is exact and clean",
+  );
+  assert.match(verify.run, /test "\$\(git rev-parse HEAD\)" = "\$SOURCE_SHA"/);
+  assert.match(verify.run, /test -z "\$\(git status --porcelain\)"/);
+  assert.doesNotMatch(
+    JSON.stringify(workflow),
+    /ci\.yml|verify-navigation-retry|successful_runs/,
+  );
 });
 
 function retainedResults() {
@@ -65,6 +88,9 @@ function retainedResults() {
 
 test("focused retry reuses completed results only when application and test behavior are unchanged", () => {
   assert.equal(verifyRetainedChecks(retainedResults()).sourceCiRunId, 123);
+  const manual = retainedResults();
+  manual.run.event = "workflow_dispatch";
+  assert.equal(verifyRetainedChecks(manual).sourceCiRunId, 123);
   for (const path of [
     "apps/web/app/workspace.css",
     "apps/api/src/server.ts",
@@ -135,14 +161,12 @@ test("every published service retains scanning and provenance before release evi
     "worker",
     "migrate",
   ]);
-  assert.deepEqual(jobs["attest-images"].needs, [
-    "verify-source",
-    "scan-images",
-  ]);
-  assert.deepEqual(jobs["release-evidence"].needs, [
-    "verify-source",
-    "attest-images",
-  ]);
+  assert.equal(jobs["scan-images"].needs, "build-images");
+  assert.equal(jobs["attest-images"].needs, "scan-images");
+  assert.equal(jobs["release-evidence"].needs, "attest-images");
+  for (const name of ["scan-images", "attest-images"]) {
+    assert.equal(jobs[name].env.SOURCE_SHA, "${{ github.sha }}");
+  }
   const scan = jobs["scan-images"].steps.find((step) =>
     step.uses?.startsWith("anchore/scan-action@"),
   );

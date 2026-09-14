@@ -275,6 +275,13 @@ test("Summary and My Work keep independent filters and existing inline updates",
   await panel
     .getByPlaceholder("Search tasks, people, or workspace…")
     .fill("Ship the launch");
+  await panel.getByRole("button", { name: "List", exact: true }).click();
+  await panel
+    .getByRole("button", {
+      name: "Edit status for Ship the launch",
+      exact: true,
+    })
+    .click();
   await panel
     .getByLabel("Status for Ship the launch", { exact: true })
     .selectOption("working");

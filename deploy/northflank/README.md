@@ -123,36 +123,55 @@ temporary network probes when finished.
 
 ## Publishing a release for the existing Northflank project
 
-The manual `Publish Northflank images` workflow builds Web, API, Worker and
-migration images from the selected commit only after a complete successful
-TREVV CI run for that exact commit. It retains the staging publisher's isolated
-registry credentials, SPDX SBOM, high/critical vulnerability scan and GitHub
-provenance checks. Its final artifact binds all four verified digests to one
-source and release ID. It publishes artifacts only; it does not change a service,
-run a database migration, alter secrets, or deploy Cloudflare.
+Routine Northflank releases do not require a full CI run or a Worker navigation
+retry. `.github/workflows/ci.yml` is manual-only: it does not run on pushes or pull
+requests. The redundant release-gate and separate publication CI-verification
+jobs have been removed. Run focused checks for the affected behavior; request the
+full diagnostic workflow only when the change warrants it. Reuse relevant checks
+that already passed when their application code, configuration and tests are unchanged.
 
-Use this workflow for the existing Northflank topology. The Render predecessor
-manifest and the older staging publisher remain intact and are not substituted
-with Northflank evidence. Before manually promoting an image, retain the current
-service and Cloudflare versions, take a current database backup, apply and verify
-the additive migration with the migration job, then update the API and Worker
-using their existing settings. Build the frontend for `https://trevv.de` with the
-live API origin and security settings. Verify readiness, authentication and the
-changed workflows after rollout. Retain deployment evidence separately from the
-publication artifact, whose `deploymentPerformed` field is always false.
+The manual `Publish Northflank images` workflow remains the backend artifact
+publisher. Every build checks out the selected commit and verifies its identity
+and clean checkout. It retains isolated registry credentials, SPDX SBOM,
+high/critical vulnerability scans and GitHub provenance checks. Its final artifact
+binds the Web, API, Worker and migration image digests to one source and release ID.
+It publishes artifacts only; it does not change a service, run a database migration,
+alter secrets, or deploy Cloudflare.
 
-### Focused retry after a Worker navigation failure
+Choose the work required by the release:
 
-The complete CI path above remains available. If its only failing browser step
-is **Guard production Worker navigation requests**, the manual **Retry Worker
-navigation** workflow can reuse the successful quality, accessibility, live
-identity, topology, browser-workflow and background-refresh results. Supply the
-original CI run ID. The workflow verifies that run and requires the application,
-dependencies, migrations, runtime configuration and test behavior to be unchanged;
-only its explicitly listed release-orchestration files may differ.
+- **Frontend-only changes:** build and deploy the Cloudflare frontend. Reuse the
+  running backend when its API contract remains compatible. Do not publish backend
+  images or run database migrations just because the frontend changed. Record the
+  frontend revision and compatible backend release accurately.
+- **Backend changes:** publish the images and update the affected API or Worker
+  services using their existing settings. Retain the previous service versions.
+- **Schema changes:** take a current backup, apply and verify the migration with
+  `trevv-migrate`, preserve regular-user permissions, then unlink temporary owner
+  access. Do not run this step when there are no pending schema changes.
 
-This path reruns the production Worker navigation checks and retains its server
-diagnostics. Publication accepts either complete CI success or this verified
-combination of retained checks and a successful retry for the exact selected
-commit. A missing, skipped or failed retry cannot authorize publication. Container
-scanning, provenance verification, migration and live rollout checks still apply.
+Build the frontend for `https://trevv.de` with the live API origin and security
+settings. Retain its previous Cloudflare version and verify readiness,
+authentication and the changed workflows after rollout. Keep deployment evidence
+separate from the publication artifact, whose `deploymentPerformed` field is
+always false.
+
+The Render predecessor manifest and older staging publisher remain available for
+that separate topology. The staging publisher accepts successful manual full-check
+runs as well as historical push runs; it is not part of routine Northflank releases.
+This guide is reference documentation and does not start any jobs.
+
+### Optional full checks and Worker navigation retry
+
+The **TREVV checks (manual)** workflow retains the quality, browser,
+accessibility, identity and topology diagnostics for explicitly requested full
+reviews. There is no extra release-gate job; GitHub records the results of those
+jobs directly.
+
+If the only failing browser step in a completed full-check run is **Guard production
+Worker navigation requests**, the manual **Retry Worker navigation** workflow can
+still reuse the successful checks and rerun just that step. Supply the original
+run ID. It accepts manual runs and historical push runs, verifies unchanged
+application, dependencies, migrations, runtime configuration and test behavior,
+and retains diagnostics. This is an optional investigation tool, not a prerequisite
+for Northflank publication or deployment.

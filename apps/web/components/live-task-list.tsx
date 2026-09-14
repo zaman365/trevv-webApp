@@ -16,6 +16,7 @@ import {
   Columns3,
   LayoutGrid,
   List,
+  Pencil,
   Search,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
@@ -46,7 +47,7 @@ function TaskSelect(props: ComponentProps<"select">) {
   );
 }
 
-/** The same saved tasks, filters and accessible status controls in every view. */
+/** Readable task summaries, with deliberate entry points into editing. */
 export function LiveTaskList({
   items,
   workspaces,
@@ -94,6 +95,7 @@ export function LiveTaskList({
     ),
   ].sort();
   const [view, setView] = useState<"cards" | "list" | "board">("cards");
+  const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
   const [cardPage, setCardPage] = useState({ index: 0, filters: "" });
   const [sort, setSort] = useState<"due" | "priority" | "recent">("due");
   const [today, setToday] = useState(() => taskToday(timezone));
@@ -198,6 +200,14 @@ export function LiveTaskList({
 
   function renderItem(item: WorkItemDto) {
     const workspace = workspaceNames.get(item.workspaceId);
+    const href = `${workspaceHref(workspace?.slug ?? "")}/boards/${encodeURIComponent(item.boardId)}#${encodeURIComponent(item.id)}`;
+    const statusLabel = {
+      not_started: "Not started",
+      working: "In progress",
+      review: "In review",
+      blocked: "Blocked",
+      done: "Completed",
+    }[item.status];
     const overdue =
       item.status !== "done" && Boolean(item.dueDate && item.dueDate < today);
     const title = (
@@ -214,6 +224,7 @@ export function LiveTaskList({
       <article
         className={`${styles.task} ${view !== "list" ? styles.card : ""}`}
         data-status={item.status}
+        data-version={item.version}
         data-testid={`work-item-${item.id}`}
         role="listitem"
       >
@@ -227,11 +238,7 @@ export function LiveTaskList({
             {title}
           </button>
         ) : (
-          <Link
-            className={styles.title}
-            title={item.title}
-            href={`${workspaceHref(workspace?.slug ?? "")}/boards/${encodeURIComponent(item.boardId)}#${encodeURIComponent(item.id)}`}
-          >
+          <Link className={styles.title} title={item.title} href={href}>
             {title}
           </Link>
         )}
@@ -267,41 +274,104 @@ export function LiveTaskList({
               ))
             : "Unassigned"}
         </span>
-        <TaskSelect
-          aria-label={`Status for ${item.title}`}
-          disabled={
-            pendingIds.has(item.id) ||
-            item.status === "blocked" ||
-            item.status === "done"
-          }
-          value={item.status}
-          onChange={(event) =>
-            onStatusChange(item, event.target.value as WorkItemDto["status"])
-          }
+        {view === "list" && editingStatusId === item.id ? (
+          <span className={styles.statusEditor}>
+            <TaskSelect
+              aria-label={`Status for ${item.title}`}
+              disabled={
+                pendingIds.has(item.id) ||
+                item.status === "blocked" ||
+                item.status === "done"
+              }
+              value={item.status}
+              onChange={(event) =>
+                onStatusChange(
+                  item,
+                  event.target.value as WorkItemDto["status"],
+                )
+              }
+            >
+              {editableStatusOptions(item.status).map((candidate) => (
+                <option key={candidate} value={candidate}>
+                  {workItemStatusLabel(candidate)}
+                </option>
+              ))}
+            </TaskSelect>
+            <button type="button" onClick={() => setEditingStatusId(null)}>
+              Done editing
+            </button>
+          </span>
+        ) : (
+          <span className={styles.statusField}>
+            <span className={styles.statusBadge} data-status={item.status}>
+              <span aria-hidden="true" />
+              {statusLabel}
+            </span>
+            {view === "list" ? (
+              <button
+                type="button"
+                className={styles.editStatus}
+                aria-label={`Edit status for ${item.title}`}
+                onClick={() => setEditingStatusId(item.id)}
+              >
+                <Pencil size={13} aria-hidden="true" />
+              </button>
+            ) : null}
+          </span>
+        )}
+        <span
+          className={styles.priority}
+          data-priority={item.priority}
+          aria-label={`Priority: ${item.priority}`}
         >
-          {editableStatusOptions(item.status).map((candidate) => (
-            <option key={candidate} value={candidate}>
-              {workItemStatusLabel(candidate)}
-            </option>
-          ))}
-        </TaskSelect>
-        <span className={styles.priority} data-priority={item.priority}>
           {item.priority}
         </span>
         <span className={styles.due} data-overdue={overdue}>
           <CalendarDays size={13} aria-hidden="true" />
+          {view !== "list" ? (
+            <span className={styles.fieldLabel}>Due</span>
+          ) : null}
           {item.dueDate
             ? `${overdue ? "Overdue · " : ""}${formatLiveDateOnly(item.dueDate, timezone)}`
             : "No due date"}
         </span>
-        <span className={styles.saved} aria-live="polite">
-          {pendingIds.has(item.id) ? "Saving…" : `v${item.version}`}
+        <span
+          className={pendingIds.has(item.id) ? styles.saved : "sr-only"}
+          aria-live="polite"
+        >
+          {pendingIds.has(item.id)
+            ? "Saving…"
+            : `Saved version ${item.version}`}
         </span>
         {view !== "list" ? (
-          <span className={styles.openHint} aria-hidden="true">
-            Open {item.type}
-            <ArrowUpRight size={14} />
-          </span>
+          <div className={styles.cardActions}>
+            <span className={styles.openHint} aria-hidden="true">
+              Open {item.type}
+              <ArrowUpRight size={14} />
+            </span>
+            {onOpen ? (
+              <button
+                className={styles.editTask}
+                type="button"
+                aria-label={`Edit ${item.type}`}
+                title={`Edit ${item.title}`}
+                onClick={() => onOpen(item)}
+              >
+                <Pencil size={13} aria-hidden="true" />
+                Edit
+              </button>
+            ) : (
+              <Link
+                className={styles.editTask}
+                aria-label={`Edit ${item.type}`}
+                title={`Edit ${item.title}`}
+                href={href}
+              >
+                <Pencil size={13} aria-hidden="true" />
+                Edit
+              </Link>
+            )}
+          </div>
         ) : null}
       </article>
     );

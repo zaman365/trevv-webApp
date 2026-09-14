@@ -145,7 +145,7 @@ jobs:
             -f status=completed \
             -f per_page=20 \
             --jq '[.workflow_runs[] | select(
-              .event == "push" and
+              (.event == "push" or .event == "workflow_dispatch") and
               .head_branch == "trevv-foundation" and
               .conclusion == "success"
             )] | length')

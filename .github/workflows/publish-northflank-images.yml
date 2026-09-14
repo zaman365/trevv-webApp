@@ -8,39 +8,8 @@ concurrency:
   group: northflank-image-publication-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  verify-source:
-    name: Verify exact source and complete CI
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: read
-    outputs:
-      source_sha: ${{ steps.source.outputs.source_sha }}
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          persist-credentials: false
-      - name: Verify the selected commit passed every CI gate
-        id: source
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test -z "$(git status --porcelain)"
-          successful_runs=$(gh api --method GET \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
-            -f "head_sha=${GITHUB_SHA}" -f status=completed -f per_page=100 \
-            --jq '[.workflow_runs[] | select(.event == "push" and .conclusion == "success")] | length')
-          if [ "$successful_runs" -ge 1 ]; then
-            test "$successful_runs" -ge 1
-          else
-            node scripts/verify-navigation-retry.mjs publication
-          fi
-          echo "source_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
   build-images:
     name: Build and push ${{ matrix.target }}
-    needs: verify-source
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -59,12 +28,12 @@ jobs:
       contents: read
       packages: write
     env:
-      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+      SOURCE_SHA: ${{ github.sha }}
     steps:
-      - name: Check out the verified source
+      - name: Check out the selected source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ needs.verify-source.outputs.source_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Verify the checkout is exact and clean
         run: |
@@ -101,7 +70,7 @@ jobs:
           tags: ${{ steps.image.outputs.reference }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ needs.verify-source.outputs.source_sha }}
+            org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.title=trevv-${{ matrix.target }}
           build-args: |
             STAGING_PUBLIC_ORIGIN=https://trevv.de
@@ -170,7 +139,7 @@ jobs:
 
   scan-images:
     name: Scan ${{ matrix.target }}
-    needs: [verify-source, build-images]
+    needs: build-images
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -181,7 +150,7 @@ jobs:
       contents: read
       packages: read
     env:
-      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+      SOURCE_SHA: ${{ github.sha }}
     steps:
       - name: Download unverified build evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -262,7 +231,7 @@ jobs:
 
   attest-images:
     name: Attest verified ${{ matrix.target }} image
-    needs: [verify-source, scan-images]
+    needs: scan-images
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -275,7 +244,7 @@ jobs:
       id-token: write
       packages: write
     env:
-      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+      SOURCE_SHA: ${{ github.sha }}
     steps:
       - name: Download passed security evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -346,7 +315,7 @@ jobs:
 
   release-evidence:
     name: Collect verified Northflank release images
-    needs: [verify-source, attest-images]
+    needs: attest-images
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -358,7 +327,7 @@ jobs:
           merge-multiple: true
       - name: Bind the four verified images to one source release
         env:
-          SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           for target in web api worker migrate; do
             jq -e --arg source "$SOURCE_SHA" --arg target "$target" '

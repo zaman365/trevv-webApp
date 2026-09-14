@@ -48,6 +48,19 @@ const packageManifest = JSON.parse(
 const job = (name) => workflow.jobs[name];
 const stepNamed = (steps, name) => steps.find((step) => step.name === name);
 
+test("the legacy staging publisher accepts manually requested full checks", () => {
+  const verify = stepNamed(
+    job("verify-source").steps,
+    "Require a successful complete CI run for the exact source",
+  );
+  assert.match(
+    verify.run,
+    /\.event == "push" or \.event == "workflow_dispatch"/,
+  );
+  assert.match(verify.run, /\.head_branch == "trevv-foundation"/);
+  assert.match(verify.run, /\.conclusion == "success"/);
+});
+
 test("keeps the reviewed Node security baseline consistent", () => {
   const nodeVersion = "22.23.2";
   const nodeImage =

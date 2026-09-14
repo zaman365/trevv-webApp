@@ -250,6 +250,13 @@ test("Portfolio workspace panels fetch scoped work and support real inline updat
     panel.getByRole("link", { name: /Ship the launch/ }),
   ).toBeVisible();
   await expect(panel).not.toContainText("Other workspace secret");
+  await panel.getByRole("button", { name: "List", exact: true }).click();
+  await panel
+    .getByRole("button", {
+      name: "Edit status for Ship the launch",
+      exact: true,
+    })
+    .click();
   await panel
     .getByLabel("Status for Ship the launch", { exact: true })
     .selectOption("working");

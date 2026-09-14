@@ -31,6 +31,7 @@ describe("browser API proxy boundary", () => {
           "content-type": "application/json",
           "idempotency-key": "save-one",
           "if-match": '"1"',
+          "accept-encoding": "gzip, br",
         },
         body: JSON.stringify({ title: "Demo Task" }),
       }),
@@ -41,8 +42,12 @@ describe("browser API proxy boundary", () => {
     );
     expect(forwarded.get("idempotency-key")).toBe("save-one");
     expect(forwarded.get("if-match")).toBe('"1"');
+    expect(forwarded.get("accept-encoding")).toBe("identity");
     expect(response.status).toBe(201);
     expect(response.headers.get("etag")).toBe('"2"');
+    expect(response.headers.get("cache-control")).toBe(
+      "private, no-store, max-age=0, no-transform",
+    );
     expect(response.headers.get("idempotency-replayed")).toBe("true");
     expect(response.headers.get("idempotency-key")).toBe("save-one");
   });

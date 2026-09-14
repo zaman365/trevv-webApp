@@ -3,7 +3,7 @@ import { setup } from "../fixtures/live-workflow-browser";
 import { item } from "../../apps/web/test-fixtures/live-workflow-data";
 
 for (const width of [1440, 390]) {
-  test(`task cards open from their background and keep status actions separate at ${width}px`, async ({
+  test(`task cards show information until opened or explicitly edited at ${width}px`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 950 });
@@ -43,10 +43,18 @@ for (const width of [1440, 390]) {
         (element) => getComputedStyle(element).borderTopWidth,
       ),
     ).toBe("1px");
-    await card.getByLabel(`Status for ${item.title}`).selectOption("working");
-    await expect(card.getByLabel(`Status for ${item.title}`)).toHaveValue(
-      "working",
-    );
+    await expect(card.getByRole("combobox")).toHaveCount(0);
+    await expect(card).toContainText("Not started");
+    await expect(card).toContainText("Due");
+    await card.getByRole("button", { name: "Edit task", exact: true }).click();
+    const detail = page.getByTestId("work-item-detail");
+    await expect(detail).toBeVisible();
+    await detail.getByLabel(/^Work status/).selectOption("working");
+    await expect(card).toHaveAttribute("data-status", "working");
+    await expect(card).toHaveAttribute("data-version", "2");
+    await page.keyboard.press("Escape");
+    await expect(card).toContainText("In progress");
+    await expect(card.getByRole("combobox")).toHaveCount(0);
     await expect(page.getByTestId("work-item-detail")).toBeHidden();
     const owner = card.getByRole("button", { name: "Owner", exact: true });
     await owner.click();
@@ -106,10 +114,21 @@ test("large card collections keep every task reachable and preserve list and boa
   expect(
     await board.locator('article[data-testid^="work-item-"]').count(),
   ).toBeLessThan(50);
+  const firstRow = board.getByTestId("work-item-task-0");
+  await expect(firstRow.getByRole("combobox")).toHaveCount(0);
+  await firstRow
+    .getByRole("button", { name: "Edit status for Task 000" })
+    .click();
+  await expect(firstRow.getByRole("combobox")).toBeVisible();
+  await firstRow.getByRole("button", { name: "Done editing" }).click();
+  await expect(firstRow.getByRole("combobox")).toHaveCount(0);
   await board.getByRole("button", { name: "Board", exact: true }).click();
   await expect(
     board.getByRole("region", { name: /^not started/ }),
   ).toContainText("Task 000");
+  await expect(
+    board.getByTestId("work-item-task-0").getByRole("combobox"),
+  ).toHaveCount(0);
   await expect(board.getByTestId("work-item-task-0")).toContainText(
     "Open task",
   );
@@ -128,6 +147,13 @@ for (const view of ["personal", "page-my-work"] as const) {
     await expect(
       page.getByRole("button", { name: "Cards", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
+    await expect(card.getByRole("combobox")).toHaveCount(0);
+    await expect(
+      card.getByRole("link", { name: "Edit task", exact: true }),
+    ).toHaveAttribute(
+      "href",
+      `/app/workspaces/launch/boards/board-one#${item.id}`,
+    );
     await expect(
       card.getByRole("link", { name: new RegExp(item.title) }),
     ).toHaveAttribute(

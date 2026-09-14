@@ -345,6 +345,13 @@ test("dashboard charts drill into saved work and preserve inline status updates"
   await page
     .getByRole("button", { name: "Show in progress work: 1", exact: true })
     .click();
+  await source.getByRole("button", { name: "List", exact: true }).click();
+  await source
+    .getByRole("button", {
+      name: "Edit status for Campaign creative",
+      exact: true,
+    })
+    .click();
   await source
     .getByRole("combobox", {
       name: "Status for Campaign creative",
@@ -586,7 +593,7 @@ test("refresh does not reopen a closed deep-linked task drawer", async ({
   await expect(detail).toHaveCount(0);
   state.change();
   await page.getByRole("button", { name: "Refresh test records" }).click();
-  await expect(page.getByTestId("live-board")).toContainText("v2");
+  await expect(page.getByTestId("live-board")).toContainText("Saved version 2");
   await expect(detail).toHaveCount(0);
 });
 
@@ -664,9 +671,17 @@ test("board filters, status columns, and completed work stay connected to saved 
     "Ship the completed launch",
   );
   await boardView
-    .getByRole("region", { name: /^working/ })
-    .getByLabel("Status for Draft project brief")
-    .selectOption("review");
+    .getByTestId("work-item-undated-task")
+    .getByRole("button", { name: "Edit task", exact: true })
+    .click();
+  const taskDetail = page.getByTestId("work-item-detail");
+  await taskDetail.getByLabel(/^Work status/).selectOption("review");
+  await expect(taskDetail.getByLabel(/^Work status/)).toHaveValue("review");
+  await expect(boardView.getByTestId("work-item-undated-task")).toHaveAttribute(
+    "data-version",
+    "2",
+  );
+  await page.keyboard.press("Escape");
   await expect(
     boardView.getByRole("region", { name: /^review/ }),
   ).toContainText("Draft project brief");

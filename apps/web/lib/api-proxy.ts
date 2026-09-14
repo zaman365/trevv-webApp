@@ -103,6 +103,13 @@ export async function proxyApiRequest(
   headers.set("x-forwarded-proto", incoming.protocol.replace(":", ""));
   const requestId = webRequestId(headers.get("x-request-id"));
   headers.set("x-request-id", requestId);
+  // Save receipts use strong entity tags for optimistic concurrency. An
+  // intermediary may weaken or remove them when it recompresses the JSON.
+  if (
+    segments[0] === "v1" &&
+    !["GET", "HEAD", "OPTIONS"].includes(request.method)
+  )
+    headers.set("accept-encoding", "identity");
 
   const body =
     request.method === "GET" || request.method === "HEAD"
@@ -138,7 +145,10 @@ export async function proxyApiRequest(
   const responseHeaders = copyResponseHeaders(upstream.headers);
   if (!responseHeaders.has("x-request-id"))
     responseHeaders.set("x-request-id", requestId);
-  responseHeaders.set("cache-control", "private, no-store, max-age=0");
+  responseHeaders.set(
+    "cache-control",
+    `private, no-store, max-age=0${responseHeaders.has("etag") ? ", no-transform" : ""}`,
+  );
   responseHeaders.set("pragma", "no-cache");
 
   const location = responseHeaders.get("location");

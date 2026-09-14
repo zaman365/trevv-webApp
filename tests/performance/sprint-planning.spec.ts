@@ -96,9 +96,22 @@ test("sprint filters and work use actual cycle membership, with project backlog 
   await expect(details).not.toContainText("Backlog research");
   await expect(details).not.toContainText("Next sprint task");
   await expect(panel).not.toContainText("Outside workspace");
+  await details.getByRole("button", { name: "List", exact: true }).click();
+  await details
+    .getByRole("button", {
+      name: "Edit status for Prepare release",
+      exact: true,
+    })
+    .click();
   await expect(
     details.getByLabel("Status for Prepare release", { exact: true }),
   ).toBeDisabled();
+  await details
+    .getByRole("button", {
+      name: "Edit status for Review release",
+      exact: true,
+    })
+    .click();
   await details
     .getByLabel("Status for Review release", { exact: true })
     .selectOption("review");

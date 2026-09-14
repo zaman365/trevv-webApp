@@ -4,7 +4,8 @@ import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 // These files affect release orchestration only. Any application, dependency,
-// migration, runtime or test-behavior change requires a new complete CI run.
+// migration, runtime or test-behavior change prevents reuse in this optional
+// diagnostic. This script is not a Northflank publication requirement.
 export const retryOnlyFiles = new Set([
   ".github/workflows/worker-navigation-retry.yml",
   ".github/workflows/publish-northflank-images.yml",
@@ -16,7 +17,7 @@ export const retryOnlyFiles = new Set([
 export function verifyRetainedChecks({ run, jobs, changedFiles, repository }) {
   assert.equal(run.path, ".github/workflows/ci.yml");
   assert.equal(run.head_repository?.full_name, repository);
-  assert.equal(run.event, "push");
+  assert.ok(["push", "workflow_dispatch"].includes(run.event));
   assert.equal(run.status, "completed");
   assert.equal(run.conclusion, "failure");
   for (const name of [

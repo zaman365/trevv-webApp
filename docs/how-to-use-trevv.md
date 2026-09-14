@@ -129,10 +129,13 @@ available. Existing boards and their tasks remain available in Sprints.
 ## 7. Run a daily follow-up
 
 Task collections open in **Cards** across Dashboard, My Work, teams, sprints,
-and boards. Click a card to open its task; use its status control or owner name
-without leaving the collection. Cards show context, priority, ownership, and
-the due date. Larger collections have **Previous tasks / Next tasks** controls.
-**List** retains the compact view, and **Board** groups the same cards by status.
+and boards. Cards show the title and context, status and priority, description,
+owner, and due date as information. Click a card or **Edit** to open the task's
+details, where status, assignment, dates, updates, and evidence can be changed.
+Owner names still open actionable profile previews without opening the task.
+Larger collections have **Previous tasks / Next tasks** controls.
+**List** retains the compact view with status controls available through the
+explicit **Edit status** button. **Board** groups the same summary cards by status.
 Search, date filters, sorting, and completed work remain available in all views.
 
 1. Start with Today and Overdue in My Work. Update Working, Review or Done as the work changes. Use the board view to see work by status.
