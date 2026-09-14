@@ -29,6 +29,13 @@ async function start(
       decisionState: "needed" as const,
       title: "Choose the launch",
     },
+    {
+      ...item,
+      id: "approval",
+      type: "approval" as const,
+      approvalState: "pending" as const,
+      title: "Approve the launch brief",
+    },
   ];
   const state = await setup(page, "", {
     view,
@@ -138,6 +145,77 @@ test("Portfolio retains workspace creation and adds searchable local sections", 
   await expect(page.getByTestId("workspace-card-launch")).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/");
 });
+
+for (const view of ["page-my-work", "portfolio"] as const) {
+  test(`${view} keeps My Work tasks and offers actionable companion tabs`, async ({
+    page,
+  }) => {
+    const state = await start(page, view);
+    if (view === "portfolio")
+      await page
+        .getByRole("tablist", { name: "Portfolio sections" })
+        .getByRole("tab", { name: "My Work", exact: true })
+        .click();
+    const tabs = page.getByRole("tablist", { name: "My Work sections" });
+    await expect(tabs.getByRole("tab")).toHaveText([
+      view === "portfolio" ? "Tasks" : "My Work",
+      "Decisions",
+      "Approvals",
+      "Waiting",
+      "Plans and ideas",
+      "Inbox",
+      "Attention",
+    ]);
+    const search = page.getByPlaceholder("Search tasks, people, or workspace…");
+    await search.fill("Ship the launch");
+    await tabs.getByRole("tab", { name: "Decisions", exact: true }).click();
+    const panel = page.getByRole("tabpanel", {
+      name: "Decisions",
+      exact: true,
+    });
+    await expect(
+      panel.getByRole("heading", { name: "Choose the launch" }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("link", { name: "Open Decisions full page" }),
+    ).toHaveAttribute("href", "/app/workspaces/launch/decisions");
+    await panel
+      .getByRole("textbox", { name: "Rationale", exact: true })
+      .fill("The launch plan is ready");
+    await tabs.getByRole("tab", { name: "Approvals", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Approve the launch brief" }),
+    ).toBeVisible();
+    await page.goBack();
+    await expect(
+      panel.getByRole("textbox", { name: "Rationale", exact: true }),
+    ).toHaveValue("The launch plan is ready");
+    await panel.getByRole("button", { name: "Record outcome" }).click();
+    await expect(panel).toContainText("Server confirmed");
+    expect(state.transitions[0]).toMatchObject({
+      path: "/api/v1/items/decision/decision",
+      body: { state: "decided", rationale: "The launch plan is ready" },
+    });
+    await tabs.getByRole("tab", { name: "Waiting", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Active waits" }),
+    ).toBeVisible();
+    if (view === "portfolio") {
+      const url = new URL(page.url());
+      expect(url.searchParams.get("section")).toBe("my-work");
+      expect(url.searchParams.get("workSection")).toBe("waiting");
+    }
+    await page.reload();
+    await expect(
+      tabs.getByRole("tab", { name: "Waiting", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await tabs.getByRole("tab").first().click();
+    await expect(
+      page.getByRole("link", { name: /Ship the launch/ }),
+    ).toBeVisible();
+    await expect(page.getByRole("main")).toHaveCount(1);
+  });
+}
 
 test("Portfolio workspace panels fetch scoped work and support real inline updates", async ({
   page,
@@ -259,6 +337,93 @@ test("Teams keeps six cards in view below one heading and the shared tabs", asyn
   ).toBeVisible();
 });
 
+test("team cards align different content and preserve tools, workload, management and native navigation", async ({
+  page,
+}) => {
+  const fixture = teamWorkspaceApi();
+  fixture.state.teams[0]!.name = "Creative Content System";
+  fixture.state.teams[0]!.featureCapabilities = [
+    "work",
+    "messages",
+    "decisions",
+    "approvals",
+  ];
+  fixture.state.teams[1]!.purpose = "Keep operations moving.";
+  await setup(page, "", { view: "teams", styled: true, api: fixture.api });
+  const cards = page.locator('[data-testid^="team-card-"]');
+  const creative = page.getByTestId("team-card-team-launch");
+  await expect(cards).toHaveCount(3);
+  for (const width of [1280, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    for (const card of await cards.all()) {
+      expect(
+        await card.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      ).toBe(true);
+    }
+    if (width === 1280) {
+      const bounds = await cards.evaluateAll((elements) =>
+        elements.map((element) => {
+          const card = element.getBoundingClientRect();
+          return {
+            height: card.height,
+            footer:
+              element.querySelector("footer")!.getBoundingClientRect().top -
+              card.top,
+          };
+        }),
+      );
+      expect(new Set(bounds.map((bound) => bound.height)).size).toBe(1);
+      expect(new Set(bounds.map((bound) => bound.footer)).size).toBe(1);
+    }
+  }
+  const tools = creative.locator("details");
+  await tools.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await expect(tools.getByText("Approvals", { exact: true })).toBeVisible();
+  await expect(tools).toContainText("4 preset options available to 2 members");
+  await tools.locator("summary").click();
+  await creative.getByRole("button", { name: "View member workload" }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Show workload for" }),
+  ).toHaveValue("team-launch");
+  const manage = creative.getByRole("button", {
+    name: "Manage Creative Content System",
+  });
+  await manage.click();
+  await expect(
+    page.getByRole("dialog", { name: "Creative Content System", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(manage).toBeFocused();
+  await expect(
+    creative.getByRole("link", { name: "Open team room" }),
+  ).toHaveAttribute("href", "/app/workspaces/launch/messages#room-launch");
+  const privateTeam = page.getByTestId("team-card-team-private");
+  await expect(
+    privateTeam.getByRole("link", { name: "Open team room" }),
+  ).toHaveCount(0);
+  await expect(
+    privateTeam.getByRole("button", { name: "View details" }),
+  ).toBeVisible();
+  await page.route("**/app/workspaces/launch/teams/team-launch", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<h1>Team destination</h1>",
+    }),
+  );
+  await creative.click({ position: { x: 8, y: 8 } });
+  await expect(page).toHaveURL(
+    "https://trevv.test/app/workspaces/launch/teams/team-launch",
+  );
+});
+
 test("Teams embeds actionable People cards, projects and messages without nested page navigation", async ({
   page,
 }) => {
@@ -273,7 +438,7 @@ test("Teams embeds actionable People cards, projects and messages without nested
     page.getByRole("button", { name: "Chat", exact: true }),
   ).toBeVisible();
   await expect(page.locator("main")).toHaveCount(1);
-  await tabs.getByRole("tab", { name: "Projects", exact: true }).click();
+  await tabs.getByRole("tab", { name: "Sprints", exact: true }).click();
   await page
     .getByRole("button", { name: "New project / plan", exact: true })
     .click();
@@ -435,13 +600,46 @@ test("Personal work retains organization-wide tasks and offers scoped companion 
   await setup(page, "", {
     view: "personal",
     api: fixture.api,
-    records: [{ ...item, assignees: [{ id: "user-one", name: "Owner" }] }],
+    records: [
+      { ...item, assignees: [{ id: "user-one", name: "Owner" }] },
+      {
+        ...item,
+        id: "personal-decision",
+        type: "decision",
+        decisionState: "needed",
+        title: "Launch decision",
+      },
+      {
+        ...item,
+        id: "outside-decision",
+        workspaceId: "outside",
+        type: "decision",
+        decisionState: "needed",
+        title: "Other workspace decision",
+      },
+    ],
   });
   const tabs = page.getByRole("tablist", { name: "Personal work sections" });
   await page.getByRole("button", { name: /^All work / }).click();
   await expect(
     page.getByRole("link", { name: /Ship the launch/ }).first(),
   ).toBeVisible();
+  for (const name of ["Decisions", "Approvals", "Waiting"]) {
+    await tabs.getByRole("tab", { name, exact: true }).click();
+    await expect(page.getByLabel("Workspace for this section")).toHaveValue(
+      "launch",
+    );
+    const panel = page.getByRole("tabpanel", { name, exact: true });
+    await expect(
+      panel.getByRole("link", { name: `Open ${name} full page` }),
+    ).toHaveAttribute("href", `/app/workspaces/launch/${name.toLowerCase()}`);
+    if (name === "Decisions") {
+      await expect(
+        panel.getByRole("heading", { name: "Launch decision" }),
+      ).toBeVisible();
+      await expect(panel).not.toContainText("Other workspace decision");
+    }
+  }
   await tabs.getByRole("tab", { name: "Messages", exact: true }).click();
   await expect(page.getByLabel("Workspace for this section")).toHaveValue(
     "launch",

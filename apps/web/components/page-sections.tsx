@@ -37,6 +37,7 @@ export function PageSections({
   renderSection,
   onSectionChange,
   toolbar,
+  queryParameter = "section",
 }: {
   sections: readonly PageSection[];
   label: string;
@@ -45,6 +46,7 @@ export function PageSections({
   renderSection(section: string): ReactNode;
   onSectionChange?: ((section: string) => void) | undefined;
   toolbar?: ReactNode;
+  queryParameter?: string;
 }) {
   return (
     <SectionState
@@ -56,6 +58,7 @@ export function PageSections({
         renderSection,
         onSectionChange,
         toolbar,
+        queryParameter,
       }}
     />
   );
@@ -67,6 +70,7 @@ function SectionState({
   renderSection,
   onSectionChange,
   toolbar,
+  queryParameter,
 }: Omit<Parameters<typeof PageSections>[0], "scope">) {
   const id = useId();
   const fallback = sections[0]!.id;
@@ -83,6 +87,7 @@ function SectionState({
         window.location.search,
         ids.split("|"),
         fallback,
+        queryParameter,
       );
       setSelected(next);
       setVisited((before) =>
@@ -93,13 +98,13 @@ function SectionState({
     sync();
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
-  }, [ids, fallback]);
+  }, [ids, fallback, queryParameter]);
   function select(next: string) {
     if (next === selected) return;
     window.history.pushState(
       null,
       "",
-      pageSectionUrl(window.location.href, next, fallback),
+      pageSectionUrl(window.location.href, next, fallback, queryParameter),
     );
     setSelected(next);
     setVisited((before) =>

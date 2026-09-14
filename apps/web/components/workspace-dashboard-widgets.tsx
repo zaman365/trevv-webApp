@@ -510,7 +510,7 @@ export function WorkspaceDashboardWidgets({
               <h2 id="dashboard-milestones-title">Milestones</h2>
             </div>
             <Link href={workspaceHref(workspaceSlug, "planning")}>
-              Projects & sprints <ArrowRight size={14} />
+              Sprints <ArrowRight size={14} />
             </Link>
           </header>
           {metrics.milestones.length ? (

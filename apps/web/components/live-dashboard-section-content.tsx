@@ -9,6 +9,9 @@ const SharedPlanningHub = dynamic(
   () => import("./shared-planning-hub").then((m) => m.SharedPlanningHub),
   { loading: () => <p>Loading plans and ideas…</p> },
 );
+const WorkspacePageSections = dynamic(() =>
+  import("./workspace-page-sections").then((m) => m.WorkspacePageSections),
+);
 
 const MyWork = lazy(() =>
   import("./live-work-my-work").then((m) => ({ default: m.LiveMyWork })),
@@ -70,7 +73,12 @@ export function DashboardSectionContent({
       );
     case "my-work":
       return (
-        <>
+        <WorkspacePageSections
+          page="my-work"
+          workspaceSlug={workspaceSlug}
+          primaryLabel="Tasks"
+          nested
+        >
           <SharedPlanningHub
             workspaceId={workspaceId}
             workspaceSlug={workspaceSlug}
@@ -78,7 +86,7 @@ export function DashboardSectionContent({
             compact
           />
           <MyWork items={items} workspaceSlug={workspaceSlug} />
-        </>
+        </WorkspacePageSections>
       );
     case "planning":
       return sprintFocus ? (

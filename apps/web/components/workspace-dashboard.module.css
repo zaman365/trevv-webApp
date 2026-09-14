@@ -73,10 +73,22 @@
   font-size: 13px;
   text-decoration: none;
 }
-.sectionActions button {
-  display: flex;
-  align-items: center;
+.movementPanel {
+  container: movement / inline-size;
+}
+.sectionActions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+.movementPanel .sectionActions > button {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  justify-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 88px;
   padding: 14px;
   border: 1px solid var(--fh-border);
   border-radius: 10px;
@@ -84,17 +96,54 @@
   color: var(--fh-ink);
   text-align: left;
   font: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
-.sectionActions button:hover {
+.movementPanel .sectionActions > button:hover {
   border-color: var(--fh-primary);
+  background: var(--fh-primary-soft);
 }
-.sectionActions button span {
+.sectionActions > button:focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 2px;
+}
+.sectionActions > button > svg {
+  box-sizing: content-box;
+  padding: 9px;
+  border-radius: 10px;
+  color: var(--fh-primary-strong);
+  background: var(--fh-primary-soft);
+}
+.sectionActions > button > span {
   display: grid;
+  min-width: 0;
   gap: 4px;
 }
-.sectionActions button small {
+.sectionActions strong {
+  color: var(--fh-ink);
+  font-weight: 650;
+  line-height: 1.4;
+}
+.sectionActions small {
   color: var(--fh-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+@container movement (max-width: 880px) {
+  .sectionActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container movement (max-width: 500px) {
+  .sectionActions {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .movementPanel .sectionActions > button {
+    min-height: 76px;
+    padding: 12px;
+  }
 }
 @media (max-width: 600px) {
   .sectionTabs {

@@ -40,6 +40,29 @@ describe("page sections and portfolio boundaries", () => {
       ),
     ).toBe("approvals");
   });
+  it("keeps My Work companion tabs independent of the surrounding page", () => {
+    const current =
+      "https://trevv.test/app/portfolio?section=my-work&workspace=launch";
+    expect(pageSectionUrl(current, "decisions", "my-work", "workSection")).toBe(
+      "/app/portfolio?section=my-work&workspace=launch&workSection=decisions",
+    );
+    expect(
+      sectionFromSearch(
+        "?section=my-work&workSection=approvals",
+        workspaceSectionGroups["my-work"],
+        "my-work",
+        "workSection",
+      ),
+    ).toBe("approvals");
+    expect(
+      pageSectionUrl(
+        `${current}&workSection=waiting`,
+        "my-work",
+        "my-work",
+        "workSection",
+      ),
+    ).toBe("/app/portfolio?section=my-work&workspace=launch");
+  });
   it("cannot select a workspace from another portfolio or invent one for an empty portfolio", () => {
     const records = [
       { id: "a", portfolioId: "one", slug: "launch" },

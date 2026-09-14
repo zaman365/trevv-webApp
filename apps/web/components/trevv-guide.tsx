@@ -19,7 +19,7 @@ export const trevvGuideSteps: {
     steps: [
       "Use a workspace for each startup, business or client. Portfolio brings those workspaces together within your organization.",
       "Create a workspace from Portfolio. Give it a recognizable name, purpose and lead. Keep each project inside it as a project plan; use separate workspaces when access should differ.",
-      "Open Projects & sprints to create a project with a clear goal and target date. Existing boards remain available as project plans.",
+      "Open Sprints to plan delivery cycles or create a project with a clear goal and target date. Existing boards remain available as project plans.",
     ],
   },
   {
@@ -36,7 +36,7 @@ export const trevvGuideSteps: {
   {
     title: "Give a project its team and context",
     view: "planning",
-    action: "Open Projects & sprints",
+    action: "Open Sprints",
     steps: [
       "Choose New project / plan, select its team, and optionally start from a department template.",
       "For Marketing, record the campaign audience, channels and success metric. For IT, record the product or sprint goal, acceptance criteria, risks and definition of done.",

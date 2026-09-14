@@ -125,6 +125,106 @@ test("sprint filters and work use actual cycle membership, with project backlog 
   await expect(panel.getByRole("article", { name: / sprint$/ })).toHaveCount(3);
 });
 
+test("sprint cards open their work from the whole card and keep full-page links separate", async ({
+  page,
+}) => {
+  const { panel } = await sprints(page);
+  const planned = panel.getByTestId("planning-card-sprint-planned");
+  await planned.click({ position: { x: 10, y: 10 } });
+  await expect(
+    panel.getByRole("region", {
+      name: "planned launch sprint sprint details",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    planned.getByRole("link", {
+      name: "Open planned launch sprint board",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "/app/workspaces/launch/boards/sprint-planned");
+  const active = panel.getByTestId("planning-card-sprint-active");
+  await active
+    .getByRole("button", { name: "active launch sprint", exact: true })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    panel.getByRole("region", {
+      name: "active launch sprint sprint details",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("planning cards stay aligned across teams and expose notes, milestones, editing and card navigation", async ({
+  page,
+}) => {
+  const api = teamWorkspaceApi();
+  const first = api.state.boards[0]!;
+  const description =
+    "Goal: Deliver the launch across both teams.\nScope: A complete campaign with a clear review process.\nSuccess criteria: Publish and measure the results.\nRisks: Review capacity.";
+  first.description = description;
+  first.startDate = "2026-09-14";
+  first.endDate = "2026-09-25";
+  const second = api.state.boards[1]!;
+  second.description = "Goal:\nScope:\nSuccess criteria:\nMilestones:\nRisks:";
+  await setup(page, "", {
+    view: "planning",
+    styled: true,
+    api: api.api,
+    records: [{ ...item, type: "milestone", title: "Review the campaign" }],
+  });
+  await expect(
+    page.getByRole("heading", { name: "Sprints", exact: true, level: 1 }),
+  ).toBeVisible();
+  const cards = page.locator('[data-testid^="planning-card-"]');
+  for (const width of [1440, 1024, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const boxes = await cards.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const r = node.getBoundingClientRect();
+        return { height: r.height, width: r.width, right: r.right };
+      }),
+    );
+    expect(boxes.length).toBeGreaterThan(1);
+    expect(
+      Math.max(...boxes.map((b) => b.height)) -
+        Math.min(...boxes.map((b) => b.height)),
+    ).toBeLessThanOrEqual(1);
+    for (const box of boxes) expect(box.right).toBeLessThanOrEqual(width);
+  }
+  const card = page.getByTestId(`planning-card-${first.id}`);
+  await expect(card.getByRole("progressbar")).toHaveAttribute("value", "0");
+  await expect(card).toContainText("0%");
+  await card.locator("summary").click();
+  await expect(
+    card.locator("details").getByText(description, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    card.getByRole("link", { name: "Review the campaign", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `/app/workspaces/launch/boards/${item.boardId}#${item.id}`,
+  );
+  await card.getByRole("button", { name: "Edit project", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Edit plan", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await page.route(
+    `https://trevv.test/app/workspaces/launch/boards/${first.id}`,
+    (route) =>
+      route.fulfill({ contentType: "text/html", body: "<h1>Plan board</h1>" }),
+  );
+  await card.click({ position: { x: 10, y: 10 } });
+  await expect(
+    page.getByRole("heading", { name: "Plan board", exact: true }),
+  ).toBeVisible();
+});
+
 test("Plan sprint persists sprint type, goal, team, parent and required dates; task capture keeps its cycle", async ({
   page,
 }) => {

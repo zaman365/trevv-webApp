@@ -8,7 +8,11 @@ import {
 import { useLiveAppRecords } from "@/lib/live-app-data";
 import { LiveWorkspaceRecordsScope } from "./live-workspace-records-scope";
 import { useAppSession } from "@/lib/app-session-context";
-import { sectionCatalog, portfolioWorkspaces } from "@/lib/page-sections";
+import {
+  sectionCatalog,
+  portfolioWorkspaces,
+  myWorkRelatedSections,
+} from "@/lib/page-sections";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { AppLink as Link } from "@/components/navigation-link";
 import styles from "./portfolio-page-sections.module.css";
@@ -57,9 +61,7 @@ export function PortfolioPageSections({
   const workspace = personal
     ? (workspaces.find((entry) => entry.slug === requested) ?? workspaces[0])
     : selected;
-  const ids = personal
-    ? ["ideas", "inbox", "waiting", "messages", "attention"]
-    : operational;
+  const ids = personal ? [...myWorkRelatedSections, "messages"] : operational;
   const sections = [
     { id: "overview", label: personal ? "All my tasks" : "Overview" },
     ...(!personal

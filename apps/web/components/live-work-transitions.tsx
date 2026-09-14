@@ -4,7 +4,7 @@ import { useReportRouteReady } from "@/lib/navigation-performance";
 
 import type { WorkItemDto } from "@founderhq/api-contract";
 import { CheckCircle2, FileQuestion } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
@@ -37,6 +37,7 @@ export function LiveTransitions({
   workspaceId: string;
 }) {
   useReportRouteReady(true);
+  const titleId = useId();
   const session = useAppSession();
   const liveData = useLiveAppData();
   const storageKey = liveDraftStorageKey({
@@ -214,11 +215,11 @@ export function LiveTransitions({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby={`${kind}-items-title`}>
+    <section className={styles.panel} aria-labelledby={titleId}>
       <header>
         <div>
           <p>Canonical record + accountable rationale</p>
-          <h2 id={`${kind}-items-title`}>
+          <h2 id={titleId}>
             {kind === "decision" ? "Decision" : "Approval"} WorkItems
           </h2>
         </div>

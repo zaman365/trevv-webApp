@@ -506,6 +506,60 @@ test("onboarding configures a generalized first project", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("demo My Work keeps its task tools and adds decisions, approvals and waiting", async ({
+  page,
+}) => {
+  await gotoCanonical(page, workspaceRoute("my-work"));
+  const tabs = page.getByRole("tablist", {
+    name: "My Work sections",
+    exact: true,
+  });
+  await expect(tabs.getByRole("tab")).toHaveText([
+    "My Work",
+    "Decisions",
+    "Approvals",
+    "Waiting",
+  ]);
+  const search = page.getByRole("textbox", {
+    name: "Search My Work",
+    exact: true,
+  });
+  await search.fill("launch");
+  await tabs.getByRole("tab", { name: "Decisions", exact: true }).click();
+  await page
+    .getByRole("button", { name: "New decision", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Create a decision", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close new decision" }).click();
+  await tabs.getByRole("tab", { name: "Approvals", exact: true }).click();
+  await expect(
+    page
+      .getByRole("tabpanel", { name: "Approvals", exact: true })
+      .locator(".approval-layout"),
+  ).toBeVisible();
+  await tabs.getByRole("tab", { name: "Waiting", exact: true }).click();
+  await page.getByRole("button", { name: /^Waiting on External/ }).click();
+  await page
+    .locator(".waiting-list article")
+    .first()
+    .getByRole("button", { name: "Draft follow-up" })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Prepare a focused nudge" }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog", { name: "Prepare a focused nudge" })
+    .getByRole("button", { name: "Save local preview" })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Follow-up prepared");
+  await tabs.getByRole("tab", { name: "My Work", exact: true }).click();
+  await expect(search).toHaveValue("launch");
+  await expect(page.getByRole("main")).toHaveCount(1);
+});
+
 test("member focus centers and informational notifications render", async ({
   page,
 }) => {

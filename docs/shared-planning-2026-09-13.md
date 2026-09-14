@@ -22,6 +22,13 @@ conversation is the place to discuss it.
   overview show plans, ideas, people and links to discussions and source details.
   My Work includes ideas assigned to the current person and linked discussions
   they participate in. Full-page navigation remains available.
+- Compact planning cards open the workspace Ideas page when their title or
+  background is clicked, with a keyboard-focusable link in place of View all.
+  Creation, source links, discussions and sharing actions retain their own
+  behavior. The action pair is Plan/Idea and Task: Plan/Idea offers both existing
+  editors, while Task opens task capture in the current workspace and team.
+  Plan/Idea closes on outside click or Escape. Idea and task drafts are separate;
+  assignments, optional sharing and existing task fields remain available.
 - Existing sources have Include people / New discussion actions. Existing
   discussions retain participant management, replies, message recovery and
   response workflows. Additional discussions can have different selected groups.

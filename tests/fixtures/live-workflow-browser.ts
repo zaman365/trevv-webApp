@@ -366,7 +366,7 @@ export async function setup(
     ).toBeVisible();
   } else if (options.view === "planning") {
     await expect(
-      page.getByRole("heading", { name: "Projects and sprints", level: 1 }),
+      page.getByRole("heading", { name: "Sprints", level: 1 }),
     ).toBeVisible();
   } else if (options.view === "capture") {
     await expect(

@@ -1,8 +1,23 @@
 "use client";
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lightbulb, MessageCircleMore, Plus, Users, X } from "lucide-react";
+import {
+  ChevronDown,
+  Lightbulb,
+  MessageCircleMore,
+  Plus,
+  Users,
+  X,
+} from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords } from "@/lib/live-app-data";
@@ -28,7 +43,7 @@ import formStyles from "./live-operating-loop.module.css";
 const PlanEditor = lazy(() =>
   import("./live-project-planning").then((m) => ({ default: m.PlanEditor })),
 );
-const IdeaEditor = lazy(() =>
+const CaptureEditor = lazy(() =>
   import("./live-quick-capture").then((m) => ({
     default: m.LiveQuickCaptureDialog,
   })),
@@ -71,7 +86,7 @@ export function SharedPlanningHub({
   });
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState("all");
-  const [create, setCreate] = useState<"plan" | "idea" | null>(null);
+  const [create, setCreate] = useState<"plan" | "idea" | "task" | null>(null);
   const [sharing, setSharing] = useState<ResourceCard | null>(null);
   const canWrite = !["viewer", "guest"].includes(session.organization.role);
   const accessLost =
@@ -152,16 +167,27 @@ export function SharedPlanningHub({
     search,
   ]);
   const visible = compact ? cards.slice(0, 4) : cards;
+  const title = personal ? "Plans and ideas involving me" : "Plans and ideas";
   return (
     <section
-      className={styles.hub}
-      aria-label={personal ? "Plans and ideas involving me" : "Plans and ideas"}
+      className={`${styles.hub}${compact ? ` ${styles.clickableHub}` : ""}`}
+      aria-label={title}
     >
       <header>
         <div>
           <h2>
-            <Lightbulb size={19} aria-hidden="true" />{" "}
-            {personal ? "Plans and ideas involving me" : "Plans and ideas"}
+            {compact ? (
+              <Link
+                className={styles.hubLink}
+                href={workspaceHref(workspaceSlug, "ideas")}
+              >
+                <Lightbulb size={19} aria-hidden="true" /> {title}
+              </Link>
+            ) : (
+              <>
+                <Lightbulb size={19} aria-hidden="true" /> {title}
+              </>
+            )}
           </h2>
           <p>
             {personal
@@ -169,21 +195,7 @@ export function SharedPlanningHub({
               : "Explore upcoming work, invite input and keep the conversation connected."}
           </p>
         </div>
-        <div className={styles.actions}>
-          {canWrite ? (
-            <>
-              <button type="button" onClick={() => setCreate("idea")}>
-                <Plus size={14} /> New idea
-              </button>
-              <button type="button" onClick={() => setCreate("plan")}>
-                <Plus size={14} /> New plan
-              </button>
-            </>
-          ) : null}
-          {compact ? (
-            <Link href={workspaceHref(workspaceSlug, "ideas")}>View all</Link>
-          ) : null}
-        </div>
+        {canWrite ? <PlanningCreateActions onCreate={setCreate} /> : null}
       </header>
       {!compact ? (
         <div className={styles.filters}>
@@ -326,14 +338,15 @@ export function SharedPlanningHub({
             }}
           />
         ) : null}
-        {create === "idea" ? (
-          <IdeaEditor
+        {create === "idea" || create === "task" ? (
+          <CaptureEditor
+            key={create}
             workspaceId={workspaceId}
             workspaceSlug={workspaceSlug}
-            defaultType="idea"
+            defaultType={create}
             {...(teamId ? { defaultTeamId: teamId } : {})}
             defaultAssigneeId={session.user.id}
-            draftScope={`planning-idea:${workspaceId}:${teamId ?? "all"}`}
+            draftScope={`planning-${create}:${workspaceId}:${teamId ?? "all"}`}
             onClose={() => setCreate(null)}
             onConfirmed={() => setCreate(null)}
           />
@@ -343,6 +356,88 @@ export function SharedPlanningHub({
         <ShareExisting resource={sharing} onClose={() => setSharing(null)} />
       ) : null}
     </section>
+  );
+}
+
+function PlanningCreateActions({
+  onCreate,
+}: {
+  onCreate: (kind: "plan" | "idea" | "task") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !ref.current?.contains(event.target))
+        setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
+  }, [open]);
+  return (
+    <div className={`${styles.actions} ${styles.createActions}`}>
+      <div
+        className={styles.createPicker}
+        ref={ref}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+            trigger.current?.focus();
+          }
+        }}
+      >
+        <button
+          ref={trigger}
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen(!open)}
+        >
+          <Plus size={14} aria-hidden="true" /> Plan/Idea{" "}
+          <ChevronDown size={14} aria-hidden="true" />
+        </button>
+        {open ? (
+          <div
+            id={id}
+            className={styles.createChoices}
+            role="group"
+            aria-label="Create a plan or idea"
+          >
+            {(["plan", "idea"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => {
+                  trigger.current?.focus();
+                  setOpen(false);
+                  onCreate(kind);
+                }}
+              >
+                {kind === "plan" ? "Plan" : "Idea"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.currentTarget.focus();
+          onCreate("task");
+        }}
+      >
+        <Plus size={14} aria-hidden="true" /> Task
+      </button>
+    </div>
   );
 }
 

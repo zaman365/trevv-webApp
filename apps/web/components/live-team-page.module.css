@@ -11,8 +11,7 @@
 .page a {
   -webkit-tap-highlight-color: transparent;
 }
-.page button:not(:global(.primary-button)),
-.page a {
+:where(.page) :where(button:not(:global(.primary-button)), a) {
   font: inherit;
 }
 .page button:focus-visible,

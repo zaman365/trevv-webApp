@@ -26,6 +26,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BoardDto } from "@founderhq/api-contract";
 import { TrevvApiError } from "@founderhq/api-client";
+import { ArrowRight } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords } from "@/lib/live-app-data";
@@ -41,17 +42,13 @@ import { teamPlaybooks } from "@/lib/team-playbooks";
 import { WorkspaceFrame } from "./workspace-frame";
 import { LiveStateNotice } from "./live-state";
 import styles from "./live-operating-loop.module.css";
+import {
+  PlanningCard,
+  planningKindLabels as kindLabels,
+} from "./planning-card";
+import cardStyles from "./planning-card.module.css";
 
 type PlanKind = NonNullable<BoardDto["planning"]>["kind"];
-const kindLabels: Record<PlanKind, string> = {
-  project: "Project",
-  sprint: "Sprint",
-  campaign: "Campaign",
-  content: "Content calendar",
-  backlog: "Backlog",
-  operations: "Operations cycle",
-  goals: "Company goals",
-};
 const SprintPlanningContent = dynamic(() =>
   import("./live-sprint-planning").then(
     (module) => module.SprintPlanningContent,
@@ -79,7 +76,7 @@ function ProjectPlanningPage({ workspaceSlug }: { workspaceSlug: string }) {
       <main className={styles.main}>
         <header className={`${styles.hero} compact-page-header`}>
           <div>
-            <h1>{sprintFocus ? "Sprints" : "Projects and sprints"}</h1>
+            <h1>Sprints</h1>
           </div>
           <Link href={workspaceHref(workspaceSlug, "guide")}>
             Step-by-step guide
@@ -88,7 +85,7 @@ function ProjectPlanningPage({ workspaceSlug }: { workspaceSlug: string }) {
         <WorkspacePageSections
           page={"planning"}
           workspaceSlug={workspaceSlug}
-          primaryLabel={sprintFocus ? "Sprints" : "Projects"}
+          primaryLabel="Sprints"
         >
           {workspace ? (
             sprintFocus ? (
@@ -99,9 +96,11 @@ function ProjectPlanningPage({ workspaceSlug }: { workspaceSlug: string }) {
             ) : (
               <>
                 <Link
+                  className={cardStyles.switchLink}
                   href={`${workspaceHref(workspaceSlug, "planning")}?mode=sprints`}
                 >
-                  Open sprint planning
+                  Open sprint planning{" "}
+                  <ArrowRight size={14} aria-hidden="true" />
                 </Link>
                 <ProjectPlanningContent
                   workspaceId={workspace.id}
@@ -149,7 +148,9 @@ export function ProjectPlanningContent({
   const accessLost =
     query.error instanceof TrevvApiError &&
     [401, 403, 404].includes(query.error.status);
-  const boards = accessLost ? [] : (query.data ?? []);
+  const boards = accessLost
+    ? []
+    : (query.data ?? []).filter((board) => board.workspaceId === workspaceId);
   const shown = boards.filter(
     (board) =>
       (!filter || board.planning?.teamId === filter) &&
@@ -162,7 +163,7 @@ export function ProjectPlanningContent({
   );
   return (
     <section
-      className={styles.panel}
+      className={`${styles.panel} ${cardStyles.section}`}
       aria-label={
         parentBoard ? "Project sprints and cycles" : "Project planning"
       }
@@ -193,7 +194,7 @@ export function ProjectPlanningContent({
         ) : null}
       </header>
       {!teamId && directory.data?.teams.length ? (
-        <label className={styles.field}>
+        <label className={`${styles.field} ${cardStyles.teamFilter}`}>
           Team
           <select
             value={filter}
@@ -226,7 +227,7 @@ export function ProjectPlanningContent({
             : "Create a project, choose a team, and start with its first milestone."}
         </p>
       ) : null}
-      <div className={styles.planGrid}>
+      <div className={cardStyles.grid}>
         {shown.map((board) => {
           const items = data.items.filter(
             (item) =>
@@ -236,72 +237,25 @@ export function ProjectPlanningContent({
                   item.boardId === board.id
                 : item.boardId === board.id),
           );
-          const done = items.filter((item) => item.status === "done").length;
-          const milestones = items.filter((item) => item.type === "milestone");
           const parent = boards.find(
             (entry) => entry.id === board.planning?.parentBoardId,
           );
           return (
-            <article className={styles.planCard} key={board.id}>
-              <small>
-                {kindLabels[board.planning?.kind ?? "project"]} ·{" "}
-                {board.planning?.state ?? "planned"}
-                {parent ? ` · ${parent.name}` : ""}
-              </small>
-              <h3>
-                <Link
-                  href={`${workspaceHref(workspaceSlug)}/boards/${encodeURIComponent(board.id)}`}
-                >
-                  {board.name}
-                </Link>
-              </h3>
-              <p>
-                {board.description ||
-                  "Add the goal and success criteria in Edit plan."}
-              </p>
-              <span>
-                {board.startDate ?? "No start date"} →{" "}
-                {board.endDate ?? "No target date"}
-              </span>
-              <span>
-                {done} / {items.length} tasks completed
-                {data.recordsComplete ? "" : " · Loading work…"}
-              </span>
-              <progress
-                aria-label={`${board.name} completion`}
-                value={done}
-                max={Math.max(1, items.length)}
-              />
-              {board.planning?.state === "completed" && done < items.length ? (
-                <p>
-                  {items.length - done} unfinished items remain visible. Move
-                  them to the next cycle from each task’s planning fields.
-                </p>
-              ) : null}
-              {milestones.length ? (
-                <ul aria-label={`${board.name} milestones`}>
-                  {milestones.map((item) => (
-                    <li key={item.id}>
-                      <Link
-                        href={`${workspaceHref(workspaceSlug)}/boards/${item.boardId}#${item.id}`}
-                      >
-                        {item.title}
-                      </Link>{" "}
-                      ·{" "}
-                      {item.status === "done"
-                        ? "Completed"
-                        : (item.dueDate ?? "Set a due date")}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {canCreate ? (
-                <button type="button" onClick={() => setEditing(board)}>
-                  Edit{" "}
-                  {kindLabels[board.planning?.kind ?? "project"].toLowerCase()}
-                </button>
-              ) : null}
-            </article>
+            <PlanningCard
+              key={board.id}
+              board={board}
+              workspaceSlug={workspaceSlug}
+              timezone={session.organization.timezone ?? "UTC"}
+              teamName={
+                directory.data?.teams.find(
+                  (entry) => entry.id === board.planning?.teamId,
+                )?.name
+              }
+              parentName={parent?.name}
+              items={items}
+              complete={data.recordsComplete}
+              onEdit={canCreate ? () => setEditing(board) : undefined}
+            />
           );
         })}
       </div>

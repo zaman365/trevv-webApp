@@ -20,8 +20,17 @@ export const sectionCatalog = {
   { id: string; label: string; title: string; description: string }
 >;
 
+export const myWorkRelatedSections = [
+  "decisions",
+  "approvals",
+  "waiting",
+  "ideas",
+  "inbox",
+  "attention",
+] as const;
+
 export const workspaceSectionGroups = {
-  "my-work": ["my-work", "ideas", "inbox", "waiting", "attention"],
+  "my-work": ["my-work", ...myWorkRelatedSections],
   planning: ["planning", "ideas", "my-work", "teams", "decisions"],
   inbox: ["inbox", "my-work", "messages", "waiting"],
   attention: ["attention", "waiting", "decisions", "approvals", "reviews"],
@@ -44,8 +53,9 @@ export function sectionFromSearch(
   search: string,
   ids: readonly string[],
   fallback: string,
+  parameter = "section",
 ) {
-  const value = new URLSearchParams(search).get("section");
+  const value = new URLSearchParams(search).get(parameter);
   return value && ids.includes(value) ? value : fallback;
 }
 
@@ -53,10 +63,11 @@ export function pageSectionUrl(
   current: string,
   section: string,
   fallback: string,
+  parameter = "section",
 ) {
   const url = new URL(current);
-  if (section === fallback) url.searchParams.delete("section");
-  else url.searchParams.set("section", section);
+  if (section === fallback) url.searchParams.delete(parameter);
+  else url.searchParams.set(parameter, section);
   url.hash = "";
   return `${url.pathname}${url.search}`;
 }

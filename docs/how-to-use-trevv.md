@@ -25,7 +25,7 @@ charts and source work; each other section keeps its own workspace scope.
 
 2. Create a workspace from Portfolio. Give it a recognizable name, purpose and lead. Keep each project inside it as a project plan; use separate workspaces when access should differ.
 
-3. Open Projects & sprints to create a project with a clear goal and target date. Existing boards remain available as project plans.
+3. Open Sprints to plan delivery cycles or create a project with a clear goal and target date. Existing boards remain available as project plans.
 
 ## 2. Create teams and add people
 

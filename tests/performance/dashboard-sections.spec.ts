@@ -168,7 +168,9 @@ test("every top tab updates the dashboard in place and offers the correct full p
       exact: true,
     });
     await expect(panel).toBeVisible();
-    await expect(page.getByRole("tabpanel")).toHaveCount(1);
+    await expect(page.getByRole("tabpanel")).toHaveCount(
+      section.id === "my-work" ? 2 : 1,
+    );
     await expect(
       panel.getByRole("link", {
         name: `Open ${section.title} full page`,
@@ -194,6 +196,65 @@ test("every top tab updates the dashboard in place and offers the correct full p
         panel.getByRole("heading", { name: "Open signals" }),
       ).toBeVisible();
   }
+});
+
+test("embedded My Work tabs preserve Dashboard context, filters and keyboard navigation", async ({
+  page,
+}) => {
+  await dashboard(page);
+  const outer = page.getByRole("tablist", { name: "Dashboard sections" });
+  await outer.getByRole("tab", { name: "My Work", exact: true }).click();
+  const tabs = page.getByRole("tablist", { name: "My Work sections" });
+  const search = page
+    .getByRole("tabpanel", { name: "Tasks", exact: true })
+    .getByRole("searchbox", { name: "Search tasks", exact: true });
+  await search.fill("Ship the launch");
+  await tabs
+    .getByRole("tab", { name: "Tasks", exact: true })
+    .press("ArrowRight");
+  await expect(
+    tabs.getByRole("tab", { name: "Decisions", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("heading", { name: "Choose a launch date" }),
+  ).toBeVisible();
+  const draft = page.getByRole("textbox", { name: "Rationale", exact: true });
+  await draft.fill("Review with the launch team");
+  await tabs.getByRole("tab", { name: "Approvals", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Approve the brief" }),
+  ).toBeVisible();
+  await tabs.getByRole("tab", { name: "Waiting", exact: true }).click();
+  expect(new URL(page.url()).searchParams.get("section")).toBe("my-work");
+  expect(new URL(page.url()).searchParams.get("workSection")).toBe("waiting");
+  await outer.getByRole("tab", { name: "Summary", exact: true }).click();
+  await outer.getByRole("tab", { name: "My Work", exact: true }).click();
+  await expect(
+    tabs.getByRole("tab", { name: "Waiting", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await tabs.getByRole("tab", { name: "Decisions", exact: true }).click();
+  await expect(draft).toHaveValue("Review with the launch team");
+  await tabs.getByRole("tab", { name: "Tasks", exact: true }).click();
+  await expect(search).toHaveValue("Ship the launch");
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const tab of await tabs.getByRole("tab").all()) {
+    const box = (await tab.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  }
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await tabs.getByRole("tab", { name: "Waiting", exact: true }).click();
+  await page.reload();
+  await expect(
+    outer.getByRole("tab", { name: "My Work", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    tabs.getByRole("tab", { name: "Waiting", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
 });
 
 test("Summary and My Work keep independent filters and existing inline updates", async ({

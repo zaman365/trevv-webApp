@@ -1,5 +1,6 @@
 "use client";
-
+import dynamic from "next/dynamic";
+import { PageSections } from "./page-sections";
 import {
   AlertTriangle,
   ArrowRight,
@@ -35,6 +36,10 @@ import { DecisionCenter } from "./decision-center";
 import { InboxExperience } from "./email-inbox-workflow";
 import { MyWorkWorkflow } from "./my-work-workflow";
 import { CapabilityNotice } from "./capability-status";
+
+const WaitingContent = dynamic(() =>
+  import("./management-experience").then((module) => module.WaitingContent),
+);
 
 export type FocusKind =
   | "myWork"
@@ -74,12 +79,18 @@ export function FocusExperience({
   const active = kind === "settings" ? "settings" : kind;
   return (
     <WorkspaceFrame active={active} workspaceSlug={workspaceSlug}>
-      <FocusMain kind={kind} />
+      <FocusMain kind={kind} workspaceSlug={workspaceSlug} />
     </WorkspaceFrame>
   );
 }
 
-function FocusMain({ kind }: { kind: FocusKind }) {
+function FocusMain({
+  kind,
+  workspaceSlug,
+}: {
+  kind: FocusKind;
+  workspaceSlug?: string | undefined;
+}) {
   const capturedWork = useCapturedWork();
   const { scope } = useWorkspace();
   const copy = productCopy.en.focus;
@@ -115,7 +126,38 @@ function FocusMain({ kind }: { kind: FocusKind }) {
           </div>
         </header>
       )}
-      {kind === "myWork" && <MyWorkWorkflow />}
+      {kind === "myWork" && (
+        <PageSections
+          scope={`demo-my-work:${workspaceSlug ?? "all"}`}
+          label="My Work sections"
+          sections={[
+            { id: "my-work", label: "My Work" },
+            ...(["decisions", "approvals", "waiting"] as const).map((id) => ({
+              id,
+              label: id[0]!.toUpperCase() + id.slice(1),
+              ...(workspaceSlug
+                ? { href: workspaceHref(workspaceSlug, id) }
+                : {}),
+            })),
+          ]}
+          renderSection={(section) =>
+            section === "decisions" ? (
+              <DecisionCenter />
+            ) : section === "approvals" ? (
+              <ApprovalView
+                capturedWork={capturedWork}
+                allowedWorkspaceIds={scope.workspaces.map(
+                  (workspace) => workspace.id,
+                )}
+              />
+            ) : (
+              <WaitingContent embedded />
+            )
+          }
+        >
+          <MyWorkWorkflow />
+        </PageSections>
+      )}
       {kind === "inbox" && <InboxExperience />}
       {kind === "decisions" && <DecisionCenter />}
       {kind === "approvals" && (

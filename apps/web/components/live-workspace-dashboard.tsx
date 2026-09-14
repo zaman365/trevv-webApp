@@ -374,7 +374,10 @@ export function LiveWorkspaceDashboard({
             workspaceSlug={workspaceSlug}
             compact
           />
-          <section className={styles.panel} aria-labelledby="live-loop-title">
+          <section
+            className={`${styles.panel} ${dashboardStyles.movementPanel}`}
+            aria-labelledby="live-loop-title"
+          >
             <header>
               <div>
                 <p>Keep work moving</p>
@@ -382,34 +385,36 @@ export function LiveWorkspaceDashboard({
               </div>
             </header>
             <nav
-              className={`${styles.actionList} ${dashboardStyles.sectionActions}`}
+              className={dashboardStyles.sectionActions}
               aria-label="Operating loop views"
             >
               <button type="button" onClick={() => select("attention")}>
-                <Sparkles size={16} />
+                <Sparkles size={18} aria-hidden="true" />
                 <span>
                   <strong>Attention</strong>
                   <small>
-                    {countLabel(attention.length)} items need attention
+                    {countLabel(attention.length)}{" "}
+                    {attention.length === 1 ? "item needs" : "items need"}{" "}
+                    attention
                   </small>
                 </span>
               </button>
               <button type="button" onClick={() => select("decisions")}>
-                <FileQuestion size={16} />
+                <FileQuestion size={18} aria-hidden="true" />
                 <span>
                   <strong>Decisions</strong>
                   <small>{countLabel(itemTotals?.decisions ?? 0)} open</small>
                 </span>
               </button>
               <button type="button" onClick={() => select("approvals")}>
-                <ClipboardCheck size={16} />
+                <ClipboardCheck size={18} aria-hidden="true" />
                 <span>
                   <strong>Approvals</strong>
                   <small>{countLabel(itemTotals?.approvals ?? 0)} open</small>
                 </span>
               </button>
               <button type="button" onClick={() => select("waiting")}>
-                <Clock3 size={16} />
+                <Clock3 size={18} aria-hidden="true" />
                 <span>
                   <strong>Waiting</strong>
                   <small>{countLabel(waiting.length)} active follow-ups</small>

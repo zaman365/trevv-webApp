@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -76,6 +77,30 @@ export function LiveRefreshStatus() {
 
 function LiveRefreshStatusView({ compact = false }: { compact?: boolean }) {
   const data = useOptionalLiveAppRecords();
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const details = detailsRef.current;
+      if (
+        details?.open &&
+        event.target instanceof Node &&
+        !details.contains(event.target)
+      )
+        details.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      const details = detailsRef.current;
+      if (event.key !== "Escape" || !details?.open) return;
+      details.open = false;
+      details.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnPointerDown, true);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown, true);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
   const refreshedAt = useLiveAppRefreshedAt();
   const visible = useSyncExternalStore(
     subscribeVisibility,
@@ -148,6 +173,7 @@ function LiveRefreshStatusView({ compact = false }: { compact?: boolean }) {
       <div className={styles.controls}>
         {compact ? null : refresh}
         <details
+          ref={detailsRef}
           className={styles.details}
           onToggle={(event) => {
             if (

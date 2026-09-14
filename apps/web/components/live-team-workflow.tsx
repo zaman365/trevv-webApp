@@ -371,30 +371,42 @@ export function LiveTeamWorkflowContent({
                       data-testid={`team-card-${team.id}`}
                       key={team.id}
                     >
-                      <div className={styles.teamMark} aria-hidden="true">
-                        {team.name.slice(0, 1).toLocaleUpperCase()}
-                      </div>
-                      <div className={styles.teamCardBody}>
-                        <div className={styles.teamTitleRow}>
-                          <div>
-                            <span>{presetLabels[team.preset]} preset</span>
-                            <h3>
-                              <Link href={teamHref(workspaceSlug, team.id)}>
-                                {team.name}
-                              </Link>
-                            </h3>
-                          </div>
-                          <span className={styles.memberCount}>
-                            <Users size={13} /> {team.members.length}
-                          </span>
+                      <header className={styles.teamTitleRow}>
+                        <div className={styles.teamMark} aria-hidden="true">
+                          {team.name.slice(0, 1).toLocaleUpperCase()}
                         </div>
-                        <p>
-                          {team.purpose || teamPlaybooks[team.preset].outcome}
-                        </p>
+                        <h3>
+                          <Link
+                            className={styles.teamCardLink}
+                            href={teamHref(workspaceSlug, team.id)}
+                            title={team.name}
+                          >
+                            {team.name}
+                          </Link>
+                        </h3>
+                        <span
+                          className={styles.memberCount}
+                          aria-label={`${team.members.length} ${team.members.length === 1 ? "member" : "members"}`}
+                        >
+                          <Users size={13} aria-hidden="true" />{" "}
+                          {team.members.length}
+                        </span>
+                      </header>
+                      <p
+                        className={styles.teamPurpose}
+                        title={
+                          team.purpose || teamPlaybooks[team.preset].outcome
+                        }
+                      >
+                        {team.purpose || teamPlaybooks[team.preset].outcome}
+                      </p>
+                      <div className={styles.teamCardBody}>
                         <dl className={styles.teamFacts}>
                           <div>
                             <dt>Lead</dt>
-                            <dd>{lead?.user.name ?? "Not assigned"}</dd>
+                            <dd title={lead?.user.name}>
+                              {lead?.user.name ?? "Not assigned"}
+                            </dd>
                           </div>
                           <div>
                             <dt>Room</dt>
@@ -407,58 +419,91 @@ export function LiveTeamWorkflowContent({
                             </dd>
                           </div>
                         </dl>
-                        <p className={styles.teamTaskSummary}>
-                          {tasks.length} open tasks ·{" "}
-                          {
-                            tasks.filter(
-                              (item) => item.dueDate && item.dueDate < today,
-                            ).length
-                          }{" "}
-                          overdue ·{" "}
-                          {
-                            tasks.filter((item) => item.status === "blocked")
-                              .length
-                          }{" "}
-                          blocked{liveData.recordsComplete ? "" : " · Loading…"}
-                        </p>
-                      </div>
-                      <div
-                        className={styles.featureChips}
-                        aria-label={`${team.name} interface options`}
-                      >
-                        {team.featureCapabilities.slice(0, 3).map((feature) => (
-                          <span key={feature}>{featureLabels[feature]}</span>
-                        ))}
-                        {team.featureCapabilities.length > 3 ? (
-                          <span>+{team.featureCapabilities.length - 3}</span>
+                        <dl
+                          className={styles.teamTaskSummary}
+                          aria-label="Team work"
+                        >
+                          <div>
+                            <dt>Open tasks</dt>
+                            <dd>{tasks.length}</dd>
+                          </div>
+                          <div>
+                            <dt>Overdue</dt>
+                            <dd>
+                              {
+                                tasks.filter(
+                                  (item) =>
+                                    item.dueDate && item.dueDate < today,
+                                ).length
+                              }
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Blocked</dt>
+                            <dd>
+                              {
+                                tasks.filter(
+                                  (item) => item.status === "blocked",
+                                ).length
+                              }
+                            </dd>
+                          </div>
+                        </dl>
+                        {!liveData.recordsComplete ? (
+                          <small role="status">Loading work counts…</small>
                         ) : null}
-                        {team.featureCapabilities.length === 0 ? (
-                          <span>No feature preset</span>
-                        ) : null}
                       </div>
-                      <div className={styles.teamWorkActions}>
-                        <Link href={teamHref(workspaceSlug, team.id)}>
+                      <details className={styles.teamTools}>
+                        <summary>
+                          <span>{presetLabels[team.preset]} preset</span>
+                          <span>
+                            {team.featureCapabilities.length}{" "}
+                            {team.featureCapabilities.length === 1
+                              ? "tool"
+                              : "tools"}{" "}
+                            <ChevronRight size={13} aria-hidden="true" />
+                          </span>
+                        </summary>
+                        <div
+                          className={styles.featureChips}
+                          aria-label={`${team.name} interface options`}
+                        >
+                          {team.featureCapabilities.map((feature) => (
+                            <span key={feature}>{featureLabels[feature]}</span>
+                          ))}
+                          {team.featureCapabilities.length === 0 ? (
+                            <span>No feature preset</span>
+                          ) : null}
+                        </div>
+                        <p>{teamFeatureAvailability(team)}</p>
+                      </details>
+                      <footer className={styles.teamCardFooter}>
+                        <Link
+                          className={styles.teamOpenAction}
+                          href={teamHref(workspaceSlug, team.id)}
+                        >
                           Open team{" "}
                           <ChevronRight size={14} aria-hidden="true" />
                         </Link>
                         <button
+                          className={styles.teamIconAction}
                           type="button"
                           aria-label="View member workload"
+                          title="View member workload"
                           onClick={() => setWorkTeamId(team.id)}
                         >
-                          Workload
+                          <Users size={16} aria-hidden="true" />
                         </button>
                         {team.room ? (
                           <Link
+                            className={styles.teamIconAction}
                             aria-label="Open team room"
+                            title="Open team room"
                             href={`${workspaceHref(workspaceSlug, "messages")}#${encodeURIComponent(team.room.conversationId)}`}
                           >
-                            Team room
+                            <MessageCircleMore size={16} aria-hidden="true" />
                           </Link>
                         ) : null}
-                      </div>
-                      <footer className={styles.teamCardFooter}>
-                        <small>{teamFeatureAvailability(team)}</small>
                         {canManage ? (
                           <button
                             aria-label={`Manage ${team.name}`}

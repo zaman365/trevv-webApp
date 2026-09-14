@@ -65,6 +65,7 @@
   --text: var(--fh-ink);
   --text-secondary: var(--fh-muted);
   --border: var(--fh-border);
+  --border-strong: var(--fh-border-strong);
   --focus-ring: var(--fh-primary);
 }
 

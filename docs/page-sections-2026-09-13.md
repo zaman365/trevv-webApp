@@ -28,8 +28,8 @@ render another top-level tab bar, page frame or main landmark.
 | Page            | Local sections                                                                                                              |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Portfolio       | Overview, Workspaces, My Work, Projects, Plans and ideas, Teams, People, Messages, Attention, Decisions, Approvals, Waiting |
-| My Work         | Tasks, Plans and ideas, Inbox, Waiting, Attention                                                                           |
-| Projects        | Projects and sprints, Plans and ideas, My Work, Teams, Decisions                                                            |
+| My Work         | Tasks, Decisions, Approvals, Waiting, Plans and ideas, Inbox, Attention                                                     |
+| Sprints         | Sprints, Plans and ideas, My Work, Teams, Decisions                                                                         |
 | Inbox           | Inbox, My Work, Messages, Waiting                                                                                           |
 | Attention       | Issues, Waiting, Decisions, Approvals, Weekly review                                                                        |
 | Decisions       | Decisions, Approvals, Attention, Messages                                                                                   |
@@ -131,3 +131,45 @@ invitations, and keeps the same summary dialogs, cards, workload and management
 flows. Feature labels use the full card width. A six-team browser regression
 includes the production sidebar/topbar space and owner actions so extra header
 height cannot silently push the second row off screen again.
+
+## My Work companion sections (September 14)
+
+Workspace My Work now places Decisions, Approvals and Waiting together after
+the task tab. Plans and ideas, Inbox and Attention remain available. Personal
+My Work retains all-workspace assignments and its existing communication tools;
+the added companion sections use the explicit workspace selector and display
+that workspace's records and full-page destination.
+
+Embedded My Work in Dashboard, Portfolio and other related page sections has
+the same local tabs, starting with Tasks. This is a deliberate exception to the
+general rule against repeated embedded navigation: these tabs organize personal
+work inside the surrounding page, with no extra page frame or main landmark.
+Their `workSection` URL state is independent of the parent `section`. Back,
+forward and reload restore both levels; previously opened tasks and outcome
+forms retain their filters and drafts while switching tabs. Decision, approval
+and follow-up actions reuse the existing versioned workflows and error handling.
+
+Demo My Work also offers Decisions, Approvals and Waiting through its existing
+local workflows. The original task workflow and standalone demo pages remain
+available. Browser regressions cover in-place navigation, task preservation,
+workspace isolation, decision submission, draft retention, mobile layout and
+keyboard navigation.
+
+## Consistent planning cards (September 14)
+
+The planning page, shared section tabs and current navigation labels use Sprints.
+Both sprint planning and existing project/plan management remain reachable,
+including team-specific planning and a project's delivery cycles. The underlying
+record kinds and routes are unchanged.
+
+Plans and sprints share one responsive card layout: type and state, goal summary,
+team, parent project, start and target dates, completion percentage, open/blocked
+work and milestone counts. Cards align across teams and screen sizes. A zero
+completion value renders an empty progress bar. Card backgrounds and titles open
+the board, or select the sprint's work in place; edit controls and full-page
+links remain independent. Keyboard focus outlines cover the whole card.
+
+Details retains the full original description and every milestone link. Empty
+template labels are omitted only from the short summary; source descriptions,
+plan editing, lifecycle controls, team filters, task capture, project backlog,
+permissions and unfinished-work guidance remain available.

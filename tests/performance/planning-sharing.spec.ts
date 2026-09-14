@@ -178,6 +178,114 @@ async function includeTeam(page: Page) {
     .fill("Please help shape the first milestone.");
 }
 
+for (const width of [1440, 390]) {
+  test(`compact planning card opens its page while creation actions stay independent at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const state = await dashboard(page);
+    await page.getByRole("tab", { name: "My Work", exact: true }).click();
+    const hub = page.getByRole("region", {
+      name: "Plans and ideas involving me",
+    });
+    const link = hub.getByRole("link", {
+      name: "Plans and ideas involving me",
+    });
+    await expect(hub.getByText("View all", { exact: true })).toHaveCount(0);
+    await expect(link).toHaveAttribute("href", "/app/workspaces/launch/ideas");
+    const currentUrl = page.url();
+    const planIdea = hub.getByRole("button", {
+      name: "Plan/Idea",
+      exact: true,
+    });
+    const picker = hub.getByRole("group", { name: "Create a plan or idea" });
+    await planIdea.click();
+    await expect(picker).toBeVisible();
+    await page.getByRole("heading", { name: "My Work", exact: true }).click();
+    await expect(picker).toBeHidden();
+    await planIdea.click();
+    await planIdea.press("Escape");
+    await expect(picker).toBeHidden();
+    await expect(planIdea).toBeFocused();
+    await planIdea.press("Enter");
+    await planIdea.press("Tab");
+    await expect(
+      picker.getByRole("button", { name: "Plan", exact: true }),
+    ).toBeFocused();
+    await picker.getByRole("button", { name: "Idea", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Idea", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("live-capture-title").fill("Keep this idea draft");
+    await page
+      .getByRole("button", { name: "Close capture", exact: true })
+      .click();
+    await expect(page).toHaveURL(currentUrl);
+    await planIdea.click();
+    await picker.getByRole("button", { name: "Plan", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByLabel("Plan name", { exact: true })).toBeVisible();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    await expect(page).toHaveURL(currentUrl);
+    await hub.getByRole("button", { name: "Task", exact: true }).click();
+    await expect(
+      page.getByRole("tab", { name: "Task", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("live-capture-title")).toHaveValue("");
+    await page
+      .getByTestId("live-capture-title")
+      .fill("Follow up on the launch");
+    await page
+      .getByRole("button", { name: "Close capture", exact: true })
+      .click();
+    await planIdea.click();
+    await picker.getByRole("button", { name: "Idea", exact: true }).click();
+    await expect(page.getByTestId("live-capture-title")).toHaveValue(
+      "Keep this idea draft",
+    );
+    await page
+      .getByRole("button", { name: "Close capture", exact: true })
+      .click();
+    await hub.getByRole("button", { name: "Task", exact: true }).click();
+    await expect(page.getByTestId("live-capture-title")).toHaveValue(
+      "Follow up on the launch",
+    );
+    await page.getByTestId("live-capture-submit").click();
+    await expect(page.getByRole("dialog")).toBeHidden();
+    expect(state.creations).toHaveLength(1);
+    expect(state.creations[0]).toMatchObject({
+      type: "task",
+      title: "Follow up on the launch",
+      workspaceId: board.workspaceId,
+      assigneeIds: [session.user.id],
+    });
+    await expect(
+      page.getByRole("link", { name: /Follow up on the launch/ }),
+    ).toBeVisible();
+    await page.route(
+      "https://trevv.test/app/workspaces/launch/ideas",
+      (route) =>
+        route.fulfill({ contentType: "text/html", body: "<h1>Ideas</h1>" }),
+    );
+    // Clicking the card's empty padding follows the same native link as its title.
+    await hub.click({ position: { x: 10, y: 10 } });
+    await expect(page).toHaveURL(
+      "https://trevv.test/app/workspaces/launch/ideas",
+    );
+    await page.goBack();
+    await expect(link).toBeVisible();
+    await link.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(
+      "https://trevv.test/app/workspaces/launch/ideas",
+    );
+  });
+}
+
 test("planning cards keep wrapped descriptions and actions readable across multiple rows", async ({
   page,
 }) => {
@@ -396,7 +504,11 @@ test("the dashboard Plans and ideas tab opens creation and filters without navig
   ).toHaveAttribute("href", "/app/workspaces/launch/ideas");
   await panel.getByLabel("Show plans or ideas").selectOption("ideas");
   await expect(panel.getByRole("article")).toHaveCount(0);
-  await panel.getByRole("button", { name: "New idea", exact: true }).click();
+  await panel.getByRole("button", { name: "Plan/Idea", exact: true }).click();
+  await panel
+    .getByRole("group", { name: "Create a plan or idea" })
+    .getByRole("button", { name: "Idea", exact: true })
+    .click();
   await expect(
     page.getByRole("tab", { name: "Idea", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
@@ -477,8 +589,8 @@ test("plans and discussions are hidden when workspace conversation access is los
 test("the project editor shares its saved plan without losing project settings", async ({
   page,
 }) => {
-  const state = await dashboard(page);
-  await page.getByRole("tab", { name: "Projects", exact: true }).click();
+  const state = planningApi();
+  await setup(page, "", { view: "planning", api: state.api });
   await page
     .getByRole("button", { name: "New project / plan", exact: true })
     .click();

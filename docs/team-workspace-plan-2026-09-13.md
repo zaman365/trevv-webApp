@@ -106,3 +106,14 @@ Validation completed on 2026-09-13:
 The implementation is local and uncommitted; deployment remains a separate
 operation. Existing directory summary interactions and other worktree changes
 were preserved.
+
+## Directory card layout, 2026-09-14
+
+Team cards now share a full-width layout with a compact avatar/name header,
+purpose, lead and room facts, and three aligned work counts. The team-name
+link covers the card background and retains normal link/keyboard behavior.
+Open team, workload, room and permission-aware management actions remain
+independent in one footer. Teams without an accessible room still have no room
+link. The preset and tool count expand to show every configured capability
+and its availability explanation, replacing the static extra-tools count.
+This shared layout applies to the directory and embedded team sections.

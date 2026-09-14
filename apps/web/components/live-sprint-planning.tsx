@@ -13,7 +13,8 @@ import { presentLiveReadError } from "@/lib/live-errors";
 import { workspaceResourceKeys } from "@/lib/workspace-resource-keys";
 import { workspaceHref } from "@/lib/workspace-routes";
 import { dashboardPlanItems } from "@/lib/workspace-dashboard";
-import { formatLiveDateOnly } from "@/lib/live-workflow-ui";
+import { PlanningCard } from "./planning-card";
+import cardStyles from "./planning-card.module.css";
 import { PlanEditor } from "./live-project-planning";
 import { LiveMyWork } from "./live-work-my-work";
 import { LiveQuickCaptureDialog } from "./lazy-create-dialogs";
@@ -239,13 +240,9 @@ export function SprintPlanningContent({
           )}
         </div>
       )}
-      <div className={styles.cards}>
+      <div className={cardStyles.grid}>
         {shown.map((board) => {
           const tasks = dashboardPlanItems(items, board);
-          const done = tasks.filter((item) => item.status === "done").length;
-          const blocked = tasks.filter(
-            (item) => item.status === "blocked",
-          ).length;
           const team = directory.data?.teams.find(
             (entry) => entry.id === board.planning?.teamId,
           );
@@ -253,71 +250,21 @@ export function SprintPlanningContent({
             (entry) => entry.id === board.planning?.parentBoardId,
           );
           return (
-            <article
-              aria-label={`${board.name} sprint`}
-              className={styles.card}
-              data-selected={selected?.id === board.id}
+            <PlanningCard
               key={board.id}
-            >
-              <div className={styles.cardTop}>
-                <span
-                  className={styles.badge}
-                  data-state={board.planning!.state}
-                >
-                  {labels[board.planning!.state]}
-                </span>
-                <span>{team?.name ?? "No team assigned"}</span>
-              </div>
-              <h3>
-                <button
-                  type="button"
-                  aria-pressed={selected?.id === board.id}
-                  aria-controls="selected-sprint-work"
-                  onClick={() => {
-                    setSelectedId(board.id);
-                    setWorkScope("sprint");
-                  }}
-                >
-                  {board.name}
-                </button>
-              </h3>
-              <p className={styles.goal}>
-                {board.description || "Add a sprint goal in Edit sprint."}
-              </p>
-              {project && <small>Project · {project.name}</small>}
-              <span className={styles.dates}>
-                {board.startDate
-                  ? formatLiveDateOnly(board.startDate, timezone)
-                  : "Set start date"}{" "}
-                →{" "}
-                {board.endDate
-                  ? formatLiveDateOnly(board.endDate, timezone)
-                  : "Set end date"}
-              </span>
-              <div className={styles.progressLabel}>
-                <span>
-                  {complete
-                    ? `${done} / ${tasks.length} work items completed`
-                    : "Loading sprint work…"}
-                </span>
-                {complete && (
-                  <strong>
-                    {tasks.length ? Math.round((done / tasks.length) * 100) : 0}
-                    %
-                  </strong>
-                )}
-              </div>
-              <progress
-                aria-label={`${board.name} completion`}
-                {...(complete ? { value: done } : {})}
-                max={Math.max(1, tasks.length)}
-              />
-              {complete && blocked > 0 && (
-                <span className={styles.blocked}>
-                  {blocked} blocked · needs attention
-                </span>
-              )}
-            </article>
+              board={board}
+              workspaceSlug={workspaceSlug}
+              timezone={timezone}
+              teamName={team?.name}
+              parentName={project?.name}
+              items={tasks}
+              complete={complete}
+              selected={selected?.id === board.id}
+              onSelect={() => {
+                setSelectedId(board.id);
+                setWorkScope("sprint");
+              }}
+            />
           );
         })}
       </div>

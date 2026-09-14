@@ -973,3 +973,38 @@ test("standalone views retain one connection bar with details and direct retry",
     connection.getByText(/The latest workspace updates have been checked/),
   ).toBeVisible();
 });
+
+for (const header of [true, false]) {
+  test(`connection details dismiss outside and with Escape while preserving refresh (header=${header})`, async ({
+    page,
+  }) => {
+    const state = await connectionHarness(page, { header });
+    const connection = page.getByRole("group", {
+      name: "Workspace connection",
+    });
+    const details = connection.locator("details");
+    const trigger = details.locator("summary");
+    await trigger.click();
+    await expect(details).toHaveAttribute("open");
+    await details.getByText(/Last checked/).click();
+    await expect(details).toHaveAttribute("open");
+    const checks = state.checks;
+    await connection
+      .getByRole("button", { name: "Refresh connection" })
+      .click();
+    await expect.poll(() => state.checks).toBeGreaterThan(checks);
+    if (header) await expect(details).toHaveAttribute("open");
+    // An ordinary page click dismisses the popup without taking focus back.
+    await page.locator("#clock").click();
+    await expect(details).not.toHaveAttribute("open");
+    await trigger.click();
+    await expect(details).toHaveAttribute("open");
+    await page.keyboard.press("Escape");
+    await expect(details).not.toHaveAttribute("open");
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(details).toHaveAttribute("open");
+    await trigger.click();
+    await expect(details).not.toHaveAttribute("open");
+  });
+}

@@ -34,11 +34,13 @@ export function WorkspacePageSections({
   workspaceSlug,
   children,
   primaryLabel,
+  nested = false,
 }: {
   page: string;
   workspaceSlug: string;
   children: ReactNode;
   primaryLabel?: string;
+  nested?: boolean;
 }) {
   const embedded = useEmbeddedSection();
   const data = useLiveAppRecords();
@@ -47,7 +49,8 @@ export function WorkspacePageSections({
     (entry) => entry.slug === workspaceSlug,
   );
   const ids = workspaceSectionGroups[page as OrganizedWorkspacePage];
-  if (embedded || !ids || !workspace || data.accessLost) return children;
+  if ((embedded && !nested) || !ids || !workspace || data.accessLost)
+    return children;
   const sections = ids.map((id) => ({
     id,
     label:
@@ -64,7 +67,8 @@ export function WorkspacePageSections({
   }));
   return (
     <PageSections
-      scope={`${session.organization.id}:${workspace.id}:${page}`}
+      scope={`${session.organization.id}:${workspace.id}:${page}:${nested ? "nested" : "page"}`}
+      queryParameter={nested ? "workSection" : "section"}
       label={`${page === "my-work" ? "My Work" : sections[0]!.label} sections`}
       sections={sections}
       renderSection={(section) => (

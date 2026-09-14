@@ -302,19 +302,26 @@
 
 .teamGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
-  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: 0.75rem;
+  align-items: stretch;
 }
 
 .teamCard {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.6rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
   min-width: 0;
-  padding: 0.75rem;
+  padding: 1rem;
   border: 1px solid var(--border, #dfe3ec);
   border-radius: 13px;
-  background: var(--surface-subtle, #f7f8fb);
+  background: var(--surface, #fff);
+}
+
+.teamCard:hover {
+  border-color: var(--fh-primary, #5b56db);
+  box-shadow: 0 3px 12px #18223b0a;
 }
 
 .teamMark,
@@ -341,41 +348,59 @@
 
 .teamCardBody {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.7rem;
   min-width: 0;
 }
 
 .teamTitleRow {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.teamTitleRow > div {
-  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.6rem;
 }
 
 .teamTitleRow span,
-.teamCardBody > p,
+.teamPurpose,
 .teamFacts dt,
-.teamCardFooter small {
+.teamCardBody > small,
+.teamTools {
   color: var(--text-secondary, #5f687c);
 }
 
-.teamTitleRow > div > span {
-  font-size: 0.75rem;
-  font-weight: 720;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.teamTitleRow h3 {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
-.teamTitleRow h3 {
-  margin: 0.1rem 0 0;
+.teamCardLink {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  font-size: 1rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  color: inherit;
+  text-decoration: none;
+}
+
+.teamCardLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 13px;
+}
+
+.teamCardLink:focus-visible {
+  outline: none;
+}
+
+.teamCardLink:focus-visible::after {
+  outline: 2px solid var(--fh-primary, #5b56db);
+  outline-offset: 3px;
 }
 
 .memberCount {
@@ -383,30 +408,54 @@
   align-items: center;
   gap: 0.2rem;
   padding: 0.2rem 0.4rem;
-  border: 1px solid var(--border, #dfe3ec);
   border-radius: 999px;
-  background: var(--surface, #fff);
+  background: var(--surface-subtle, #f7f8fb);
   font-size: 0.75rem;
   white-space: nowrap;
 }
 
-.teamCardBody > p {
-  min-height: 2.4em;
+.teamPurpose {
+  min-height: 2.8em;
   margin: 0;
   display: -webkit-box;
   overflow: hidden;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   line-height: 1.4;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.teamCardBody > .teamTaskSummary {
-  min-height: 0;
+.teamTaskSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 0.5rem 0;
+  border-radius: 8px;
+  background: var(--surface-subtle, #f7f8fb);
 }
 
-.teamCard > .featureChips {
-  grid-column: 1 / -1;
+.teamTaskSummary > div {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.teamTaskSummary > div + div {
+  border-left: 1px solid var(--border, #dfe3ec);
+}
+
+.teamTaskSummary dt {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #5f687c);
+}
+
+.teamTaskSummary dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
 .teamFacts {
@@ -428,14 +477,62 @@
 }
 
 .teamFacts dt {
-  font-size: 0.75rem;
-  font-weight: 650;
+  font-size: 0.7rem;
+  font-weight: 400;
 }
 
 .teamFacts dd {
   margin: 0.1rem 0 0;
   font-size: 0.76rem;
-  font-weight: 700;
+  font-weight: 550;
+}
+
+.teamTools {
+  position: relative;
+  z-index: 2;
+  margin-top: auto;
+  font-size: 0.7rem;
+}
+
+.teamTools summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 1.6rem;
+  gap: 0.4rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.teamTools summary::-webkit-details-marker {
+  display: none;
+}
+
+.teamTools summary > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--fh-primary-strong, #4842c7);
+}
+
+.teamTools[open] summary svg {
+  transform: rotate(90deg);
+}
+
+.teamTools .featureChips {
+  margin-top: 0.45rem;
+}
+
+.teamTools p {
+  margin: 0.4rem 0 0;
+  line-height: 1.4;
+}
+
+.teamTools .featureChips span {
+  background: var(--surface-subtle, #f7f8fb);
+  color: var(--text-secondary, #5f687c);
+  font-size: 0.7rem;
+  font-weight: 500;
 }
 
 .featureChips {
@@ -454,17 +551,55 @@
 }
 
 .teamCardFooter {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.35rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border, #dfe3ec);
 }
 
-.teamCardFooter small {
+.teamCardFooter > a,
+.teamCardFooter > button {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.teamOpenAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 2.15rem;
+  margin-right: auto;
   font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fh-primary-strong, #4842c7);
+  text-decoration: none;
+}
+
+.teamCardFooter .teamIconAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  min-height: 2.15rem;
+  padding: 0;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--text-secondary, #5f687c);
+}
+
+.teamCardFooter > :hover {
+  background: var(--fh-primary-soft, #efeeff);
+  color: var(--fh-primary-strong, #4842c7);
+}
+
+.teamCardFooter > :focus-visible,
+.teamTools summary:focus-visible {
+  outline: 2px solid var(--fh-primary, #5b56db);
+  outline-offset: 2px;
 }
 
 .teamCardFooter button,
@@ -938,15 +1073,6 @@
     padding-inline: 0.6rem;
   }
 
-  .teamCardFooter {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .teamCardFooter button {
-    width: 100%;
-  }
-
   .modalBackdrop {
     align-items: end;
     padding: 0;
@@ -990,22 +1116,6 @@
   min-height: 2.5rem;
   padding: 0.4rem 0.7rem;
   font: inherit;
-}
-.teamWorkActions {
-  display: flex;
-  grid-column: 1 / -1;
-  gap: 0.65rem;
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: 0.75rem;
-}
-.teamWorkActions > a,
-.teamWorkActions > button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  min-height: 2rem;
-  white-space: nowrap;
 }
 .teamTabs {
   display: flex;

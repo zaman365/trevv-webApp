@@ -100,12 +100,13 @@ export function WaitingExperience({
 }) {
   return (
     <WorkspaceFrame active="waiting" workspaceSlug={workspaceSlug}>
-      <WaitingMain />
+      <WaitingContent />
     </WorkspaceFrame>
   );
 }
 
-function WaitingMain() {
+export function WaitingContent({ embedded = false }: { embedded?: boolean }) {
+  const Container = embedded ? "section" : "main";
   const { scope } = useWorkspace();
   const [waiting, setWaiting] = useState(demoWaitingStates);
   const [section, setSection] = useState<WaitingSection>("Waiting on Me");
@@ -123,13 +124,21 @@ function WaitingMain() {
     inWaitingSection(item, section),
   );
   return (
-    <main className="trevv-main waiting-center">
-      <PageHeader
-        eyebrow="Follow-ups"
-        title="Waiting Center"
-        subtitle="Track dependencies that are waiting on a person, team, decision, document, or external partner."
-        hintId="waiting"
-      />
+    <Container
+      className={embedded ? "waiting-center" : "trevv-main waiting-center"}
+    >
+      {embedded ? (
+        <h2>
+          Waiting Center <Hint resourceId="waiting" />
+        </h2>
+      ) : (
+        <PageHeader
+          eyebrow="Follow-ups"
+          title="Waiting Center"
+          subtitle="Track dependencies that are waiting on a person, team, decision, document, or external partner."
+          hintId="waiting"
+        />
+      )}
       {notice && (
         <div className="success-toast" role="status">
           <CheckCircle2 size={15} />
@@ -265,7 +274,7 @@ function WaitingMain() {
           }}
         />
       )}
-    </main>
+    </Container>
   );
 }
 

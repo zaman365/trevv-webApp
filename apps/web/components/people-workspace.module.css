@@ -97,6 +97,9 @@
   font-size: 0.88rem;
   overflow-wrap: anywhere;
 }
+.contact svg {
+  flex-shrink: 0;
+}
 .tabs {
   display: flex;
   gap: 0.4rem;
@@ -146,7 +149,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.25rem;
-  align-items: start;
+  align-items: stretch;
 }
 .panel {
   min-width: 0;
@@ -233,17 +236,22 @@
 }
 .filters {
   display: flex;
-  align-items: center;
+  align-items: end;
   flex-wrap: wrap;
   gap: 0.8rem;
   margin-bottom: 1rem;
 }
 .filters label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.filters label:first-child {
+  flex: 1 1 16rem;
+  max-width: 24rem;
 }
 .filters :is(input, select) {
   color: var(--text);
@@ -253,6 +261,9 @@
   padding: 0.6rem;
   font: inherit;
   max-width: 100%;
+  min-height: 40px;
+  font-size: 0.85rem;
+  font-weight: 400;
 }
 .directory {
   display: grid;
@@ -265,6 +276,10 @@
   align-items: center;
   margin-bottom: 0.8rem;
   min-width: 0;
+}
+.panel > .cardHeader {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
 }
 .cardHeader > div {
   min-width: 0;

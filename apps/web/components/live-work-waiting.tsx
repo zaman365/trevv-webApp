@@ -4,7 +4,7 @@ import { useReportRouteReady } from "@/lib/navigation-performance";
 
 import type { WaitingStateDto } from "@founderhq/api-contract";
 import { Clock3 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { presentLiveError } from "@/lib/live-errors";
@@ -20,6 +20,7 @@ export function LiveWaiting({
   records: WaitingStateDto[];
 }) {
   useReportRouteReady(true);
+  const titleId = useId();
   const session = useAppSession();
   const liveData = useLiveAppData();
   const [records, setRecords] = useState(source);
@@ -122,11 +123,11 @@ export function LiveWaiting({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="waiting-records-title">
+    <section className={styles.panel} aria-labelledby={titleId}>
       <header>
         <div>
           <p>Durable follow-up ownership</p>
-          <h2 id="waiting-records-title">Active waits</h2>
+          <h2 id={titleId}>Active waits</h2>
         </div>
       </header>
       {notice}

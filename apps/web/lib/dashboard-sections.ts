@@ -23,8 +23,8 @@ export const dashboardSections = [
   },
   {
     id: "planning",
-    label: "Projects",
-    title: "Projects and sprints",
+    label: "Sprints",
+    title: "Sprints",
     description: "Manage project goals, plans, cycles and delivery dates.",
     view: "planning",
   },

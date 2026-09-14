@@ -1,0 +1,243 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+  align-items: stretch;
+  grid-auto-rows: 1fr;
+}
+.section > header p {
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+.teamFilter {
+  max-width: 260px;
+}
+.switchLink {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--fh-border);
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--fh-primary-strong);
+  background: var(--fh-surface);
+  text-decoration: none;
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--fh-border);
+  border-radius: 16px;
+  background: var(--fh-surface);
+  color: var(--fh-ink);
+}
+.card:hover,
+.card[data-selected="true"] {
+  border-color: var(--fh-primary);
+  box-shadow: 0 3px 12px #18223b0a;
+}
+.top,
+.progress > div,
+.actions,
+.actions > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.top,
+.meta dt,
+.progress,
+.details {
+  font-size: 12px;
+  color: var(--fh-muted);
+}
+.badge {
+  padding: 4px 8px;
+  border-radius: 16px;
+  background: var(--fh-surface-subtle);
+  text-transform: capitalize;
+  font-weight: 600;
+}
+.badge[data-state="active"] {
+  color: var(--fh-primary-strong);
+  background: var(--fh-primary-soft);
+}
+.badge[data-state="completed"] {
+  color: var(--fh-success, #187968);
+  background: var(--fh-success-soft, #edf6f3);
+}
+.card h3,
+.card p,
+.card dl,
+.card dd {
+  margin: 0;
+}
+.card h3 {
+  font-size: 17px;
+  line-height: 1.4;
+  min-height: 2.8em;
+}
+.primary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-align: left;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 16px;
+}
+.primary:focus-visible {
+  outline: none;
+}
+.primary:focus-visible::after {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 3px;
+}
+.summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  min-height: 3em;
+  line-height: 1.5;
+  font-size: 13px;
+  color: var(--fh-muted);
+}
+.meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.meta dt {
+  margin-bottom: 4px;
+}
+.meta dd {
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.progress {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.progress strong {
+  color: var(--fh-ink);
+}
+.progress progress {
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--fh-border);
+  accent-color: var(--fh-primary);
+}
+.progress progress::-webkit-progress-bar {
+  background: var(--fh-border);
+}
+.progress progress::-webkit-progress-value {
+  background: var(--fh-primary);
+}
+.progress progress::-moz-progress-bar {
+  background: var(--fh-primary);
+}
+.health[data-blocked="true"] {
+  color: var(--fh-danger, #b62a49);
+}
+.actions {
+  min-height: 36px;
+  font-size: 12px;
+}
+.openHint,
+.actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--fh-primary-strong);
+  font-weight: 600;
+}
+.actions button,
+.actions a {
+  position: relative;
+  z-index: 2;
+  padding: 8px 10px;
+  border: 1px solid var(--fh-border);
+  border-radius: 8px;
+  background: var(--fh-surface);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.details {
+  position: relative;
+  z-index: 2;
+  border-top: 1px solid var(--fh-border);
+  padding-top: 10px;
+  line-height: 18px;
+}
+.details summary {
+  cursor: pointer;
+}
+.details > div {
+  max-height: 160px;
+  overflow: auto;
+  margin-top: 10px;
+  line-height: 1.6;
+}
+.details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.details ul {
+  margin: 8px 0 0;
+  padding-left: 16px;
+}
+.details a {
+  color: var(--fh-primary-strong);
+}
+.detailsPlaceholder {
+  min-height: 29px;
+}
+.actions :focus-visible,
+.details :focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .card {
+    padding: 16px;
+  }
+  .actions button,
+  .actions a {
+    min-height: 44px;
+  }
+}
