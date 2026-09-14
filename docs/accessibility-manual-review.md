@@ -153,6 +153,16 @@ that same one-node set with zero violations; the old two-node allowance is
 replaced. This is the already-reviewed decorative gradient mark also present on
 Onboarding, with no new selector or extended review period.
 
+The live dashboard's compact, keyboard-focusable sprint list can place its
+fourth entry below the inner scroll viewport. The live accessibility helper
+now scrolls these specific `elmPartiallyObscured` dashboard nodes into view and
+rechecks their contrast with Axe. It accepts a node only when Axe records an
+actual passing contrast measurement; a violation still fails immediately, and
+an absent or incomplete measurement still requires the existing exact review.
+The complete desktop/mobile dashboard workflow passes against isolated
+PostgreSQL in Chromium and WebKit with this direct measurement. No new
+fingerprint allowance was added for these scrollable entries.
+
 This register does not satisfy the required keyboard, VoiceOver/NVDA, 200%
 zoom, reduced-motion, high-contrast, or touch-target evidence. Those remain
 separate release gates.

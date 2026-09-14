@@ -42,9 +42,52 @@ export async function expectNoLiveWcagFindings(page: Page, surface: string) {
   const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
 
   expect(summarizeFindings(results.violations)).toEqual([]);
+  // A compact dashboard can put real text below an inner scroll viewport.
+  // Bring only those obscured nodes into view and measure their actual contrast
+  // before consulting the review register. A missing/skipped measurement is
+  // still incomplete; a measured violation still fails immediately.
+  const remainingIncomplete = [];
+  for (const finding of results.incomplete) {
+    const remainingNodes = [];
+    for (const node of finding.nodes) {
+      const selector = node.target[0];
+      const canMeasureAfterScrolling =
+        surface.startsWith("visual-dashboard-") &&
+        finding.id === "color-contrast" &&
+        node.target.length === 1 &&
+        typeof selector === "string" &&
+        node.any.length > 0 &&
+        node.any.every(
+          (check) => check.data?.messageKey === "elmPartiallyObscured",
+        );
+      if (canMeasureAfterScrolling) {
+        const element = page.locator(selector);
+        if ((await element.count()) === 1 && (await element.isVisible())) {
+          await element.evaluate((target) =>
+            target.scrollIntoView({ block: "center", inline: "nearest" }),
+          );
+          const measured = await new AxeBuilder({ page })
+            .include(selector)
+            .withRules(["color-contrast"])
+            .analyze();
+          expect(summarizeFindings(measured.violations)).toEqual([]);
+          if (
+            measured.incomplete.length === 0 &&
+            measured.passes.some(
+              (result) => result.id === "color-contrast" && result.nodes.length,
+            )
+          )
+            continue;
+        }
+      }
+      remainingNodes.push(node);
+    }
+    if (remainingNodes.length)
+      remainingIncomplete.push({ ...finding, nodes: remainingNodes });
+  }
   const browserName = page.context().browser()?.browserType().name() ?? "none";
   const today = new Date().toISOString().slice(0, 10);
-  const unreviewed = results.incomplete.filter((finding) => {
+  const unreviewed = remainingIncomplete.filter((finding) => {
     const fingerprint = createHash("sha256")
       .update(
         JSON.stringify({

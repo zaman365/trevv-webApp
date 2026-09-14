@@ -545,7 +545,6 @@ header.compact-page-header > div:last-child:not(:first-child),
 :root {
   --fh-topbar-height: 56px;
 }
-html:has(.workspace-product),
 body:has(.workspace-product) {
   overscroll-behavior-y: none;
 }

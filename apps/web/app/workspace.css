@@ -4602,7 +4602,8 @@ header.compact-page-header > div:last-child:not(:first-child),
   margin-left: 248px;
 }
 /* Anchor the shell to the viewport, including during trackpad overscroll. */
-html:has(.workspace-product),
+/* Keep the root free to dispatch wheel input in WebKit. The body contains
+   overscroll while the toolbar remains anchored to the viewport. */
 body:has(.workspace-product) {
   overscroll-behavior-y: none;
 }
