@@ -137,7 +137,10 @@ export async function setup(
   await page.route("https://trevv.test/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === "/" || /\/tasks\/[^/]+$/.test(path))
+    if (
+      !path.startsWith("/api/") &&
+      (path === "/" || /\/tasks\/[^/]+$/.test(path) || /\/search$/.test(path))
+    )
       return route.fulfill({
         contentType: "text/html",
         body: `<!doctype html><html lang="en"><head><title>TREVV test workspace</title>${

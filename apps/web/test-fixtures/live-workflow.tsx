@@ -1,3 +1,5 @@
+import { SearchLauncher } from "../components/search-launcher";
+import { LiveSearch } from "../components/live-work-search";
 import { TaskPage } from "../components/task-page";
 import { LivePortfolioExperience } from "../components/live-portfolio-experience";
 import { LivePersonalWork } from "../components/live-personal-work";
@@ -43,6 +45,10 @@ function Workflow() {
   const [capture, setCapture] = useState(false);
   const [confirmed, setConfirmed] = useState<LiveCaptureSuccess | null>(null);
   const taskMatch = window.location.pathname.match(/\/tasks\/([^/]+)/);
+  if (window.location.pathname.endsWith("/search"))
+    return (
+      <LiveSearch workspaceId={board.workspaceId} workspaceSlug="launch" />
+    );
   if (view === "task" || taskMatch)
     return (
       <TaskPage
@@ -200,6 +206,24 @@ function Workflow() {
     </>
   );
 }
+function PreviewSearch() {
+  const demo = new URLSearchParams(window.location.search).has("demoSearch");
+  return demo ? (
+    <WorkspaceProvider>
+      <SearchLauncher
+        workspaceId="workspace-northstar"
+        workspaceSlug="northstar-apparel"
+        demo
+      />
+    </WorkspaceProvider>
+  ) : (
+    <SearchLauncher
+      workspaceId={board.workspaceId}
+      workspaceSlug="launch"
+      demo={false}
+    />
+  );
+}
 createRoot(document.getElementById("root")!).render(
   <AppSessionProvider
     session={{
@@ -232,6 +256,7 @@ createRoot(document.getElementById("root")!).render(
     >
       <PlanningSharingProvider>
         <FloatingChatProvider defaultWorkspaceSlug="launch">
+          <PreviewSearch />
           <Workflow />
         </FloatingChatProvider>
       </PlanningSharingProvider>

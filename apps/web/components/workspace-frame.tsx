@@ -1,6 +1,7 @@
 "use client";
 import { personHref } from "@/lib/people-routes";
 
+import { SearchLauncher } from "./search-launcher";
 import { QuickCaptureButton } from "./quick-capture-button";
 
 import {
@@ -27,7 +28,6 @@ import {
   Moon,
   MoreHorizontal,
   Plus,
-  Search,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -321,28 +321,10 @@ function WorkspaceChrome({
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
         target?.tagName === "SELECT" ||
-        target?.isContentEditable;
+        target?.isContentEditable ||
+        Boolean(target?.closest('[role="dialog"]'));
       if (event.key === "Escape" && captureOpen) {
         setCaptureOpen(false);
-      }
-      if (
-        contextProject &&
-        event.key === "/" &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !isTyping
-      ) {
-        event.preventDefault();
-        const searchInput = document.querySelector<HTMLInputElement>(
-          "[data-trevv-search-input]",
-        );
-
-        if (searchInput) {
-          searchInput.focus();
-        } else {
-          router.push(workspaceHref(contextProject.slug, "search"));
-        }
       }
       if (
         contextProject &&
@@ -1063,15 +1045,11 @@ function WorkspaceChrome({
             <Menu size={20} />
           </button>
           {contextProject && (
-            <Link
-              href={scopedHref("search")}
-              className="search-trigger"
-              aria-keyshortcuts="/"
-            >
-              <Search size={17} />
-              <span>{copy.shell.search}</span>
-              <kbd title="Press slash to search">/</kbd>
-            </Link>
+            <SearchLauncher
+              workspaceId={contextProject.id}
+              workspaceSlug={contextProject.slug}
+              demo={appSession.demo}
+            />
           )}
           {appSession.demo ? (
             <TechnicalPreviewBadge mode="demo" />
