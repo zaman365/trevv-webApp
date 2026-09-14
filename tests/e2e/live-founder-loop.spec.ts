@@ -1390,6 +1390,10 @@ test.describe.serial("live founder operating loop", () => {
     ).toBeVisible();
     await drawer.getByRole("button", { name: "Close Team details" }).click();
     await page.goto(`/app/workspaces/${workspaceSlug}/planning`);
+    await expect(
+      page.getByRole("button", { name: "New Sprint", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Other plans" }).click();
     await page.getByRole("button", { name: "New project / plan" }).click();
     const plan = page.getByRole("dialog", {
       name: "Create a project or delivery cycle",

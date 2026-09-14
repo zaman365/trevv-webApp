@@ -62,7 +62,7 @@ export function StakeholderExperience({ slug }: { slug: string }) {
           className="workspace-mark"
           style={{
             background: `${workspace.accent}18`,
-            color: workspace.accent,
+            color: "var(--fh-ink)",
           }}
         >
           {workspace.icon}

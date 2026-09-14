@@ -182,7 +182,7 @@
   height: 32px;
   display: grid;
   place-items: center;
-  color: var(--brand, var(--fh-primary-strong));
+  color: var(--fh-ink);
   background: color-mix(
     in srgb,
     var(--brand, var(--fh-primary)) 12%,

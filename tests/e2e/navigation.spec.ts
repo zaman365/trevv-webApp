@@ -89,7 +89,7 @@ test("the workspace toolbar stays fixed during wheel scrolling and at page bound
     });
     for (const position of positions) expect(position).toEqual(original);
     if (delta === 700)
-      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+      await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
   }
   await toolbar.locator(".search-trigger").click();
   await expect(page).toHaveURL(new RegExp(`${workspaceRoute("search")}$`));

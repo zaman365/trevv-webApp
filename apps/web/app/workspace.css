@@ -12443,7 +12443,7 @@ body:has(.workspace-product) {
   place-items: center;
   padding: 0 5px;
   margin-top: 20px;
-  color: white;
+  color: var(--fh-on-primary);
   background: var(--fh-primary);
   border-radius: var(--fh-radius-control);
   font-size: 10px;

@@ -533,6 +533,14 @@ test("demo My Work keeps its task tools and adds decisions, approvals and waitin
   await expect(
     page.getByRole("dialog", { name: "Create a decision", exact: true }),
   ).toBeVisible();
+  const viewportWidth = page.viewportSize()!.width;
+  const dialogBounds = await page
+    .getByRole("dialog", { name: "Create a decision", exact: true })
+    .boundingBox();
+  expect(dialogBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds!.x + dialogBounds!.width).toBeLessThanOrEqual(
+    viewportWidth + 1,
+  );
   await page.getByRole("button", { name: "Close new decision" }).click();
   await tabs.getByRole("tab", { name: "Approvals", exact: true }).click();
   await expect(

@@ -1872,7 +1872,7 @@ export function WorkspaceMark({
   return (
     <span
       className="workspace-mark"
-      style={{ background: `${color}18`, color }}
+      style={{ background: `${color}18`, color: "var(--fh-ink)" }}
     >
       {workspace?.icon ?? fallback}
     </span>

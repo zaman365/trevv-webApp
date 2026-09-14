@@ -118,6 +118,32 @@ and RGB(244,246,251) on RGB(25,30,45), or 15.35:1. It introduces no contrast
 incomplete. These measurements cover that label only; the existing layered
 Dashboard surfaces remain under the bounded deferral described above.
 
+The 14 September compact-layout release was checked in Chromium, WebKit and
+mobile Chromium in both themes. All 24 Portfolio, Messages, Teams and Blueprints
+combinations returned zero Axe A/AA violations. The removed Portfolio eyebrow
+and corrected mark foregrounds reduce Portfolio's remaining layered-background
+set to 25 nodes on desktop (`2432abac…`) and 23 on mobile (`6a0a3db…`), identical
+in both themes. Only these exact route fingerprints replace their predecessors.
+
+The review also found and fixed low-contrast dark unread counts and branded
+workspace initials. Unread counts now measure 5.37:1 in light mode and 6.12:1 in
+dark mode. The Portfolio selector initial measures 13.80:1 and 13.79:1; the three
+workspace initials measure at least 13.82:1 and 14.51:1 respectively. These
+measurements composite translucent backgrounds before calculating contrast.
+Messages now returns no incomplete finding, so its obsolete dark-theme
+allowances were removed.
+
+Ubuntu CI run 34835776802 repeatedly reported the mobile Leadership Approvals
+chip beside the fixed bottom navigation plus the existing Quick capture label
+(`09383856…`, two nodes), and Quick capture alone on Blueprints (`748a08d6…`,
+one node). The former chip measures 9.10:1 in light mode and 12.88:1 in dark mode;
+Quick capture measures 5.35:1 and 6.74:1. The recorded Linux screenshots show the
+chip partly occluded by the fixed navigation; scrolling keeps it reachable.
+The refreshed light-mode fingerprints retain the same bounded diagnostic
+deferral, owner and 15 September expiry. No violation or broader selector match
+is accepted. The reviewed Linux and macOS screenshots also retain the original
+0.5% visual comparison tolerance.
+
 This register does not satisfy the required keyboard, VoiceOver/NVDA, 200%
 zoom, reduced-motion, high-contrast, or touch-target evidence. Those remain
 separate release gates.
