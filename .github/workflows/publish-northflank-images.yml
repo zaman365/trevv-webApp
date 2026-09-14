@@ -32,7 +32,11 @@ jobs:
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
             -f "head_sha=${GITHUB_SHA}" -f status=completed -f per_page=100 \
             --jq '[.workflow_runs[] | select(.event == "push" and .conclusion == "success")] | length')
-          test "$successful_runs" -ge 1
+          if [ "$successful_runs" -ge 1 ]; then
+            test "$successful_runs" -ge 1
+          else
+            node scripts/verify-navigation-retry.mjs publication
+          fi
           echo "source_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
   build-images:
     name: Build and push ${{ matrix.target }}

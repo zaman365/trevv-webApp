@@ -140,3 +140,19 @@ using their existing settings. Build the frontend for `https://trevv.de` with th
 live API origin and security settings. Verify readiness, authentication and the
 changed workflows after rollout. Retain deployment evidence separately from the
 publication artifact, whose `deploymentPerformed` field is always false.
+
+### Focused retry after a Worker navigation failure
+
+The complete CI path above remains available. If its only failing browser step
+is **Guard production Worker navigation requests**, the manual **Retry Worker
+navigation** workflow can reuse the successful quality, accessibility, live
+identity, topology, browser-workflow and background-refresh results. Supply the
+original CI run ID. The workflow verifies that run and requires the application,
+dependencies, migrations, runtime configuration and test behavior to be unchanged;
+only its explicitly listed release-orchestration files may differ.
+
+This path reruns the production Worker navigation checks and retains its server
+diagnostics. Publication accepts either complete CI success or this verified
+combination of retained checks and a successful retry for the exact selected
+commit. A missing, skipped or failed retry cannot authorize publication. Container
+scanning, provenance verification, migration and live rollout checks still apply.
