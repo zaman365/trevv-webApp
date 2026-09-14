@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { LiveRefreshStatus } from "./live-refresh-status";
 
 import { dateTimeFormatter } from "@/lib/date-format";
@@ -23,7 +24,14 @@ import {
   X,
 } from "lucide-react";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type FormEvent,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWorkItemDetails } from "@/lib/use-work-item-details";
 import { useAccessibleDialog } from "@/lib/live-collaboration";
@@ -37,7 +45,7 @@ import {
   formatLiveDateOnly,
   workItemStatusLabel,
 } from "@/lib/live-workflow-ui";
-import { workspaceHref } from "@/lib/workspace-routes";
+import { taskHref, workspaceHref } from "@/lib/workspace-routes";
 import { LiveStateNotice, LiveSyncedAt } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
@@ -66,6 +74,7 @@ export function LiveBoardExperience({
   workspaceSlug: string;
   boardId: string;
 }) {
+  const router = useRouter();
   const session = useAppSession();
   const liveData = useLiveAppData();
   const workspace = liveData.workspaces.find(
@@ -156,8 +165,10 @@ export function LiveBoardExperience({
     )
       return;
     openedHash.current = itemHash;
-    setSelectedId(itemHash);
-  }, [itemHash, sourceItems]);
+    if (sourceItems.find((item) => item.id === itemHash)?.type === "task")
+      router.replace(taskHref(workspaceSlug, itemHash));
+    else setSelectedId(itemHash);
+  }, [itemHash, sourceItems, router, workspaceSlug]);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
@@ -482,7 +493,9 @@ export function LiveBoardExperience({
               await liveData.applyConfirmedItem(item);
               replaceItem(item);
               setCreateOpen(false);
-              setSelectedId(item.id);
+              if (item.type === "task")
+                router.push(taskHref(workspaceSlug, item.id));
+              else setSelectedId(item.id);
               setNotice({
                 kind: "saved",
                 title: `Server confirmed “${item.title}”`,
@@ -785,6 +798,7 @@ export function WorkItemDetail({
   onClose,
   onConfirmed,
   embedded = false,
+  organized = false,
 }: {
   item: WorkItemDto;
   history: WorkItemHistoryEntryDto[];
@@ -794,6 +808,7 @@ export function WorkItemDetail({
   onClose: () => void;
   onConfirmed: (item: WorkItemDto, confirmation: string) => Promise<void>;
   embedded?: boolean;
+  organized?: boolean;
 }) {
   const session = useAppSession();
   const liveData = useLiveAppData();
@@ -971,486 +986,511 @@ export function WorkItemDetail({
             </button>
           ) : null}
           {item.description ? <p>{item.description}</p> : null}
-          <section className={styles.detailEditor} aria-label="Task owner">
-            <p>
-              Assigned to:{" "}
-              {item.assignees.map((person) => person.name).join(", ") ||
-                "Unassigned"}
-            </p>
-            <LiveAssigneeField
-              workspaceId={item.workspaceId}
-              value={assigneeId}
-              onChange={setAssigneeId}
-              disabled={pending}
-              allowUnassigned={true}
-            />
-            <div className={styles.buttonGrid}>
-              <button
-                data-testid={`assign-item-${item.id}`}
+          <TaskActionGroup organized={organized} title="Assign an owner">
+            <section className={styles.detailEditor} aria-label="Task owner">
+              <p>
+                Assigned to:{" "}
+                {item.assignees.map((person) => person.name).join(", ") ||
+                  "Unassigned"}
+              </p>
+              <LiveAssigneeField
+                workspaceId={item.workspaceId}
+                value={assigneeId}
+                onChange={setAssigneeId}
                 disabled={pending}
-                onClick={() =>
-                  void run(async () => {
-                    const response = await liveData.client.assignItem(
-                      item.id,
-                      { assigneeIds: assigneeId ? [assigneeId] : [] },
-                      item.version,
-                      retainedKey(
-                        retryKeys.current,
-                        `assign:${item.id}:${item.version}:${assigneeId}`,
-                      ),
-                    );
-                    const assigneeName =
-                      response.data.item.assignees.find(
-                        (assignee) => assignee.id === assigneeId,
-                      )?.name ?? "the selected member";
-                    return {
-                      item: response.data.item,
-                      confirmation: assigneeId
-                        ? `Task assigned to ${assigneeName}.`
-                        : "Task is now unassigned.",
-                    };
-                  })
-                }
-                type="button"
-              >
-                <UserPlus size={14} />{" "}
-                {assigneeId ? "Assign selected person" : "Remove assignment"}
-              </button>
-            </div>
-          </section>
-          <LiveTaskPlanningSummary item={item} />
-          <section className={styles.detailEditor} aria-label="Task details">
-            <header>
-              <h3>Details</h3>
-              {!editing ? (
+                allowUnassigned={true}
+              />
+              <div className={styles.buttonGrid}>
                 <button
+                  data-testid={`assign-item-${item.id}`}
+                  disabled={pending}
+                  onClick={() =>
+                    void run(async () => {
+                      const response = await liveData.client.assignItem(
+                        item.id,
+                        { assigneeIds: assigneeId ? [assigneeId] : [] },
+                        item.version,
+                        retainedKey(
+                          retryKeys.current,
+                          `assign:${item.id}:${item.version}:${assigneeId}`,
+                        ),
+                      );
+                      const assigneeName =
+                        response.data.item.assignees.find(
+                          (assignee) => assignee.id === assigneeId,
+                        )?.name ?? "the selected member";
+                      return {
+                        item: response.data.item,
+                        confirmation: assigneeId
+                          ? `Task assigned to ${assigneeName}.`
+                          : "Task is now unassigned.",
+                      };
+                    })
+                  }
                   type="button"
-                  onClick={() => {
-                    setEditTitle(item.title);
-                    setEditDescription(item.description);
-                    setEditPriority(item.priority);
-                    setEditPlanning(item.planning ?? {});
-                    setEditDueDate(item.dueDate ?? "");
-                    setEditVersion(item.version);
-                    setEditing(true);
+                >
+                  <UserPlus size={14} />{" "}
+                  {assigneeId ? "Assign selected person" : "Remove assignment"}
+                </button>
+              </div>
+            </section>
+          </TaskActionGroup>
+          <LiveTaskPlanningSummary item={item} />
+          <TaskActionGroup organized={organized} title="Edit task details">
+            <section className={styles.detailEditor} aria-label="Task details">
+              <header>
+                <h3>Details</h3>
+                {!editing ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditTitle(item.title);
+                      setEditDescription(item.description);
+                      setEditPriority(item.priority);
+                      setEditPlanning(item.planning ?? {});
+                      setEditDueDate(item.dueDate ?? "");
+                      setEditVersion(item.version);
+                      setEditing(true);
+                    }}
+                  >
+                    Edit details
+                  </button>
+                ) : null}
+              </header>
+              {editing ? (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const patch = {
+                      title: editTitle.trim(),
+                      description: editDescription.trim(),
+                      priority: editPriority,
+                      dueDate: editDueDate || null,
+                      planning: editPlanning,
+                    };
+                    void run(async () => {
+                      const response = await liveData.client.updateItem(
+                        item.id,
+                        patch,
+                        editVersion,
+                        retainedKey(
+                          retryKeys.current,
+                          `details:${item.id}:${editVersion}:${JSON.stringify(patch)}`,
+                        ),
+                      );
+                      setEditing(false);
+                      return {
+                        item: response.data,
+                        confirmation: "Task details saved.",
+                      };
+                    });
                   }}
                 >
-                  Edit details
-                </button>
-              ) : null}
-            </header>
-            {editing ? (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const patch = {
-                    title: editTitle.trim(),
-                    description: editDescription.trim(),
-                    priority: editPriority,
-                    dueDate: editDueDate || null,
-                    planning: editPlanning,
-                  };
+                  {editing && editVersion !== item.version ? (
+                    <LiveStateNotice
+                      kind="version-conflict"
+                      title="This task changed while you were editing"
+                      description="Your draft is kept. Review the current details, then apply your draft to the latest task."
+                      actions={
+                        <button
+                          type="button"
+                          onClick={() => setEditVersion(item.version)}
+                        >
+                          Use latest version for my draft
+                        </button>
+                      }
+                    />
+                  ) : null}
+                  <label className={styles.field}>
+                    <span>Task title</span>
+                    <input
+                      required
+                      maxLength={500}
+                      disabled={pending}
+                      value={editTitle}
+                      onChange={(event) => setEditTitle(event.target.value)}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>Description</span>
+                    <textarea
+                      maxLength={20000}
+                      rows={4}
+                      disabled={pending}
+                      value={editDescription}
+                      onChange={(event) =>
+                        setEditDescription(event.target.value)
+                      }
+                    />
+                  </label>
+                  <div className={styles.formGrid}>
+                    <label className={styles.field}>
+                      <span>Priority</span>
+                      <select
+                        disabled={pending}
+                        value={editPriority}
+                        onChange={(event) =>
+                          setEditPriority(
+                            event.target.value as WorkItemDto["priority"],
+                          )
+                        }
+                      >
+                        {["urgent", "high", "normal", "low", "none"].map(
+                          (priority) => (
+                            <option key={priority}>{priority}</option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+                    <label className={styles.field}>
+                      <span>Due date</span>
+                      <input
+                        type="date"
+                        disabled={pending}
+                        value={editDueDate}
+                        onChange={(event) => setEditDueDate(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <LiveTaskPlanningFields
+                    workspaceId={item.workspaceId}
+                    boardId={item.boardId}
+                    itemId={item.id}
+                    value={editPlanning}
+                    onChange={setEditPlanning}
+                  />
+                  <div className={styles.buttonGrid}>
+                    <button
+                      type="submit"
+                      disabled={
+                        pending ||
+                        !editTitle.trim() ||
+                        editVersion !== item.version
+                      }
+                    >
+                      Save changes
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => setEditing(false)}
+                    >
+                      Cancel editing
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <p>
+                  {item.dueDate
+                    ? `Due ${formatLiveDateOnly(item.dueDate, timezone)}`
+                    : "No due date"}
+                </p>
+              )}
+            </section>
+          </TaskActionGroup>
+          <TaskActionGroup
+            organized={organized}
+            title="Progress, blockers, follow-ups & completion"
+          >
+            <label className={styles.field}>
+              <span>Work status</span>
+              <select
+                value={item.status}
+                disabled={
+                  pending || item.status === "blocked" || item.status === "done"
+                }
+                onChange={(event) => {
+                  const status = event.target.value as WorkItemDto["status"];
                   void run(async () => {
                     const response = await liveData.client.updateItem(
                       item.id,
-                      patch,
-                      editVersion,
+                      { status },
+                      item.version,
                       retainedKey(
                         retryKeys.current,
-                        `details:${item.id}:${editVersion}:${JSON.stringify(patch)}`,
+                        `status:${item.id}:${item.version}:${status}`,
                       ),
                     );
-                    setEditing(false);
                     return {
                       item: response.data,
-                      confirmation: "Task details saved.",
+                      confirmation: `Status updated to ${workItemStatusLabel(response.data.status)}.`,
                     };
                   });
                 }}
               >
-                {editing && editVersion !== item.version ? (
-                  <LiveStateNotice
-                    kind="version-conflict"
-                    title="This task changed while you were editing"
-                    description="Your draft is kept. Review the current details, then apply your draft to the latest task."
-                    actions={
-                      <button
-                        type="button"
-                        onClick={() => setEditVersion(item.version)}
-                      >
-                        Use latest version for my draft
-                      </button>
-                    }
-                  />
-                ) : null}
-                <label className={styles.field}>
-                  <span>Task title</span>
-                  <input
-                    required
-                    maxLength={500}
-                    disabled={pending}
-                    value={editTitle}
-                    onChange={(event) => setEditTitle(event.target.value)}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>Description</span>
-                  <textarea
-                    maxLength={20000}
-                    rows={4}
-                    disabled={pending}
-                    value={editDescription}
-                    onChange={(event) => setEditDescription(event.target.value)}
-                  />
-                </label>
-                <div className={styles.formGrid}>
-                  <label className={styles.field}>
-                    <span>Priority</span>
-                    <select
-                      disabled={pending}
-                      value={editPriority}
-                      onChange={(event) =>
-                        setEditPriority(
-                          event.target.value as WorkItemDto["priority"],
-                        )
-                      }
-                    >
-                      {["urgent", "high", "normal", "low", "none"].map(
-                        (priority) => (
-                          <option key={priority}>{priority}</option>
+                {editableStatusOptions(item.status).map((status) => (
+                  <option key={status} value={status}>
+                    {workItemStatusLabel(status)}
+                  </option>
+                ))}
+              </select>
+              <small>
+                Use Resolve with evidence below to complete this item.
+              </small>
+            </label>
+            <label className={styles.field}>
+              <span>Reason or follow-up note</span>
+              <textarea
+                onChange={(event) => {
+                  reasonRevision.current += 1;
+                  setReason(event.target.value);
+                }}
+                rows={3}
+                value={reason}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>Evidence</span>
+              <textarea
+                onChange={(event) => {
+                  evidenceRevision.current += 1;
+                  setEvidenceBody(event.target.value);
+                }}
+                placeholder="Record observable proof, a link, or the resolved outcome"
+                rows={3}
+                value={evidenceBody}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>Next follow-up</span>
+              <input
+                onChange={(event) => setWaitingDate(event.target.value)}
+                required
+                type="date"
+                value={waitingDate}
+              />
+            </label>
+            <div className={styles.buttonGrid}>
+              <button
+                data-testid={`block-item-${item.id}`}
+                disabled={pending || !reason.trim()}
+                onClick={() =>
+                  void run(
+                    async () => {
+                      const response = await liveData.client.setItemBlocked(
+                        item.id,
+                        {
+                          blocked: item.status !== "blocked",
+                          reason: reason.trim(),
+                        },
+                        item.version,
+                        retainedKey(
+                          retryKeys.current,
+                          `block:${item.id}:${item.version}:${item.status !== "blocked"}:${reason.trim()}`,
                         ),
-                      )}
-                    </select>
-                  </label>
-                  <label className={styles.field}>
-                    <span>Due date</span>
-                    <input
-                      type="date"
-                      disabled={pending}
-                      value={editDueDate}
-                      onChange={(event) => setEditDueDate(event.target.value)}
-                    />
-                  </label>
-                </div>
-                <LiveTaskPlanningFields
-                  workspaceId={item.workspaceId}
-                  boardId={item.boardId}
-                  itemId={item.id}
-                  value={editPlanning}
-                  onChange={setEditPlanning}
-                />
-                <div className={styles.buttonGrid}>
-                  <button
-                    type="submit"
-                    disabled={
-                      pending ||
-                      !editTitle.trim() ||
-                      editVersion !== item.version
-                    }
-                  >
-                    Save changes
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => setEditing(false)}
-                  >
-                    Cancel editing
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <p>
-                {item.dueDate
-                  ? `Due ${formatLiveDateOnly(item.dueDate, timezone)}`
-                  : "No due date"}
-              </p>
-            )}
-          </section>
-          <label className={styles.field}>
-            <span>Work status</span>
-            <select
-              value={item.status}
-              disabled={
-                pending || item.status === "blocked" || item.status === "done"
-              }
-              onChange={(event) => {
-                const status = event.target.value as WorkItemDto["status"];
+                      );
+                      return {
+                        item: response.data.item,
+                        confirmation: response.data.attentionRefreshQueued
+                          ? "Block state is durable; deterministic Attention recomputation is queued."
+                          : "Block state is durable.",
+                      };
+                    },
+                    { consumeReason: true },
+                  )
+                }
+                type="button"
+              >
+                <AlertTriangle size={14} />
+                {item.status === "blocked" ? "Unblock" : "Block"}
+              </button>
+              <button
+                data-testid={`evidence-item-${item.id}`}
+                disabled={pending || !evidenceBody.trim()}
+                onClick={() =>
+                  void run(
+                    async () => {
+                      const response = await liveData.client.addItemEvidence(
+                        item.id,
+                        { body: evidenceBody.trim() },
+                        item.version,
+                        retainedKey(
+                          retryKeys.current,
+                          `evidence:${item.id}:${item.version}:${evidenceBody.trim()}`,
+                        ),
+                      );
+                      const latest = await liveData.client.item(item.id);
+                      return {
+                        item: latest,
+                        confirmation: `Evidence ${response.data.evidence.id} is durable at item version ${response.data.itemVersion}.`,
+                      };
+                    },
+                    { consumeEvidence: true },
+                  )
+                }
+                type="button"
+              >
+                <Link2 size={14} /> Add evidence
+              </button>
+              <button
+                data-testid={`resolve-item-${item.id}`}
+                disabled={
+                  pending || !evidenceBody.trim() || item.status === "done"
+                }
+                onClick={() =>
+                  void run(
+                    async () => {
+                      const response = await liveData.client.resolveItem(
+                        item.id,
+                        { evidence: evidenceBody.trim() },
+                        item.version,
+                        retainedKey(
+                          retryKeys.current,
+                          `resolve:${item.id}:${item.version}:${evidenceBody.trim()}`,
+                        ),
+                      );
+                      return {
+                        item: response.data.item,
+                        confirmation: response.data.attentionRefreshQueued
+                          ? "Resolution and evidence are durable; Attention recomputation is queued."
+                          : "Resolution and evidence are durable.",
+                      };
+                    },
+                    { consumeEvidence: true },
+                  )
+                }
+                type="button"
+              >
+                <CheckCircle2 size={14} /> Resolve with evidence
+              </button>
+              <button
+                data-testid={`waiting-item-${item.id}`}
+                disabled={pending || !reason.trim() || item.status === "done"}
+                onClick={() =>
+                  void run(
+                    async () => {
+                      const response = await liveData.client.createWaiting(
+                        {
+                          workspaceId: item.workspaceId,
+                          entityType: "work_item",
+                          entityId: item.id,
+                          title: item.title,
+                          waitingType: "other",
+                          waitingLabel: reason.trim().slice(0, 200),
+                          followUpOwnerId: session.user.id,
+                          expectedBy: waitingDate,
+                          nextFollowUp: waitingDate,
+                          note: reason.trim(),
+                        },
+                        item.version,
+                        retainedKey(
+                          retryKeys.current,
+                          `waiting:${item.id}:${item.version}:${reason.trim()}:${waitingDate}`,
+                        ),
+                      );
+                      const latest = await liveData.client.item(item.id);
+                      return {
+                        item: latest,
+                        confirmation: `Waiting record ${response.data.id} is durable at version ${response.data.version}; WorkItem version ${latest.version} is canonical.`,
+                      };
+                    },
+                    { consumeReason: true },
+                  )
+                }
+                type="button"
+              >
+                <Clock3 size={14} /> Move to Waiting
+              </button>
+            </div>
+          </TaskActionGroup>
+          <TaskActionGroup
+            organized={organized}
+            title="Post an update or evidence"
+          >
+            <form
+              className={styles.detailEditor}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const body = updateBody.trim();
+                if (!body) return;
                 void run(async () => {
-                  const response = await liveData.client.updateItem(
+                  await liveData.client.addItemEvidence(
                     item.id,
-                    { status },
+                    { body },
                     item.version,
                     retainedKey(
                       retryKeys.current,
-                      `status:${item.id}:${item.version}:${status}`,
+                      `update:${item.id}:${item.version}:${body}`,
                     ),
                   );
+                  const latest = await liveData.client.item(item.id);
+                  setUpdateBody((current) =>
+                    current.trim() === body ? "" : current,
+                  );
                   return {
-                    item: response.data,
-                    confirmation: `Status updated to ${workItemStatusLabel(response.data.status)}.`,
+                    item: latest,
+                    confirmation: "Update posted to this task.",
                   };
                 });
               }}
             >
-              {editableStatusOptions(item.status).map((status) => (
-                <option key={status} value={status}>
-                  {workItemStatusLabel(status)}
-                </option>
-              ))}
-            </select>
-            <small>
-              Use Resolve with evidence below to complete this item.
-            </small>
-          </label>
-          <label className={styles.field}>
-            <span>Reason or follow-up note</span>
-            <textarea
-              onChange={(event) => {
-                reasonRevision.current += 1;
-                setReason(event.target.value);
-              }}
-              rows={3}
-              value={reason}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>Evidence</span>
-            <textarea
-              onChange={(event) => {
-                evidenceRevision.current += 1;
-                setEvidenceBody(event.target.value);
-              }}
-              placeholder="Record observable proof, a link, or the resolved outcome"
-              rows={3}
-              value={evidenceBody}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>Next follow-up</span>
-            <input
-              onChange={(event) => setWaitingDate(event.target.value)}
-              required
-              type="date"
-              value={waitingDate}
-            />
-          </label>
-          <div className={styles.buttonGrid}>
-            <button
-              data-testid={`block-item-${item.id}`}
-              disabled={pending || !reason.trim()}
-              onClick={() =>
-                void run(
-                  async () => {
-                    const response = await liveData.client.setItemBlocked(
-                      item.id,
-                      {
-                        blocked: item.status !== "blocked",
-                        reason: reason.trim(),
-                      },
-                      item.version,
-                      retainedKey(
-                        retryKeys.current,
-                        `block:${item.id}:${item.version}:${item.status !== "blocked"}:${reason.trim()}`,
-                      ),
-                    );
-                    return {
-                      item: response.data.item,
-                      confirmation: response.data.attentionRefreshQueued
-                        ? "Block state is durable; deterministic Attention recomputation is queued."
-                        : "Block state is durable.",
-                    };
-                  },
-                  { consumeReason: true },
-                )
-              }
-              type="button"
-            >
-              <AlertTriangle size={14} />
-              {item.status === "blocked" ? "Unblock" : "Block"}
-            </button>
-            <button
-              data-testid={`evidence-item-${item.id}`}
-              disabled={pending || !evidenceBody.trim()}
-              onClick={() =>
-                void run(
-                  async () => {
-                    const response = await liveData.client.addItemEvidence(
-                      item.id,
-                      { body: evidenceBody.trim() },
-                      item.version,
-                      retainedKey(
-                        retryKeys.current,
-                        `evidence:${item.id}:${item.version}:${evidenceBody.trim()}`,
-                      ),
-                    );
-                    const latest = await liveData.client.item(item.id);
-                    return {
-                      item: latest,
-                      confirmation: `Evidence ${response.data.evidence.id} is durable at item version ${response.data.itemVersion}.`,
-                    };
-                  },
-                  { consumeEvidence: true },
-                )
-              }
-              type="button"
-            >
-              <Link2 size={14} /> Add evidence
-            </button>
-            <button
-              data-testid={`resolve-item-${item.id}`}
-              disabled={
-                pending || !evidenceBody.trim() || item.status === "done"
-              }
-              onClick={() =>
-                void run(
-                  async () => {
-                    const response = await liveData.client.resolveItem(
-                      item.id,
-                      { evidence: evidenceBody.trim() },
-                      item.version,
-                      retainedKey(
-                        retryKeys.current,
-                        `resolve:${item.id}:${item.version}:${evidenceBody.trim()}`,
-                      ),
-                    );
-                    return {
-                      item: response.data.item,
-                      confirmation: response.data.attentionRefreshQueued
-                        ? "Resolution and evidence are durable; Attention recomputation is queued."
-                        : "Resolution and evidence are durable.",
-                    };
-                  },
-                  { consumeEvidence: true },
-                )
-              }
-              type="button"
-            >
-              <CheckCircle2 size={14} /> Resolve with evidence
-            </button>
-            <button
-              data-testid={`waiting-item-${item.id}`}
-              disabled={pending || !reason.trim() || item.status === "done"}
-              onClick={() =>
-                void run(
-                  async () => {
-                    const response = await liveData.client.createWaiting(
-                      {
-                        workspaceId: item.workspaceId,
-                        entityType: "work_item",
-                        entityId: item.id,
-                        title: item.title,
-                        waitingType: "other",
-                        waitingLabel: reason.trim().slice(0, 200),
-                        followUpOwnerId: session.user.id,
-                        expectedBy: waitingDate,
-                        nextFollowUp: waitingDate,
-                        note: reason.trim(),
-                      },
-                      item.version,
-                      retainedKey(
-                        retryKeys.current,
-                        `waiting:${item.id}:${item.version}:${reason.trim()}:${waitingDate}`,
-                      ),
-                    );
-                    const latest = await liveData.client.item(item.id);
-                    return {
-                      item: latest,
-                      confirmation: `Waiting record ${response.data.id} is durable at version ${response.data.version}; WorkItem version ${latest.version} is canonical.`,
-                    };
-                  },
-                  { consumeReason: true },
-                )
-              }
-              type="button"
-            >
-              <Clock3 size={14} /> Move to Waiting
-            </button>
-          </div>
-
-          <form
-            className={styles.detailEditor}
-            onSubmit={(event) => {
-              event.preventDefault();
-              const body = updateBody.trim();
-              if (!body) return;
-              void run(async () => {
-                await liveData.client.addItemEvidence(
-                  item.id,
-                  { body },
-                  item.version,
-                  retainedKey(
-                    retryKeys.current,
-                    `update:${item.id}:${item.version}:${body}`,
-                  ),
-                );
-                const latest = await liveData.client.item(item.id);
-                setUpdateBody((current) =>
-                  current.trim() === body ? "" : current,
-                );
-                return {
-                  item: latest,
-                  confirmation: "Update posted to this task.",
-                };
-              });
-            }}
+              <label className={styles.field}>
+                <span>Post an update</span>
+                <textarea
+                  rows={3}
+                  maxLength={20000}
+                  value={updateBody}
+                  disabled={pending}
+                  onChange={(event) => setUpdateBody(event.target.value)}
+                  placeholder="Ask a question, share progress, or explain the next step…"
+                />
+              </label>
+              <button type="submit" disabled={pending || !updateBody.trim()}>
+                Post update
+              </button>
+              <small>
+                Visible to people with access to this task. Updates stay with
+                its evidence and history.
+              </small>
+            </form>
+          </TaskActionGroup>
+          <TaskActionGroup
+            organized={organized}
+            title="Evidence & change history"
           >
-            <label className={styles.field}>
-              <span>Post an update</span>
-              <textarea
-                rows={3}
-                maxLength={20000}
-                value={updateBody}
-                disabled={pending}
-                onChange={(event) => setUpdateBody(event.target.value)}
-                placeholder="Ask a question, share progress, or explain the next step…"
-              />
-            </label>
-            <button type="submit" disabled={pending || !updateBody.trim()}>
-              Post update
-            </button>
-            <small>
-              Visible to people with access to this task. Updates stay with its
-              evidence and history.
-            </small>
-          </form>
-
-          <section className={styles.timeline} aria-labelledby="evidence-title">
-            <h3 id="evidence-title">
-              <FileText size={15} /> Updates and evidence
-            </h3>
-            {loading ? (
-              <p>Loading durable evidence…</p>
-            ) : evidence.length === 0 ? (
-              <p>No evidence recorded yet.</p>
-            ) : (
-              evidence.map((record) => (
-                <article key={record.id}>
-                  <strong>{record.author.name}</strong>
-                  <p>{record.body}</p>
-                  <small>{formatLiveDate(record.createdAt, timezone)}</small>
-                </article>
-              ))
-            )}
-          </section>
-          <section className={styles.timeline} aria-labelledby="history-title">
-            <h3 id="history-title">
-              <History size={15} /> Change history
-            </h3>
-            {loading ? (
-              <p>Loading durable history…</p>
-            ) : history.length === 0 ? (
-              <p>No history recorded yet.</p>
-            ) : (
-              history.map((entry) => (
-                <article key={entry.id}>
-                  <strong>{entry.summary}</strong>
-                  <p>Reason code: {entry.reasonCode}</p>
-                  <small>{formatLiveDate(entry.occurredAt, timezone)}</small>
-                </article>
-              ))
-            )}
-          </section>
+            <section
+              className={styles.timeline}
+              aria-labelledby="evidence-title"
+            >
+              <h3 id="evidence-title">
+                <FileText size={15} /> Updates and evidence
+              </h3>
+              {loading ? (
+                <p>Loading durable evidence…</p>
+              ) : evidence.length === 0 ? (
+                <p>No evidence recorded yet.</p>
+              ) : (
+                evidence.map((record) => (
+                  <article key={record.id}>
+                    <strong>{record.author.name}</strong>
+                    <p>{record.body}</p>
+                    <small>{formatLiveDate(record.createdAt, timezone)}</small>
+                  </article>
+                ))
+              )}
+            </section>
+            <section
+              className={styles.timeline}
+              aria-labelledby="history-title"
+            >
+              <h3 id="history-title">
+                <History size={15} /> Change history
+              </h3>
+              {loading ? (
+                <p>Loading durable history…</p>
+              ) : history.length === 0 ? (
+                <p>No history recorded yet.</p>
+              ) : (
+                history.map((entry) => (
+                  <article key={entry.id}>
+                    <strong>{entry.summary}</strong>
+                    <p>Reason code: {entry.reasonCode}</p>
+                    <small>{formatLiveDate(entry.occurredAt, timezone)}</small>
+                  </article>
+                ))
+              )}
+            </section>
+          </TaskActionGroup>
         </div>
       </aside>
     </div>
@@ -1483,4 +1523,23 @@ function retainedKey(keys: Map<string, string>, fingerprint: string) {
   const created = crypto.randomUUID();
   keys.set(fingerprint, created);
   return created;
+}
+
+function TaskActionGroup({
+  organized,
+  title,
+  children,
+}: {
+  organized: boolean;
+  title: string;
+  children: ReactNode;
+}) {
+  return organized ? (
+    <details className={styles.taskActionGroup}>
+      <summary>{title}</summary>
+      <div>{children}</div>
+    </details>
+  ) : (
+    <>{children}</>
+  );
 }

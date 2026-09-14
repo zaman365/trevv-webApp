@@ -1,3 +1,4 @@
+import { taskReviewCommandSchema } from "@founderhq/api-contract";
 import {
   reportPlanQuerySchema,
   saveReportPlanSchema,
@@ -2401,6 +2402,45 @@ export function createApiApp(dependencies: ApiAppDependencies) {
     return context.json(item);
   });
 
+  api.post("/api/v1/items/:id/review", async (context) => {
+    const expectedVersion = readIfMatch(context);
+    if (expectedVersion instanceof Response) return expectedVersion;
+    const parsed = taskReviewCommandSchema.safeParse(
+      await context.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return validationFailure(
+        context,
+        "Review the reviewer selection and notes.",
+        parsed.error.flatten(),
+      );
+    const idempotency = readIdempotencyKey(context, true);
+    if (idempotency instanceof Response) return idempotency;
+    const id = context.req.param("id");
+    const result = await dependencies.dataPlane.reviewTask(
+      await mutationContext(
+        context,
+        clock,
+        idGenerator,
+        "/api/v1/items/:id/review",
+        { id, review: parsed.data },
+        idempotency,
+        200,
+        expectedVersion,
+      ),
+      id,
+      expectedVersion,
+      parsed.data,
+    );
+    setMutationHeaders(
+      context,
+      result.value.version,
+      idempotency,
+      result.replayed,
+    );
+    return context.json(result.value);
+  });
+
   api.get("/api/v1/items/:id/history", async (context) =>
     context.json(
       await dependencies.dataPlane.listItemHistory(
@@ -3281,6 +3321,7 @@ export function createUnavailableLiveDependencies(): {
     convertInboxItem: unavailable,
     listItems: unavailable,
     getItem: unavailable,
+    reviewTask: unavailable,
     createItem: unavailable,
     updateItem: unavailable,
     listItemHistory: unavailable,

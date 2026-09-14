@@ -10,6 +10,21 @@ import {
 } from "../../apps/web/test-fixtures/live-workflow-data";
 import { setup } from "../fixtures/live-workflow-browser";
 
+async function openTaskEditor(page: Page, id = item.id) {
+  await page.goto(`https://trevv.test/app/workspaces/launch/tasks/${id}#edit`);
+  const detail = page.getByTestId("work-item-detail");
+  await expect(detail).toBeVisible();
+  for (const title of [
+    "Assign an owner",
+    "Edit task details",
+    "Progress, blockers, follow-ups & completion",
+    "Post an update or evidence",
+    "Evidence & change history",
+  ])
+    await detail.getByText(title, { exact: true }).click();
+  return detail;
+}
+
 test("dashboard keeps worker status loading when boards finish first", async ({
   page,
 }) => {
@@ -417,12 +432,10 @@ test("creation assigns work, opens its details, and survives a slow post-save re
       .getByRole("button", { name: "Create task / work item", exact: true })
       .click();
     await expect(form).toHaveCount(0);
-    await expect(page.getByTestId("work-item-detail")).toContainText(
-      "Prepare launch",
-    );
-    await expect(page.getByRole("region", { name: "My tasks" })).toContainText(
-      "Prepare launch",
-    );
+    await expect(
+      page.getByRole("heading", { name: "Prepare launch", exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/tasks\//);
     expect(state.creations[0].assigneeIds).toEqual(["user-one"]);
   } finally {
     state.release();
@@ -480,8 +493,7 @@ test("task details support assignment, progress, and evidence-backed completion 
   page,
 }) => {
   const state = await setup(page);
-  await page.getByRole("button", { name: item.title }).click();
-  const detail = page.getByTestId("work-item-detail");
+  const detail = await openTaskEditor(page);
   await detail
     .getByLabel("Reason or follow-up note")
     .fill("Preserve the next follow-up");
@@ -504,8 +516,8 @@ test("task details support assignment, progress, and evidence-backed completion 
   await expect(detail.getByLabel("Work status")).toHaveValue("done");
   await expect(resolveButton).toBeDisabled();
   await expect(
-    page.getByRole("region", { name: "My tasks" }),
-  ).not.toContainText(item.title);
+    page.getByRole("list", { name: "Task lifecycle" }),
+  ).toContainText("Completed");
   expect(state.transitions.map((transition) => transition.version)).toEqual([
     '"1"',
     '"2"',
@@ -516,9 +528,9 @@ test("task details support assignment, progress, and evidence-backed completion 
   );
   await detail.getByRole("button", { name: "Reopen task" }).click();
   await expect(detail.getByLabel("Work status")).toHaveValue("not_started");
-  await expect(page.getByRole("region", { name: "My tasks" })).toContainText(
-    item.title,
-  );
+  await expect(
+    page.getByRole("heading", { name: item.title, exact: true }).first(),
+  ).toBeVisible();
 });
 
 test("failed direct capture retains the draft, assignee, and safe retry key", async ({
@@ -583,50 +595,55 @@ test("direct capture confirms immediately and identifies the actual saved board 
   }
 });
 
-test("refresh does not reopen a closed deep-linked task drawer", async ({
+test("refresh does not reopen task editors after returning to the overview", async ({
   page,
 }) => {
   const state = await setup(page, "#item-one");
+  await expect(page).toHaveURL(/\/tasks\/item-one$/);
+  await page.getByRole("button", { name: "Edit task", exact: true }).click();
   const detail = page.getByTestId("work-item-detail");
   await expect(detail).toBeVisible();
-  await detail.getByRole("button", { name: /Close/ }).click();
-  await expect(detail).toHaveCount(0);
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
   state.change();
-  await page.getByRole("button", { name: "Refresh test records" }).click();
-  await expect(page.getByTestId("live-board")).toContainText("Saved version 2");
-  await expect(detail).toHaveCount(0);
+  await page.getByRole("button", { name: "Refresh task" }).click();
+  await expect(detail).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Task brief" })).toBeVisible();
 });
 
-test("a failed board refresh preserves the open task and draft, while revoked access removes it", async ({
+test("a failed task refresh preserves its draft, while revoked access removes it", async ({
   page,
 }) => {
-  await setup(page, "#item-one");
-  const detail = page.getByTestId("work-item-detail");
+  await setup(page);
+  const detail = await openTaskEditor(page);
   await detail
     .getByLabel("Reason or follow-up note")
     .fill("Keep during reconnect");
   let status = 503;
-  await page.route(`**/api/v1/boards/${board.id}`, (route) =>
+  await page.route(`**/api/v1/items/${item.id}`, (route) =>
     route.fulfill({
       status,
       json: {
-        error: { code: "test_failure", message: "Test board read failure" },
+        error: {
+          code: "test_failure",
+          message: "Test task read failure",
+          requestId: "test-task",
+        },
       },
     }),
   );
-  await page.getByRole("button", { name: "Refresh board metadata" }).click();
-  await expect(page.getByRole("button", { name: "Retry board" })).toBeVisible({
-    timeout: 10_000,
-  });
+  await page.getByRole("button", { name: "Refresh task" }).click();
+  await expect(page.getByRole("button", { name: "Retry refresh" })).toBeVisible(
+    { timeout: 10000 },
+  );
   await expect(detail.getByLabel("Reason or follow-up note")).toHaveValue(
     "Keep during reconnect",
   );
   status = 403;
-  await page.getByRole("button", { name: "Refresh board metadata" }).click();
-  await expect(
-    page.getByRole("heading", { name: board.name, exact: true }),
-  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Retry refresh" }).click();
   await expect(detail).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Task unavailable" }),
+  ).toBeVisible();
 });
 
 test("board filters, status columns, and completed work stay connected to saved tasks", async ({
@@ -670,18 +687,21 @@ test("board filters, status columns, and completed work stay connected to saved 
   await expect(boardView.getByRole("region", { name: /^done/ })).toContainText(
     "Ship the completed launch",
   );
-  await boardView
-    .getByTestId("work-item-undated-task")
-    .getByRole("button", { name: "Edit task", exact: true })
-    .click();
-  const taskDetail = page.getByTestId("work-item-detail");
+  await expect(
+    boardView
+      .getByTestId("work-item-undated-task")
+      .getByRole("link", { name: "Edit task", exact: true }),
+  ).toHaveAttribute("href", "/app/workspaces/launch/tasks/undated-task#edit");
+  const taskDetail = await openTaskEditor(page, "undated-task");
   await taskDetail.getByLabel(/^Work status/).selectOption("review");
   await expect(taskDetail.getByLabel(/^Work status/)).toHaveValue("review");
+  await page.goto("https://trevv.test/");
+  await page.getByRole("button", { name: "Refresh test records" }).click();
   await expect(boardView.getByTestId("work-item-undated-task")).toHaveAttribute(
     "data-version",
     "2",
   );
-  await page.keyboard.press("Escape");
+  await boardView.getByRole("button", { name: "Board", exact: true }).click();
   await expect(
     boardView.getByRole("region", { name: /^review/ }),
   ).toContainText("Draft project brief");
@@ -689,10 +709,7 @@ test("board filters, status columns, and completed work stay connected to saved 
   await myWork.getByRole("button", { name: /^Completed / }).click();
   await expect(
     myWork.getByRole("link", { name: /Ship the completed launch/ }),
-  ).toHaveAttribute(
-    "href",
-    "/app/workspaces/launch/boards/board-one#completed-task",
-  );
+  ).toHaveAttribute("href", "/app/workspaces/launch/tasks/completed-task");
   await boardView.getByRole("button", { name: "List", exact: true }).click();
   await boardView.getByLabel("Search tasks").fill("brief");
   await expect(boardView.getByTestId("work-item-overdue-task")).toHaveCount(0);
@@ -703,8 +720,7 @@ test("task edits survive refreshes, remove deadlines, and preserve saved updates
   page,
 }) => {
   const state = await setup(page);
-  await page.getByRole("button", { name: item.title }).click();
-  const detail = page.getByTestId("work-item-detail");
+  const detail = await openTaskEditor(page);
   await detail.getByRole("button", { name: "Edit details" }).click();
   await detail.getByLabel("Task title").fill("A clearly owned deliverable");
   await detail
@@ -716,7 +732,7 @@ test("task edits survive refreshes, remove deadlines, and preserve saved updates
     .selectOption("high");
   state.change();
   await page
-    .getByRole("button", { name: "Refresh test records" })
+    .getByRole("button", { name: "Refresh task" })
     .click({ force: true });
   await expect(detail.getByLabel("Task title")).toHaveValue(
     "A clearly owned deliverable",
@@ -747,6 +763,6 @@ test("task edits survive refreshes, remove deadlines, and preserve saved updates
   ).toContainText("Customer approved the scope.");
   expect(state.transitions[0].version).toBe('"2"');
   expect(state.transitions[1].body.dueDate).toBeNull();
-  await page.keyboard.press("Escape");
-  await expect(detail).toHaveCount(0);
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await expect(detail).toBeHidden();
 });

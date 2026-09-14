@@ -52,6 +52,12 @@ export function presentLiveError(error: unknown): LiveErrorPresentation {
         title: "This record is no longer available",
       };
     }
+    if (error.code === "constraint_conflict")
+      return {
+        ...common,
+        kind: "validation",
+        title: "This action needs attention",
+      };
     if (error.status === 409) {
       return {
         ...common,

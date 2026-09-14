@@ -710,7 +710,73 @@ export const updateCalendarEventSchema = calendarEventFieldsSchema
     message: "The event end must be after its start.",
   });
 
+export const taskReviewSchema = z.object({
+  id: idSchema,
+  round: z.number().int().positive(),
+  requestedBy: z.object({ id: idSchema, name: z.string().min(1) }),
+  requestedAt: z.iso.datetime(),
+  requestedVersion: z.number().int().nonnegative(),
+  note: z.string().min(1).max(5000),
+  dueDate: z.iso.date().optional(),
+  state: z.enum([
+    "pending",
+    "approved",
+    "changes_requested",
+    "cancelled",
+    "invalidated",
+  ]),
+  closedAt: z.iso.datetime().optional(),
+  closingNote: z.string().max(5000).optional(),
+  reviewers: z
+    .array(
+      z.object({
+        id: idSchema,
+        name: z.string().min(1),
+        decision: z.enum(["pending", "approved", "changes_requested"]),
+        note: z.string().max(5000).optional(),
+        respondedAt: z.iso.datetime().optional(),
+      }),
+    )
+    .min(1)
+    .max(25),
+});
+export const taskReviewCommandSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("request"),
+      reviewerIds: z
+        .array(idSchema)
+        .min(1)
+        .max(25)
+        .refine(
+          (ids) => new Set(ids).size === ids.length,
+          "Choose different reviewers.",
+        ),
+      note: z.string().trim().min(1).max(5000),
+      dueDate: z.iso.date().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("respond"),
+      roundId: idSchema,
+      decision: z.enum(["approved", "changes_requested"]),
+      note: z.string().trim().min(1).max(5000),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("cancel"),
+      roundId: idSchema,
+      note: z.string().trim().min(1).max(5000),
+    })
+    .strict(),
+]);
+export type TaskReviewDto = z.infer<typeof taskReviewSchema>;
+export type TaskReviewCommandInput = z.infer<typeof taskReviewCommandSchema>;
+
 const workItemBaseSchema = z.object({
+  review: taskReviewSchema.optional(),
   id: idSchema,
   workspaceId: idSchema,
   boardId: idSchema,
@@ -1815,6 +1881,7 @@ export const paginatedItemsSchema = z.object({
 
 export const createItemSchema = workItemBaseSchema
   .omit({
+    review: true,
     id: true,
     version: true,
     assignees: true,

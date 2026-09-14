@@ -1,3 +1,4 @@
+import { TaskPage } from "../components/task-page";
 import { LivePortfolioExperience } from "../components/live-portfolio-experience";
 import { LivePersonalWork } from "../components/live-personal-work";
 import { CalendarExperience } from "../components/calendar-experience";
@@ -41,6 +42,19 @@ function Workflow() {
   const queryClient = useQueryClient();
   const [capture, setCapture] = useState(false);
   const [confirmed, setConfirmed] = useState<LiveCaptureSuccess | null>(null);
+  const taskMatch = window.location.pathname.match(/\/tasks\/([^/]+)/);
+  if (view === "task" || taskMatch)
+    return (
+      <TaskPage
+        workspaceSlug="launch"
+        itemId={
+          taskMatch
+            ? decodeURIComponent(taskMatch[1]!)
+            : (new URLSearchParams(window.location.search).get("itemId") ??
+              "launch-brief")
+        }
+      />
+    );
   if (view === "report-log" || view === "report-plan")
     return (
       <ReportPlanWorkspace

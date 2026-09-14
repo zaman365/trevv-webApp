@@ -27,6 +27,22 @@ describe("background read errors", () => {
 });
 
 describe("presentLiveError", () => {
+  it("explains lifecycle constraints without claiming a stale version", () => {
+    expect(
+      presentLiveError(
+        new TrevvApiError(
+          "constraint_conflict",
+          "Wait for the reviewers",
+          "review-request",
+          409,
+        ),
+      ),
+    ).toMatchObject({
+      kind: "validation",
+      title: "This action needs attention",
+      description: "Wait for the reviewers",
+    });
+  });
   it.each([
     [401, "permission-loss"],
     [403, "permission-loss"],

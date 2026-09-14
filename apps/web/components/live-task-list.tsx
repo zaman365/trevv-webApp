@@ -34,7 +34,7 @@ import {
   sortTasks,
   type TaskPeriod,
 } from "@/lib/task-views";
-import { workspaceHref } from "@/lib/workspace-routes";
+import { taskHref, workspaceHref } from "@/lib/workspace-routes";
 import { WindowedCollection } from "./windowed-collection";
 import styles from "./live-task-list.module.css";
 
@@ -200,7 +200,10 @@ export function LiveTaskList({
 
   function renderItem(item: WorkItemDto) {
     const workspace = workspaceNames.get(item.workspaceId);
-    const href = `${workspaceHref(workspace?.slug ?? "")}/boards/${encodeURIComponent(item.boardId)}#${encodeURIComponent(item.id)}`;
+    const href =
+      item.type === "task"
+        ? taskHref(workspace?.slug ?? "", item.id)
+        : `${workspaceHref(workspace?.slug ?? "")}/boards/${encodeURIComponent(item.boardId)}#${encodeURIComponent(item.id)}`;
     const statusLabel = {
       not_started: "Not started",
       working: "In progress",
@@ -228,7 +231,7 @@ export function LiveTaskList({
         data-testid={`work-item-${item.id}`}
         role="listitem"
       >
-        {onOpen ? (
+        {onOpen && item.type !== "task" ? (
           <button
             className={styles.title}
             title={item.title}
@@ -349,7 +352,7 @@ export function LiveTaskList({
               Open {item.type}
               <ArrowUpRight size={14} />
             </span>
-            {onOpen ? (
+            {onOpen && item.type !== "task" ? (
               <button
                 className={styles.editTask}
                 type="button"
@@ -365,7 +368,7 @@ export function LiveTaskList({
                 className={styles.editTask}
                 aria-label={`Edit ${item.type}`}
                 title={`Edit ${item.title}`}
-                href={href}
+                href={item.type === "task" ? `${href}#edit` : href}
               >
                 <Pencil size={13} aria-hidden="true" />
                 Edit

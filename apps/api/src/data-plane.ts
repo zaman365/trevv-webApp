@@ -368,6 +368,12 @@ export interface DataPlane {
     },
   ): Promise<PaginatedWorkItems>;
   getItem(context: ApiRequestContext, id: string): Promise<WorkItemDto>;
+  reviewTask(
+    context: ApiMutationContext,
+    id: string,
+    expectedVersion: number,
+    input: import("@founderhq/api-contract").TaskReviewCommandInput,
+  ): Promise<MutationResult<WorkItemDto>>;
   createItem(
     context: ApiMutationContext,
     input: CreateItemInput,
@@ -462,6 +468,7 @@ export interface DataPlane {
 }
 
 export type DataPlaneErrorCode =
+  | "constraint_conflict"
   | "resource_not_found"
   | "scope_mismatch"
   | "version_conflict"

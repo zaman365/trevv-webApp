@@ -37,7 +37,7 @@ const LiveTransitions = dynamic(
   { loading },
 );
 const LiveWeeklyReview = dynamic(
-  () => import("./live-work-reviews").then((module) => module.LiveWeeklyReview),
+  () => import("./task-review-queue").then((module) => module.TaskReviewQueue),
   { loading },
 );
 const LiveSearch = dynamic(
@@ -108,8 +108,8 @@ const viewCopy: Record<
     active: "approvals",
   },
   reviews: {
-    title: "Weekly Review",
-    subtitle: "Publish durable progress and a comparable workspace snapshot.",
+    title: "Reviews",
+    subtitle: "Review tasks and publish weekly workspace progress.",
     active: "reviews",
   },
   waiting: {

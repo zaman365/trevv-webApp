@@ -64,6 +64,8 @@ export function workspaceShellRoute(
   const view = match[2];
   if (!view)
     return { active: "dashboard", workspaceSlug, requiresRecords: true };
+  if (/^tasks\/[^/]+$/.test(view))
+    return { active: "myWork", workspaceSlug, requiresRecords: true };
   if (/^boards\/[^/]+$/.test(view))
     return { active: "workspace", workspaceSlug, requiresRecords: true };
   if (view === "people" || /^(teams|people)\/[^/]+$/.test(view))

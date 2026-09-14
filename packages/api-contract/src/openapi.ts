@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { taskReviewSchema, taskReviewCommandSchema } from "./index.js";
 import { reportPlanOpenApiPaths } from "./report-plan-openapi.js";
 import { superadminOpenApiPaths } from "./superadmin-openapi.js";
 
@@ -2775,6 +2777,51 @@ export const openApiDocument = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/WorkItemTransition" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthenticated" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "422": { $ref: "#/components/responses/Validation" },
+          "428": { $ref: "#/components/responses/PreconditionRequired" },
+          "429": { $ref: "#/components/responses/RateLimited" },
+          "503": { $ref: "#/components/responses/RepositoryUnavailable" },
+        },
+      },
+    },
+    "/api/v1/items/{id}/review": {
+      post: {
+        tags: ["Items"],
+        operationId: "reviewTask",
+        parameters: [
+          { $ref: "#/components/parameters/ItemId" },
+          { $ref: "#/components/parameters/IfMatch" },
+          { $ref: "#/components/parameters/IdempotencyKey" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/TaskReviewCommand" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Versioned task review with per-reviewer responses",
+            headers: {
+              ETag: { $ref: "#/components/headers/ETag" },
+              "Idempotency-Key": {
+                $ref: "#/components/headers/IdempotencyKey",
+              },
+              "Idempotency-Replayed": {
+                $ref: "#/components/headers/IdempotencyReplayed",
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkItem" },
               },
             },
           },
@@ -5753,6 +5800,8 @@ export const openApiDocument = {
           name: { type: "string", minLength: 1, maxLength: 160 },
         },
       },
+      TaskReview: z.toJSONSchema(taskReviewSchema),
+      TaskReviewCommand: z.toJSONSchema(taskReviewCommandSchema),
       WorkItem: {
         type: "object",
         required: [
@@ -5798,6 +5847,7 @@ export const openApiDocument = {
           },
         ],
         properties: {
+          review: { $ref: "#/components/schemas/TaskReview" },
           id: { type: "string", minLength: 3, maxLength: 128 },
           workspaceId: { type: "string", minLength: 3, maxLength: 128 },
           boardId: { type: "string", minLength: 3, maxLength: 128 },

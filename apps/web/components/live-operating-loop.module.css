@@ -1087,3 +1087,22 @@
 .captureBoardField {
   grid-column: 1 / -1;
 }
+
+.taskActionGroup {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.taskActionGroup > summary {
+  padding: 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.taskActionGroup > div {
+  padding: 0 16px 16px;
+  display: grid;
+  gap: 16px;
+}
+.taskActionGroup:hover {
+  border-color: #a39cdb;
+}

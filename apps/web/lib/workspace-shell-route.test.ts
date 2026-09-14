@@ -82,3 +82,13 @@ describe("persistent shell route ownership", () => {
     ).toMatchObject({ active: "settings" });
   });
 });
+
+it("loads records and preserves workspace chrome for task pages", () => {
+  expect(
+    workspaceShellRoute("/app/workspaces/launch/tasks/task-one#reviews"),
+  ).toEqual({
+    active: "myWork",
+    workspaceSlug: "launch",
+    requiresRecords: true,
+  });
+});

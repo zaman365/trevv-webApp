@@ -67,6 +67,7 @@ export async function setup(
     dashboard?: boolean;
     styled?: boolean;
     view?:
+      | "task"
       | "portfolio"
       | "personal"
       | "calendar"
@@ -136,7 +137,7 @@ export async function setup(
   await page.route("https://trevv.test/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === "/")
+    if (path === "/" || /\/tasks\/[^/]+$/.test(path))
       return route.fulfill({
         contentType: "text/html",
         body: `<!doctype html><html lang="en"><head><title>TREVV test workspace</title>${
@@ -390,6 +391,14 @@ export async function setup(
           name: new RegExp(board.name),
         }),
     ).toBeVisible();
+  } else if (
+    hash &&
+    records.some(
+      (record) =>
+        record.id === hash.replace(/^#/, "") && record.type === "task",
+    )
+  ) {
+    await expect(page.getByTestId("task-page")).toBeVisible();
   } else {
     await expect(page.getByTestId("live-board")).toBeVisible();
     await expect(

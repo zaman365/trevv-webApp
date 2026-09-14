@@ -21,6 +21,7 @@ live only when the cutover smoke evidence for the deployed commit passes.
 - stakeholder-safe Workspace views, import presets/dry runs, cross-Workspace dependencies, and workload evidence
 - pricing-agnostic subscription and entitlement architecture with unrestricted development mode
 - polished Workspace Overview, board table/Kanban, inline editing, and item side panel
+- [Full task pages and tracked review rounds](docs/features/task-lifecycle.md), with multiple reviewers, feedback, completion evidence and reopening
 - My Work, actionable Inbox, informational Notifications, Decision Center, Approval Center, search, integration previews, and a fictional onboarding walkthrough
 - English-only intended GA scope, responsive mobile-browser layouts, dark mode, and installable PWA behavior
 - versioned Hono API contract, explicit demo/live data planes, tenant-scoped PostgreSQL repositories, real Better Auth email/password flows, transactional onboarding and invitations, server-derived organization selection, route guards, session revocation, a persistent work-management loop with evidence/history, durable Teams and contextual Messages, a leased outbox worker with explicit Attention, collaboration, and reviewed audit-only handlers, typed client, permission policy, transactional audit/outbox records, sample browser exports, and safe integration mocks

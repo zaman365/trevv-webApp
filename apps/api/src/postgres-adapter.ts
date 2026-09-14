@@ -1492,6 +1492,23 @@ export function createPostgresAdapter(options: PostgresAdapterOptions): {
       return { value: toWorkItemDto(result.value), replayed: result.replayed };
     },
 
+    async reviewTask(context, id, expectedVersion, input) {
+      const repositories = scoped(options.repositories, context);
+      const current = await repositories.workItems.get(id);
+      requireWorkspaceAccess(
+        context.access,
+        input.action === "respond" ? "read" : "update",
+        current.workspaceId,
+      );
+      const result = await repositories.workItems.update(
+        id,
+        expectedVersion,
+        { reviewCommand: input },
+        mutation(context),
+      );
+      return { value: toWorkItemDto(result.value), replayed: result.replayed };
+    },
+
     async listItemHistory(context, id) {
       const repositories = scoped(options.repositories, context);
       const item = await repositories.workItems.get(id);
@@ -2485,6 +2502,7 @@ function toInboxItemDto(item: InboxItemProjection): InboxItemDto {
 
 function toWorkItemDto(item: WorkItemProjection): WorkItemDto {
   return {
+    ...(item.review ? { review: item.review } : {}),
     id: item.id,
     workspaceId: item.workspaceId,
     boardId: item.boardId,

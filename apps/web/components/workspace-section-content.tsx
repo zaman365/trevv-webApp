@@ -11,7 +11,7 @@ const People = lazy(() =>
   import("./live-people-page").then((m) => ({ default: m.LivePeoplePage })),
 );
 const Review = lazy(() =>
-  import("./live-work-reviews").then((m) => ({ default: m.LiveWeeklyReview })),
+  import("./task-review-queue").then((m) => ({ default: m.TaskReviewQueue })),
 );
 export function WorkspaceSectionContent({
   section,

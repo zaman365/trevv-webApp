@@ -17,8 +17,8 @@ export const sectionCatalog = {
   },
   reviews: {
     id: "reviews",
-    label: "Weekly review",
-    title: "Weekly review",
+    label: "Reviews",
+    title: "Reviews",
     description: "Review progress and publish an update for your workspace.",
   },
 } as Record<
@@ -29,6 +29,7 @@ export const sectionCatalog = {
 export const myWorkRelatedSections = [
   "decisions",
   "approvals",
+  "reviews",
   "waiting",
   "ideas",
   "report-log",

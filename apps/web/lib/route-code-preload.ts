@@ -3,6 +3,7 @@ import type { WebRuntimeMode } from "./web-runtime-config";
 
 // Static modules only: never prefetch an authenticated RSC response or API data.
 const modules = {
+  task: () => import("../components/task-page"),
   portfolioLoader: () => import("../components/portfolio-loader"),
   portfolio: () => import("../components/portfolio-experience"),
   livePortfolio: () => import("../components/live-portfolio-experience"),
@@ -66,6 +67,7 @@ export function routeCodeModules(
   if (!match) return [];
   const view = match[1];
   if (!view) return ["moduleLoader", live ? "liveDashboard" : "dashboard"];
+  if (/^tasks\/[^/]+$/.test(view)) return ["task"];
   if (/^boards\/[^/]+$/.test(view))
     return ["boardLoader", live ? "liveBoard" : "board"];
   if (/^teams\/[^/]+$/.test(view))

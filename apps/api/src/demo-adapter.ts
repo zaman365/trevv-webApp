@@ -1,3 +1,4 @@
+import { applyTaskReview, reviewForTaskChange } from "@founderhq/core";
 import type {
   BoardDto,
   CalendarDto,
@@ -772,6 +773,19 @@ export function createDemoAdapter(): DemoAdapter {
         });
         if (existing.version !== expectedVersion)
           throw versionConflict(existing.version);
+        let review;
+        try {
+          review = reviewForTaskChange(
+            existing,
+            patch,
+            context.now.toISOString(),
+          );
+        } catch (error) {
+          throw new DataPlaneError(
+            "constraint_conflict",
+            (error as Error).message,
+          );
+        }
         const { assigneeIds } = patch;
         const assignees = assigneeIds?.map(demoUserForId);
         if (assignees?.some((assignee) => !assignee)) throw notFound();
@@ -796,8 +810,94 @@ export function createDemoAdapter(): DemoAdapter {
         if (patch.priority !== undefined) updated.priority = patch.priority;
         if (patch.dueDate === null) delete updated.dueDate;
         else if (patch.dueDate !== undefined) updated.dueDate = patch.dueDate;
+        if (review) updated.review = review;
+        if (
+          review?.state === "invalidated" &&
+          existing.review?.state !== "invalidated" &&
+          ["review", "done"].includes(existing.status) &&
+          !patch.status
+        )
+          updated.status = "working";
         itemStore.set(existing.id, updated);
+        appendDemoHistory(historyStore, id, {
+          id: context.newId(),
+          type: "item_updated",
+          reasonCode: "item_updated",
+          summary: patch.status
+            ? `Task moved to ${patch.status}`
+            : "Task details updated",
+          actor: demoUserForId(context.access.userId),
+          itemVersion: updated.version,
+          occurredAt: context.now.toISOString(),
+          metadata: {
+            ...(review ? { review } : {}),
+            fields: Object.keys(patch),
+          },
+        });
         return updated;
+      });
+    },
+
+    async reviewTask(context, id, expectedVersion, input) {
+      return withIdempotency(idempotencyStore, context, () => {
+        const item = requireDemoItem(itemStore, context.access, id);
+        if (item.version !== expectedVersion)
+          throw versionConflict(item.version);
+        if (
+          input.action === "cancel" &&
+          item.review?.requestedBy.id !== context.access.userId &&
+          !item.assignees.some(
+            (person) => person.id === context.access.userId,
+          ) &&
+          !["owner", "admin"].includes(context.access.role)
+        )
+          throw new DataPlaneError(
+            "constraint_conflict",
+            "Only the requester, a task owner or a manager can cancel this review.",
+          );
+        const actor = demoUserForId(context.access.userId) ?? {
+          id: context.access.userId,
+          name: "Demo reviewer",
+        };
+        try {
+          const result = applyTaskReview(item, input, {
+            actor,
+            now: context.now.toISOString(),
+            newId: context.newId(),
+            reviewers:
+              input.action === "request"
+                ? input.reviewerIds.flatMap((id) => {
+                    const person = demoUserForId(id);
+                    return person ? [person] : [];
+                  })
+                : [],
+          });
+          const updated = {
+            ...item,
+            ...result,
+            version: item.version + 1,
+            updatedAt: context.now.toISOString(),
+          };
+          itemStore.set(id, updated);
+          appendDemoHistory(historyStore, id, {
+            id: context.newId(),
+            type: "item_updated",
+            reasonCode: `review_${input.action}`,
+            summary: `Review round ${result.review.round}: ${input.action === "respond" ? input.decision : input.action} — ${input.note}`,
+            actor,
+            occurredAt: context.now.toISOString(),
+            itemVersion: updated.version,
+            metadata: { review: result.review },
+          });
+          return updated;
+        } catch (error) {
+          throw new DataPlaneError(
+            "constraint_conflict",
+            error instanceof Error
+              ? error.message
+              : "Review could not be saved.",
+          );
+        }
       });
     },
 
@@ -1331,6 +1431,19 @@ function transitionDemoItem(
     const item = requireDemoItem(itemStore, context.access, id);
     if (item.version !== expectedVersion) throw versionConflict(item.version);
     if (kind !== "resolve" && item.type !== kind) throw notFound();
+    if (kind === "resolve")
+      try {
+        reviewForTaskChange(
+          item,
+          { status: "done" },
+          context.now.toISOString(),
+        );
+      } catch (error) {
+        throw new DataPlaneError(
+          "constraint_conflict",
+          (error as Error).message,
+        );
+      }
     const now = context.now.toISOString();
     const updated: WorkItemDto = {
       ...item,

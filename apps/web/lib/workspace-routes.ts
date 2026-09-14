@@ -58,3 +58,7 @@ export function teamHref(
   const path = `${workspaceHref(workspaceSlug, "teams")}/${encodeURIComponent(teamId)}`;
   return section ? `${path}#${encodeURIComponent(section)}` : path;
 }
+
+export function taskHref(workspaceSlug: string, itemId: string) {
+  return `${workspaceHref(workspaceSlug)}/tasks/${encodeURIComponent(itemId)}`;
+}

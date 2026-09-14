@@ -2229,3 +2229,162 @@ describe("migration upgrade", () => {
     }
   }, 120_000);
 });
+
+describe("task review persistence", () => {
+  it("persists reviewer rounds atomically, checks access, rejects stale saves and guards every completion path", async () => {
+    const tenant = await seedTenant("task-review");
+    const foreign = await seedTenant("task-review-foreign");
+    const reviewerId = `reviewer-${tenant.userId}`;
+    const inaccessibleId = `private-${tenant.userId}`;
+    await connection.db
+      .insert(users)
+      .values(
+        [reviewerId, inaccessibleId].map((id) => ({
+          id,
+          name: id,
+          email: `${id}@example.test`,
+        })),
+      );
+    await connection.db
+      .insert(memberships)
+      .values(
+        [reviewerId, inaccessibleId].map((userId) => ({
+          userId,
+          organizationId: tenant.organizationId,
+          role: "member" as const,
+        })),
+      );
+    await connection.db
+      .insert(workspaceMembers)
+      .values({
+        organizationId: tenant.organizationId,
+        workspaceId: tenant.workspaceA,
+        userId: reviewerId,
+      });
+    const repository = createPostgresRepositories(connection.db);
+    const repo = repository.forOrganization(tenant.scope);
+    const created = await repo.workItems.create(
+      createInput(tenant, "Review deliverable"),
+      mutation(undefined, "/items/create"),
+    );
+    const id = created.value.id;
+    const request = {
+      reviewCommand: {
+        action: "request" as const,
+        reviewerIds: [tenant.userId, reviewerId],
+        note: "Verify the results",
+      },
+    };
+    for (const invalid of [inaccessibleId, foreign.userId])
+      await expect(
+        repo.workItems.update(
+          id,
+          0,
+          {
+            reviewCommand: { ...request.reviewCommand, reviewerIds: [invalid] },
+          },
+          mutation(undefined, "/items/review"),
+        ),
+      ).rejects.toBeDefined();
+    expect((await repo.workItems.get(id)).version).toBe(0);
+    const requestKey = crypto.randomUUID();
+    const submitted = await repo.workItems.update(
+      id,
+      0,
+      request,
+      mutation(requestKey, "/items/review"),
+    );
+    const replay = await repo.workItems.update(
+      id,
+      0,
+      request,
+      mutation(requestKey, "/items/review"),
+    );
+    expect(replay.replayed).toBe(true);
+    expect(replay.value.review).toEqual(submitted.value.review);
+    expect((await repo.workItems.get(id)).status).toBe("review");
+    await expect(
+      repo.workItems.update(
+        id,
+        0,
+        request,
+        mutation(undefined, "/items/review"),
+      ),
+    ).rejects.toMatchObject({ code: "version_conflict" });
+    await expect(
+      repo.workItems.update(
+        id,
+        1,
+        { status: "done" },
+        mutation(undefined, "/items/update"),
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+    await expect(
+      repo.workItems.transition(
+        id,
+        1,
+        { status: "done", evidence: { summary: "Delivered" } },
+        mutation(undefined, "/items/resolve"),
+      ),
+    ).rejects.toMatchObject({ code: "constraint_conflict" });
+    const respond = {
+      reviewCommand: {
+        action: "respond" as const,
+        roundId: submitted.value.review!.id,
+        decision: "approved" as const,
+        note: "Verified",
+      },
+    };
+    const first = await repo.workItems.update(
+      id,
+      1,
+      respond,
+      mutation(undefined, "/items/review"),
+    );
+    expect(first.value.review?.state).toBe("pending");
+    const reviewer = repository.forOrganization(
+      createOrganizationScope({
+        ...tenant.scope,
+        userId: reviewerId,
+        requestId: crypto.randomUUID(),
+      }),
+    );
+    const approved = await reviewer.workItems.update(
+      id,
+      2,
+      respond,
+      mutation(undefined, "/items/review"),
+    );
+    expect(approved.value.review?.state).toBe("approved");
+    const done = await repo.workItems.transition(
+      id,
+      3,
+      { status: "done", evidence: { summary: "All outcomes delivered" } },
+      mutation(undefined, "/items/resolve"),
+    );
+    expect(done.value.item.status).toBe("done");
+    const reopened = await repo.workItems.update(
+      id,
+      4,
+      { status: "working" },
+      mutation(undefined, "/items/update"),
+    );
+    expect(reopened.value.review?.state).toBe("invalidated");
+    const second = await repo.workItems.update(
+      id,
+      5,
+      request,
+      mutation(undefined, "/items/review"),
+    );
+    expect(second.value.review?.round).toBe(2);
+    const history = await repo.workItems.history(id);
+    expect(
+      history.some(
+        (event) =>
+          event.snapshot.review?.round === 1 &&
+          event.snapshot.review.state === "approved",
+      ),
+    ).toBe(true);
+    expect(history.at(-1)?.metadata.review).toEqual(second.value.review);
+  });
+});

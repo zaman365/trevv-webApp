@@ -2,6 +2,12 @@ import {
   createReportPlanRepositories,
   type ReportPlanRepositories,
 } from "./report-plan-repositories.js";
+import {
+  applyTaskReview,
+  reviewForTaskChange,
+  type TaskReview,
+  type TaskReviewCommand,
+} from "@founderhq/core";
 import type { BoardPlanning, WorkItemPlanning } from "@founderhq/core";
 import { createHash } from "node:crypto";
 import {
@@ -148,6 +154,7 @@ export interface MutationResult<T> {
 }
 
 export interface WorkItemProjection {
+  review?: TaskReview;
   planning?: WorkItemPlanning;
   id: string;
   workspaceId: string;
@@ -330,6 +337,7 @@ export interface ConvertInboxToWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  reviewCommand?: TaskReviewCommand;
   planning?: WorkItemPlanning;
   title?: string;
   description?: string;
@@ -6101,6 +6109,9 @@ async function hydrateWorkItems(
       ...(isRecord(typeData.planning)
         ? { planning: typeData.planning as WorkItemPlanning }
         : {}),
+      ...(isRecord(typeData.review)
+        ? { review: typeData.review as unknown as TaskReview }
+        : {}),
       version: item.version,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
@@ -6774,6 +6785,79 @@ async function updateWorkItem(
         ? existing.typeData
         : {};
       const typeData = { ...existingTypeData };
+      const current = await getScopedWorkItem(
+        transaction,
+        scope.organizationId,
+        id,
+      );
+      if (current.version !== expectedVersion)
+        throw versionConflict(current.version);
+      let reviewStatus: WorkItemProjection["status"] | undefined;
+      let reviewSummary: string | undefined;
+      try {
+        if (input.reviewCommand) {
+          const actor = await resolveSession(transaction, scope);
+          if (!actor.workspaceIds.includes(current.workspaceId))
+            throw notFound();
+          const command = input.reviewCommand;
+          if (
+            command.action === "cancel" &&
+            current.review?.requestedBy.id !== scope.userId &&
+            !current.assigneeIds.includes(scope.userId) &&
+            !actor.managedWorkspaceIds.includes(current.workspaceId)
+          )
+            throw new Error(
+              "Only the requester, a task owner or a workspace manager can cancel this review.",
+            );
+          const reviewers: Array<{ id: string; name: string }> = [];
+          if (command.action === "request")
+            for (const userId of command.reviewerIds) {
+              const member = await resolveSession(transaction, {
+                ...scope,
+                userId,
+              });
+              if (!member.workspaceIds.includes(current.workspaceId))
+                throw new Error(
+                  "Every reviewer must have access to this workspace.",
+                );
+              reviewers.push({ id: member.user.id, name: member.user.name });
+            }
+          const result = applyTaskReview(current, command, {
+            actor: { id: actor.user.id, name: actor.user.name },
+            now: now.toISOString(),
+            newId: crypto.randomUUID(),
+            reviewers,
+          });
+          typeData.review = result.review;
+          reviewStatus = result.status;
+          reviewSummary =
+            command.action === "request"
+              ? `Review round ${result.review.round} sent to ${result.review.reviewers.map((person) => person.name).join(", ")}`
+              : command.action === "cancel"
+                ? "Review cancelled"
+                : command.decision === "approved"
+                  ? "Review approved"
+                  : "Changes requested";
+        } else {
+          const review = reviewForTaskChange(current, input, now.toISOString());
+          if (review) typeData.review = review;
+          if (
+            review?.state === "invalidated" &&
+            current.review?.state !== "invalidated" &&
+            ["review", "done"].includes(current.status) &&
+            !input.status
+          )
+            reviewStatus = "working";
+        }
+      } catch (error) {
+        if (error instanceof RepositoryError) throw error;
+        throw new RepositoryError(
+          "constraint_conflict",
+          error instanceof Error
+            ? error.message
+            : "Review could not be updated.",
+        );
+      }
       if (input.planning !== undefined) {
         await validateItemPlanning(
           transaction,
@@ -6804,9 +6888,12 @@ async function updateWorkItem(
       if (input.description !== undefined)
         update.description = input.description;
       if (input.status !== undefined) update.status = input.status;
+      if (reviewStatus) update.status = reviewStatus;
       if (input.priority !== undefined) update.priority = input.priority;
       if (input.dueDate !== undefined) update.dueDate = input.dueDate ?? null;
       if (
+        current.review !== undefined ||
+        input.reviewCommand !== undefined ||
         input.planning !== undefined ||
         input.approvalState !== undefined ||
         input.decisionState !== undefined
@@ -6865,7 +6952,7 @@ async function updateWorkItem(
           previousVersion: expectedVersion,
           version: expectedVersion + 1,
           fields: Object.keys(input).sort(),
-          status: input.status ?? existing.status,
+          status: reviewStatus ?? input.status ?? existing.status,
           decisionState:
             input.decisionState === undefined ? null : input.decisionState,
           approvalState:
@@ -6883,8 +6970,12 @@ async function updateWorkItem(
       await appendWorkItemHistory(transaction, scope, {
         item,
         type: history.type,
-        summary: input.rationale?.trim() || history.summary,
-        reasonCode: input.reasonCode ?? history.reasonCode,
+        summary: reviewSummary
+          ? `${reviewSummary}: ${input.reviewCommand!.note}`
+          : input.rationale?.trim() || history.summary,
+        reasonCode: input.reviewCommand
+          ? `review_${input.reviewCommand.action}`
+          : (input.reasonCode ?? history.reasonCode),
         sourceType: "work_item",
         sourceId: id,
         sourceOccurredAt: now,
@@ -6892,6 +6983,29 @@ async function updateWorkItem(
         metadata: {
           fields: Object.keys(input).sort(),
           previousVersion: expectedVersion,
+          ...(item.review ? { review: item.review } : {}),
+          changes: (
+            ["title", "description", "status", "priority", "dueDate"] as const
+          ).flatMap((field) =>
+            current[field] !== item[field]
+              ? [
+                  {
+                    field,
+                    before: current[field] ?? "",
+                    after: item[field] ?? "",
+                  },
+                ]
+              : [],
+          ),
+          ...(current.assignees.map((person) => person.id).join(",") !==
+          item.assignees.map((person) => person.id).join(",")
+            ? {
+                assignment: {
+                  before: current.assignees.map((person) => person.name),
+                  after: item.assignees.map((person) => person.name),
+                },
+              }
+            : {}),
         },
         now,
       });

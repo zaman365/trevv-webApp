@@ -1,4 +1,8 @@
 import {
+  taskReviewCommandSchema,
+  type TaskReviewCommandInput,
+} from "@founderhq/api-contract";
+import {
   appSyncStatusSchema,
   appSyncSummarySchema,
   approvalTransitionSchema,
@@ -1039,6 +1043,23 @@ function createApiMethods({
       workItemSchema.parse(
         (await request(`/items/${encodeURIComponent(id)}`)).body,
       ),
+
+    reviewTask: async (
+      id: string,
+      input: TaskReviewCommandInput,
+      version: number,
+      idempotencyKey: string,
+    ): Promise<VersionedMutationResponse<WorkItemDto>> => {
+      const response = await request(
+        `/items/${encodeURIComponent(id)}/review`,
+        {
+          method: "POST",
+          headers: mutationHeaders(version, idempotencyKey),
+          body: JSON.stringify(taskReviewCommandSchema.parse(input)),
+        },
+      );
+      return parseVersionedMutation(response, workItemSchema);
+    },
 
     itemHistory: async (id: string): Promise<WorkItemHistoryEntryDto[]> =>
       workItemHistoryEntrySchema
