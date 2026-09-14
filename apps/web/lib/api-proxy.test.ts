@@ -7,6 +7,37 @@ afterEach(() => {
 });
 
 describe("browser API proxy boundary", () => {
+  it.each([
+    ["GET", "profile"],
+    ["POST", "profile"],
+    ["POST", "change-email"],
+    ["POST", "cancel-email-change"],
+  ])(
+    "forwards only the active customer session for %s %s",
+    async (method, operation) => {
+      vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
+      vi.stubEnv("AUTH_COOKIE_PREFIX", "trevv_alpha");
+      const upstream = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+      vi.stubGlobal("fetch", upstream);
+      await proxyApiRequest(
+        new Request(`https://trevv.test/api/auth/${operation}`, {
+          method,
+          headers: {
+            cookie:
+              "__Secure-trevv_alpha.session_token=active; trevv.session_token=old; __Secure-trevv_superadmin.session_token=admin; trevv.registration_invitation=invite; theme=dark",
+            "content-type": "application/json",
+          },
+          ...(method === "POST" ? { body: "{}" } : {}),
+        }),
+        ["auth", operation],
+      );
+      expect(
+        new Headers((upstream.mock.calls[0]?.[1] as RequestInit).headers).get(
+          "cookie",
+        ),
+      ).toBe("__Secure-trevv_alpha.session_token=active");
+    },
+  );
   it("returns only profile fields through the account route and keeps identity secrets hidden", async () => {
     vi.stubEnv("API_ORIGIN", "https://api.trevv.test");
     const profile = {

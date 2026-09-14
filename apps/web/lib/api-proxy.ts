@@ -1,4 +1,8 @@
-import { webApiOrigin, webRegistrationMode } from "./web-runtime-config";
+import {
+  webApiOrigin,
+  webRegistrationMode,
+  webSessionCookieNames,
+} from "./web-runtime-config";
 import { appendSetCookieHeaders } from "./response-cookies";
 import { webRequestId } from "./security-headers";
 import { readBoundedRequestBody } from "./bounded-request-body";
@@ -209,7 +213,19 @@ function restrictBrowserAuthCookies(
 
   const incoming = headers.get("cookie");
   headers.delete("cookie");
-  if (!incoming || segments.slice(1).join("/") !== "sign-up/email") return;
+  if (!incoming) return;
+  const operation = segments.slice(1).join("/");
+  if (["profile", "change-email", "cancel-email-change"].includes(operation)) {
+    const sessionNames = webSessionCookieNames();
+    const sessionCookies = incoming
+      .split(";")
+      .map((part) => part.trim())
+      .filter((part) => sessionNames.includes(part.slice(0, part.indexOf("="))))
+      .join("; ");
+    if (sessionCookies) headers.set("cookie", sessionCookies);
+    return;
+  }
+  if (operation !== "sign-up/email") return;
 
   const invitation = incoming
     .split(";")
