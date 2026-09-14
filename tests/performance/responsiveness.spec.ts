@@ -937,6 +937,25 @@ test("connection details are accessible in both themes and stay within a narrow 
   await expect(connection.locator("details")).not.toHaveAttribute("open");
 });
 
+test("the compact refresh icon checks for updates and preserves connection details", async ({
+  page,
+}) => {
+  const state = await connectionHarness(page);
+  const connection = page.getByRole("group", { name: "Workspace connection" });
+  const trigger = connection.locator("summary");
+  await expect(trigger).toHaveAccessibleName("Connection details: Up to date");
+  await expect(trigger).toHaveText("");
+  const checks = state.checks;
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => state.checks).toBeGreaterThan(checks);
+  await expect(connection.locator("details strong")).toHaveText("Up to date");
+  await expect(connection.getByText(/Last checked/)).toBeVisible();
+  await expect(
+    connection.getByRole("button", { name: "Refresh connection" }),
+  ).toBeEnabled();
+});
+
 test("standalone views retain one connection bar with details and direct retry", async ({
   page,
 }) => {

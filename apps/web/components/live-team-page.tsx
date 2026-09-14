@@ -335,7 +335,7 @@ export function LiveTeamPage({
     <WorkspaceFrame active="teams" workspaceSlug={workspaceSlug}>
       <main className={styles.page} data-testid="live-team-page">
         <nav className={styles.breadcrumb} aria-label="Breadcrumb">
-          <Link href={workspaceHref(workspaceSlug)}>{workspace.name}</Link>
+          <Link href={workspaceHref(workspaceSlug)}>Overview</Link>
           <ChevronRight size={13} aria-hidden="true" />
           <Link href={workspaceHref(workspaceSlug, "teams")}>Teams</Link>
           <ChevronRight size={13} aria-hidden="true" />

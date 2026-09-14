@@ -197,15 +197,10 @@ export function LiveTeamWorkflowContent({
         data-testid="live-teams"
       >
         <header
-          className={`${styles.pageHeader} ${styles.teamDirectoryHeader}`}
+          className={`${styles.pageHeader} ${styles.teamDirectoryHeader} compact-page-header`}
         >
           <div>
-            <p>{workspace.name} / Collaboration</p>
             <Heading>{heading}</Heading>
-            <span>
-              Bring people together, balance their work, and keep conversations
-              connected.
-            </span>
           </div>
           <div
             className={`${styles.headerActions} ${styles.teamHeaderActions}`}
@@ -233,15 +228,11 @@ export function LiveTeamWorkflowContent({
             {["owner", "admin"].includes(session.organization.role) ? (
               <Link
                 href={`/app/account/invitations?workspaceId=${encodeURIComponent(workspace.id)}`}
+                aria-label={`Invite people to ${workspace.name}`}
               >
-                Invite people to {workspace.name}
+                Invite people
               </Link>
             ) : null}
-            <small className={styles.syncStatus} aria-live="off">
-              {directory.isFetching && !directory.isLoading
-                ? "Checking for Team changes"
-                : "Team directory"}
-            </small>
           </div>
         </header>
 

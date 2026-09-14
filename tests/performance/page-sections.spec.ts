@@ -40,10 +40,83 @@ async function start(
   return { ...fixture, ...state };
 }
 
+for (const view of [
+  "page-ideas",
+  "page-attention",
+  "page-my-work",
+  "page-decisions",
+  "page-approvals",
+  "page-waiting",
+  "page-search",
+  "planning",
+  "teams",
+  "people",
+  "messages",
+  "portfolio",
+  "calendar",
+] as const) {
+  test(`${view} keeps its topic and actions in a compact page header`, async ({
+    page,
+  }) => {
+    const fixture = teamWorkspaceApi();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page, "", {
+      view,
+      styled: true,
+      api: async (route) => {
+        const url = new URL(route.request().url());
+        if (url.pathname.endsWith("/calendar")) {
+          await route.fulfill({
+            json: {
+              workspaceId: "workspace-one",
+              range: {
+                from: url.searchParams.get("from"),
+                to: url.searchParams.get("to"),
+              },
+              calendars: [],
+              events: [],
+              providerAvailability: [],
+            },
+          });
+          return true;
+        }
+        return fixture.api(route);
+      },
+    });
+    const header = page.locator("main > header.compact-page-header").first();
+    const heading = header.getByRole("heading", { level: 1 });
+    await expect(heading).toBeVisible();
+    // Keep workspace labels and descriptions out of the topic row without
+    // losing the page's actions or local navigation.
+    await expect(header.locator(":scope > div:first-child")).toHaveText(
+      await heading.innerText(),
+    );
+    expect((await header.boundingBox())!.height).toBeLessThanOrEqual(64);
+    for (const action of await header.getByRole("button").all())
+      await expect(action).toBeInViewport();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(heading).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
 test("Portfolio retains workspace creation and adds searchable local sections", async ({
   page,
 }) => {
   await start(page, "portfolio");
+  const header = page.locator("main > header.compact-page-header");
+  await expect(header.getByRole("heading", { level: 1 })).toHaveCSS(
+    "font-size",
+    "22px",
+  );
+  await expect(
+    header.getByRole("button", { name: "Create Workspace", exact: true }),
+  ).toBeVisible();
+  await expect(header).not.toContainText("Fictional TREVV Preview Org");
   const tabs = page.getByRole("tablist", { name: "Portfolio sections" });
   await expect(tabs.getByRole("tab")).toHaveCount(12);
   await expect(page.getByTestId("workspace-card-launch")).toBeVisible();

@@ -89,7 +89,6 @@ export function ReportPlanExperience({
 function ReportPlanWorkspace({
   workspaceId,
   workspaceSlug,
-  workspaceName,
 }: {
   workspaceId: string;
   workspaceSlug: string;
@@ -211,14 +210,9 @@ function ReportPlanWorkspace({
   }
   return (
     <main className={styles.main}>
-      <header className={styles.hero}>
+      <header className={`${styles.hero} compact-page-header`}>
         <div>
-          <p className={styles.eyebrow}>{workspaceName} / Team updates</p>
           <h1>Report and plan</h1>
-          <p>
-            Make progress visible. Surface what’s stuck. Set out what comes
-            next.
-          </p>
         </div>
         {canWrite && (
           <div className={styles.actions}>

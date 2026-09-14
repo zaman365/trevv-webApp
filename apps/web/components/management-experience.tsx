@@ -1791,7 +1791,6 @@ function NotificationsMain() {
 }
 
 function PageHeader({
-  eyebrow,
   title,
   subtitle,
   action,
@@ -1804,14 +1803,12 @@ function PageHeader({
   hintId?: string;
 }) {
   return (
-    <header className="trevv-page-header">
+    <header className="trevv-page-header compact-page-header">
       <div>
-        <p>{eyebrow}</p>
-        <h1 className="page-title-with-hint">
+        <h1 className="page-title-with-hint" title={subtitle}>
           {title}
           {hintId && <Hint resourceId={hintId} />}
         </h1>
-        <span>{subtitle}</span>
       </div>
       {action}
     </header>

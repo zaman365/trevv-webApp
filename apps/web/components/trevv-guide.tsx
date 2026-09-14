@@ -107,13 +107,9 @@ export function TrevvGuide({ workspaceSlug }: { workspaceSlug?: string }) {
       {...(workspaceSlug ? { workspaceSlug } : {})}
     >
       <main className={styles.main}>
-        <header className={styles.hero}>
+        <header className={`${styles.hero} compact-page-header`}>
           <div>
-            <p>Your operating guide</p>
             <h1>Run your work with TREVV</h1>
-            <span>
-              From the first teammate to a repeatable daily and weekly routine.
-            </span>
           </div>
         </header>
         <nav aria-label="Guide steps" className={guideStyles.guideNav}>

@@ -3,7 +3,7 @@ import { setup } from "../fixtures/live-workflow-browser";
 import { teamWorkspaceApi } from "../fixtures/team-workspace-api";
 import { board, item } from "../../apps/web/test-fixtures/live-workflow-data";
 import { issueSignals } from "../../apps/web/test-fixtures/attention-workspace-data";
-import { dashboardSections } from "../../apps/web/lib/dashboard-sections";
+import { dashboardNavigationSections } from "../../apps/web/lib/dashboard-sections";
 
 async function dashboard(page: Page) {
   const api = teamWorkspaceApi();
@@ -41,13 +41,127 @@ async function dashboard(page: Page) {
   return { ...api, ...state };
 }
 
+test("summary cards align within the available page width and keep long lists accessible", async ({
+  page,
+}, testInfo) => {
+  const api = teamWorkspaceApi();
+  api.state.boards[0]!.name = board.name;
+  for (let index = 0; index < 6; index++) {
+    api.state.boards.push({
+      ...board,
+      id: `extra-plan-${index}`,
+      name: `Upcoming delivery plan ${index + 1}`,
+    });
+  }
+  await setup(page, "", {
+    dashboard: true,
+    styled: true,
+    api: api.api,
+    records: Array.from({ length: 8 }, (_, index) => ({
+      ...item,
+      id: `work-${index}`,
+      assignees: [{ id: `person-${index}`, name: `Teammate ${index + 1}` }],
+    })),
+  });
+  const status = page.getByRole("region", {
+    name: "Work by status",
+    exact: true,
+  });
+  const deadlines = page.getByRole("region", {
+    name: "Upcoming deadlines",
+    exact: true,
+  });
+  const projects = page.getByRole("region", {
+    name: "Project progress",
+    exact: true,
+  });
+  const workload = page.getByRole("region", {
+    name: "Workload by person",
+    exact: true,
+  });
+  for (const size of [
+    { width: 1440, sidebar: 248, columns: 2 },
+    { width: 1100, sidebar: 248, columns: 2 },
+    { width: 1024, sidebar: 248, columns: 2 },
+    { width: 1000, sidebar: 248, columns: 1 },
+    { width: 768, sidebar: 0, columns: 2 },
+    { width: 740, sidebar: 0, columns: 1 },
+    { width: 390, sidebar: 0, columns: 1 },
+  ]) {
+    await page.setViewportSize({ width: size.width, height: 900 });
+    await page.locator("main").evaluate((element, margin) => {
+      element.style.marginLeft = `${margin}px`;
+      element.style.width = `calc(100% - ${margin}px)`;
+    }, size.sidebar);
+    const [a, b, c, d] = await Promise.all([
+      status.boundingBox(),
+      deadlines.boundingBox(),
+      projects.boundingBox(),
+      workload.boundingBox(),
+    ]);
+    if (size.columns === 2) {
+      expect(a!.y).toBe(b!.y);
+      expect(a!.height).toBe(b!.height);
+      expect(c!.y).toBe(d!.y);
+      expect(c!.height).toBe(d!.height);
+      expect(a!.height).toBeLessThan(350);
+      expect(c!.height).toBeLessThan(400);
+    } else {
+      expect(b!.y).toBeGreaterThan(a!.y + a!.height);
+      expect(
+        await projects
+          .getByRole("region", { name: "Project progress list" })
+          .evaluate((el) => el.scrollHeight <= el.clientHeight + 1),
+      ).toBe(true);
+    }
+    const overflow = await page.evaluate(() =>
+      [...document.querySelectorAll("main *")]
+        .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
+        .slice(0, 5)
+        .map((el) => ({
+          tag: el.tagName,
+          className: el.className,
+          right: el.getBoundingClientRect().right,
+        })),
+    );
+    expect(overflow, `Viewport ${size.width}`).toEqual([]);
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator("main").evaluate((el) => {
+    el.style.marginLeft = "248px";
+    el.style.width = "calc(100% - 248px)";
+  });
+  const plans = projects.getByRole("region", { name: "Project progress list" });
+  await expect(plans.getByRole("link")).toHaveCount(6);
+  await projects.getByRole("button", { name: "Show all 9 plans" }).click();
+  await expect(plans.getByRole("link")).toHaveCount(9);
+  await plans.getByRole("link").last().focus();
+  expect(await plans.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await workload.getByRole("button", { name: "Show all 8 people" }).click();
+  const people = workload.getByRole("region", { name: "People workload list" });
+  await expect(people.getByRole("button")).toHaveCount(8);
+  await people.getByRole("button").last().focus();
+  expect(await people.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await status.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: testInfo.outputPath("balanced-dashboard.png"),
+  });
+  await people.getByRole("button").last().click();
+  await expect(page.locator("#dashboard-source-work")).toContainText(
+    "Teammate 8",
+  );
+});
+
 test("every top tab updates the dashboard in place and offers the correct full page", async ({
   page,
 }) => {
   await dashboard(page);
   const tabs = page.getByRole("tablist", { name: "Dashboard sections" });
-  await expect(tabs.getByRole("tab")).toHaveCount(11);
-  for (const section of dashboardSections) {
+  await expect(tabs.getByRole("tab")).toHaveCount(9);
+  await expect(
+    tabs.getByRole("tab", { name: /^(Messages|Inbox)$/ }),
+  ).toHaveCount(0);
+  for (const section of dashboardNavigationSections) {
     await tabs.getByRole("tab", { name: section.label, exact: true }).click();
     const panel = page.getByRole("tabpanel", {
       name: section.label,
@@ -60,7 +174,10 @@ test("every top tab updates the dashboard in place and offers the correct full p
         name: `Open ${section.title} full page`,
         exact: true,
       }),
-    ).toHaveAttribute("href", `/app/workspaces/launch/${section.view}`);
+    ).toHaveAttribute(
+      "href",
+      `/app/workspaces/launch/${section.view}${section.id === "planning" ? "?mode=sprints" : ""}`,
+    );
     await expect(
       tabs.getByRole("tab", { name: section.label, exact: true }),
     ).toHaveAttribute("aria-selected", "true");
@@ -68,17 +185,9 @@ test("every top tab updates the dashboard in place and offers the correct full p
     await expect(page.locator("main")).toHaveCount(1);
     if (section.id === "teams")
       await expect(panel.getByTestId("team-card-team-launch")).toBeVisible();
-    if (section.id === "messages")
-      await expect(
-        panel.getByRole("textbox", { name: "Message", exact: true }),
-      ).toBeEnabled();
     if (section.id === "planning")
       await expect(
-        panel.getByRole("region", { name: "Project planning", exact: true }),
-      ).toBeVisible();
-    if (section.id === "inbox")
-      await expect(
-        panel.getByRole("tab", { name: /Captured work/ }),
+        panel.getByRole("region", { name: "Sprint planning", exact: true }),
       ).toBeVisible();
     if (section.id === "attention")
       await expect(
@@ -121,7 +230,7 @@ test("Summary and My Work keep independent filters and existing inline updates",
   expect(state.transitions[0]).toMatchObject({ body: { status: "working" } });
 });
 
-test("team and project management remain available inside dashboard panels", async ({
+test("team and sprint management remain available inside dashboard panels", async ({
   page,
 }) => {
   await dashboard(page);
@@ -139,28 +248,26 @@ test("team and project management remain available inside dashboard panels", asy
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
-  await tabs.getByRole("tab", { name: "Projects", exact: true }).click();
+  await tabs.getByRole("tab", { name: "Sprints", exact: true }).click();
   await expect(
-    page.getByRole("region", { name: "Project planning", exact: true }),
+    page.getByRole("region", { name: "Sprint planning", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "New project / plan", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Plan sprint", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
 });
 
-test("Messages keep a draft across tabs and send within the dashboard", async ({
+test("Messages keep drafts and sending on their own page after leaving Dashboard navigation", async ({
   page,
 }) => {
-  const api = await dashboard(page);
-  const tabs = page.getByRole("tablist", { name: "Dashboard sections" });
-  await tabs.getByRole("tab", { name: "Messages", exact: true }).click();
-  const panel = page.getByRole("tabpanel", { name: "Messages", exact: true });
+  const api = teamWorkspaceApi();
+  await setup(page, "", { view: "messages", api: api.api });
+  const tabs = page.getByRole("tablist", { name: "Messages sections" });
+  const panel = page.getByTestId("live-messages");
   await panel.getByRole("button", { name: /Launch team/ }).click();
   const composer = panel.getByRole("textbox", { name: "Message" });
   await composer.fill("Keep the launch discussion here");
-  await tabs.getByRole("tab", { name: "My Work", exact: true }).click();
+  await tabs.getByRole("tab", { name: "People", exact: true }).click();
   await tabs.getByRole("tab", { name: "Messages", exact: true }).click();
   await expect(composer).toHaveValue("Keep the launch discussion here");
   await panel.getByRole("button", { name: "Send", exact: true }).click();
@@ -283,7 +390,7 @@ for (const theme of ["light", "dark"]) {
     await tabs.getByRole("tab", { name: "Summary", exact: true }).focus();
     await page.keyboard.press("ArrowRight");
     await expect(
-      tabs.getByRole("tab", { name: "My Work", exact: true }),
+      tabs.getByRole("tab", { name: "Attention", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("End");
     await expect(

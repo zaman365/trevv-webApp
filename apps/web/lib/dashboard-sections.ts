@@ -7,6 +7,14 @@ export const dashboardSections = [
     view: "dashboard",
   },
   {
+    id: "attention",
+    label: "Attention",
+    title: "Attention",
+    description:
+      "Understand issues and choose the next action to resolve them.",
+    view: "attention",
+  },
+  {
     id: "my-work",
     label: "My Work",
     title: "My Work",
@@ -50,14 +58,6 @@ export const dashboardSections = [
     view: "inbox",
   },
   {
-    id: "attention",
-    label: "Attention",
-    title: "Attention",
-    description:
-      "Understand issues and choose the next action to resolve them.",
-    view: "attention",
-  },
-  {
     id: "decisions",
     label: "Decisions",
     title: "Decisions",
@@ -84,10 +84,27 @@ export const dashboardSections = [
 
 export type DashboardSection = (typeof dashboardSections)[number]["id"];
 
+// Keep the shared Messages/Inbox metadata for other pages, while the Dashboard
+// navigation focuses on work, people, and decisions.
+export const dashboardNavigationSections = dashboardSections
+  .filter((section) => section.id !== "messages" && section.id !== "inbox")
+  .map((section) =>
+    section.id === "planning"
+      ? {
+          ...section,
+          label: "Sprints" as const,
+          title: "Sprints",
+          description:
+            "Plan a sprint, follow its goal and move the team’s work forward.",
+        }
+      : section,
+  );
+
 export function dashboardSectionFromSearch(search: string): DashboardSection {
   const value = new URLSearchParams(search).get("section");
   return (
-    dashboardSections.find((section) => section.id === value)?.id ?? "summary"
+    dashboardNavigationSections.find((section) => section.id === value)?.id ??
+    "summary"
   );
 }
 

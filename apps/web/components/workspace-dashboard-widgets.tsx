@@ -179,7 +179,7 @@ export function WorkspaceDashboardWidgets({
       </section>
       <div className={styles.chartGrid}>
         <section
-          className={styles.widget}
+          className={`${styles.widget} ${styles.statusWidget}`}
           aria-labelledby="dashboard-status-title"
         >
           <header>
@@ -204,7 +204,7 @@ export function WorkspaceDashboardWidgets({
                 <strong>
                   {metrics.total ? `${metrics.completion}%` : "—"}
                 </strong>
-                <span>{metrics.total ? "completed" : "No work yet"}</span>
+                {!metrics.total && <span>No work yet</span>}
               </div>
             </div>
             <div className={styles.legend}>
@@ -326,7 +326,12 @@ export function WorkspaceDashboardWidgets({
             </Link>
           </header>
           {projectRows.length ? (
-            <div className={styles.projectList}>
+            <div
+              className={styles.projectList}
+              role="region"
+              aria-label="Project progress list"
+              tabIndex={0}
+            >
               {(allPlans ? projectRows : projectRows.slice(0, 6)).map((row) => (
                 <Link
                   className={styles.project}
@@ -409,7 +414,7 @@ export function WorkspaceDashboardWidgets({
           )}
         </section>
         <section
-          className={styles.widget}
+          className={`${styles.widget} ${styles.workloadWidget}`}
           aria-labelledby="dashboard-workload-title"
         >
           <header>
@@ -420,7 +425,12 @@ export function WorkspaceDashboardWidgets({
             <Users size={20} aria-hidden="true" />
           </header>
           {metrics.owners.length ? (
-            <div className={styles.ownerList}>
+            <div
+              className={styles.ownerList}
+              role="region"
+              aria-label="People workload list"
+              tabIndex={0}
+            >
               {(allPeople ? metrics.owners : metrics.owners.slice(0, 6)).map(
                 (owner) => (
                   <button

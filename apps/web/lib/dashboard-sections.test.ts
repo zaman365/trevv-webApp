@@ -3,6 +3,7 @@ import {
   dashboardSectionFromSearch,
   dashboardSectionUrl,
   dashboardSections,
+  dashboardNavigationSections,
 } from "./dashboard-sections";
 import { isWorkspaceView } from "./workspace-routes";
 
@@ -10,7 +11,24 @@ describe("dashboard sections", () => {
   it("restores known sections and safely defaults unsupported links", () => {
     expect(dashboardSectionFromSearch("?section=teams")).toBe("teams");
     expect(dashboardSectionFromSearch("?section=settings")).toBe("summary");
+    expect(dashboardSectionFromSearch("?section=messages")).toBe("summary");
+    expect(dashboardSectionFromSearch("?section=inbox")).toBe("summary");
     expect(dashboardSectionFromSearch("")).toBe("summary");
+  });
+  it("removes communication tabs only from Dashboard navigation", () => {
+    expect(dashboardNavigationSections.map(({ id }) => id)).toEqual([
+      "summary",
+      "attention",
+      "my-work",
+      "planning",
+      "ideas",
+      "teams",
+      "decisions",
+      "approvals",
+      "waiting",
+    ]);
+    expect(dashboardSections.find(({ id }) => id === "messages")).toBeDefined();
+    expect(dashboardSections.find(({ id }) => id === "inbox")).toBeDefined();
   });
   it("changes only the section and old detail hash, keeping workspace and other parameters", () => {
     expect(

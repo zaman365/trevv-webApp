@@ -1,0 +1,202 @@
+.root {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.root p {
+  margin: 0;
+}
+.toolbar,
+.actions,
+.cardTop,
+.progressLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.actions {
+  justify-content: flex-start;
+  font-size: 0.8rem;
+}
+.actions a,
+.actions button {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.actions button,
+.filters button,
+.empty button {
+  min-height: 36px;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 9px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+}
+.actions button:not(:global(.primary-button)),
+.empty button {
+  background: var(--surface, #fff);
+  color: var(--fh-ink, #182135);
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0.25rem;
+  gap: 0.25rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+.filters button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary, #5f687c);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.filters button[aria-pressed="true"] {
+  background: var(--fh-primary-soft, #eeecff);
+  color: var(--fh-primary, #6258dc);
+  border-color: var(--fh-primary, #6258dc);
+}
+.filters span {
+  margin-left: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.teamFilter {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  max-width: 260px;
+}
+.teamFilter select {
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #dfe3ec);
+  background: var(--surface, #fff);
+  color: inherit;
+  min-width: 0;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 1rem;
+}
+.card,
+.detail,
+.empty {
+  padding: 1.25rem;
+  border: 1px solid var(--border, #dfe3ec);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  min-width: 0;
+}
+.card {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+.card[data-selected="true"] {
+  border-color: var(--fh-primary, #6258dc);
+}
+.card h3,
+.detail h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+}
+.card h3 button {
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.card h3 button:hover {
+  color: var(--fh-primary, #6258dc);
+}
+.card button:focus-visible,
+.root a:focus-visible {
+  outline: 2px solid var(--fh-primary, #6258dc);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.cardTop,
+.card small,
+.dates,
+.progressLabel,
+.detail > header small {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #5f687c);
+}
+.badge {
+  background: var(--fh-surface-subtle, #f4f5fa);
+  border-radius: 20px;
+  padding: 0.3rem 0.6rem;
+  font-weight: 600;
+}
+.badge[data-state="active"] {
+  color: var(--fh-primary, #6258dc);
+  background: var(--fh-primary-soft, #eeecff);
+}
+.goal {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #5f687c);
+}
+.card progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--fh-primary, #6258dc);
+}
+.blocked {
+  color: var(--fh-danger, #b62a49);
+  font-size: 0.8rem;
+}
+.detail,
+.empty {
+  display: grid;
+  gap: 1rem;
+}
+.empty button {
+  justify-self: start;
+}
+@media (max-width: 600px) {
+  .actions,
+  .toolbar {
+    align-items: flex-start;
+  }
+  .card,
+  .detail,
+  .empty {
+    padding: 1rem;
+  }
+  .filters button,
+  .actions button {
+    min-height: 44px;
+  }
+}
+
+.card progress {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--fh-border);
+}
+.card progress::-webkit-progress-bar {
+  background: var(--fh-border);
+}
+.card progress::-webkit-progress-value {
+  background: var(--fh-primary);
+}
+.card progress::-moz-progress-bar {
+  background: var(--fh-primary);
+}

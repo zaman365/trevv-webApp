@@ -18,6 +18,11 @@ const Projects = lazy(() =>
     default: m.ProjectPlanningContent,
   })),
 );
+const Sprints = lazy(() =>
+  import("./live-sprint-planning").then((m) => ({
+    default: m.SprintPlanningContent,
+  })),
+);
 const Teams = lazy(() =>
   import("./live-team-workflow").then((m) => ({
     default: m.LiveTeamWorkflowContent,
@@ -46,10 +51,12 @@ export function DashboardSectionContent({
   section,
   workspaceId,
   workspaceSlug,
+  sprintFocus = false,
 }: {
   section: Exclude<DashboardSection, "summary">;
   workspaceId: string;
   workspaceSlug: string;
+  sprintFocus?: boolean;
 }) {
   const data = useLiveAppRecords();
   const items = data.items.filter((item) => item.workspaceId === workspaceId);
@@ -74,7 +81,9 @@ export function DashboardSectionContent({
         </>
       );
     case "planning":
-      return (
+      return sprintFocus ? (
+        <Sprints workspaceId={workspaceId} workspaceSlug={workspaceSlug} />
+      ) : (
         <Projects workspaceId={workspaceId} workspaceSlug={workspaceSlug} />
       );
     case "teams":

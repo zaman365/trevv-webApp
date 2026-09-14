@@ -227,15 +227,17 @@ export function LiveWorkspaceDashboard({
         className={`${styles.main} ${dashboardStyles.dashboard}`}
         data-testid="live-dashboard"
       >
-        <header className={dashboardStyles.hero}>
+        <header className={`${dashboardStyles.hero} compact-page-header`}>
           <div>
-            <p>{workspace.name} / Your workspace</p>
-            <h1>Dashboard</h1>
-            <p className={dashboardStyles.heroText}>
-              {workspace.priority ||
+            <h1
+              title={
+                workspace.priority ||
                 workspace.description ||
-                "A clear view of progress, people and the work that needs your attention."}
-            </p>
+                "Progress, people and work that needs your attention."
+              }
+            >
+              Dashboard
+            </h1>
           </div>
           <div className={dashboardStyles.heroActions}>
             <button
@@ -523,6 +525,7 @@ export function LiveWorkspaceDashboard({
               workspaceSlug={workspaceSlug}
             >
               <DashboardSectionContent
+                sprintFocus
                 section={id}
                 workspaceId={workspace.id}
                 workspaceSlug={workspaceSlug}

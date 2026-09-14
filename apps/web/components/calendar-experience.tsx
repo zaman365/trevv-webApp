@@ -202,11 +202,9 @@ export function CalendarExperience({
   return (
     <WorkspaceFrame active="calendar" workspaceSlug={workspaceSlug}>
       <main className={styles.page}>
-        <header className={styles.header}>
+        <header className={`${styles.header} compact-page-header`}>
           <div>
-            <span className={styles.eyebrow}>Workspace · {workspace.name}</span>
             <h1>Calendar</h1>
-            <p>One schedule for TREVV events, meetings, and due work.</p>
           </div>
           <div className={styles.headerActions}>
             <button type="button" onClick={() => setConnectionOpen(true)}>

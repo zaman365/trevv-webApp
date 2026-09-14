@@ -190,7 +190,8 @@
 }
 .widgets {
   display: grid;
-  gap: 20px;
+  gap: 16px;
+  container: dashboard-widgets / inline-size;
 }
 .dataNote {
   margin: 0;
@@ -200,13 +201,13 @@
 .kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 .kpi {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   text-align: left;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid var(--fh-border);
   border-radius: 14px;
   background: var(--fh-surface);
@@ -232,8 +233,8 @@
   font-weight: 650;
 }
 .kpiIcon {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 10px;
   display: grid;
   place-items: center;
@@ -253,7 +254,7 @@
   background: #21997c19;
 }
 .kpi > strong {
-  font-size: 36px;
+  font-size: 32px;
   line-height: 1;
   letter-spacing: -0.04em;
   font-weight: 700;
@@ -265,11 +266,13 @@
 .chartGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
+  gap: 16px;
+  align-items: stretch;
 }
 .widget {
-  padding: 23px;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
   border: 1px solid var(--fh-border);
   border-radius: 14px;
   background: var(--fh-surface);
@@ -280,7 +283,8 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
 }
 .widget h2 {
   font-size: 17px;
@@ -314,22 +318,23 @@
 }
 .statusBody {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(145px, 1fr);
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.15fr);
   align-items: center;
-  gap: 22px;
-  min-height: 185px;
+  gap: 12px;
+  min-height: 154px;
+  flex: 1;
 }
 .ring {
-  width: 168px;
-  height: 168px;
+  width: clamp(120px, 16cqi, 152px);
+  aspect-ratio: 1;
   border-radius: 50%;
   display: grid;
   place-items: center;
   margin: auto;
 }
 .ring > div {
-  width: 130px;
-  height: 130px;
+  width: 78%;
+  height: 78%;
   border-radius: 50%;
   display: flex;
   flex-direction: column;
@@ -339,7 +344,8 @@
   gap: 4px;
 }
 .ring strong {
-  font-size: 30px;
+  font-size: 28px;
+  line-height: 1;
   letter-spacing: -0.045em;
 }
 .ring span {
@@ -348,7 +354,7 @@
 }
 .legend {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 .legend button {
   width: 100%;
@@ -360,7 +366,7 @@
   background: transparent;
   color: var(--fh-ink);
   border-radius: 7px;
-  padding: 8px;
+  padding: 6px;
   font-size: 12px;
   cursor: pointer;
 }
@@ -387,16 +393,17 @@
   background: transparent;
   border: 0;
   padding: 0;
-  margin-top: 20px;
+  margin-top: 12px;
   cursor: pointer;
   text-align: left;
 }
 .deadlineChart {
-  height: 186px;
+  height: 136px;
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(var(--day-count), minmax(0, 1fr));
   gap: 4px;
-  padding-top: 24px;
+  padding-top: 16px;
 }
 .deadlineChart[data-dense="true"] {
   gap: 2px;
@@ -405,22 +412,22 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--fh-muted);
 }
 .barTrack {
-  height: 136px;
+  height: 96px;
   width: 100%;
   border-bottom: 1px solid var(--fh-border);
   background: repeating-linear-gradient(
     to top,
     transparent 0,
-    transparent 33px,
-    var(--fh-border) 34px,
-    transparent 35px
+    transparent 23px,
+    var(--fh-border) 24px,
+    transparent 25px
   );
   display: flex;
   align-items: flex-end;
@@ -448,7 +455,7 @@
   background: #4d41b1;
 }
 .deadlinePicker {
-  margin-top: 16px;
+  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -481,8 +488,28 @@
   flex-wrap: wrap;
   gap: 10px;
   border-top: 1px solid var(--fh-border);
-  padding-top: 15px;
-  margin-top: 18px;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.statusWidget > .textAction {
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--fh-border);
+}
+.workloadWidget > footer {
+  margin-top: auto;
+}
+.projectList,
+.ownerList {
+  max-height: clamp(180px, 24vh, 208px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+}
+.projectList:focus-visible,
+.ownerList:focus-visible {
+  outline: 2px solid var(--fh-primary);
+  outline-offset: 3px;
 }
 .widget footer > span {
   color: var(--fh-muted);
@@ -490,12 +517,13 @@
 }
 .projectList {
   display: grid;
-  gap: 19px;
+  gap: 12px;
+  align-content: start;
 }
 .project {
   display: grid;
-  gap: 10px;
-  padding-bottom: 18px;
+  gap: 7px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--fh-border);
 }
 .project:last-child {
@@ -539,7 +567,7 @@
 }
 .progressTrack {
   display: flex;
-  height: 9px;
+  height: 7px;
   gap: 2px;
   overflow: hidden;
   border-radius: 4px;
@@ -555,7 +583,8 @@
 }
 .ownerList {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+  align-content: start;
 }
 .ownerList button {
   display: flex;
@@ -733,22 +762,11 @@
   .widget {
     padding: 18px;
   }
-  .ring {
-    width: 140px;
-    height: 140px;
-  }
-  .ring > div {
-    width: 108px;
-    height: 108px;
-  }
   .statusBody {
     gap: 10px;
   }
 }
 @media (max-width: 850px) {
-  .chartGrid {
-    grid-template-columns: 1fr;
-  }
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -760,16 +778,21 @@
   .milestoneList {
     grid-template-columns: 1fr;
   }
-  .statusBody {
-    grid-template-columns: 1fr 1fr;
+}
+@container dashboard-widgets (max-width: 720px) {
+  .chartGrid {
+    grid-template-columns: 1fr;
   }
-  .ring {
-    width: 168px;
-    height: 168px;
+  .projectList,
+  .ownerList {
+    max-height: none;
+    overflow-y: visible;
+    scrollbar-gutter: auto;
   }
-  .ring > div {
-    width: 130px;
-    height: 130px;
+}
+@container dashboard-widgets (max-width: 520px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 480px) {
@@ -813,14 +836,6 @@
   }
   .statusBody {
     grid-template-columns: 120px minmax(0, 1fr);
-  }
-  .ring {
-    width: 120px;
-    height: 120px;
-  }
-  .ring > div {
-    width: 92px;
-    height: 92px;
   }
   .ring strong {
     font-size: 25px;

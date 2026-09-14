@@ -214,16 +214,11 @@ export function TeamWorkflow() {
 
   return (
     <>
-      <header className="trevv-page-header">
+      <header className="trevv-page-header compact-page-header">
         <div>
-          <p>Workspace</p>
           <h1 className="page-title-with-hint">
-            Workspace teams <Hint resourceId="team-pressure" />
+            Teams <Hint resourceId="team-pressure" />
           </h1>
-          <span>
-            Preview fictional teams and feature presets. Nothing here grants
-            real access or changes another person&apos;s account.
-          </span>
         </div>
         <div className="team-header-actions">
           <button

@@ -38,3 +38,34 @@ The subsequent shared-planning extension adds a Plans and ideas tab and compact
 cards to Summary and My Work. Its optional collaboration fields and database
 migration are described in [Shared plans and ideas](shared-planning-2026-09-13.md).
 All sections and full-page destinations described above remain available.
+
+## Dashboard tab cleanup — September 14, 2026
+
+At the user's request, Messages and Inbox are removed from the Dashboard tab
+row. The nine remaining tabs cover Summary, Attention, My Work, Sprints, Plans
+and ideas, Teams and people, Decisions, Approvals, and Waiting. Their full pages,
+workspace navigation, and related tabs on other pages remain available. Old
+Dashboard links selecting Messages or Inbox now open Summary. Shared metadata,
+communication tools and saved conversation drafts are preserved.
+
+## Sprint content — September 14, 2026
+
+The Dashboard Sprints section now shows actual sprint boards with status and
+team filters, goals, dates, parent project context, completion and blocked work.
+Selecting a sprint opens its work below, with the existing list/board views,
+task details links, assignee filters and saved status changes. Project backlog
+shows unscheduled open work from its parent project. Tasks linked through a
+cycle and tasks held directly by the sprint are both included, without duplicates.
+
+Plan sprint opens the existing versioned editor with Sprint selected and dates
+required, retaining optional team collaborators. Start sprint and Review and
+complete open that editor for review before saving the lifecycle change.
+Completing a sprint does not complete or discard unfinished tasks. Add sprint
+task uses Quick Capture with the sprint/team selected and preserves the parent
+project and cycle association. Draft recovery and conflict handling remain active.
+
+Open full page preserves the sprint mode at `planning?mode=sprints`. Projects
+and other plan types remain available through an explicit link and the original
+planning page. The shared project panels on Team and other pages retain their
+existing modes and creation tools. Loading, retry and permission-loss states
+apply to sprint cards and details; incomplete work is not presented as final metrics.

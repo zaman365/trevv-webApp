@@ -27,7 +27,7 @@ export function QuickCaptureButton({
       aria-describedby={tooltipId}
       aria-keyshortcuts="Q"
     >
-      <Plus size={19} strokeWidth={2} aria-hidden="true" />
+      <Plus size={16} strokeWidth={2} aria-hidden="true" />
       <span className="topbar-create-shortcut" id={tooltipId} role="tooltip">
         Quick capture <kbd>Q</kbd>
       </span>

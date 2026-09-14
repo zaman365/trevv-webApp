@@ -92,11 +92,6 @@ function FocusMain({ kind }: { kind: FocusKind }) {
       .filter((item) => item.title.toLocaleLowerCase().includes(normalized))
       .slice(0, 8);
   }, [query, scope.items]);
-  const crumb =
-    kind === "search"
-      ? "Search"
-      : productCopy.en.nav[kind === "settings" ? "settings" : kind];
-  const workspaceName = scope.workspaces[0]?.name ?? "Selected workspace";
   return (
     <main
       className={`focus-main ${kind === "inbox" ? "focus-main-inbox" : ""}`}
@@ -104,20 +99,19 @@ function FocusMain({ kind }: { kind: FocusKind }) {
       {kind === "inbox" ? (
         <h1 className="sr-only">{copy[titleKey]}</h1>
       ) : (
-        <header className="focus-header">
+        <header className="focus-header compact-page-header">
           <div>
-            <p>
-              Workspace · {workspaceName} / {crumb}
-            </p>
-            <h1 className="page-title-with-hint">
+            <h1
+              className="page-title-with-hint"
+              title={
+                kind === "search"
+                  ? "Search the fictional Workspace corpus. These sample results do not prove production permission enforcement."
+                  : copy[subtitleKey]
+              }
+            >
               {copy[titleKey]}
               <Hint resourceId={focusHintIds[kind]} />
             </h1>
-            <span>
-              {kind === "search"
-                ? "Search the fictional Workspace corpus. These sample results do not prove production permission enforcement."
-                : copy[subtitleKey]}
-            </span>
           </div>
         </header>
       )}

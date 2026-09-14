@@ -137,7 +137,6 @@ export function AttentionCenter() {
     };
   }, [scopedGroupIds]);
 
-  const workspace = scope.workspaces[0];
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return scopedGroups.filter((group) => {
@@ -264,16 +263,11 @@ export function AttentionCenter() {
         </div>
       )}
 
-      <header className="trevv-page-header attention-page-header">
+      <header className="trevv-page-header attention-page-header compact-page-header">
         <div>
-          <p>Workspace · {workspace?.name ?? "Selected workspace"}</p>
           <h1 className="page-title-with-hint">
             Attention Center <Hint resourceId="attention" />
           </h1>
-          <span>
-            Turn this workspace&apos;s operational risk into a clear next
-            action—with the evidence and source work attached.
-          </span>
         </div>
         <button
           className="primary-button attention-next-button"

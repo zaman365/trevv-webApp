@@ -17,7 +17,6 @@ import {
   LockKeyhole,
   MessageCircleMore,
   MessageSquarePlus,
-  MessagesSquare,
   Paperclip,
   Plus,
   Reply,
@@ -622,17 +621,9 @@ export function MessagingWorkspace() {
 
   return (
     <main className="messaging-page">
-      <header className="messaging-page-header">
+      <header className="messaging-page-header compact-page-header">
         <div>
-          <span className="messaging-eyebrow">
-            <MessagesSquare size={15} /> Workspace ·{" "}
-            {workspace?.name ?? "Selected workspace"}
-          </span>
           <h1>Messages</h1>
-          <p>
-            Explore fictional rooms, requests, decisions, and updates alongside
-            sample Workspace work.
-          </p>
         </div>
         <div className="messaging-header-actions">
           <button

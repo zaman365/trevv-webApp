@@ -245,9 +245,6 @@ export function LivePeoplePage({
                 <div className={styles.heroIdentity}>
                   <span className={styles.avatar}>{initials(person.name)}</span>
                   <div>
-                    <span className={styles.eyebrow}>
-                      {workspace.name} · Person
-                    </span>
                     <Heading>
                       {person.name}
                       {person.id === session.user.id ? " (you)" : ""}
@@ -766,15 +763,9 @@ export function LivePeoplePage({
           ) : null
         ) : (
           <>
-            <header className={styles.hero}>
+            <header className={`${styles.hero} compact-page-header`}>
               <div>
-                <span className={styles.eyebrow}>
-                  {workspace?.name} · Directory
-                </span>
                 <Heading>People</Heading>
-                <p>
-                  Find a teammate, see their work, and start a conversation.
-                </p>
               </div>
               <div className={styles.actions}>
                 <Link href={workspaceHref(workspaceSlug, "teams")}>

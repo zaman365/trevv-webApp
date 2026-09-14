@@ -97,18 +97,47 @@
 }
 .compact {
   flex: 0 0 auto;
+  min-height: 32px;
   padding: 0;
   border: 0;
   background: transparent;
   font-size: 11px;
 }
 .compact .details > summary {
-  flex-direction: column;
-  gap: 2px;
+  position: relative;
+  width: 32px;
+  min-height: 32px;
   padding: 0;
+  border-radius: 8px;
 }
-.compact .label {
-  line-height: 13px;
+.compact .details > summary:hover,
+.compact .details[open] > summary {
+  color: var(--fh-primary-strong);
+  background: var(--fh-primary-soft);
+}
+.compact .details > summary .dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+}
+.compact[data-sync-status="checking"] summary > svg {
+  animation: refresh-spin 1.2s linear infinite;
+}
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .compact[data-sync-status="checking"] summary > svg {
+    animation: none;
+  }
+}
+@media (pointer: coarse) {
+  .compact .details > summary {
+    width: 44px;
+    min-height: 44px;
+  }
 }
 .compact .panel {
   right: 0;

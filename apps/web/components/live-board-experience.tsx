@@ -324,16 +324,9 @@ export function LiveBoardExperience({
   return (
     <WorkspaceFrame active="workspace" workspaceSlug={workspaceSlug}>
       <main className={styles.main} data-testid="live-board">
-        <header className={styles.hero}>
+        <header className={`${styles.hero} compact-page-header`}>
           <div>
-            <p>
-              <Link href={workspaceHref(workspaceSlug)}>{workspace.name}</Link>{" "}
-              / Project board
-            </p>
             <h1>{board?.name ?? "Loading board…"}</h1>
-            <span>
-              Tasks, owners, due dates, and progress — together in one project.
-            </span>
           </div>
           <button
             className="primary-button"
@@ -350,6 +343,7 @@ export function LiveBoardExperience({
         </header>
 
         <div className={styles.rowActions}>
+          <Link href={workspaceHref(workspaceSlug)}>Overview</Link>
           <Link href={workspaceHref(workspaceSlug, "planning")}>
             All projects and sprints
           </Link>

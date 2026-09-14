@@ -1,4 +1,8 @@
-import type { ReactNode, ComponentProps } from "react";
+import {
+  useSyncExternalStore,
+  type ReactNode,
+  type ComponentProps,
+} from "react";
 export function WorkspaceFrame({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
@@ -12,4 +16,17 @@ export function useRouter() {
 
 export function usePathname() {
   return window.location.pathname;
+}
+
+function subscribeSearch(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+}
+export function useSearchParams() {
+  const search = useSyncExternalStore(
+    subscribeSearch,
+    () => window.location.search,
+    () => "",
+  );
+  return new URLSearchParams(search);
 }

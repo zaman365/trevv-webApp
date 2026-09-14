@@ -142,10 +142,9 @@ export function LiveMessagingWorkspace({
   return (
     <WorkspaceFrame active="messages" workspaceSlug={workspaceSlug}>
       <main className={styles.routeMain}>
-        <header className={styles.pageHeader}>
+        <header className={`${styles.pageHeader} compact-page-header`}>
           <div>
             <h1>Messages</h1>
-            <span>Stay connected to people, teams and the work you share.</span>
           </div>
         </header>
         <WorkspacePageSections page="messages" workspaceSlug={workspaceSlug}>
@@ -1094,13 +1093,9 @@ export function LiveMessagingContent({
         data-testid="live-messages"
       >
         {!floating ? (
-          <header className={styles.pageHeader}>
+          <header className={`${styles.pageHeader} compact-page-header`}>
             <div>
-              <p>{workspace.name} / Collaboration</p>
               <Heading>{heading}</Heading>
-              <span>
-                Contextual Team rooms, work rooms, and direct conversations.
-              </span>
             </div>
             {canCreateConversation ? (
               <button

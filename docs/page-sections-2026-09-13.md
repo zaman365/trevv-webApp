@@ -92,6 +92,16 @@ labels so long names cannot overlap the message type at medium widths.
 
 ## Validation evidence
 
+### Compact page headers (September 14)
+
+The workspace name stays in the persistent switcher. Main page headers now use
+one compact topic/action row without repeating workspace labels or introductory
+paragraphs. Existing tabs, filters, contextual help, creation controls and
+full-page links remain available. Connection freshness and refresh stay in the
+shell's connection control. Entity profiles retain their actionable details.
+
+### Earlier page-sections validation
+
 - Web lint, TypeScript, and all 389 unit tests across 72 files pass.
 - Browser checks exercise Portfolio creation and workspace filters; isolated
   workspace reads/mutations, selection history/reload, access loss/recovery;

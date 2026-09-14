@@ -5,6 +5,7 @@ const WorkspacePageSections = dynamic(() =>
   ),
 );
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 const PlanningPeopleFields = dynamic(
   () => import("./planning-people-fields").then((m) => m.PlanningPeopleFields),
   { loading: () => <p>Loading people…</p> },
@@ -15,7 +16,13 @@ import {
   type PeopleChoice,
 } from "@/lib/planning-sharing";
 
-import { useRef, useState, type FormEvent, type RefObject } from "react";
+import {
+  Suspense,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BoardDto } from "@founderhq/api-contract";
 import { TrevvApiError } from "@founderhq/api-client";
@@ -45,38 +52,63 @@ const kindLabels: Record<PlanKind, string> = {
   operations: "Operations cycle",
   goals: "Company goals",
 };
+const SprintPlanningContent = dynamic(() =>
+  import("./live-sprint-planning").then(
+    (module) => module.SprintPlanningContent,
+  ),
+);
 
-export function LiveProjectPlanning({
-  workspaceSlug,
-}: {
-  workspaceSlug: string;
-}) {
+export function LiveProjectPlanning(props: { workspaceSlug: string }) {
+  return (
+    <Suspense
+      fallback={<LiveStateNotice kind="loading" title="Loading planning" />}
+    >
+      <ProjectPlanningPage {...props} />
+    </Suspense>
+  );
+}
+
+function ProjectPlanningPage({ workspaceSlug }: { workspaceSlug: string }) {
   const data = useLiveAppRecords();
+  const sprintFocus = useSearchParams().get("mode") === "sprints";
   const workspace = data.workspaces.find(
     (entry) => entry.slug === workspaceSlug,
   );
   return (
     <WorkspaceFrame active="planning" workspaceSlug={workspaceSlug}>
       <main className={styles.main}>
-        <header className={styles.hero}>
+        <header className={`${styles.hero} compact-page-header`}>
           <div>
-            <p>{workspace?.name} / Delivery</p>
-            <h1>Projects and sprints</h1>
-            <span>
-              Set a goal, give work an owner, and track milestones through to
-              delivery.
-            </span>
+            <h1>{sprintFocus ? "Sprints" : "Projects and sprints"}</h1>
           </div>
           <Link href={workspaceHref(workspaceSlug, "guide")}>
             Step-by-step guide
           </Link>
         </header>
-        <WorkspacePageSections page={"planning"} workspaceSlug={workspaceSlug}>
+        <WorkspacePageSections
+          page={"planning"}
+          workspaceSlug={workspaceSlug}
+          primaryLabel={sprintFocus ? "Sprints" : "Projects"}
+        >
           {workspace ? (
-            <ProjectPlanningContent
-              workspaceId={workspace.id}
-              workspaceSlug={workspaceSlug}
-            />
+            sprintFocus ? (
+              <SprintPlanningContent
+                workspaceId={workspace.id}
+                workspaceSlug={workspaceSlug}
+              />
+            ) : (
+              <>
+                <Link
+                  href={`${workspaceHref(workspaceSlug, "planning")}?mode=sprints`}
+                >
+                  Open sprint planning
+                </Link>
+                <ProjectPlanningContent
+                  workspaceId={workspace.id}
+                  workspaceSlug={workspaceSlug}
+                />
+              </>
+            )
           ) : (
             <LiveStateNotice
               kind="permission-loss"
@@ -326,6 +358,8 @@ export function PlanEditor({
   onClose,
   onSaved,
   returnFocusRef,
+  sprintFocus = false,
+  initialState,
 }: {
   workspaceId: string;
   boards: BoardDto[];
@@ -336,6 +370,8 @@ export function PlanEditor({
   onClose: () => void;
   onSaved: (board: BoardDto) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  sprintFocus?: boolean;
+  initialState?: NonNullable<BoardDto["planning"]>["state"];
 }) {
   const { client } = useLiveAppRecords();
   const shareResource = usePlanningSharing();
@@ -344,9 +380,12 @@ export function PlanEditor({
   const [name, setName] = useState(board?.name ?? "");
   const [description, setDescription] = useState(board?.description ?? "");
   const [kind, setKind] = useState<PlanKind>(
-    board?.planning?.kind ?? (parentBoard ? "sprint" : "project"),
+    board?.planning?.kind ??
+      (sprintFocus || parentBoard ? "sprint" : "project"),
   );
-  const [state, setState] = useState(board?.planning?.state ?? "planned");
+  const [state, setState] = useState(
+    initialState ?? board?.planning?.state ?? "planned",
+  );
   const [teamId, setTeamId] = useState(
     board?.planning?.teamId ?? initialTeamId ?? "",
   );
@@ -451,7 +490,13 @@ export function PlanEditor({
         <header>
           <div>
             <h2 id="plan-title">
-              {board ? "Edit plan" : "Create a project or delivery cycle"}
+              {sprintFocus
+                ? board
+                  ? "Edit sprint"
+                  : "Plan sprint"
+                : board
+                  ? "Edit plan"
+                  : "Create a project or delivery cycle"}
             </h2>
             <p>Save a goal, a team and a timeline together.</p>
           </div>
@@ -518,7 +563,7 @@ export function PlanEditor({
                   if (template) {
                     setName(template.name);
                     setDescription(template.description);
-                    if (template.templateKey.includes("sprint"))
+                    if (sprintFocus || template.templateKey.includes("sprint"))
                       setKind("sprint");
                     else if (template.templateKey.includes("campaign"))
                       setKind("campaign");
@@ -539,9 +584,9 @@ export function PlanEditor({
             </label>
           ) : null}
           <label className={styles.field}>
-            Plan name
+            {sprintFocus ? "Sprint name" : "Plan name"}
             <input
-              aria-label="Plan name"
+              aria-label={sprintFocus ? "Sprint name" : "Plan name"}
               autoFocus
               value={name}
               maxLength={160}
@@ -554,6 +599,7 @@ export function PlanEditor({
               Plan type
               <select
                 aria-label="Plan type"
+                disabled={sprintFocus}
                 value={kind}
                 onChange={(event) => setKind(event.target.value as PlanKind)}
               >
@@ -587,7 +633,9 @@ export function PlanEditor({
               disabled={Boolean(board)}
               onChange={(event) => setParentId(event.target.value)}
             >
-              <option value="">Standalone project</option>
+              <option value="">
+                {sprintFocus ? "Standalone sprint" : "Standalone project"}
+              </option>
               {boards
                 .filter(
                   (entry) =>
@@ -667,7 +715,15 @@ export function PlanEditor({
                 (people.enabled && !people.participantIds.length)
               }
             >
-              {pending ? "Saving…" : board ? "Save plan" : "Create plan"}
+              {pending
+                ? "Saving…"
+                : sprintFocus
+                  ? board
+                    ? "Save sprint"
+                    : "Create sprint"
+                  : board
+                    ? "Save plan"
+                    : "Create plan"}
             </button>
           </div>
         </footer>

@@ -189,16 +189,11 @@ export function IdeasWorkflow() {
 
   return (
     <>
-      <header className="trevv-page-header">
+      <header className="trevv-page-header compact-page-header">
         <div>
-          <p>Discovery</p>
           <h1 className="page-title-with-hint">
             Ideas & evidence <Hint resourceId="ideas" />
           </h1>
-          <span>
-            Develop opportunities lightly, attach the why, and preserve
-            provenance when work is promoted.
-          </span>
         </div>
         <button className="primary-button" onClick={() => setCreateOpen(true)}>
           <Plus size={16} /> Capture idea

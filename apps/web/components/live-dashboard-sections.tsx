@@ -33,7 +33,7 @@ const icons = {
 };
 import { AppLink as Link } from "@/components/navigation-link";
 import {
-  dashboardSections,
+  dashboardNavigationSections,
   dashboardSectionFromSearch,
   dashboardSectionUrl,
   type DashboardSection,
@@ -84,7 +84,7 @@ export function DashboardTabs({
       label="Dashboard sections"
       value={value}
       onChange={(id) => onChange(id as DashboardSection)}
-      sections={dashboardSections.map((section) => {
+      sections={dashboardNavigationSections.map((section) => {
         const Icon = icons[section.id];
         return { ...section, icon: <Icon size={16} aria-hidden="true" /> };
       })}
@@ -103,7 +103,9 @@ export function DashboardPanel({
   workspaceSlug: string;
   children: ReactNode;
 }) {
-  const meta = dashboardSections.find((entry) => entry.id === section)!;
+  const meta = dashboardNavigationSections.find(
+    (entry) => entry.id === section,
+  )!;
   return (
     <Activity mode={active ? "visible" : "hidden"}>
       <section
@@ -118,7 +120,7 @@ export function DashboardPanel({
             <p>{meta.description}</p>
           </div>
           <Link
-            href={workspaceHref(workspaceSlug, meta.view)}
+            href={`${workspaceHref(workspaceSlug, meta.view)}${section === "planning" ? "?mode=sprints" : ""}`}
             aria-label={`Open ${meta.title} full page`}
           >
             Open full page <ArrowUpRight size={16} aria-hidden="true" />

@@ -5,10 +5,9 @@ import { LiveRefreshStatus } from "./live-refresh-status";
 
 import { AppLink as Link } from "@/components/navigation-link";
 import { useReportRouteReady } from "@/lib/navigation-performance";
-import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
 import { workspaceHref, type WorkspaceView } from "@/lib/workspace-routes";
-import { LiveStateNotice, LiveSyncedAt } from "./live-state";
+import { LiveStateNotice } from "./live-state";
 import { WorkspaceFrame } from "./workspace-frame";
 import styles from "./live-operating-loop.module.css";
 import dynamic from "next/dynamic";
@@ -177,7 +176,6 @@ export function LiveWorkView({
   workspaceSlug: string;
   view: LiveWorkViewKind;
 }) {
-  const session = useAppSession();
   const liveData = useLiveAppData();
   const workspace = liveData.workspaces.find(
     (record) => record.slug === workspaceSlug,
@@ -215,16 +213,10 @@ export function LiveWorkView({
         {isInbox ? (
           <h1 className="sr-only">{copy.title}</h1>
         ) : (
-          <header className={styles.hero}>
+          <header className={`${styles.hero} compact-page-header`}>
             <div>
-              <p>Workspace · {workspace.name}</p>
-              <h1>{copy.title}</h1>
-              <span>{copy.subtitle}</span>
+              <h1 title={copy.subtitle}>{copy.title}</h1>
             </div>
-            <small>
-              Last synced{" "}
-              <LiveSyncedAt timezone={session.organization.timezone ?? "UTC"} />
-            </small>
           </header>
         )}
         <WorkspacePageSections page={view} workspaceSlug={workspaceSlug}>

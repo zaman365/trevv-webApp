@@ -26,3 +26,12 @@ The first CI run passed the production build and asset budgets, then found newly
 Maintainer references: [Next.js security release](https://github.com/vercel/next.js/releases/tag/v16.3.3), [sharp advisory](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c), and [js-yaml advisory](https://github.com/advisories/GHSA-2883-xcg3-v3hh).
 
 A subsequent audit indexed [the Nodemailer address-parser advisory](https://github.com/advisories/GHSA-2x7j-588g-ccc2). Nodemailer is pinned to its patched 9.1.0 release. Unrelated direct and transitive package versions remain unchanged.
+
+## Dashboard card sizing — September 14, 2026
+
+Summary cards now use compact padding, consistent gaps and aligned row heights.
+The charts scale down together, and the two-column layout stacks when the
+available content width is narrow, including beside the workspace sidebar.
+Long project and workload lists scroll within their desktop cards, with named,
+keyboard-focusable scroll areas. Existing Show all controls, links and work
+filters remain available. Stacked layouts let the lists expand naturally.

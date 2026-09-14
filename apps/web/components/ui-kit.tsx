@@ -18,7 +18,6 @@ import { Hint } from "./learning-hint";
 /* ---------------------------------------------------------------- hero --- */
 
 export function PageHero({
-  eyebrow,
   title,
   subtitle,
   accent,
@@ -52,20 +51,18 @@ export function PageHero({
         accent ? ({ "--brand": accent } as React.CSSProperties) : undefined
       }
     >
-      <div className="hero-top">
+      <div className="hero-top compact-page-header">
         {monogram && (
           <span className="hero-mark" aria-hidden="true">
             {monogram}
           </span>
         )}
         <div className="hero-copy">
-          {eyebrow && <p className="hero-eyebrow">{eyebrow}</p>}
           <div className="hero-title-row">
-            <h1>{title}</h1>
+            <h1 title={subtitle}>{title}</h1>
             {hintId && <Hint resourceId={hintId} />}
             {badge}
           </div>
-          {subtitle && <p className="hero-sub">{subtitle}</p>}
         </div>
         {(selector || actions) && (
           <div className="hero-actions">

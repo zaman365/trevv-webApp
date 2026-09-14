@@ -868,14 +868,12 @@ export function SettingsExperience({
   return (
     <WorkspaceFrame active="settings" workspaceSlug={workspaceSlug}>
       <main className="focus-main settings-page">
-        <header className="focus-header settings-page-header">
+        <header className="focus-header settings-page-header compact-page-header">
           <div>
-            <p>TREVV / Settings</p>
             <h1 className="page-title-with-hint">
               {currentCopy.title}
               <Hint resourceId={settingsHintIds[activeSection]} />
             </h1>
-            <span>{currentCopy.subtitle}</span>
           </div>
           {activeSection === "members" && (
             <button

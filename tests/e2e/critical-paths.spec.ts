@@ -516,7 +516,7 @@ test("member focus centers and informational notifications render", async ({
     { view: "decisions", heading: "Decision Center" },
     { view: "approvals", heading: "Approval Center" },
     { view: "ideas", heading: "Ideas & evidence" },
-    { view: "teams", heading: "Workspace teams" },
+    { view: "teams", heading: "Teams" },
     { view: "notifications", heading: "Notifications" },
   ];
   for (const { view, heading } of modules) {

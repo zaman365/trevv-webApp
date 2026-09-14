@@ -8,12 +8,11 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { ChevronDown, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useOptionalLiveAppRecords } from "@/lib/live-app-data";
 import { useLiveAppRefreshedAt } from "@/lib/live-app-freshness";
 import { presentLiveReadError } from "@/lib/live-errors";
 import { LiveSyncedAt } from "./live-state";
-import { TechnicalPreviewBadge } from "./capability-status";
 import styles from "./live-refresh-status.module.css";
 
 const RefreshStatusProvided = createContext(false);
@@ -120,7 +119,6 @@ function LiveRefreshStatusView({ compact = false }: { compact?: boolean }) {
     <span className={styles.label}>
       <span className={styles.dot} aria-hidden="true" />
       {title}
-      {compact ? <ChevronDown size={12} aria-hidden="true" /> : null}
     </span>
   );
   const refresh = (
@@ -149,15 +147,28 @@ function LiveRefreshStatusView({ compact = false }: { compact?: boolean }) {
       </span>
       <div className={styles.controls}>
         {compact ? null : refresh}
-        <details className={styles.details}>
+        <details
+          className={styles.details}
+          onToggle={(event) => {
+            if (
+              compact &&
+              event.currentTarget.open &&
+              online &&
+              !data.refreshing
+            )
+              void data.refresh();
+          }}
+        >
           <summary
             aria-label={compact ? `Connection details: ${title}` : undefined}
-            title={compact ? "Connection details" : undefined}
+            title={
+              compact ? `${title} · Refresh and connection details` : undefined
+            }
           >
             {compact ? (
               <>
-                <TechnicalPreviewBadge mode="live" />
-                {label}
+                <RefreshCw size={16} aria-hidden="true" />
+                <span className={styles.dot} aria-hidden="true" />
               </>
             ) : (
               "Connection details"

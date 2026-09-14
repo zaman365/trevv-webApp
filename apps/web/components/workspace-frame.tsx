@@ -200,6 +200,8 @@ function WorkspaceChrome({
   const [portfolioCreateOpen, setPortfolioCreateOpen] = useState(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const portfolioMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuButtonRef = useRef<HTMLButtonElement>(null);
   const router = useAppNavigation();
   const {
     copy: messages,
@@ -408,6 +410,32 @@ function WorkspaceChrome({
     };
   }, [portfolioMenuOpen]);
 
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !userMenuRef.current?.contains(event.target)
+      ) {
+        setUserMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+        userMenuButtonRef.current?.focus();
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnPointerDown, true);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown, true);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [userMenuOpen]);
+
   // One number, from one place. See lib/attention.ts.
   const attentionCount =
     dataMode === "live" && liveData?.summary
@@ -496,8 +524,8 @@ function WorkspaceChrome({
                   {contextProject?.icon ?? <FolderKanban size={15} />}
                 </span>
                 <span className="workspace-context-copy">
-                  <small>Workspace</small>
                   <strong>{contextProject?.name ?? "Choose workspace"}</strong>
+                  <small>Workspace</small>
                 </span>
                 <ChevronDown
                   className={`workspace-context-chevron ${workspaceMenuOpen ? "open" : ""}`}
@@ -1136,8 +1164,10 @@ function WorkspaceChrome({
             >
               <Lightbulb size={17} />
             </button>
-            <div className="user-menu-wrap">
+            <div className="user-menu-wrap" ref={userMenuRef}>
               <button
+                ref={userMenuButtonRef}
+                aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
                 className="avatar avatar-mz avatar-button"
                 aria-label={copy.shell.userMenu}

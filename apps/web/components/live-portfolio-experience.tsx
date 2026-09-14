@@ -144,14 +144,9 @@ export function LivePortfolioExperience() {
   return (
     <WorkspaceFrame active="portfolio">
       <main className={styles.main} data-testid="live-portfolio">
-        <header className={styles.hero}>
+        <header className={`${styles.hero} compact-page-header`}>
           <div>
-            <p>Portfolio · {session.organization.name}</p>
             <h1>{portfolio?.name ?? "Your portfolio"}</h1>
-            <span>
-              Your startups, teams, and projects — with a clear view of what
-              needs attention.
-            </span>
           </div>
           {portfolio && canCreateWorkspace ? (
             <button
@@ -160,7 +155,7 @@ export function LivePortfolioExperience() {
               onClick={() => setFormOpen(true)}
               type="button"
             >
-              <Plus size={15} /> Create project / workspace
+              <Plus size={15} /> Create Workspace
             </button>
           ) : null}
         </header>
@@ -436,7 +431,7 @@ export function LivePortfolioExperience() {
                       "Retry same request"
                     ) : (
                       <>
-                        <CheckCircle2 size={14} /> Create project / workspace
+                        <CheckCircle2 size={14} /> Create Workspace
                       </>
                     )}
                   </button>

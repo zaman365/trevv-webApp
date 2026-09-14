@@ -33,10 +33,12 @@ export function WorkspacePageSections({
   page,
   workspaceSlug,
   children,
+  primaryLabel,
 }: {
   page: string;
   workspaceSlug: string;
   children: ReactNode;
+  primaryLabel?: string;
 }) {
   const embedded = useEmbeddedSection();
   const data = useLiveAppRecords();
@@ -49,7 +51,9 @@ export function WorkspacePageSections({
   const sections = ids.map((id) => ({
     id,
     label:
-      sectionCatalog[id]?.label ?? (id === "calendar" ? "Schedule" : "Search"),
+      (id === page ? primaryLabel : undefined) ??
+      sectionCatalog[id]?.label ??
+      (id === "calendar" ? "Schedule" : "Search"),
     ...(id !== page
       ? {
           title: sectionCatalog[id]?.title,

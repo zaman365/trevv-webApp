@@ -2,7 +2,7 @@
 
 import type { WorkItemDto } from "@founderhq/api-contract";
 import { AppLink as Link } from "@/components/navigation-link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useReportRouteReady } from "@/lib/navigation-performance";
 import { useAppSession } from "@/lib/app-session-context";
 import { useLiveAppRecords as useLiveAppData } from "@/lib/live-app-data";
@@ -30,6 +30,7 @@ export function LiveMyWork({
   onOpen?: (item: WorkItemDto) => void;
 }) {
   useReportRouteReady(true);
+  const titleId = useId();
   const session = useAppSession();
   const liveData = useLiveAppData();
   const [localItems, setLocalItems] = useState(items);
@@ -127,7 +128,7 @@ export function LiveMyWork({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="my-work-title">
+    <section className={styles.panel} aria-labelledby={titleId}>
       <header>
         <div>
           <p>
@@ -135,7 +136,7 @@ export function LiveMyWork({
               ? session.user.name
               : "Owners, deadlines, and progress"}
           </p>
-          <h2 id="my-work-title">{title}</h2>
+          <h2 id={titleId}>{title}</h2>
         </div>
         <Link
           href={workspaceSlug ? workspaceHref(workspaceSlug) : "/app/portfolio"}

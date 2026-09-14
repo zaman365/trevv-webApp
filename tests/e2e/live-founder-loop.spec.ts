@@ -83,7 +83,7 @@ test.describe.serial("live founder operating loop", () => {
       .getByLabel("Current priority")
       .fill("Close the founder operating loop");
     await workspaceDialog
-      .getByRole("button", { name: "Create project / workspace" })
+      .getByRole("button", { name: "Create Workspace" })
       .click();
     await expect(
       page.getByText(`Server confirmed “${workspaceName}”`),
@@ -975,7 +975,7 @@ test.describe.serial("live founder operating loop", () => {
       .getByLabel("Current priority")
       .fill("Deliver the first customer launch plan");
     await projectDialog
-      .getByRole("button", { name: "Create project / workspace" })
+      .getByRole("button", { name: "Create Workspace" })
       .click();
     await expect(
       page.getByText(`Server confirmed “${projectName}”`),
@@ -1254,7 +1254,7 @@ test.describe.serial("live founder operating loop", () => {
       const workspaceForm = page.getByTestId("create-workspace-dialog");
       await workspaceForm.getByLabel("Name").fill(workspaceName);
       await workspaceForm
-        .getByRole("button", { name: "Create project / workspace" })
+        .getByRole("button", { name: "Create Workspace" })
         .click();
       await page
         .getByRole("link", { name: "Open workspace", exact: true })

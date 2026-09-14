@@ -163,6 +163,17 @@ for (const theme of ["light", "dark"]) {
     const neighborBounds = await neighbor.boundingBox();
     expect(buttonBounds?.width).toBe(neighborBounds?.width);
     expect(buttonBounds?.height).toBe(neighborBounds?.height);
+    expect(buttonBounds?.height).toBe(32);
+    expect((await page.locator(".topbar").boundingBox())?.height).toBe(56);
+    expect((await button.locator("svg").boundingBox())?.width).toBe(16);
+    expect(
+      await button.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return (
+          style.color !== style.backgroundColor && style.borderWidth === "1px"
+        );
+      }),
+    ).toBe(true);
     await button.click();
     const form = page.getByRole("dialog", { name: "Quick capture" });
     await form
