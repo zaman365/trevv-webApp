@@ -144,6 +144,15 @@ deferral, owner and 15 September expiry. No violation or broader selector match
 is accepted. The reviewed Linux and macOS screenshots also retain the original
 0.5% visual comparison tolerance.
 
+The complete follow-up run 34838176759 confirms the same measured mobile Teams
+and Blueprints fingerprints in dark mode as well. Those theme-specific entries
+now cover both observed themes. The shared workspace-initial correction also
+reduces Stakeholder from two unresolved elements to the existing single brand
+mark (`a1a713bd…`). All six local Stakeholder browser/theme combinations return
+that same one-node set with zero violations; the old two-node allowance is
+replaced. This is the already-reviewed decorative gradient mark also present on
+Onboarding, with no new selector or extended review period.
+
 This register does not satisfy the required keyboard, VoiceOver/NVDA, 200%
 zoom, reduced-motion, high-contrast, or touch-target evidence. Those remain
 separate release gates.

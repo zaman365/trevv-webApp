@@ -107,8 +107,8 @@
       "routes": ["/app/workspaces/localreach/stakeholder"],
       "themes": ["light", "dark"],
       "ruleId": "color-contrast",
-      "nodeCount": 2,
-      "sha256": "7b71a80eddf6d017a24f5b488e1569d4354c558090adbf04f90b043a8353dd14"
+      "nodeCount": 1,
+      "sha256": "a1a713bd8b3872e3260b643793a5a81170e73de0f9d1a118e9ce5167a57a1dcb"
     },
     {
       "projects": ["chromium", "webkit", "mobile-chromium"],
@@ -231,7 +231,7 @@
       "themes": ["dark"],
       "ruleId": "color-contrast",
       "nodeCount": 2,
-      "sha256": "a620b1b69531f072348fa95391f256bb3e33fe27eb18eef382612cf374d39058"
+      "sha256": "093838568d876d1a70441ecfcbc886aca2bce2f872e79728081305cd95d7726b"
     },
     {
       "projects": ["mobile-chromium"],
@@ -292,7 +292,7 @@
     {
       "projects": ["mobile-chromium"],
       "routes": ["/app/workspaces/northstar-apparel/blueprints"],
-      "themes": ["light"],
+      "themes": ["light", "dark"],
       "ruleId": "color-contrast",
       "nodeCount": 1,
       "sha256": "748a08d6c6cda10de5114783d4950ad41f777f1f486bede89ea5cb0854722e45"
