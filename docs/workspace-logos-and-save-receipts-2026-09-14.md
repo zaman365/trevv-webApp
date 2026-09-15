@@ -43,3 +43,10 @@ Creation flows continue to use their existing explicit draft keys.
 Focused coverage checks transport receipt variations and invalid receipts,
 retry identity, image decoding and limits, tenant isolation, atomic persistence,
 replacement/removal, and preservation of existing workspace fields.
+
+Web builds resolve the API contract and core package entry points directly to
+their current sources in both Next and Worker builds. Their Node production
+exports remain unchanged. This prevents an older local `dist` directory from
+rejecting new input fields or dropping new response fields, such as `logo` and
+`logoUrl`. A compiled Worker regression covers logo saving, display after reload,
+and removal, alongside the existing source-level upload coverage.

@@ -53,6 +53,8 @@ const secondWorkspace = {
   slug: "another-workspace",
   name: "Another workspace",
 };
+const originalWorkspace = structuredClone(workspace);
+let workspaceLogo;
 const board = {
   id: "board-one",
   workspaceId: workspace.id,
@@ -96,6 +98,9 @@ http
     res.setHeader("content-type", "application/json");
     res.setHeader("cache-control", "no-store");
     if (path === "/test/reset") {
+      delete workspace.logoUrl;
+      Object.assign(workspace, originalWorkspace);
+      workspaceLogo = undefined;
       seen = [];
       detailed = [];
       denied = url.searchParams.has("denied");
@@ -179,7 +184,47 @@ http
       };
     else if (path === "/api/v1/workspaces")
       body = denied ? [secondWorkspace] : [workspace, secondWorkspace];
-    else if (path === "/api/v1/workspaces/workspace-one/calendar") {
+    else if (
+      path === "/api/v1/workspaces/workspace-one/settings" &&
+      req.method === "PATCH"
+    ) {
+      if (req.headers["if-match"] !== `"${workspace.versionTag}"`) {
+        res.statusCode = 409;
+        return res.end(
+          JSON.stringify({
+            error: {
+              code: "version_conflict",
+              message: "Workspace changed",
+              requestId: "fixture",
+            },
+          }),
+        );
+      }
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const { logo, ...fields } = JSON.parse(Buffer.concat(chunks).toString());
+      if (typeof logo === "string") {
+        workspaceLogo = Buffer.from(logo.split(",")[1], "base64");
+        workspace.logoUrl = `/api/v1/workspaces/${workspace.id}/logo?v=${"a".repeat(64)}`;
+      } else if (logo === null) {
+        delete workspace.logoUrl;
+        workspaceLogo = undefined;
+      }
+      Object.assign(workspace, fields, {
+        versionTag: new Date(
+          Date.parse(workspace.versionTag) + 1,
+        ).toISOString(),
+      });
+      workspace.updatedAt = workspace.versionTag;
+      revision++;
+      res.setHeader("x-trevv-resource-version", workspace.versionTag);
+      res.setHeader("etag", `"${workspace.versionTag}"`);
+      body = workspace;
+    } else if (path === "/api/v1/workspaces/workspace-one/logo") {
+      res.setHeader("content-type", "image/webp");
+      if (!workspaceLogo) res.statusCode = 404;
+      return res.end(workspaceLogo);
+    } else if (path === "/api/v1/workspaces/workspace-one/calendar") {
       const query = new URL(req.url, "http://localhost").searchParams;
       body = {
         workspaceId: workspace.id,
